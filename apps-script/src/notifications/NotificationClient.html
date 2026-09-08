@@ -1,0 +1,534 @@
+<style>
+.ntf-page .ntf-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.ntf-page .ntf-row-unread { background: var(--color-primary-muted); }
+.ntf-page .ntf-row-unread td:first-child { box-shadow: inset 3px 0 0 var(--color-primary); }
+.ntf-page .ntf-msg { color: var(--color-text-muted); font-size: var(--text-sm); max-width: 36rem; }
+.ntf-page .ntf-pref-grid { display: grid; gap: 0; }
+.ntf-page .ntf-pref-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--color-border);
+}
+.ntf-page .ntf-pref-row:last-child { border-bottom: 0; }
+.ntf-page .ntf-pref-mod { font-size: var(--text-xs); color: var(--color-text-muted); letter-spacing: 0.04em; text-transform: uppercase; font-weight: 650; margin: 16px 0 4px; }
+.ntf-page .ntf-pref-mod:first-child { margin-top: 0; }
+.ntf-page .announce-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) {
+  .ntf-page .ntf-pref-row, .ntf-page .announce-form .form-row { grid-template-columns: 1fr; }
+}
+</style>
+<script>
+(function () {
+  'use strict';
+
+  function ready(fn) {
+    if (window.HrmsApp) fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  ready(function initNotificationUi() {
+    var App = window.HrmsApp;
+    if (!App) return;
+    var $ = App.$;
+    var escapeHtml = App.escapeHtml;
+    var callServer = App.callServer;
+    var showToast = App.showToast;
+    var pageHeaderHtml = App.pageHeaderHtml;
+    var tableShell = App.tableShell;
+
+    var ntfState = {
+      tab: 'inbox',
+      inbox: null,
+      log: null,
+      prefs: null,
+      catalog: null
+    };
+
+    function invalidateNtfShell_() {
+      if (App.invalidateModuleViewCache) App.invalidateModuleViewCache('notifications');
+    }
+
+    function invalidateNtfInbox_() {
+      ntfState.inbox = null;
+      invalidateNtfShell_();
+    }
+
+    function invalidateNtfPrefs_() {
+      ntfState.prefs = null;
+      invalidateNtfShell_();
+    }
+
+    function invalidateNtfLog_() {
+      ntfState.log = null;
+      invalidateNtfShell_();
+    }
+
+    if (App.registerModuleDataCacheClear) {
+      App.registerModuleDataCacheClear(function () {
+        ntfState.tab = 'inbox';
+        ntfState.inbox = null;
+        ntfState.log = null;
+        ntfState.prefs = null;
+        ntfState.catalog = null;
+      });
+    }
+
+    App.registerRoute('notifications', {
+      title: 'Notifications',
+      render: function (params) { renderNotifications(params); }
+    });
+
+    if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
+      window.HrmsNotificationBell.mount();
+    }
+
+    function pageEl() {
+      var page = $('page-content');
+      if (!page) return null;
+      page.classList.remove('hidden');
+      return page;
+    }
+
+    function stillOn(seq) {
+      if (App.routeStill) return App.routeStill(seq, 'notifications');
+      var s = App.getState();
+      return seq === s.navSeq && s.currentRoute === 'notifications';
+    }
+
+    function session() {
+      var s = App.getState() && App.getState().session;
+      return s || {};
+    }
+
+    function isHr() {
+      var r = String(session().role || '').toUpperCase();
+      return r === 'HR' || r === 'ADMIN';
+    }
+
+    function relTime(value) {
+      if (!value) return '—';
+      var d = value instanceof Date ? value : new Date(value);
+      if (isNaN(d.getTime())) return escapeHtml(String(value));
+      return d.toLocaleString();
+    }
+
+    function typeLabel(type) {
+      return String(type || '').replace(/_/g, ' ');
+    }
+
+    function tabBtn(id, label) {
+      return '<button type="button" class="tab' + (ntfState.tab === id ? ' active' : '') +
+        '" data-ntf-tab="' + id + '">' + escapeHtml(label) + '</button>';
+    }
+
+    function tabHasCache_() {
+      if (ntfState.tab === 'preferences') return !!(ntfState.prefs);
+      if (ntfState.tab === 'log') return !!(ntfState.log);
+      if (ntfState.tab === 'announce') return true;
+      return !!(ntfState.inbox);
+    }
+
+    function renderNotifications(params) {
+      var page = pageEl();
+      if (!page) return;
+      params = params || (App.getState() && App.getState().routeParams) || {};
+      if (params.tab) ntfState.tab = params.tab;
+      var seq = App.getState().navSeq;
+      var ntfKey = 'notifications';
+      var restoreNtf = App.consumeModuleViewRestore && App.consumeModuleViewRestore(ntfKey) && tabHasCache_();
+      var keepRefresh = !!(App.isModuleRefresh && App.isModuleRefresh(ntfKey) && tabHasCache_());
+      var actions = ntfState.tab === 'inbox'
+        ? '<button type="button" class="btn btn-secondary" id="ntf-page-mark-all">Mark all read</button>'
+        : '';
+      var tabs = tabBtn('inbox', 'Inbox') + tabBtn('preferences', 'Preferences');
+      if (isHr()) {
+        tabs += tabBtn('log', 'Email log') + tabBtn('announce', 'Announce');
+      }
+      var bodyPlaceholder = '';
+      if (!(restoreNtf || keepRefresh)) {
+        bodyPlaceholder = App.sectionSkeleton
+          ? App.sectionSkeleton({ variant: 'list', rows: 6, label: 'Loading notifications' })
+          : (App.skeletonTableRows
+            ? '<div class="table-wrap"><table class="data-table"><tbody>' + App.skeletonTableRows(4, 6) + '</tbody></table></div>'
+            : '');
+      }
+      page.innerHTML = '<div class="ntf-page">' +
+        pageHeaderHtml('Notifications', 'Your in-app inbox. Email is optional per type.', actions) +
+        '<div class="tabs" id="ntf-tabs">' + tabs + '</div>' +
+        '<div id="ntf-body">' + bodyPlaceholder + '</div>' +
+        '</div>';
+
+      Array.prototype.forEach.call(page.querySelectorAll('[data-ntf-tab]'), function (btn) {
+        btn.addEventListener('click', function () {
+          ntfState.tab = btn.getAttribute('data-ntf-tab');
+          renderNotifications({ tab: ntfState.tab });
+        });
+      });
+      if ($('ntf-page-mark-all')) {
+        $('ntf-page-mark-all').addEventListener('click', function () {
+          if (ntfState.inbox && ntfState.inbox.items) {
+            ntfState.inbox.items.forEach(function (it) {
+              it.status = 'READ';
+              it.unread = false;
+            });
+            ntfState.inbox.unread_count = 0;
+            paintInbox(ntfState.inbox);
+          }
+          if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
+            window.HrmsNotificationBell.applyUnreadCount(0);
+          }
+          callServer('apiMarkAllNotificationsRead', { button: $('ntf-page-mark-all'), loadingText: 'Updating…' })
+            .then(function (res) {
+              showToast(res && res.changed ? 'Marked ' + res.changed + ' read' : 'Already up to date', 'success');
+              if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
+                window.HrmsNotificationBell.applyUnreadCount(res && res.unread_count != null ? res.unread_count : 0);
+              }
+            })
+            .catch(function (err) {
+              showToast(err.message || 'Could not mark all read', 'error');
+              loadTab(seq);
+            });
+        });
+      }
+      if (restoreNtf || keepRefresh) {
+        if (ntfState.tab === 'preferences') paintPrefs(ntfState.prefs);
+        else if (ntfState.tab === 'log') paintLog(ntfState.log);
+        else if (ntfState.tab === 'announce') paintAnnounce();
+        else paintInbox(ntfState.inbox);
+        if (restoreNtf) return;
+      }
+      loadTab(seq);
+    }
+
+    function loadTab(seq) {
+      if (ntfState.tab === 'preferences') return loadPrefs(seq);
+      if (ntfState.tab === 'log') return loadLog(seq);
+      if (ntfState.tab === 'announce') {
+        paintAnnounce();
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded('notifications');
+        return;
+      }
+      return loadInbox(seq);
+    }
+
+    function loadInbox(seq) {
+      callServer('apiGetNotifications', { limit: 100 })
+        .then(function (data) {
+          if (!stillOn(seq)) return;
+          ntfState.inbox = data;
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded('notifications');
+          paintInbox(data);
+        })
+        .catch(function (err) {
+          if (!stillOn(seq)) return;
+          if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+          paintError(err);
+        });
+    }
+
+    function paintInbox(data) {
+      var body = $('ntf-body');
+      if (!body) return;
+      var items = (data && data.items) || [];
+      if (!items.length) {
+        body.innerHTML = '<div class="empty-state"><div class="empty-state-icon" aria-hidden="true"></div><h2 class="empty-state-title">No notifications</h2>' +
+          '<p class="empty-state-text">Updates from leave, payroll, and HR will appear here.</p></div>';
+        return;
+      }
+      var rows = items.map(function (item) {
+        var unread = item.unread || item.status === 'UNREAD';
+        return '<tr class="' + (unread ? 'ntf-row-unread' : '') + '" data-id="' + escapeHtml(item.notification_id) + '">' +
+          '<td>' + (unread ? '<span class="badge badge-submitted">Unread</span>' : '<span class="badge badge-draft">Read</span>') + '</td>' +
+          '<td><div>' + escapeHtml(item.title || '') + '</div>' +
+            (item.message ? '<div class="ntf-msg">' + escapeHtml(item.message) + '</div>' : '') + '</td>' +
+          '<td>' + escapeHtml(typeLabel(item.type)) + '</td>' +
+          '<td>' + escapeHtml(relTime(item.created_at)) + '</td>' +
+          '<td>' + (item.action_route
+            ? '<button type="button" class="btn btn-secondary btn-sm ntf-open">Open</button>'
+            : '—') + '</td>' +
+          '</tr>';
+      }).join('');
+      body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+        '<th>Status</th><th>Notification</th><th>Type</th><th>When</th><th></th></tr></thead><tbody>' +
+        rows + '</tbody></table></div>' +
+        '<p class="hint">' + escapeHtml(String(data.unread_count || 0)) + ' unread of ' +
+        escapeHtml(String(data.total || items.length)) + '</p>';
+      Array.prototype.forEach.call(body.querySelectorAll('tr[data-id]'), function (tr) {
+        var id = tr.getAttribute('data-id');
+        var item = null;
+        items.forEach(function (it) { if (it.notification_id === id) item = it; });
+        var openBtn = tr.querySelector('.ntf-open');
+        function markLocal(readAt, unreadCount) {
+          if (!item) return;
+          item.status = 'READ';
+          item.unread = false;
+          if (readAt) item.read_at = readAt;
+          if (ntfState.inbox && unreadCount != null) ntfState.inbox.unread_count = unreadCount;
+          else if (ntfState.inbox && ntfState.inbox.unread_count) {
+            ntfState.inbox.unread_count = Math.max(0, Number(ntfState.inbox.unread_count) - 1);
+          }
+          paintInbox(ntfState.inbox);
+          if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyMarkReadResult) {
+            window.HrmsNotificationBell.applyMarkReadResult(id, {
+              record: item,
+              unread_count: ntfState.inbox && ntfState.inbox.unread_count
+            });
+          }
+        }
+        function markReadRpc() {
+          if (!item || !(item.unread || item.status === 'UNREAD')) return Promise.resolve();
+          var snap = { status: item.status, unread: item.unread, count: ntfState.inbox && ntfState.inbox.unread_count };
+          markLocal(new Date().toISOString(), snap.count != null ? Math.max(0, Number(snap.count) - 1) : 0);
+          return callServer('apiMarkNotificationRead', id).then(function (data) {
+            markLocal(data && data.record && data.record.read_at, data && data.unread_count);
+          }).catch(function (err) {
+            item.status = snap.status;
+            item.unread = snap.unread;
+            if (ntfState.inbox) ntfState.inbox.unread_count = snap.count;
+            paintInbox(ntfState.inbox);
+            showToast((err && err.message) || 'Could not mark as read', 'error');
+          });
+        }
+        function openIt() {
+          markReadRpc();
+          if (item && item.action_route) {
+            App.navigate(item.action_route, item.action_params || {});
+          }
+        }
+        tr.addEventListener('dblclick', openIt);
+        if (openBtn) openBtn.addEventListener('click', function (e) { e.stopPropagation(); openIt(); });
+        tr.addEventListener('click', function () {
+          if (item && (item.unread || item.status === 'UNREAD')) markReadRpc();
+        });
+      });
+    }
+
+    function loadPrefs(seq) {
+      callServer('apiGetNotificationPreferences')
+        .then(function (data) {
+          if (!stillOn(seq)) return;
+          ntfState.prefs = data.preferences || [];
+          ntfState.catalog = data.catalog || {};
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded('notifications');
+          paintPrefs(ntfState.prefs);
+        })
+        .catch(function (err) {
+          if (!stillOn(seq)) return;
+          paintError(err);
+        });
+    }
+
+    function paintPrefs(prefs) {
+      var body = $('ntf-body');
+      if (!body) return;
+      var html = '<div class="card"><p>Choose which events appear in your inbox and which also send email. Organisation toggles can still block leave or payroll email.</p>';
+      var lastMod = '';
+      (prefs || []).forEach(function (p, idx) {
+        if (p.module !== lastMod) {
+          lastMod = p.module;
+          html += '<div class="ntf-pref-mod">' + escapeHtml(lastMod) + '</div>';
+        }
+        html += '<div class="ntf-pref-row">' +
+          '<div><strong>' + escapeHtml(p.label || p.notification_type) + '</strong></div>' +
+          '<label class="form-check"><input type="checkbox" data-pref="' + idx + '" data-field="in_app_enabled"' +
+            (p.in_app_enabled ? ' checked' : '') + '> In-app</label>' +
+          '<label class="form-check"><input type="checkbox" data-pref="' + idx + '" data-field="email_enabled"' +
+            (p.email_enabled ? ' checked' : '') + '> Email</label>' +
+          '</div>';
+      });
+      html += '<div class="form-actions" style="margin-top:16px">' +
+        '<button type="button" class="btn btn-primary" id="ntf-save-prefs">Save preferences</button>' +
+        '<span class="hint" id="ntf-pref-status"></span></div></div>';
+      body.innerHTML = html;
+      var save = $('ntf-save-prefs');
+      if (save) {
+        save.addEventListener('click', function () {
+          var patches = [];
+          Array.prototype.forEach.call(body.querySelectorAll('[data-pref]'), function (input) {
+            var i = Number(input.getAttribute('data-pref'));
+            var field = input.getAttribute('data-field');
+            if (!patches[i]) {
+              patches[i] = { notification_type: prefs[i].notification_type };
+            }
+            patches[i][field] = !!input.checked;
+          });
+          callServer('apiSaveNotificationPreferences', patches.filter(Boolean), {
+            button: save, loadingText: 'Saving…'
+          }).then(function () {
+            invalidateNtfPrefs_();
+            showToast('Preferences saved', 'success');
+          }).catch(function (err) {
+            showToast(err.message || 'Could not save preferences', 'error');
+          });
+        });
+      }
+    }
+
+    function loadLog(seq) {
+      if (!isHr()) {
+        paintError({ message: 'Only HR and Admin can view the email log.' });
+        return;
+      }
+      callServer('apiListNotificationEmailLog', { limit: 100 })
+        .then(function (data) {
+          if (!stillOn(seq)) return;
+          ntfState.log = data;
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded('notifications');
+          paintLog(data);
+        })
+        .catch(function (err) {
+          if (!stillOn(seq)) return;
+          paintError(err);
+        });
+    }
+
+    function paintLog(data) {
+      var body = $('ntf-body');
+      if (!body) return;
+      var items = (data && data.items) || [];
+      var kpis = '<div class="kpi-row">' +
+        '<div class="card kpi-card"><div class="kpi-label">Logged</div><div class="kpi-value">' +
+          escapeHtml(String(data.total || 0)) + '</div></div>' +
+        '<div class="card kpi-card"><div class="kpi-label">Failed / no email</div><div class="kpi-value">' +
+          escapeHtml(String(data.failed_count || 0)) + '</div></div></div>';
+      if (!items.length) {
+        body.innerHTML = kpis + '<div class="empty-state"><h2 class="empty-state-title">No email log rows</h2>' +
+          '<p class="empty-state-text">Leave and payroll emails are recorded here when modules send them.</p></div>';
+        return;
+      }
+      var rows = items.map(function (row) {
+        var st = String(row.status || '').toUpperCase();
+        var badge = 'badge-draft';
+        if (st === 'SENT') badge = 'badge-approved';
+        if (st === 'FAILED' || st === 'NO_EMAIL') badge = 'badge-rejected';
+        if (st === 'PENDING') badge = 'badge-submitted';
+        var retry = (st === 'FAILED' || st === 'PENDING' || st === 'NO_EMAIL')
+          ? '<button type="button" class="btn btn-secondary btn-sm ntf-retry" data-id="' +
+            escapeHtml(row.notification_id) + '">Retry</button>'
+          : '';
+        return '<tr>' +
+          '<td><span class="badge ' + badge + '">' + escapeHtml(st || '—') + '</span></td>' +
+          '<td>' + escapeHtml(row.event_type || '') + '</td>' +
+          '<td>' + escapeHtml(row.recipient_email || '') + '</td>' +
+          '<td>' + escapeHtml(row.employee_id || '') + '</td>' +
+          '<td>' + escapeHtml(row.subject || '') + '</td>' +
+          '<td>' + escapeHtml(row.error_message || '') + '</td>' +
+          '<td>' + retry + '</td></tr>';
+      }).join('');
+      body.innerHTML = kpis + '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+        '<th>Status</th><th>Event</th><th>Email</th><th>Employee ID</th><th>Subject</th><th>Error</th><th></th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      Array.prototype.forEach.call(body.querySelectorAll('.ntf-retry'), function (btn) {
+        btn.addEventListener('click', function () {
+          callServer('apiRetryNotificationEmail', btn.getAttribute('data-id'), {
+            button: btn, loadingText: 'Retrying…'
+          }).then(function (res) {
+            invalidateNtfLog_();
+            showToast('Retry result: ' + (res && res.status), res && res.status === 'SENT' ? 'success' : 'error');
+            loadLog(App.getState().navSeq);
+          }).catch(function (err) {
+            showToast(err.message || 'Retry failed', 'error');
+          });
+        });
+      });
+    }
+
+    function paintAnnounce() {
+      var body = $('ntf-body');
+      if (!body) return;
+      if (!isHr()) {
+        paintError({ message: 'Only HR and Admin can send announcements.' });
+        return;
+      }
+      body.innerHTML =
+        '<div class="card announce-form">' +
+          '<h2>Company announcement</h2>' +
+          '<p>Creates an in-app notification for each active employee. Email is optional.</p>' +
+          '<div class="form-group"><label class="form-label is-required" for="ntf-ann-title">Title</label>' +
+            '<input class="form-input" id="ntf-ann-title" maxlength="120"></div>' +
+          '<div class="form-group"><label class="form-label" for="ntf-ann-msg">Message</label>' +
+            '<textarea class="form-input" id="ntf-ann-msg" rows="4" maxlength="2000"></textarea></div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label class="form-label" for="ntf-ann-type">Type</label>' +
+              '<select class="form-input" id="ntf-ann-type">' +
+                '<option value="HR_ANNOUNCEMENT">HR</option>' +
+                '<option value="POLICY_ANNOUNCEMENT">Policy</option>' +
+                '<option value="SYSTEM_ANNOUNCEMENT">System</option>' +
+              '</select></div>' +
+            '<div class="form-group"><label class="form-label" for="ntf-ann-aud">Audience</label>' +
+              '<select class="form-input" id="ntf-ann-aud">' +
+                '<option value="ALL">All active employees</option>' +
+                '<option value="ROLE">By role</option>' +
+              '</select></div>' +
+          '</div>' +
+          '<div class="form-group hidden" id="ntf-ann-roles-wrap">' +
+            '<label class="form-label">Roles</label>' +
+            '<label class="form-check"><input type="checkbox" value="EMPLOYEE" checked> Employee</label>' +
+            '<label class="form-check"><input type="checkbox" value="MANAGER"> Manager</label>' +
+            '<label class="form-check"><input type="checkbox" value="HR"> HR</label>' +
+            '<label class="form-check"><input type="checkbox" value="ADMIN"> Admin</label>' +
+          '</div>' +
+          '<label class="form-check"><input type="checkbox" id="ntf-ann-email"> Also send email</label>' +
+          '<div class="form-actions">' +
+            '<button type="button" class="btn btn-primary" id="ntf-ann-send">Send announcement</button>' +
+          '</div></div>';
+      var aud = $('ntf-ann-aud');
+      if (aud) {
+        aud.addEventListener('change', function () {
+          $('ntf-ann-roles-wrap').classList.toggle('hidden', aud.value !== 'ROLE');
+        });
+      }
+      $('ntf-ann-send').addEventListener('click', function () {
+        var roles = [];
+        Array.prototype.forEach.call(document.querySelectorAll('#ntf-ann-roles-wrap input:checked'), function (c) {
+          roles.push(c.value);
+        });
+        var payload = {
+          type: $('ntf-ann-type').value,
+          title: $('ntf-ann-title').value,
+          message: $('ntf-ann-msg').value,
+          audience: $('ntf-ann-aud').value,
+          roles: roles,
+          send_email: $('ntf-ann-email').checked
+        };
+        callServer('apiCreateHrAnnouncement', payload, {
+          button: $('ntf-ann-send'), loadingText: 'Sending…'
+        }).then(function (res) {
+          invalidateNtfInbox_();
+          showToast('Created ' + (res && res.created) + ' notification(s)', 'success');
+          $('ntf-ann-title').value = '';
+          $('ntf-ann-msg').value = '';
+        }).catch(function (err) {
+          showToast(err.message || 'Could not send announcement', 'error');
+        });
+      });
+    }
+
+    function paintError(err) {
+      var body = $('ntf-body');
+      if (!body) return;
+      var msg = (err && err.message) || 'Could not load notifications.';
+      var isSetup = err && (err.code === 'CONFIGURATION_ERROR' ||
+        String(msg).toLowerCase().indexOf('not set up') >= 0);
+      body.innerHTML = '<div class="alert alert-danger">' + escapeHtml(msg) + '</div>' +
+        (isSetup && isHr()
+          ? '<div class="form-actions" style="margin-top:12px">' +
+            '<button type="button" class="btn btn-primary" id="ntf-setup-btn">Set up Notification Center</button></div>'
+          : '');
+      var setupBtn = $('ntf-setup-btn');
+      if (setupBtn) {
+        setupBtn.addEventListener('click', function () {
+          callServer('apiEnsureNotificationSchema', { button: setupBtn, loadingText: 'Setting up…' })
+            .then(function () {
+              invalidateNtfShell_();
+              showToast('Notification sheets are ready.', 'success');
+              loadTab(App.getState().navSeq);
+            })
+            .catch(function (setupErr) {
+              showToast((setupErr && setupErr.message) || 'Setup failed', 'error');
+            });
+        });
+      }
+    }
+  });
+})();
+</script>

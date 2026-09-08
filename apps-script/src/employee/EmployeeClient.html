@@ -1,0 +1,1008 @@
+<script>
+(function () {
+  'use strict';
+
+  function ready(fn) {
+    if (window.HrmsApp) fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  ready(function initEmployeeUi() {
+    var App = window.HrmsApp;
+    if (!App) return;
+    var $ = App.$;
+    var escapeHtml = App.escapeHtml;
+    var callServer = App.callServer;
+    var showToast = App.showToast;
+    var navigate = App.navigate;
+    var setActionFeedback = App.setActionFeedback;
+    var setFlash = App.setFlash;
+    var consumeFlash = App.consumeFlash;
+    var flashBannerHtml = App.flashBannerHtml;
+
+    var listState = { page: 1, team: false };
+    var empViewCache = {
+      lists: {},
+      profiles: {},
+      extras: {},
+      picker: null
+    };
+
+    function listCacheKey(team) {
+      return team ? 'my-team' : 'employees';
+    }
+
+    function profileCacheKey(employeeId, isSelf) {
+      return isSelf ? 'my-profile' : ('employee-profile:' + String(employeeId || ''));
+    }
+
+    function markView_(key) {
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded(key);
+    }
+
+    function shellInv_(keys) {
+      if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(keys);
+    }
+
+    function invalidateEmpLists_() {
+      delete empViewCache.lists.employees;
+      delete empViewCache.lists['my-team'];
+      empViewCache.picker = null;
+      shellInv_(['employees', 'my-team', 'employee-create']);
+    }
+
+    function invalidateEmpProfileLists_(employeeId, isSelf) {
+      invalidateEmpLists_();
+      if (employeeId) {
+        shellInv_('employee-profile:' + employeeId);
+        if (empViewCache.extras[employeeId]) delete empViewCache.extras[employeeId].leave;
+      }
+      if (isSelf) shellInv_('my-profile');
+    }
+
+    function failRefresh_() {
+      if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+    }
+
+    if (App.registerModuleDataCacheClear) {
+      App.registerModuleDataCacheClear(function () {
+        empViewCache.lists = {};
+        empViewCache.profiles = {};
+        empViewCache.extras = {};
+        empViewCache.picker = null;
+      });
+    }
+
+    App.registerRoute('employees', { title: 'Employees', render: function () { renderList(false); } });
+    App.registerRoute('my-team', { title: 'My Team', render: function () { renderList(true); } });
+    App.registerRoute('my-profile', { title: 'My Profile', render: renderMyProfile });
+    App.registerRoute('employee-create', { title: 'Add employee', render: renderCreate });
+    App.registerRoute('employee-profile', { title: 'Employee', render: function (params) { renderProfile(params && params.employeeId); } });
+
+    function pageEl() {
+      var page = $('page-content');
+      if (!page) return null;
+      page.classList.remove('hidden');
+      return page;
+    }
+
+    function stillOn(seq, route) {
+      if (App.routeStill) return App.routeStill(seq, route);
+      var s = App.getState();
+      return seq === s.navSeq && s.currentRoute === route;
+    }
+
+    function listRoute() {
+      return listState.team ? 'my-team' : 'employees';
+    }
+
+    function listShellHtml() {
+      var tpl = $('tpl-emp-list');
+      if (tpl) {
+        if (tpl.content && tpl.content.childNodes && tpl.content.childNodes.length) {
+          var wrap = document.createElement('div');
+          wrap.appendChild(document.importNode(tpl.content, true));
+          if (wrap.innerHTML) return wrap.innerHTML;
+        }
+        if (tpl.innerHTML) return tpl.innerHTML;
+      }
+      return '<div class="page-header"><div class="page-header-text">' +
+        '<h2 class="page-heading" id="emp-list-heading" aria-hidden="true">Employees</h2>' +
+        '<p class="page-lede" id="emp-list-lede">Search the directory. Open a row to view a profile.</p></div>' +
+        '<div class="page-header-actions" id="emp-list-actions">' +
+        (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') + '</div></div>' +
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label" for="emp-search">Search</label>' +
+        '<input class="form-input search-input" id="emp-search" type="search" placeholder="Employee ID or name"></div>' +
+        '<div class="form-group"><label class="form-label" for="emp-filter-status">Status</label>' +
+        '<select class="form-select" id="emp-filter-status"><option value="">All</option>' +
+        '<option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="emp-filter-dept">Department</label>' +
+        '<select class="form-select" id="emp-filter-dept"><option value="">All</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="emp-filter-loc">Location</label>' +
+        '<select class="form-select" id="emp-filter-loc"><option value="">All</option></select></div>' +
+        '</div></div>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+        '<th>Employee ID</th><th>Name</th><th>Department</th><th>Designation</th>' +
+        '<th>Location</th><th>Type</th><th>Status</th><th>Manager</th>' +
+        '</tr></thead><tbody id="emp-table-body"></tbody></table></div>' +
+        '<div class="pagination" id="emp-pagination"></div>';
+    }
+
+    function loadingHtml(label) {
+      return App.sectionSkeleton
+        ? App.sectionSkeleton({ label: label || 'Loading' })
+        : (App.sectionSpinner ? App.sectionSpinner(label) :
+          '<div class="hrms-loading-block" aria-busy="true"><div class="skeleton skeleton-line w80" aria-hidden="true"></div></div>');
+    }
+
+    function skRows(cols, rows) {
+      return App.skeletonTableRows ? App.skeletonTableRows(cols, rows) :
+        '<tr class="skeleton-row" aria-hidden="true"><td colspan="' + cols + '"><div class="skeleton skeleton-line w80"></div></td></tr>';
+    }
+
+    function paintErr(el, message, retry) {
+      if (App.paintSectionError) App.paintSectionError(el, message, retry);
+      else if (el) el.innerHTML = '<div class="alert alert-danger">' + escapeHtml(message || 'Failed') + '</div>';
+    }
+
+    function statusBadge(status) {
+      var s = escapeHtml(status || '');
+      var cls = s === 'INACTIVE' ? 'badge status-badge badge-status-INACTIVE' : 'badge status-badge badge-status-ACTIVE';
+      return '<span class="' + cls + '">' + s + '</span>';
+    }
+
+    function fieldGroup(id, label, inputHtml, span2) {
+      var req = /\srequired([\s>]|$)/.test(inputHtml);
+      return '<div class="form-group' + (span2 ? ' form-span-2' : '') + '" id="fg-' + id + '">' +
+        '<label class="form-label' + (req ? ' is-required' : '') + '" for="' + id + '">' + escapeHtml(label) + '</label>' +
+        inputHtml +
+        '<div class="field-error" id="err-' + id + '"></div></div>';
+    }
+
+    function input(id, type, value, required) {
+      return '<input class="form-input" id="' + id + '" name="' + id + '" type="' + type + '" value="' +
+        escapeHtml(value || '') + '"' + (required ? ' required' : '') + '>';
+    }
+
+    function select(id, options, value) {
+      var html = '<select class="form-select" id="' + id + '" name="' + id + '">';
+      options.forEach(function (o) {
+        var v = typeof o === 'string' ? o : o.value;
+        var l = typeof o === 'string' ? o : o.label;
+        html += '<option value="' + escapeHtml(v) + '"' + (v === (value || '') ? ' selected' : '') + '>' + escapeHtml(l) + '</option>';
+      });
+      return html + '</select>';
+    }
+
+    function showFieldErrors(details) {
+      var fields = (details && details.fields) || {};
+      Object.keys(fields).forEach(function (k) {
+        var fg = $('fg-' + k);
+        var err = $('err-' + k);
+        if (fg) fg.classList.add('has-error');
+        if (err) err.textContent = fields[k];
+      });
+    }
+
+    function clearFieldErrors() {
+      var groups = document.querySelectorAll('#page-content .form-group.has-error');
+      for (var i = 0; i < groups.length; i++) groups[i].classList.remove('has-error');
+      var errs = document.querySelectorAll('#page-content .field-error');
+      for (var j = 0; j < errs.length; j++) errs[j].textContent = '';
+    }
+
+    function formValues(ids) {
+      var out = {};
+      ids.forEach(function (id) {
+        var el = $(id);
+        if (!el) return;
+        if (el.type === 'checkbox') out[id] = el.checked;
+        else out[id] = el.value;
+      });
+      return out;
+    }
+
+    function bindListChrome_(team) {
+      var heading = $('emp-list-heading');
+      var lede = $('emp-list-lede');
+      if (heading) heading.textContent = team ? 'My Team' : 'Employees';
+      if (lede) {
+        lede.textContent = team
+          ? 'Direct reports. Open a row to view work details.'
+          : 'Search the directory. Open a row to view a profile.';
+      }
+      var actions = $('emp-list-actions');
+      var session = App.getState().session || {};
+      var refreshHtml = App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '';
+      var addHtml = '';
+      if (!team && (session.role === 'HR' || session.role === 'ADMIN')) {
+        addHtml = '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
+      }
+      if (actions) actions.innerHTML = refreshHtml + addHtml;
+      if ($('btn-emp-add')) $('btn-emp-add').addEventListener('click', function () { navigate('employee-create'); });
+      ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc'].forEach(function (id) {
+        var el = $(id);
+        if (!el) return;
+        el.addEventListener(id === 'emp-search' ? 'input' : 'change', function () {
+          if (listState.ignoreFilter) return;
+          listState.page = 1;
+          loadList();
+        });
+      });
+    }
+
+    function applyListQuery_(query) {
+      query = query || {};
+      listState.ignoreFilter = true;
+      if ($('emp-search')) $('emp-search').value = query.q || '';
+      if ($('emp-filter-status')) $('emp-filter-status').value = query.status || '';
+      if ($('emp-filter-dept') && query.department) $('emp-filter-dept').value = query.department;
+      if ($('emp-filter-loc') && query.location) $('emp-filter-loc').value = query.location;
+      listState.ignoreFilter = false;
+    }
+
+    function renderList(team) {
+      listState.team = team;
+      listState.ignoreFilter = false;
+      var key = listCacheKey(team);
+      var page = pageEl();
+      if (!page) return;
+      var cached = empViewCache.lists[key];
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(key) && cached) {
+        listState.page = cached.query && cached.query.page ? cached.query.page : 1;
+        page.innerHTML = listShellHtml();
+        bindListChrome_(team);
+        applyListQuery_(cached.query);
+        if (cached.data) {
+          fillSelectOptions('emp-filter-dept', cached.data.departments || [], cached.query && cached.query.department);
+          fillSelectOptions('emp-filter-loc', cached.data.locations || [], cached.query && cached.query.location);
+          renderTable(cached.data);
+        }
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh(key) && cached)) {
+        listState.page = 1;
+      } else if (cached.query && cached.query.page) {
+        listState.page = cached.query.page;
+      }
+      page.innerHTML = listShellHtml();
+      bindListChrome_(team);
+      if (cached && cached.query) applyListQuery_(cached.query);
+      var tbody = $('emp-table-body');
+      if (tbody && !(App.isModuleRefresh && App.isModuleRefresh(key) && cached && cached.data)) {
+        tbody.innerHTML = skRows(8, 6);
+      } else if (cached && cached.data) {
+        fillSelectOptions('emp-filter-dept', cached.data.departments || [], cached.query && cached.query.department);
+        fillSelectOptions('emp-filter-loc', cached.data.locations || [], cached.query && cached.query.location);
+        renderTable(cached.data);
+      }
+      loadList();
+    }
+
+    function loadList() {
+      var seq = App.getState().navSeq;
+      var route = listRoute();
+      var key = listCacheKey(listState.team);
+      var tbody = $('emp-table-body');
+      if (tbody && !(App.isModuleRefresh && App.isModuleRefresh(key) && empViewCache.lists[key])) {
+        tbody.innerHTML = skRows(8, 6);
+      }
+      var query = {
+        q: $('emp-search') ? $('emp-search').value : '',
+        status: $('emp-filter-status') ? $('emp-filter-status').value : '',
+        department: $('emp-filter-dept') ? $('emp-filter-dept').value : '',
+        location: $('emp-filter-loc') ? $('emp-filter-loc').value : '',
+        page: listState.page,
+        pageSize: 25
+      };
+      var fn = listState.team ? 'apiGetMyTeam' : 'apiGetEmployeeDirectory';
+      callServer(fn, query)
+        .then(function (data) {
+          if (!stillOn(seq, route) || !$('emp-table-body')) return;
+          empViewCache.lists[key] = { data: data, query: query };
+          fillSelectOptions('emp-filter-dept', data.departments || [], query.department);
+          fillSelectOptions('emp-filter-loc', data.locations || [], query.location);
+          renderTable(data);
+          markView_(key);
+        })
+        .catch(function (err) {
+          if (!stillOn(seq, route)) return;
+          failRefresh_();
+          var body = $('emp-table-body');
+          if (body) {
+            body.innerHTML = '<tr><td colspan="8"></td></tr>';
+            var cell = body.querySelector('td');
+            if (cell) {
+              paintErr(cell, err.message || 'Failed to load directory', function () { loadList(); });
+            }
+          }
+        });
+    }
+
+    function fillSelectOptions(id, values, selected) {
+      var el = $(id);
+      if (!el) return;
+      listState.ignoreFilter = true;
+      var current = selected || el.value;
+      var html = '<option value="">All</option>';
+      (values || []).forEach(function (v) {
+        html += '<option value="' + escapeHtml(v) + '"' + (v === current ? ' selected' : '') + '>' +
+          escapeHtml(v) + '</option>';
+      });
+      el.innerHTML = html;
+      listState.ignoreFilter = false;
+    }
+
+    function renderTable(data) {
+      var tbody = $('emp-table-body');
+      if (!tbody) return;
+      if (!data.rows || !data.rows.length) {
+        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline">' +
+          '<p class="empty-state-title">No matching employees</p>' +
+          '<p class="empty-state-text">Try a different search or clear a filter.</p></div></td></tr>';
+      } else {
+        tbody.innerHTML = data.rows.map(function (r) {
+          return '<tr class="table-row-click" data-id="' + escapeHtml(r.employee_id) + '">' +
+            '<td class="mono">' + escapeHtml(r.employee_id) + '</td>' +
+            '<td>' + escapeHtml(r.display_name) + '</td>' +
+            '<td>' + escapeHtml(r.department) + '</td>' +
+            '<td>' + escapeHtml(r.designation) + '</td>' +
+            '<td>' + escapeHtml(r.location) + '</td>' +
+            '<td>' + escapeHtml(r.employment_type) + '</td>' +
+            '<td>' + statusBadge(r.status) + '</td>' +
+            '<td>' + escapeHtml(r.manager_name || r.manager_employee_id || '—') + '</td>' +
+            '</tr>';
+        }).join('');
+        var rows = tbody.querySelectorAll('tr.table-row-click');
+        for (var i = 0; i < rows.length; i++) {
+          rows[i].addEventListener('click', function () {
+            navigate('employee-profile', { employeeId: this.getAttribute('data-id') });
+          });
+        }
+      }
+      var pag = $('emp-pagination');
+      if (!pag) return;
+      var total = data.total || 0;
+      var page = data.page || 1;
+      var size = data.pageSize || 25;
+      var pages = Math.max(1, Math.ceil(total / size));
+      pag.innerHTML = '<span>' + total + ' people</span><span>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="emp-prev" ' + (page <= 1 ? 'disabled' : '') + '>Previous</button> ' +
+        'Page ' + page + ' of ' + pages + ' ' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="emp-next" ' + (page >= pages ? 'disabled' : '') + '>Next</button></span>';
+      if ($('emp-prev')) $('emp-prev').addEventListener('click', function () { listState.page = Math.max(1, page - 1); loadList(); });
+      if ($('emp-next')) $('emp-next').addEventListener('click', function () { listState.page = page + 1; loadList(); });
+    }
+
+    function employeeFormHtml(emp, mode) {
+      emp = emp || {};
+      var types = [
+        { value: 'PERMANENT', label: 'Permanent' },
+        { value: 'CONTRACT', label: 'Contract' },
+        { value: 'INTERN', label: 'Intern' },
+        { value: 'CONSULTANT', label: 'Consultant' }
+      ];
+      var genders = [
+        { value: '', label: '—' },
+        { value: 'Female', label: 'Female' },
+        { value: 'Male', label: 'Male' },
+        { value: 'Other', label: 'Other' },
+        { value: 'Prefer not to say', label: 'Prefer not to say' }
+      ];
+      var readId = mode !== 'create';
+      var html = '<form id="emp-form" class="form-grid emp-form-grid">';
+      if (readId) {
+        html += fieldGroup('employee_id', 'Employee ID', '<input class="form-input mono" id="employee_id" value="' +
+          escapeHtml(emp.employee_id || '') + '" disabled>');
+      }
+      html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
+      html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
+      html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
+      html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
+      html += fieldGroup('gender', 'Gender', select('gender', genders, emp.gender || ''));
+      html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
+      html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true);
+      html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
+      html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
+      html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
+      html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
+      html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT'));
+      html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
+      if (emp.can_view_payroll_ids || mode === 'create') {
+        html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
+        html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
+        html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
+        html += fieldGroup('bank_ifsc', 'IFSC', input('bank_ifsc', 'text', emp.bank_ifsc));
+        html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name));
+      }
+      if (mode === 'create' || (emp.view_mode === 'HR')) {
+        html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
+      }
+      html += '</form>';
+      if (mode === 'create') {
+        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create login for this work email (role EMPLOYEE)</label>';
+      }
+      return html;
+    }
+
+    function fillManagerSelect_(list, selectedId, excludeId) {
+      var sel = $('manager_employee_id');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">None</option>';
+      (list || []).forEach(function (p) {
+        if (excludeId && p.employee_id === excludeId) return;
+        var opt = document.createElement('option');
+        opt.value = p.employee_id;
+        opt.textContent = p.employee_id + ' — ' + p.display_name;
+        if (p.employee_id === selectedId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function loadManagerOptions(selectedId, excludeId) {
+      var sel = $('manager_employee_id');
+      if (!sel) return;
+      if (empViewCache.picker && !(App.isModuleRefresh && App.isModuleRefresh('employee-create'))) {
+        fillManagerSelect_(empViewCache.picker, selectedId, excludeId);
+        return;
+      }
+      sel.innerHTML = '<option value="">None</option>';
+      callServer('apiGetEmployeePicker').then(function (list) {
+        empViewCache.picker = list || [];
+        fillManagerSelect_(list, selectedId, excludeId);
+      }).catch(function () {
+        if (selectedId) {
+          var opt = document.createElement('option');
+          opt.value = selectedId;
+          opt.textContent = selectedId;
+          opt.selected = true;
+          sel.appendChild(opt);
+        }
+      });
+    }
+
+    function collectEmployeePayload() {
+      var ids = [
+        'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
+        'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
+        'employment_type', 'location', 'pan', 'bank_account_name', 'bank_account_number',
+        'bank_ifsc', 'bank_name', 'notes'
+      ];
+      var payload = formValues(ids);
+      if ($('create_user')) payload.create_user = $('create_user').checked;
+      return payload;
+    }
+
+    function renderCreate() {
+      var page = pageEl();
+      if (!page) return;
+      var createKey = 'employee-create';
+      page.innerHTML = '<div class="page-header"><div class="page-header-text">' +
+        '<h2 class="page-heading" aria-hidden="true">Add employee</h2>' +
+        '<p class="page-lede">Employee ID is assigned on save. Payroll identifiers are optional.</p></div>' +
+        '<div class="page-header-actions">' + (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') + '</div></div>' +
+        '<div class="card">' +
+        employeeFormHtml({}, 'create') +
+        '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-emp-save">Save</button> ' +
+        '<button type="button" class="btn btn-secondary" id="btn-emp-cancel">Cancel</button></div>' +
+        '<div id="emp-form-feedback" class="action-feedback hidden" role="status"></div></div>';
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(createKey) && empViewCache.picker) {
+        fillManagerSelect_(empViewCache.picker, '', '');
+      } else {
+        loadManagerOptions('', '');
+      }
+      markView_(createKey);
+      $('btn-emp-cancel').addEventListener('click', function () { navigate('employees'); });
+      $('btn-emp-save').addEventListener('click', function () {
+        clearFieldErrors();
+        var btn = $('btn-emp-save');
+        var feedback = $('emp-form-feedback');
+        callServer('apiCreateEmployee', collectEmployeePayload(), {
+          button: btn,
+          loadingText: 'Saving employee...',
+          feedback: feedback
+        })
+          .then(function (result) {
+            (result.warnings || []).forEach(function (w) { showToast(w); });
+            invalidateEmpLists_();
+            if (setFlash) setFlash('Created ' + result.employee.employee_id, 'success', 'employee-profile');
+            navigate('employee-profile', { employeeId: result.employee.employee_id });
+          })
+          .catch(function (err) {
+            showFieldErrors(err.details);
+            if (!feedback && showToast) showToast(err.message || 'Create failed', 'error');
+          });
+      });
+    }
+
+    function renderMyProfile() {
+      renderProfile(null, true);
+    }
+
+    function renderProfile(employeeId, isSelf) {
+      var page = pageEl();
+      if (!page) return;
+      var key = profileCacheKey(employeeId, isSelf);
+      var cached = empViewCache.profiles[key];
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(key) && cached && cached.emp) {
+        drawProfile(cached.emp, !!isSelf, { restore: true, cacheKey: key });
+        return;
+      }
+      var keep = App.isModuleRefresh && App.isModuleRefresh(key) && cached && cached.emp;
+      if (keep) {
+        drawProfile(cached.emp, !!isSelf, { restore: true, cacheKey: key });
+      } else {
+        page.innerHTML =
+          '<div class="card" id="profile-shell">' +
+            '<div class="profile-header"><div>' +
+              '<div class="skeleton skeleton-xl" style="width:220px"></div>' +
+              '<div class="skeleton skeleton-line w40" style="margin-top:10px"></div>' +
+            '</div></div>' +
+            '<div class="emp-tabs">' +
+              '<span class="skeleton skeleton-line" style="width:72px;height:28px;display:inline-block;margin-right:8px"></span>' +
+              '<span class="skeleton skeleton-line" style="width:90px;height:28px;display:inline-block;margin-right:8px"></span>' +
+              '<span class="skeleton skeleton-line" style="width:80px;height:28px;display:inline-block"></span>' +
+            '</div>' +
+            '<div id="profile-body">' +
+              (App.skeletonLine ? App.skeletonLine('w100') + App.skeletonLine('w80') + App.skeletonLine('w60') : loadingHtml('Loading profile…')) +
+            '</div>' +
+          '</div>';
+      }
+      var req = isSelf ? callServer('apiGetMyProfile') : callServer('apiGetEmployee', employeeId);
+      var seq = App.getState().navSeq;
+      var route = isSelf ? 'my-profile' : 'employee-profile';
+      req.then(function (emp) {
+        if (!stillOn(seq, route)) return;
+        empViewCache.profiles[key] = { emp: emp };
+        markView_(key);
+        drawProfile(emp, !!isSelf, { cacheKey: key });
+      }).catch(function (err) {
+        if (!stillOn(seq, route)) return;
+        failRefresh_();
+        paintErr(page, err.message || 'Unable to load profile', function () {
+          renderProfile(employeeId, isSelf);
+        });
+      });
+    }
+
+    function drawProfile(emp, isSelf, opts) {
+      var page = pageEl();
+      if (!page) return;
+      var title = isSelf ? 'My Profile' : (emp.display_name || emp.employee_id);
+      $('page-title').textContent = title;
+      var tabs = ['personal', 'employment'];
+      if (emp.can_view_payroll_ids) tabs.push('payroll');
+      if (emp.view_mode !== 'TEAM_WORK') tabs.push('leave');
+      if (emp.can_view_documents) tabs.push('documents');
+      if (emp.can_view_payslips) tabs.push('payslips');
+
+      var headerActions = '';
+      if (emp.can_change_status) {
+        if (emp.status === 'ACTIVE') {
+          headerActions += '<button type="button" class="btn btn-danger" id="btn-deactivate">Deactivate</button>';
+        } else {
+          headerActions += '<button type="button" class="btn btn-primary" id="btn-activate">Reactivate</button>';
+        }
+      }
+      if (!isSelf && (App.getState().session.role === 'HR' || App.getState().session.role === 'ADMIN')) {
+        headerActions += '<button type="button" class="btn btn-secondary" id="btn-back-dir">Back to directory</button>';
+      }
+      var header = '<div class="page-header"><div class="page-header-text">' +
+        '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(emp.display_name || '') + '</h2>' +
+        '<p class="page-lede mono">' + escapeHtml(emp.employee_id || '') + ' · ' + statusBadge(emp.status) + '</p></div>' +
+        '<div class="page-header-actions">' +
+        (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') + headerActions + '</div></div>';
+      var route = isSelf ? 'my-profile' : 'employee-profile';
+      var flash = consumeFlash ? consumeFlash(route) : null;
+      var flashHtml = flashBannerHtml ? flashBannerHtml(flash) : '';
+
+      var extrasKey = emp.employee_id || 'self';
+      var extras = empViewCache.extras[extrasKey] || {};
+      var savedTab = extras.tab && tabs.indexOf(extras.tab) >= 0 ? extras.tab : tabs[0];
+      var tabBtns = tabs.map(function (t) {
+        var labels = { personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary', documents: 'Documents', payslips: 'Payslips' };
+        return '<button type="button" class="emp-tab' + (t === savedTab ? ' active' : '') + '" data-tab="' + t + '">' + labels[t] + '</button>';
+      }).join('');
+
+      var html = header + flashHtml +
+        '<div id="emp-profile-feedback" class="action-feedback hidden" role="status"></div>' +
+        '<div class="emp-tabs">' + tabBtns + '</div>';
+      html += '<div class="tab-panel' + (savedTab === 'personal' ? ' active' : '') + '" data-panel="personal">' + personalPanel(emp) + '</div>';
+      html += '<div class="tab-panel' + (savedTab === 'employment' ? ' active' : '') + '" data-panel="employment">' + employmentPanel(emp) + '</div>';
+      if (emp.can_view_payroll_ids) html += '<div class="tab-panel' + (savedTab === 'payroll' ? ' active' : '') + '" data-panel="payroll">' + payrollPanel(emp) + '</div>';
+      if (emp.view_mode !== 'TEAM_WORK') {
+        html += '<div class="tab-panel" data-panel="leave"><div id="leave-summary">' +
+          '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
+          '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
+      }
+      if (emp.can_view_documents) html += '<div class="tab-panel" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
+      if (emp.can_view_payslips) html += '<div class="tab-panel" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
+      page.innerHTML = html;
+
+      var tabEls = page.querySelectorAll('.emp-tab');
+      for (var i = 0; i < tabEls.length; i++) {
+        tabEls[i].addEventListener('click', function () {
+          var id = this.getAttribute('data-tab');
+          empViewCache.extras[extrasKey] = empViewCache.extras[extrasKey] || {};
+          empViewCache.extras[extrasKey].tab = id;
+          var ts = page.querySelectorAll('.emp-tab');
+          var ps = page.querySelectorAll('.tab-panel');
+          for (var a = 0; a < ts.length; a++) ts[a].classList.toggle('active', ts[a].getAttribute('data-tab') === id);
+          for (var b = 0; b < ps.length; b++) ps[b].classList.toggle('active', ps[b].getAttribute('data-panel') === id);
+        });
+      }
+
+      if ($('btn-back-dir')) $('btn-back-dir').addEventListener('click', function () { navigate('employees'); });
+      if ($('btn-deactivate')) $('btn-deactivate').addEventListener('click', function () { confirmStatus(emp, 'INACTIVE'); });
+      if ($('btn-activate')) $('btn-activate').addEventListener('click', function () { setStatus(emp.employee_id, 'ACTIVE'); });
+
+      bindProfileSaves(emp);
+      var restoring = !!(opts && opts.restore);
+      if (emp.view_mode !== 'TEAM_WORK') loadLeave(emp.employee_id, restoring);
+      if (emp.can_view_documents) loadDocs(emp, null, restoring);
+      if (emp.can_view_payslips) loadPayslips(emp.employee_id, restoring);
+    }
+
+    function dl(items) {
+      return '<dl class="dl-grid">' + items.map(function (it) {
+        return '<dt>' + escapeHtml(it[0]) + '</dt><dd>' + (it[2] || escapeHtml(it[1] == null || it[1] === '' ? '—' : String(it[1]))) + '</dd>';
+      }).join('') + '</dl>';
+    }
+
+    function personalPanel(emp) {
+      if (emp.view_mode === 'TEAM_WORK') {
+        return '<p class="hint">Managers see work details only for the team.</p>' +
+          dl([['Name', emp.display_name], ['Employee ID', emp.employee_id]]);
+      }
+      if (emp.can_edit || emp.can_edit_contact) {
+        var html = '<div class="form-grid emp-form-grid">';
+        if (emp.can_edit) {
+          html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
+          html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
+          html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
+          html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
+          html += fieldGroup('gender', 'Gender', input('gender', 'text', emp.gender));
+        } else {
+          html += '<div class="form-span-2">' + dl([
+            ['First name', emp.first_name], ['Last name', emp.last_name],
+            ['Display name', emp.display_name], ['Date of birth', emp.date_of_birth], ['Gender', emp.gender]
+          ]) + '</div>';
+        }
+        html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
+        html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true);
+        html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-personal">Save</button>';
+        if (emp.updated_at) html += '<span class="hint">Last updated ' + escapeHtml(String(emp.updated_at)) + '</span>';
+        html += '</div><div id="emp-save-personal-feedback" class="action-feedback hidden" role="status"></div>';
+        return html;
+      }
+      return dl([
+        ['First name', emp.first_name], ['Last name', emp.last_name], ['Display name', emp.display_name],
+        ['Date of birth', emp.date_of_birth], ['Gender', emp.gender], ['Phone', emp.phone], ['Address', emp.address]
+      ]);
+    }
+
+    function employmentPanel(emp) {
+      if (emp.view_mode === 'TEAM_WORK' || !emp.can_edit) {
+        return dl([
+          ['Employee ID', emp.employee_id], ['Work email', emp.work_email],
+          ['Department', emp.department], ['Designation', emp.designation],
+          ['Manager', emp.manager_employee_id], ['Joining date', emp.joining_date],
+          ['Type', emp.employment_type], ['Location', emp.location], ['Status', emp.status]
+        ]);
+      }
+      var html = '<div class="form-grid emp-form-grid">';
+      html += fieldGroup('employee_id', 'Employee ID', '<input class="form-input mono" id="employee_id" value="' + escapeHtml(emp.employee_id) + '" disabled>');
+      html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
+      html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
+      html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
+      html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
+      html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type));
+      html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
+      html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
+      html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-employment">Save</button></div>' +
+        '<div id="emp-save-employment-feedback" class="action-feedback hidden" role="status"></div>';
+      return html;
+    }
+
+    function payrollPanel(emp) {
+      var html = '';
+      if (emp.can_edit) {
+        html += '<div class="form-grid emp-form-grid">';
+        html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
+        html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
+        html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
+        html += fieldGroup('bank_ifsc', 'IFSC', input('bank_ifsc', 'text', emp.bank_ifsc));
+        html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name));
+        html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-payroll">Save</button></div>' +
+          '<div id="emp-save-payroll-feedback" class="action-feedback hidden" role="status"></div>';
+      } else {
+        html += dl([
+          ['PAN', emp.pan], ['Account name', emp.bank_account_name],
+          ['Account number', emp.bank_account_number], ['IFSC', emp.bank_ifsc], ['Bank', emp.bank_name]
+        ]);
+      }
+      if (emp.can_view_salary_summary) {
+        html += '<h2 class="section-title" style="margin-top:24px">Current structure</h2>';
+        if (emp.current_structure) {
+          html += dl([
+            ['Status', emp.current_structure.status],
+            ['Effective from', emp.current_structure.effective_from],
+            ['CTC (monthly)', emp.current_structure.ctc_monthly],
+            ['Currency', emp.current_structure.currency]
+          ]);
+          html += '<p class="hint">Component lines are managed in Compensation (HR).</p>';
+        } else {
+          html += '<p class="hint">No current salary structure on file yet.</p>';
+        }
+      }
+      return html;
+    }
+
+    function bindProfileSaves(emp) {
+      function save(btn, feedbackEl) {
+        clearFieldErrors();
+        var payload = {};
+        ['first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
+          'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
+          'employment_type', 'location', 'notes', 'pan', 'bank_account_name', 'bank_account_number',
+          'bank_ifsc', 'bank_name'].forEach(function (id) {
+          var el = $(id);
+          if (el && !el.disabled) payload[id] = el.value;
+        });
+        var route = emp.employee_id === (App.getState().session || {}).employee_id ? 'my-profile' : 'employee-profile';
+        return callServer('apiUpdateEmployee', emp.employee_id, payload, {
+          button: btn,
+          loadingText: 'Saving employee...',
+          feedback: feedbackEl
+        })
+          .then(function (result) {
+            (result.warnings || []).forEach(function (w) { showToast(w); });
+            invalidateEmpProfileLists_(emp.employee_id, emp.employee_id === (App.getState().session || {}).employee_id);
+            if (setFlash) setFlash('Employee saved.', 'success', route);
+            drawProfile(result.employee, emp.employee_id === (App.getState().session || {}).employee_id);
+          })
+          .catch(function (err) {
+            showFieldErrors(err.details);
+          });
+      }
+      if ($('btn-save-personal')) {
+        $('btn-save-personal').addEventListener('click', function () {
+          save(this, $('emp-save-personal-feedback'));
+        });
+      }
+      if ($('btn-save-employment')) {
+        loadManagerOptions(emp.manager_employee_id, emp.employee_id);
+        $('btn-save-employment').addEventListener('click', function () {
+          save(this, $('emp-save-employment-feedback'));
+        });
+      }
+      if ($('btn-save-payroll')) {
+        $('btn-save-payroll').addEventListener('click', function () {
+          save(this, $('emp-save-payroll-feedback'));
+        });
+      }
+    }
+
+    function confirmStatus(emp, status) {
+      var backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
+        '<div class="modal-header"><h3 class="modal-title" id="modal-title">Deactivate employee?</h3>' +
+        '<p class="modal-desc">' + escapeHtml(emp.display_name) + ' will be set INACTIVE. Their login (if any) will be disabled. They cannot submit new leave. Existing submitted leave stays until decided. Locked payroll is unchanged.</p></div>' +
+        '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>' +
+        '<button type="button" class="btn btn-danger-solid" id="modal-ok">Deactivate</button></div>' +
+        '<div id="modal-status-feedback" class="action-feedback hidden" role="status"></div></div>';
+      document.body.appendChild(backdrop);
+      $('modal-cancel').addEventListener('click', function () { backdrop.remove(); });
+      $('modal-ok').addEventListener('click', function () {
+        var okBtn = $('modal-ok');
+        var employeeId = emp.employee_id;
+        callServer('apiSetEmployeeStatus', employeeId, status, {
+          button: okBtn,
+          loadingText: 'Deactivating...',
+          feedback: $('modal-status-feedback')
+        })
+          .then(function (updated) {
+            backdrop.remove();
+            invalidateEmpProfileLists_(employeeId, employeeId === (App.getState().session || {}).employee_id);
+            if (setFlash) {
+              setFlash('Status updated to ' + updated.status, 'success',
+                employeeId === (App.getState().session || {}).employee_id ? 'my-profile' : 'employee-profile');
+            }
+            drawProfile(updated, employeeId === (App.getState().session || {}).employee_id);
+          })
+          .catch(function (err) {
+            if (setActionFeedback) setActionFeedback($('modal-status-feedback'), err.message || 'Status change failed', 'error');
+            else showToast(err.message || 'Status change failed', 'error');
+          });
+      });
+    }
+
+    function setStatus(employeeId, status) {
+      var btn = status === 'ACTIVE' ? $('btn-activate') : $('btn-deactivate');
+      var feedback = $('emp-profile-feedback');
+      callServer('apiSetEmployeeStatus', employeeId, status, {
+        button: btn,
+        loadingText: status === 'ACTIVE' ? 'Reactivating...' : 'Deactivating...',
+        feedback: feedback
+      })
+        .then(function (emp) {
+          var route = employeeId === (App.getState().session || {}).employee_id ? 'my-profile' : 'employee-profile';
+          invalidateEmpProfileLists_(employeeId, employeeId === (App.getState().session || {}).employee_id);
+          if (setFlash) setFlash('Status updated to ' + emp.status, 'success', route);
+          drawProfile(emp, employeeId === (App.getState().session || {}).employee_id);
+        });
+    }
+
+    function paintLeaveSummary_(el, rows) {
+      if (!rows.length) {
+        el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances are seeded from active leave types when an employee is created.</p></div>';
+        return;
+      }
+      el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+        '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
+        '</tr></thead><tbody>' + rows.map(function (r) {
+          return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +
+            '<td class="num">' + r.entitled_days + '</td><td class="num">' + r.used_days + '</td><td class="num">' + r.pending_days + '</td>' +
+            '<td class="num">' + r.carried_forward_days + '</td><td class="num">' + r.available_days + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+
+    function loadLeave(employeeId, restore) {
+      var el = $('leave-summary');
+      var extras = empViewCache.extras[employeeId];
+      if (restore && extras && extras.leave && el) {
+        paintLeaveSummary_(el, extras.leave);
+        return;
+      }
+      var seq = App.getState().navSeq;
+      callServer('apiGetEmployeeLeaveSummary', employeeId)
+        .then(function (rows) {
+          var panel = $('leave-summary');
+          if (!panel || seq !== App.getState().navSeq) return;
+          empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+          empViewCache.extras[employeeId].leave = rows;
+          paintLeaveSummary_(panel, rows);
+        })
+        .catch(function (err) {
+          var panel = $('leave-summary');
+          paintErr(panel, err.message || 'Leave summary unavailable', function () { loadLeave(employeeId); });
+        });
+    }
+
+    function loadDocs(emp, notice, restore) {
+      var seq = App.getState().navSeq;
+      var extra = empViewCache.extras[emp.employee_id];
+      var req = (restore && extra && extra.docs)
+        ? Promise.resolve(extra.docs)
+        : callServer('apiGetEmployeeDocuments', emp.employee_id);
+      req.then(function (rows) {
+          var el = $('docs-panel');
+          if (!el || seq !== App.getState().navSeq) return;
+          empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
+          empViewCache.extras[emp.employee_id].docs = rows;
+          var html = '';
+          if (emp.can_upload_documents) {
+            html += '<div class="form-row"><div class="form-group"><label class="form-label" for="doc-title">Title</label>' +
+              '<input class="form-input" id="doc-title" placeholder="Offer letter"></div>' +
+              '<div class="form-group"><label class="form-label" for="doc-file">File</label><input class="form-input" type="file" id="doc-file"></div></div>' +
+              '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-upload-doc">Upload</button></div>' +
+              '<div id="emp-upload-feedback" class="action-feedback hidden" role="status"></div>';
+          }
+          if (!rows.length) html += '<div class="empty-state empty-state-inline"><p class="empty-state-title">No employee files yet</p><p class="empty-state-text">Upload a document to keep it with this record.</p></div>';
+          else {
+            html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Uploaded</th><th class="col-actions"></th></tr></thead><tbody>';
+            rows.forEach(function (d) {
+              html += '<tr><td>' + escapeHtml(d.title) + '</td><td>' + escapeHtml(String(d.uploaded_at || '')) +
+                '</td><td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">Download</button></td></tr>';
+            });
+            html += '</tbody></table></div>';
+          }
+          el.innerHTML = html;
+          if ($('btn-upload-doc')) $('btn-upload-doc').addEventListener('click', function () { uploadDoc(emp); });
+          bindDownloads(el);
+          if (notice && setActionFeedback) setActionFeedback($('emp-upload-feedback') || el, notice, 'success');
+        })
+        .catch(function (err) {
+          var el = $('docs-panel');
+          paintErr(el, err.message || 'Documents unavailable', function () { loadDocs(emp); });
+        });
+    }
+
+    function loadPayslips(employeeId, restore) {
+      var seq = App.getState().navSeq;
+      var extra = empViewCache.extras[employeeId];
+      var req = (restore && extra && extra.payslips)
+        ? Promise.resolve(extra.payslips)
+        : callServer('apiGetEmployeePayslips', employeeId);
+      req.then(function (rows) {
+          var el = $('payslip-panel');
+          if (!el || seq !== App.getState().navSeq) return;
+          empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+          empViewCache.extras[employeeId].payslips = rows;
+          if (!rows.length) {
+            el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No payslips yet</p><p class="empty-state-text">Files appear here after payroll is locked.</p></div>';
+            return;
+          }
+          el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Run</th><th>Uploaded</th><th class="col-actions"></th></tr></thead><tbody>' +
+            rows.map(function (d) {
+              return '<tr><td>' + escapeHtml(d.title) + '</td><td>' + escapeHtml(d.payroll_run_id || '—') + '</td><td>' +
+                escapeHtml(String(d.uploaded_at || '')) + '</td><td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' +
+                escapeHtml(d.document_id) + '">Download</button></td></tr>';
+            }).join('') + '</tbody></table></div>';
+          bindDownloads(el);
+        })
+        .catch(function (err) {
+          var el = $('payslip-panel');
+          paintErr(el, err.message || 'Payslips unavailable', function () { loadPayslips(employeeId); });
+        });
+    }
+
+    function bindDownloads(root) {
+      var btns = root.querySelectorAll('.js-dl');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].addEventListener('click', function () {
+          var id = this.getAttribute('data-id');
+          var btn = this;
+          callServer('apiDownloadEmployeeDocument', id, { button: btn, loadingText: 'Downloading...' })
+            .then(downloadBlob)
+            .catch(function (err) { showToast(err.message || 'Download failed', 'error'); });
+        });
+      }
+    }
+
+    function downloadBlob(file) {
+      var binary = atob(file.base64);
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      var blob = new Blob([bytes], { type: file.mimeType || 'application/octet-stream' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = file.fileName || file.title || 'download';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function uploadDoc(emp) {
+      var fileInput = $('doc-file');
+      var title = $('doc-title') ? $('doc-title').value : '';
+      var btn = $('btn-upload-doc');
+      var feedback = $('emp-upload-feedback');
+      if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+        if (setActionFeedback) setActionFeedback(feedback, 'Choose a file to upload', 'error');
+        else showToast('Choose a file to upload', 'error');
+        return;
+      }
+      if (App.isButtonLoading && App.isButtonLoading(btn)) return;
+      if (App.setButtonLoading) App.setButtonLoading(btn, 'Uploading...');
+      var file = fileInput.files[0];
+      var reader = new FileReader();
+      reader.onerror = function () {
+        if (App.restoreButton) App.restoreButton(btn);
+        if (setActionFeedback) setActionFeedback(feedback, 'Could not read that file', 'error');
+      };
+      reader.onload = function () {
+        var result = reader.result || '';
+        var base64 = String(result).split(',')[1] || '';
+        callServer('apiUploadEmployeeDocument', emp.employee_id, {
+          title: title || file.name,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          base64: base64
+        }, { button: btn, loadingText: 'Uploading...', feedback: feedback }).then(function () {
+          if (empViewCache.extras[emp.employee_id]) delete empViewCache.extras[emp.employee_id].docs;
+          shellInv_(emp.employee_id === (App.getState().session || {}).employee_id
+            ? 'my-profile'
+            : ('employee-profile:' + emp.employee_id));
+          loadDocs(emp, 'File uploaded.');
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+})();
+</script>

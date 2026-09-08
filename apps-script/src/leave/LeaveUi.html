@@ -1,0 +1,821 @@
+<script>
+(function () {
+  'use strict';
+
+  function ctx() {
+    if (window.HrmsApp) {
+      return {
+        state: window.HrmsApp.getState(),
+        callServer: window.HrmsApp.callServer,
+        escapeHtml: window.HrmsApp.escapeHtml,
+        showToast: window.HrmsApp.showToast,
+        navigate: window.HrmsApp.navigate,
+        $: window.HrmsApp.$
+      };
+    }
+    return window.__hrmsCtx;
+  }
+
+  function onRoute(route) {
+    var app = window.HrmsApp;
+    if (!app || !app.getState) return true;
+    return app.getState().currentRoute === route;
+  }
+
+  function flashHtml(route) {
+    var app = window.HrmsApp;
+    if (!app || !app.consumeFlash) return '';
+    return app.flashBannerHtml(app.consumeFlash(route));
+  }
+
+  function setFlash(message, type, route) {
+    var app = window.HrmsApp;
+    if (app && app.setFlash) app.setFlash(message, type, route);
+  }
+
+  function actionOpts(button, loadingText, feedback) {
+    var o = { loadingText: loadingText || 'Working…' };
+    if (button) o.button = button;
+    if (feedback) o.feedback = feedback;
+    return o;
+  }
+
+  var leaveViewCache = {};
+
+  function markLeaveView_(key) {
+    if (window.HrmsApp && window.HrmsApp.markModuleViewLoaded) window.HrmsApp.markModuleViewLoaded(key);
+  }
+
+  function failLeaveRefresh_() {
+    if (window.HrmsApp && window.HrmsApp.finishModuleRefresh) window.HrmsApp.finishModuleRefresh(true);
+  }
+
+  function tryRestoreLeave_(key, paint) {
+    if (!leaveViewCache[key]) return false;
+    if (window.HrmsApp && window.HrmsApp.consumeModuleViewRestore && window.HrmsApp.consumeModuleViewRestore(key)) {
+      paint(leaveViewCache[key]);
+      return true;
+    }
+    return false;
+  }
+
+  function keepLeavePaint_(key) {
+    return !!(window.HrmsApp && window.HrmsApp.isModuleRefresh && window.HrmsApp.isModuleRefresh(key) && leaveViewCache[key]);
+  }
+
+  function invalidateLeaveViews_(keys, opts) {
+    opts = opts || {};
+    var list = Array.isArray(keys) ? keys : [keys];
+    list.forEach(function (k) { delete leaveViewCache[k]; });
+    var app = window.HrmsApp;
+    if (app && app.invalidateModuleViewCache) app.invalidateModuleViewCache(list);
+    if (opts.dashboard && app && app.invalidateDashboardView) app.invalidateDashboardView();
+  }
+
+  function invalidateLeaveAfterRequestMutation_() {
+    invalidateLeaveViews_(
+      ['my-leave', 'leave-apply', 'leave-approvals', 'leave-admin', 'leave-calendar'],
+      { dashboard: true }
+    );
+  }
+
+  function invalidateLeaveAfterAdminConfig_() {
+    invalidateLeaveViews_(['my-leave', 'leave-apply', 'leave-admin'], { dashboard: true });
+  }
+
+  if (window.HrmsApp && window.HrmsApp.registerModuleDataCacheClear) {
+    window.HrmsApp.registerModuleDataCacheClear(function () {
+      leaveViewCache = {};
+    });
+  }
+
+  function pageHead(title, lede, actionsHtml) {
+    var app = window.HrmsApp;
+    if (app && app.pageHeaderHtml) return app.pageHeaderHtml(title, lede, actionsHtml || '');
+    return '<div class="page-header"><div class="page-header-text"><h2 class="page-heading" aria-hidden="true">' +
+      (title || '') + '</h2>' + (lede ? '<p class="page-lede">' + lede + '</p>' : '') +
+      '</div><div class="page-header-actions">' + (actionsHtml || '') + '</div></div>';
+  }
+
+  function badgeClass(status) {
+    var s = String(status || '').toUpperCase();
+    if (s === 'DRAFT') return 'badge status-badge badge-draft';
+    if (s === 'SUBMITTED') return 'badge status-badge badge-submitted';
+    if (s === 'APPROVED') return 'badge status-badge badge-approved';
+    if (s === 'REJECTED') return 'badge status-badge badge-rejected';
+    if (s === 'CANCELLED') return 'badge status-badge badge-cancelled';
+    return 'badge status-badge';
+  }
+
+  function fmtDays(n) {
+    if (n === null || n === undefined || n === '') return '—';
+    return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
+  }
+
+  function payloadFromForm(form) {
+    return {
+      leave_request_id: form.leave_request_id || '',
+      employee_id: form.employee_id || '',
+      leave_type_id: form.leave_type_id,
+      start_date: form.start_date,
+      end_date: form.end_date,
+      is_half_day: !!form.is_half_day,
+      half_day_session: form.half_day_session || '',
+      reason: form.reason || ''
+    };
+  }
+
+  function uiHelpers() {
+    var app = window.HrmsApp || {};
+    return {
+      skRows: function (cols, rows) {
+        return app.skeletonTableRows ? app.skeletonTableRows(cols, rows) : '';
+      },
+      spinner: function (label) {
+        if (app.sectionSkeleton) return app.sectionSkeleton({ label: label || 'Loading' });
+        return app.sectionSpinner ? app.sectionSpinner(label) :
+          '<div class="hrms-loading-block" aria-busy="true"><div class="skeleton skeleton-line w80" aria-hidden="true"></div></div>';
+      },
+      paintErr: function (el, message, retry) {
+        if (app.paintSectionError) app.paintSectionError(el, message, retry);
+        else if (el) el.innerHTML = '<div class="alert alert-danger">' + (window.HrmsApp ? window.HrmsApp.escapeHtml(message) : message) + '</div>';
+      }
+    };
+  }
+
+  function renderApply(page, helpers, prefill) {
+    var c = ctx();
+    var u = uiHelpers();
+    if (!prefill && tryRestoreLeave_('leave-apply', function (cached) {
+      paintApplyForm_(page, helpers, cached.types, cached.employees, cached.mine, cached.prefill || {});
+    })) return;
+    if (!keepLeavePaint_('leave-apply')) {
+      page.innerHTML =
+        pageHead('Apply leave', 'Dates are counted on the server. Half-day is 0.5 when the type allows it.') +
+        '<div class="card" id="leave-apply-body">' + u.spinner('Loading form…') +
+        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    }
+
+    Promise.all([
+      c.callServer('apiLeaveGetTypes', false),
+      c.callServer('apiLeaveListEmployees'),
+      c.callServer('apiLeaveGetMyLeave', '')
+    ]).then(function (parts) {
+      if (!onRoute('leave-apply')) return;
+      var types = parts[0] || [];
+      var employees = parts[1] || [];
+      var mine = parts[2] || {};
+      leaveViewCache['leave-apply'] = { types: types, employees: employees, mine: mine, prefill: prefill || {} };
+      markLeaveView_('leave-apply');
+      paintApplyForm_(page, helpers, types, employees, mine, prefill || {});
+    }).catch(function (err) {
+      failLeaveRefresh_();
+      u.paintErr(page, err.message || 'Failed to load', function () { renderApply(page, helpers, prefill); });
+    });
+  }
+
+  function paintApplyForm_(page, helpers, types, employees, mine, prefill) {
+      var c = ctx();
+      var canProxy = !!(mine.can_proxy);
+      prefill = prefill || {};
+      var typeOpts = types.map(function (t) {
+        return '<option value="' + c.escapeHtml(t.leave_type_id) + '"' +
+          (prefill.leave_type_id === t.leave_type_id ? ' selected' : '') + '>' +
+          c.escapeHtml(t.code + ' — ' + t.name) + '</option>';
+      }).join('');
+      var empOpts = employees.map(function (e) {
+        var selected = (prefill.employee_id || c.state.session.employee_id) === e.employee_id;
+        return '<option value="' + c.escapeHtml(e.employee_id) + '"' + (selected ? ' selected' : '') + '>' +
+          c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
+      }).join('');
+
+      page.innerHTML =
+        pageHead('Apply leave', 'Dates are counted on the server. Half-day is 0.5 when the type allows it.') +
+        '<div class="card">' +
+          '<form id="leave-apply-form" class="form-grid">' +
+            '<input type="hidden" name="leave_request_id" value="' + c.escapeHtml(prefill.leave_request_id || '') + '">' +
+            (canProxy
+              ? '<div class="form-group"><label class="form-label is-required" for="leave-emp">Employee</label>' +
+                '<select class="form-select" id="leave-emp" name="employee_id">' + empOpts + '</select></div>'
+              : '<input type="hidden" name="employee_id" value="' + c.escapeHtml(c.state.session.employee_id) + '">') +
+            '<div class="form-group"><label class="form-label is-required" for="leave-type">Leave type</label>' +
+              '<select class="form-select" id="leave-type" name="leave_type_id" required>' +
+              '<option value="">Select type</option>' + typeOpts + '</select></div>' +
+            '<div class="form-row">' +
+              '<div class="form-group"><label class="form-label is-required" for="leave-start">Start date</label>' +
+                '<input class="form-input" type="date" id="leave-start" name="start_date" required value="' + c.escapeHtml(prefill.start_date || '') + '"></div>' +
+              '<div class="form-group"><label class="form-label is-required" for="leave-end">End date</label>' +
+                '<input class="form-input" type="date" id="leave-end" name="end_date" required value="' + c.escapeHtml(prefill.end_date || '') + '"></div>' +
+            '</div>' +
+            '<div class="form-row">' +
+              '<div class="form-group"><label class="form-check"><input type="checkbox" id="leave-half" name="is_half_day"' + (prefill.is_half_day ? ' checked' : '') + '> Half day</label></div>' +
+              '<div class="form-group"><label class="form-label" for="leave-session">Session</label>' +
+                '<select class="form-select" id="leave-session" name="half_day_session">' +
+                  '<option value="">—</option><option value="AM"' + (prefill.half_day_session === 'AM' ? ' selected' : '') + '>AM</option>' +
+                  '<option value="PM"' + (prefill.half_day_session === 'PM' ? ' selected' : '') + '>PM</option>' +
+                '</select></div>' +
+            '</div>' +
+            '<div class="form-group"><label class="form-label" for="leave-reason">Reason</label>' +
+              '<textarea class="form-input form-textarea" id="leave-reason" name="reason" rows="3">' + c.escapeHtml(prefill.reason || '') + '</textarea></div>' +
+            '<p class="hint" id="leave-preview">Duration will be calculated on the server.</p>' +
+            '<div class="form-actions">' +
+              '<button type="button" class="btn btn-secondary" id="btn-leave-draft">Save draft</button>' +
+              '<button type="submit" class="btn btn-primary" id="btn-leave-submit">Submit</button>' +
+              '<button type="button" class="btn btn-ghost" id="btn-leave-back">Back to My Leave</button>' +
+            '</div>' +
+            '<div id="leave-apply-feedback" class="action-feedback hidden" role="status"></div>' +
+          '</form>' +
+        '</div>';
+
+      function readForm() {
+        var form = document.getElementById('leave-apply-form');
+        return payloadFromForm({
+          leave_request_id: form.leave_request_id.value,
+          employee_id: form.employee_id ? form.employee_id.value : c.state.session.employee_id,
+          leave_type_id: form.leave_type_id.value,
+          start_date: form.start_date.value,
+          end_date: form.end_date.value,
+          is_half_day: form.is_half_day.checked,
+          half_day_session: form.half_day_session.value,
+          reason: form.reason.value
+        });
+      }
+
+      function refreshPreview() {
+        var p = readForm();
+        if (!p.start_date || !p.end_date) return;
+        c.callServer('apiLeavePreviewDays', p).then(function (d) {
+          document.getElementById('leave-preview').textContent =
+            'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+        }).catch(function (err) {
+          document.getElementById('leave-preview').textContent = err.message || 'Could not preview days';
+        });
+      }
+
+      ['leave-start', 'leave-end', 'leave-half', 'leave-session'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', refreshPreview);
+      });
+      document.getElementById('leave-half').addEventListener('change', function () {
+        var half = document.getElementById('leave-half').checked;
+        if (half) document.getElementById('leave-end').value = document.getElementById('leave-start').value;
+      });
+
+      document.getElementById('btn-leave-back').addEventListener('click', function () {
+        helpers.navigate('my-leave');
+      });
+      document.getElementById('btn-leave-draft').addEventListener('click', function () {
+        var p = readForm();
+        var feedback = document.getElementById('leave-apply-feedback');
+        if (!p.leave_type_id || !p.start_date || !p.end_date) {
+          if (window.HrmsApp && window.HrmsApp.setActionFeedback) {
+            window.HrmsApp.setActionFeedback(feedback, 'Type and dates are required', 'error');
+          } else {
+            helpers.showToast('Type and dates are required', 'error');
+          }
+          return;
+        }
+        c.callServer('apiLeaveSaveDraft', p, actionOpts(this, 'Saving...', feedback)).then(function () {
+          invalidateLeaveAfterRequestMutation_();
+          setFlash('Draft saved.', 'success', 'my-leave');
+          helpers.navigate('my-leave');
+        });
+      });
+      document.getElementById('leave-apply-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var p = readForm();
+        var submitBtn = document.getElementById('btn-leave-submit') || ev.target.querySelector('button[type="submit"]');
+        var feedback = document.getElementById('leave-apply-feedback');
+        c.callServer('apiLeaveSubmit', p, actionOpts(submitBtn, 'Submitting...', feedback)).then(function () {
+          invalidateLeaveAfterRequestMutation_();
+          setFlash('Leave submitted.', 'success', 'my-leave');
+          helpers.navigate('my-leave');
+        });
+      });
+      refreshPreview();
+  }
+
+  function renderMyLeave(page, helpers) {
+    var c = ctx();
+    var u = uiHelpers();
+    if (tryRestoreLeave_('my-leave', function (data) { paintMyLeave_(page, helpers, data); })) return;
+    if (!keepLeavePaint_('my-leave')) {
+      page.innerHTML =
+        pageHead('My Leave', 'Balances for the current leave year and your requests.',
+          '<button type="button" class="btn btn-primary" id="btn-apply-leave" disabled>Apply leave</button>' +
+          '<button type="button" class="btn btn-secondary" id="btn-leave-cal" disabled>Calendar</button>') +
+        '<div class="card"><h2 class="section-title">Balances</h2>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
+          '<tbody id="leave-bal-body">' + u.skRows(7, 4) + '</tbody></table></div></div>' +
+        '<div class="card"><h2 class="section-title">My requests</h2>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody id="leave-req-body">' + u.skRows(7, 4) + '</tbody></table></div></div>';
+    }
+
+    c.callServer('apiLeaveGetMyLeave', '').then(function (data) {
+      if (!onRoute('my-leave')) return;
+      leaveViewCache['my-leave'] = data;
+      markLeaveView_('my-leave');
+      paintMyLeave_(page, helpers, data);
+    }).catch(function (err) {
+      failLeaveRefresh_();
+      u.paintErr(page, err.message || 'Failed to load', function () { renderMyLeave(page, helpers); });
+    });
+  }
+
+  function paintMyLeave_(page, helpers, data) {
+      var c = ctx();
+      var balRows = (data.balances || []).map(function (b) {
+        return '<tr><td>' + c.escapeHtml(b.code) + '</td><td>' + c.escapeHtml(b.name) + '</td>' +
+          '<td class="num">' + fmtDays(b.entitled_days) + '</td>' +
+          '<td class="num">' + fmtDays(b.carried_forward_days) + '</td>' +
+          '<td class="num">' + fmtDays(b.used_days) + '</td>' +
+          '<td class="num">' + fmtDays(b.pending_days) + '</td>' +
+          '<td class="num">' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</td></tr>';
+      }).join('');
+      var reqRows = (data.requests || []).map(function (r) {
+        var canCancel = r.status === 'DRAFT' || r.status === 'SUBMITTED';
+        return '<tr>' +
+          '<td>' + c.escapeHtml(r.leave_request_id) + '</td>' +
+          '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
+          '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
+          '<td class="num">' + fmtDays(r.total_days) + '</td>' +
+          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status) + '</span></td>' +
+          '<td>' + c.escapeHtml(r.reason) + '</td>' +
+          '<td class="col-actions">' + (canCancel ? '<button type="button" class="btn btn-danger btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
+            (r.status === 'DRAFT' ? ' <button type="button" class="btn btn-secondary btn-sm" data-edit="' + c.escapeHtml(r.leave_request_id) + '">Edit</button>' : '') +
+          '</td></tr>';
+      }).join('');
+      page.innerHTML =
+        flashHtml('my-leave') +
+        pageHead('My Leave', 'Balances for leave year ' + (data.leave_year || '') + '.',
+          '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
+          '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>') +
+        '<div class="card"><h2 class="section-title">Balances</h2>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
+          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div></td></tr>') + '</tbody></table></div></div>' +
+        '<div class="card"><h2 class="section-title">My requests</h2>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody>' + (reqRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave requests yet</p><p class="empty-state-text">Apply leave to create your first request.</p></div></td></tr>') + '</tbody></table></div></div>';
+
+      var applyBtn = document.getElementById('btn-apply-leave');
+      if (applyBtn) applyBtn.addEventListener('click', function () {
+        helpers.navigate('leave-apply');
+      });
+      var calBtn = document.getElementById('btn-leave-cal');
+      if (calBtn) calBtn.addEventListener('click', function () {
+        helpers.navigate('leave-calendar');
+      });
+      page.querySelectorAll('[data-cancel]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (!confirm('Cancel this leave request?')) return;
+          c.callServer('apiLeaveCancel', btn.getAttribute('data-cancel'), actionOpts(btn, 'Cancelling...'))
+            .then(function () {
+              invalidateLeaveAfterRequestMutation_();
+              setFlash('Leave cancelled.', 'success', 'my-leave');
+              renderMyLeave(page, helpers);
+            })
+            .catch(function (err) { helpers.showToast(err.message || 'Cancel failed', 'error'); });
+        });
+      });
+      page.querySelectorAll('[data-edit]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-edit');
+          var row = (data.requests || []).filter(function (r) { return r.leave_request_id === id; })[0];
+          helpers.navigate('leave-apply');
+          setTimeout(function () { renderApply(page, helpers, row); }, 0);
+        });
+      });
+  }
+
+  function openDecisionModal(helpers, title, danger, onOk) {
+    var c = ctx();
+    var wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop';
+    wrap.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+      '<div class="modal-header"><h3 class="modal-title">' + c.escapeHtml(title) + '</h3>' +
+      '<p class="modal-desc">Add an optional comment for the audit trail.</p></div>' +
+      '<div class="modal-body"><div class="form-group"><label class="form-label" for="leave-decision-comment">Comment</label>' +
+      '<textarea class="form-input form-textarea" id="leave-decision-comment" rows="3"></textarea></div></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="leave-modal-cancel">Cancel</button>' +
+      '<button type="button" class="btn ' + (danger ? 'btn-danger-solid' : 'btn-primary') + '" id="leave-modal-ok">Confirm</button></div></div>';
+    document.body.appendChild(wrap);
+    wrap.querySelector('#leave-modal-cancel').addEventListener('click', function () { wrap.remove(); });
+    wrap.querySelector('#leave-modal-ok').addEventListener('click', function () {
+      var comment = wrap.querySelector('#leave-decision-comment').value;
+      wrap.remove();
+      onOk(comment);
+    });
+  }
+
+  function renderApprovals(page, helpers) {
+    var c = ctx();
+    var u = uiHelpers();
+    if (tryRestoreLeave_('leave-approvals', function (rows) { paintApprovals_(page, helpers, rows); })) return;
+    if (!keepLeavePaint_('leave-approvals')) {
+      page.innerHTML = pageHead('Leave approvals', 'Submitted requests waiting for a decision.') +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody id="appr-body">' + u.skRows(7, 5) + '</tbody></table></div>';
+    }
+    c.callServer('apiLeaveGetApprovals').then(function (rows) {
+      if (!onRoute('leave-approvals')) return;
+      leaveViewCache['leave-approvals'] = rows;
+      markLeaveView_('leave-approvals');
+      paintApprovals_(page, helpers, rows);
+    }).catch(function (err) {
+      failLeaveRefresh_();
+      u.paintErr(page, err.message || 'Failed to load', function () { renderApprovals(page, helpers); });
+    });
+  }
+
+  function paintApprovals_(page, helpers, rows) {
+      var c = ctx();
+      var body = (rows || []).map(function (r) {
+        return '<tr>' +
+          '<td class="num">' + c.escapeHtml(r.employee_id) + '</td>' +
+          '<td>' + c.escapeHtml(r.employee_name) + '</td>' +
+          '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
+          '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
+          '<td class="num">' + fmtDays(r.total_days) + '</td>' +
+          '<td>' + c.escapeHtml(r.reason) + '</td>' +
+          '<td class="col-actions"><button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
+            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button></td></tr>';
+      }).join('');
+      page.innerHTML = flashHtml('leave-approvals') +
+        pageHead('Leave approvals', 'Submitted requests waiting for a decision.') +
+        '<div id="leave-appr-feedback" class="action-feedback hidden" role="status"></div>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No submitted leave needs a decision right now.</p></div></td></tr>') + '</tbody></table></div>';
+      page.querySelectorAll('[data-approve]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openDecisionModal(helpers, 'Approve leave', false, function (comment) {
+              c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
+                actionOpts(btn, 'Approving...', document.getElementById('leave-appr-feedback')))
+                .then(function () {
+                  invalidateLeaveAfterRequestMutation_();
+                  setFlash('Leave approved.', 'success', 'leave-approvals');
+                  renderApprovals(page, helpers);
+                });
+            });
+        });
+      });
+      page.querySelectorAll('[data-reject]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openDecisionModal(helpers, 'Reject leave', true, function (comment) {
+              c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
+                actionOpts(btn, 'Rejecting...', document.getElementById('leave-appr-feedback')))
+                .then(function () {
+                  invalidateLeaveAfterRequestMutation_();
+                  setFlash('Leave rejected.', 'success', 'leave-approvals');
+                  renderApprovals(page, helpers);
+                });
+            });
+        });
+      });
+  }
+
+  function renderAdmin(page, helpers) {
+    var c = ctx();
+    var u = uiHelpers();
+    if (tryRestoreLeave_('leave-admin', function (cached) {
+      paintAdmin_(page, helpers, cached.data, cached.employees);
+    })) return;
+    if (!keepLeavePaint_('leave-admin')) {
+    page.innerHTML =
+      pageHead('Leave', 'Company leave requests and configurable leave types.') +
+      '<div class="tabs" id="leave-admin-tabs">' +
+        '<button type="button" class="tab active" data-tab="requests">All requests</button>' +
+        '<button type="button" class="tab" data-tab="types">Leave types</button>' +
+      '</div>' +
+      '<div id="tab-requests"><div class="card"><h2 class="section-title">Requests</h2>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + u.skRows(6, 6) + '</tbody></table></div></div></div>' +
+      '<div id="tab-types" class="hidden"><div class="card"><h2 class="section-title">Leave types</h2>' +
+        (u.skRows ? '<div class="table-wrap"><table class="data-table"><tbody>' + u.skRows(4, 4) + '</tbody></table></div>' : '') +
+      '</div></div>';
+    }
+
+    Promise.all([
+      c.callServer('apiLeaveGetAdminList', {}),
+      c.callServer('apiLeaveListEmployees')
+    ]).then(function (parts) {
+      if (!onRoute('leave-admin')) return;
+      leaveViewCache['leave-admin'] = { data: parts[0], employees: parts[1] || [] };
+      markLeaveView_('leave-admin');
+      paintAdmin_(page, helpers, parts[0], parts[1] || []);
+    }).catch(function (err) {
+      failLeaveRefresh_();
+      u.paintErr(page, err.message || 'Failed to load', function () { renderAdmin(page, helpers); });
+    });
+  }
+
+  function paintAdmin_(page, helpers, data, employees) {
+      var c = ctx();
+      var typeRows = (data.types || []).map(function (t) {
+        return '<tr>' +
+          '<td>' + c.escapeHtml(t.leave_type_id) + '</td>' +
+          '<td>' + c.escapeHtml(t.code) + '</td>' +
+          '<td>' + c.escapeHtml(t.name) + '</td>' +
+          '<td>' + (t.requires_balance ? 'Yes' : 'No') + '</td>' +
+          '<td>' + (t.counts_as_lop ? 'Yes' : 'No') + '</td>' +
+          '<td class="num">' + fmtDays(t.annual_entitlement_days) + '</td>' +
+          '<td>' + (t.is_active ? 'Active' : 'Inactive') + '</td>' +
+          '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit-type="' + c.escapeHtml(t.leave_type_id) + '">Edit</button></td></tr>';
+      }).join('');
+      var reqRows = (data.requests || []).slice(0, 25).map(function (r) {
+        return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+          '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
+          '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
+          c.escapeHtml(r.status) + '</span></td><td class="col-actions">' +
+          (r.status === 'SUBMITTED' ? '<button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
+            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button> ' : '') +
+          ((r.status === 'DRAFT' || r.status === 'SUBMITTED' || r.status === 'APPROVED')
+            ? '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
+          '</td></tr>';
+      }).join('');
+      var empFilter = employees.map(function (e) {
+        return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
+      }).join('');
+
+      page.innerHTML =
+        flashHtml('leave-admin') +
+        pageHead('Leave', 'Company leave requests and configurable leave types.') +
+        '<div class="tabs" id="leave-admin-tabs">' +
+          '<button type="button" class="tab active" data-tab="requests">All requests</button>' +
+          '<button type="button" class="tab" data-tab="types">Leave types</button>' +
+        '</div>' +
+        '<div id="tab-requests">' +
+          '<div class="page-toolbar"><div class="filters">' +
+            '<div class="form-group"><label class="form-label" for="flt-emp">Employee</label><select class="form-select" id="flt-emp"><option value="">All</option>' + empFilter + '</select></div>' +
+            '<div class="form-group"><label class="form-label" for="flt-status">Status</label><select class="form-select" id="flt-status">' +
+              '<option value="">All</option><option>DRAFT</option><option>SUBMITTED</option><option>APPROVED</option><option>REJECTED</option><option>CANCELLED</option></select></div>' +
+            '<div class="form-group"><button type="button" class="btn btn-secondary" id="btn-flt">Apply filters</button></div>' +
+          '</div></div>' +
+          '<div id="leave-admin-filter-feedback" class="action-feedback hidden" role="status"></div>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div></div>' +
+        '<div id="tab-types" class="hidden">' +
+          '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements — not hard-coded company policy.</p>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Balance</th><th>LOP</th><th class="num">Entitlement</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody>' + (typeRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No types yet</p></div></td></tr>') + '</tbody></table></div>' +
+          '<form id="leave-type-form" class="form-grid" style="margin-top:20px">' +
+            '<input type="hidden" name="leave_type_id" id="type-id">' +
+            '<div class="form-row"><div class="form-group"><label class="form-label is-required" for="type-code">Code</label><input class="form-input" name="code" id="type-code" required></div>' +
+            '<div class="form-group"><label class="form-label is-required" for="type-name">Name</label><input class="form-input" name="name" id="type-name" required></div></div>' +
+            '<div class="form-row">' +
+              '<label class="form-check"><input type="checkbox" name="is_paid" id="type-paid"> Paid</label>' +
+              '<label class="form-check"><input type="checkbox" name="requires_balance" id="type-bal"> Requires balance</label>' +
+              '<label class="form-check"><input type="checkbox" name="allow_half_day" id="type-half"> Allow half day</label>' +
+              '<label class="form-check"><input type="checkbox" name="counts_as_lop" id="type-lop"> Counts as LOP</label>' +
+              '<label class="form-check"><input type="checkbox" name="is_active" id="type-active" checked> Active</label>' +
+            '</div>' +
+            '<div class="form-row">' +
+              '<div class="form-group"><label class="form-label">Annual entitlement</label><input class="form-input" type="number" min="0" step="0.5" name="annual_entitlement_days" id="type-ent" value="0"></div>' +
+              '<div class="form-group"><label class="form-label">Carry-forward max</label><input class="form-input" type="number" min="0" step="0.5" name="carry_forward_max_days" id="type-cf" value="0"></div>' +
+              '<div class="form-group"><label class="form-label">Max consecutive</label><input class="form-input" type="number" min="0" step="0.5" name="max_consecutive_days" id="type-max"></div>' +
+              '<div class="form-group"><label class="form-label">Min service days</label><input class="form-input" type="number" min="0" name="min_service_days" id="type-min" value="0"></div>' +
+              '<div class="form-group"><label class="form-label">Sort order</label><input class="form-input" type="number" name="sort_order" id="type-sort" value="0"></div>' +
+            '</div>' +
+            '<div class="form-actions"><button type="submit" class="btn btn-primary" id="btn-save-type">Save type</button>' +
+              '<button type="button" class="btn btn-secondary" id="btn-type-reset">New type</button></div>' +
+            '<div id="leave-type-feedback" class="action-feedback hidden" role="status"></div>' +
+          '</form>' +
+          '<div class="form-actions"><button type="button" class="btn btn-secondary" id="btn-start-year">Start leave year (grant balances)</button></div>' +
+          '<div id="leave-year-feedback" class="action-feedback hidden" role="status"></div>' +
+        '</div></div>';
+
+      function bindAdminActions() {
+        var adminFeedback = function () { return document.getElementById('leave-admin-filter-feedback'); };
+        page.querySelectorAll('[data-approve]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            openDecisionModal(helpers, 'Approve leave', false, function (comment) {
+              c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
+                actionOpts(btn, 'Approving...', adminFeedback()))
+                .then(function () {
+                  invalidateLeaveAfterRequestMutation_();
+                  setFlash('Leave approved.', 'success', 'leave-admin');
+                  renderAdmin(page, helpers);
+                });
+            });
+          });
+        });
+        page.querySelectorAll('[data-reject]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            openDecisionModal(helpers, 'Reject leave', true, function (comment) {
+              c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
+                actionOpts(btn, 'Rejecting...', adminFeedback()))
+                .then(function () {
+                  invalidateLeaveAfterRequestMutation_();
+                  setFlash('Leave rejected.', 'success', 'leave-admin');
+                  renderAdmin(page, helpers);
+                });
+            });
+          });
+        });
+        page.querySelectorAll('[data-cancel]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            if (!confirm('Cancel this request?')) return;
+            c.callServer('apiLeaveCancel', btn.getAttribute('data-cancel'),
+              actionOpts(btn, 'Cancelling...', adminFeedback()))
+              .then(function () {
+                invalidateLeaveAfterRequestMutation_();
+                setFlash('Leave cancelled.', 'success', 'leave-admin');
+                renderAdmin(page, helpers);
+              });
+          });
+        });
+      }
+      bindAdminActions();
+
+      page.querySelectorAll('#leave-admin-tabs .tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          page.querySelectorAll('#leave-admin-tabs .tab').forEach(function (t) { t.classList.remove('active'); });
+          tab.classList.add('active');
+          var id = tab.getAttribute('data-tab');
+          var tabReq = document.getElementById('tab-requests');
+          var tabTypes = document.getElementById('tab-types');
+          if (tabReq) tabReq.classList.toggle('hidden', id !== 'requests');
+          if (tabTypes) tabTypes.classList.toggle('hidden', id !== 'types');
+        });
+      });
+
+      document.getElementById('btn-flt').addEventListener('click', function () {
+        var body = document.getElementById('admin-req-body');
+        if (body) body.innerHTML = u.skRows(6, 5);
+        var fltBtn = this;
+        var feedback = document.getElementById('leave-admin-filter-feedback');
+        c.callServer('apiLeaveGetAdminList', {
+          employee_id: document.getElementById('flt-emp').value,
+          status: document.getElementById('flt-status').value
+        }, actionOpts(fltBtn, 'Filtering...', feedback)).then(function (next) {
+          var html = (next.requests || []).slice(0, 25).map(function (r) {
+            return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+              '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
+              '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
+              c.escapeHtml(r.status) + '</span></td><td></td></tr>';
+          }).join('');
+          var tbody = document.getElementById('admin-req-body');
+          if (tbody) tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+        });
+      });
+
+      function fillType(t) {
+        document.getElementById('type-id').value = t ? t.leave_type_id : '';
+        document.getElementById('type-code').value = t ? t.code : '';
+        document.getElementById('type-name').value = t ? t.name : '';
+        document.getElementById('type-paid').checked = t ? t.is_paid : false;
+        document.getElementById('type-bal').checked = t ? t.requires_balance : false;
+        document.getElementById('type-half').checked = t ? t.allow_half_day : false;
+        document.getElementById('type-lop').checked = t ? t.counts_as_lop : false;
+        document.getElementById('type-active').checked = t ? t.is_active : true;
+        document.getElementById('type-ent').value = t ? t.annual_entitlement_days : 0;
+        document.getElementById('type-cf').value = t ? t.carry_forward_max_days : 0;
+        document.getElementById('type-max').value = t && t.max_consecutive_days != null ? t.max_consecutive_days : '';
+        document.getElementById('type-min').value = t ? t.min_service_days : 0;
+        document.getElementById('type-sort').value = t ? t.sort_order : 0;
+      }
+
+      page.querySelectorAll('[data-edit-type]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-edit-type');
+          var t = (data.types || []).filter(function (x) { return x.leave_type_id === id; })[0];
+          fillType(t);
+          page.querySelectorAll('#leave-admin-tabs .tab').forEach(function (tab) {
+            tab.classList.toggle('active', tab.getAttribute('data-tab') === 'types');
+          });
+          var tabReq = document.getElementById('tab-requests');
+          var tabTypes = document.getElementById('tab-types');
+          if (tabReq) tabReq.classList.add('hidden');
+          if (tabTypes) tabTypes.classList.remove('hidden');
+        });
+      });
+      document.getElementById('btn-type-reset').addEventListener('click', function () { fillType(null); });
+      document.getElementById('leave-type-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var payload = {
+          leave_type_id: document.getElementById('type-id').value,
+          code: document.getElementById('type-code').value,
+          name: document.getElementById('type-name').value,
+          is_paid: document.getElementById('type-paid').checked,
+          requires_balance: document.getElementById('type-bal').checked,
+          allow_half_day: document.getElementById('type-half').checked,
+          counts_as_lop: document.getElementById('type-lop').checked,
+          is_active: document.getElementById('type-active').checked,
+          annual_entitlement_days: document.getElementById('type-ent').value,
+          carry_forward_max_days: document.getElementById('type-cf').value,
+          max_consecutive_days: document.getElementById('type-max').value,
+          min_service_days: document.getElementById('type-min').value,
+          sort_order: document.getElementById('type-sort').value
+        };
+        var saveBtn = document.getElementById('btn-save-type') || ev.target.querySelector('button[type="submit"]');
+        c.callServer('apiLeaveSaveType', payload,
+          actionOpts(saveBtn, 'Saving...', document.getElementById('leave-type-feedback'))).then(function () {
+          invalidateLeaveAfterAdminConfig_();
+          setFlash('Leave type saved.', 'success', 'leave-admin');
+          renderAdmin(page, helpers);
+        });
+      });
+      document.getElementById('btn-start-year').addEventListener('click', function () {
+        if (!confirm('Grant leave balances for the current leave year for all ACTIVE employees?')) return;
+        var yearBtn = this;
+        c.callServer('apiLeaveStartLeaveYear', '',
+          actionOpts(yearBtn, 'Granting balances...', document.getElementById('leave-year-feedback')))
+          .then(function (res) {
+            invalidateLeaveAfterAdminConfig_();
+            invalidateLeaveViews_(['leave-approvals', 'leave-calendar'], { dashboard: false });
+            if (window.HrmsApp && window.HrmsApp.setActionFeedback) {
+              window.HrmsApp.setActionFeedback(document.getElementById('leave-year-feedback'),
+                'Leave year ' + res.leave_year + ' granted for ' + res.employees + ' employees', 'success');
+            }
+          });
+      });
+  }
+
+  function renderCalendar(page, helpers) {
+    var c = ctx();
+    var u = uiHelpers();
+    var now = new Date();
+    var year = now.getFullYear();
+    var month = now.getMonth() + 1;
+    var cachedCal = leaveViewCache['leave-calendar'];
+    if (cachedCal && cachedCal.year) {
+      year = cachedCal.year;
+      month = cachedCal.month;
+    }
+
+    function draw(y, m, fromCache) {
+      if (fromCache && cachedCal && cachedCal.data && cachedCal.year === y && cachedCal.month === m) {
+        paintCalendar_(page, helpers, cachedCal.data, draw);
+        return;
+      }
+      if (!(window.HrmsApp && window.HrmsApp.isModuleRefresh && window.HrmsApp.isModuleRefresh('leave-calendar') && cachedCal)) {
+        page.innerHTML = pageHead('Leave calendar', 'Approved leave for the month, scoped to your role.') +
+          '<div class="card">' + u.spinner('Loading calendar…') +
+          '<div class="skeleton skeleton-block" style="height:240px;margin-top:12px"></div></div>';
+      }
+      c.callServer('apiLeaveGetCalendar', y, m, '').then(function (data) {
+        if (!onRoute('leave-calendar')) return;
+        leaveViewCache['leave-calendar'] = { year: data.year, month: data.month, data: data };
+        markLeaveView_('leave-calendar');
+        paintCalendar_(page, helpers, data, draw);
+      }).catch(function (err) {
+        failLeaveRefresh_();
+        u.paintErr(page, err.message || 'Failed to load', function () { draw(y, m); });
+      });
+    }
+
+    if (tryRestoreLeave_('leave-calendar', function () { draw(year, month, true); })) return;
+    draw(year, month);
+  }
+
+  function paintCalendar_(page, helpers, data, draw) {
+      var c = ctx();
+        var first = new Date(data.year, data.month - 1, 1);
+        var startPad = first.getDay();
+        var daysInMonth = new Date(data.year, data.month, 0).getDate();
+        var cells = [];
+        var i;
+        for (i = 0; i < startPad; i++) cells.push('<div class="cal-cell cal-empty"></div>');
+        for (i = 1; i <= daysInMonth; i++) {
+          var iso = data.year + '-' + (data.month < 10 ? '0' : '') + data.month + '-' + (i < 10 ? '0' : '') + i;
+          var hits = (data.items || []).filter(function (r) {
+            return r.start_date <= iso && r.end_date >= iso;
+          });
+          var names = hits.map(function (h) { return h.employee_id + ' ' + h.leave_type_code; }).join(', ');
+          cells.push('<div class="cal-cell' + (hits.length ? ' cal-leave' : '') + '"><div class="cal-day">' + i +
+            '</div><div class="cal-items">' + c.escapeHtml(names) + '</div></div>');
+        }
+        page.innerHTML =
+          pageHead('Leave calendar', 'Approved leave · ' + data.year + '-' + (data.month < 10 ? '0' : '') + data.month +
+            '. Scope follows your role: own, team, or company.',
+            '<button type="button" class="btn btn-secondary" id="cal-prev">Previous</button>' +
+            '<button type="button" class="btn btn-secondary" id="cal-next">Next</button>') +
+          '<div class="cal-grid">' +
+            '<div class="cal-head">Sun</div><div class="cal-head">Mon</div><div class="cal-head">Tue</div><div class="cal-head">Wed</div>' +
+            '<div class="cal-head">Thu</div><div class="cal-head">Fri</div><div class="cal-head">Sat</div>' +
+            cells.join('') + '</div>';
+        document.getElementById('cal-prev').addEventListener('click', function () {
+          var nm = data.month - 1; var ny = data.year; if (nm < 1) { nm = 12; ny--; }
+          draw(ny, nm);
+        });
+        document.getElementById('cal-next').addEventListener('click', function () {
+          var nm = data.month + 1; var ny = data.year; if (nm > 12) { nm = 1; ny++; }
+          draw(ny, nm);
+        });
+  }
+
+  window.HRMSLeaveUi = {
+    render: function (route, helpers) {
+      var page = helpers.$('page-content');
+      if (!page) return;
+      page.classList.remove('hidden');
+      if (route === 'my-leave') return renderMyLeave(page, helpers);
+      if (route === 'leave-apply') return renderApply(page, helpers, null);
+      if (route === 'leave-approvals') return renderApprovals(page, helpers);
+      if (route === 'leave-admin') return renderAdmin(page, helpers);
+      if (route === 'leave-calendar') return renderCalendar(page, helpers);
+      page.innerHTML = '<div class="empty-state"><h2 class="empty-state-title">Unknown leave screen</h2><p class="empty-state-text">This leave route is not recognized.</p></div>';
+    }
+  };
+})();
+</script>

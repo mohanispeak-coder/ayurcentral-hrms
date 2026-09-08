@@ -1,0 +1,2653 @@
+<script>
+(function () {
+  'use strict';
+
+  var SESSION_STORAGE_KEY = 'hrms_session_token';
+
+  var state = {
+    session: null,
+    app: null,
+    navigation: [],
+    currentRoute: 'dashboard',
+    authEmail: '',
+    navSeq: 0,
+    flash: null
+  };
+
+  var ROUTES = {
+    dashboard: { title: 'Dashboard', render: renderDashboard },
+    settings: { title: 'Settings', render: renderPlaceholder },
+    users: { title: 'Users', render: renderPlaceholder }
+  };
+
+  /** Route → module id for lazy UI load. */
+  var ROUTE_MODULE = {
+    employees: 'employee',
+    'my-team': 'employee',
+    'my-profile': 'employee',
+    'employee-create': 'employee',
+    'employee-profile': 'employee',
+    'my-leave': 'leave',
+    'leave-apply': 'leave',
+    'leave-approvals': 'leave',
+    'leave-admin': 'leave',
+    'leave-calendar': 'leave',
+    payroll: 'payroll',
+    'payroll-run': 'payroll',
+    compensation: 'payroll',
+    'my-payslips': 'payroll',
+    pms: 'pms',
+    'pms-cycles': 'pms',
+    'pms-cycle': 'pms',
+    'pms-my-review': 'pms',
+    'pms-team': 'pms',
+    'pms-review': 'pms',
+    'pms-appraisal': 'pms',
+    ats: 'ats',
+    'ats-jobs': 'ats',
+    'ats-job': 'ats',
+    'ats-job-new': 'ats',
+    'ats-job-edit': 'ats',
+    'ats-candidates': 'ats',
+    'ats-candidate': 'ats',
+    notifications: 'notifications'
+  };
+
+  var ROUTE_TITLES = {
+    employees: 'Employees',
+    'my-team': 'My Team',
+    'my-profile': 'My Profile',
+    'employee-create': 'Add employee',
+    'employee-profile': 'Employee',
+    'my-leave': 'My Leave',
+    'leave-apply': 'Apply Leave',
+    'leave-approvals': 'Leave Approvals',
+    'leave-admin': 'Leave',
+    'leave-calendar': 'Leave Calendar',
+    payroll: 'Payroll',
+    'payroll-run': 'Payroll run',
+    compensation: 'Compensation',
+    'my-payslips': 'My Payslips',
+    pms: 'Performance',
+    'pms-cycles': 'Review cycles',
+    'pms-cycle': 'Review cycle',
+    'pms-my-review': 'My review',
+    'pms-team': 'Team reviews',
+    'pms-review': 'Review',
+    'pms-appraisal': 'Appraisals',
+    ats: 'Recruitment',
+    'ats-jobs': 'Jobs',
+    'ats-job': 'Job',
+    'ats-job-new': 'New job',
+    'ats-job-edit': 'Edit job',
+    'ats-candidates': 'Candidates',
+    'ats-candidate': 'Candidate',
+    notifications: 'Notifications'
+  };
+
+  var ROUTE_LEDES = {
+    dashboard: 'What needs your attention, based on your role.',
+    employees: 'Search the directory. Open a row to view a profile.',
+    'my-team': 'Direct reports. Open a row to view work details.',
+    'my-profile': 'Your employee record and the details you are allowed to see.',
+    'employee-create': 'Employee ID is assigned on save. Payroll identifiers are optional.',
+    'employee-profile': 'Employee master record.',
+    'my-leave': 'Balances for the current leave year and your requests.',
+    'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
+    'leave-approvals': 'Submitted requests waiting for a decision.',
+    'leave-admin': 'Company leave requests and configurable leave types.',
+    'leave-calendar': 'Approved leave for the month, scoped to your role.',
+    payroll: 'Process one month: enter days, calculate on the server, review, then lock.',
+    'payroll-run': 'One primary next step. Locked amounts never change.',
+    compensation: 'Save a first structure, then revise so history stays intact.',
+    'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
+    pms: 'Goals, self-assessment, and reviews for the current cycle.',
+    'pms-cycles': 'Create a cycle, then add goals before you open it.',
+    'pms-cycle': 'Assign goals, then move the cycle forward.',
+    'pms-my-review': 'Update progress and comments, then submit.',
+    'pms-team': 'People assigned to you in the current cycles.',
+    'pms-review': 'Self-assessment, manager ratings, and final appraisal.',
+    'pms-appraisal': 'Finalize ratings after managers submit.',
+    ats: 'Open jobs, pipeline, and interviews in your scope.',
+    'ats-jobs': 'Create, publish, and share requisitions.',
+    'ats-job': 'Applications, pipeline, and the public apply link.',
+    'ats-job-new': 'Describe the role. Publishing creates the careers link.',
+    'ats-job-edit': 'Update the requisition. Candidates are not employees.',
+    'ats-candidates': 'Applicants for jobs you can access.',
+    'ats-candidate': 'Profile, applications, interviews, and notes.',
+    notifications: 'Your inbox and, for HR, the email delivery log.',
+    settings: 'Company configuration will be available in a later phase.',
+    users: 'Role assignment will be available in a later phase.'
+  };
+
+  var NAV_GROUPS = [
+    { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
+    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'pms-my-review', 'my-payslips'], collapsible: true },
+    { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
+    { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
+    { id: 'performance', label: 'Performance', routes: ['pms', 'pms-team', 'pms-cycles', 'pms-appraisal'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
+    { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
+    { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
+  ];
+
+  /** Session-only sidebar section expand/collapse (never localStorage). */
+  var navSectionExpanded_ = {};
+
+  var ROUTE_ALIASES = {
+    'pms-self': 'pms-my-review',
+    'ats-applications': 'ats-candidates',
+    'ats-interviews': 'ats-candidates'
+  };
+
+  var moduleLoaded_ = {};
+  var moduleLoading_ = {};
+  var userRpcBusy_ = 0;
+  var preloadPaused_ = false;
+  var preloadQueue_ = [];
+  var preloadScheduled_ = false;
+
+  /**
+   * Session-only module view cache. HTML/JS download (moduleLoaded_) is not the same
+   * as a successfully initialized view. Never persisted to localStorage.
+   * Entries bind to sessionCacheKey_ (employee_id|role) and clear on login/logout.
+   * Never used for RBAC / ownership / session validity.
+   */
+  var moduleViewCache_ = {};
+  var moduleDataCacheClearHooks_ = [];
+  var refreshForceKey_ = '';
+  var refreshBusy_ = false;
+  var refreshWatchdog_ = null;
+  var dashViewCache_ = { payload: null, actions: '', complete: false };
+
+  function sessionCacheKey_() {
+    var s = state.session || {};
+    if (!s.authorized) return '';
+    return String(s.employee_id || s.email || '') + '|' + String(s.role || '');
+  }
+
+  function registerModuleDataCacheClear(fn) {
+    if (typeof fn === 'function') moduleDataCacheClearHooks_.push(fn);
+  }
+
+  function clearUserSessionViewState_() {
+    clearModuleViewCache();
+    state.flash = null;
+    state.navSeq = (state.navSeq || 0) + 1;
+    moduleDataCacheClearHooks_.forEach(function (fn) {
+      try { fn(); } catch (ignore) {}
+    });
+    logClientPerf_({ kind: 'session-view-state-clear' });
+  }
+
+  function moduleIdForRoute_(route) {
+    if (route === 'dashboard') return 'dashboard';
+    return ROUTE_MODULE[route] || '';
+  }
+
+  function moduleViewKey(route, params) {
+    params = params || {};
+    if (route === 'employee-profile') return 'employee-profile:' + String(params.employeeId || '');
+    if (route === 'payroll-run') return 'payroll-run:' + String(params.runId || '');
+    if (route === 'pms-cycle') return 'pms-cycle:' + String(params.cycleId || '');
+    if (route === 'pms-my-review' || route === 'pms-team' || route === 'pms-appraisal') {
+      return route + ':' + String(params.cycleId || '');
+    }
+    if (route === 'pms-review') {
+      return 'pms-review:' + String(params.cycleId || '') + ':' + String(params.employeeId || '');
+    }
+    if (route === 'ats-job' || route === 'ats-job-edit') return route + ':' + String(params.jobId || '');
+    if (route === 'ats-candidate') return 'ats-candidate:' + String(params.candidateId || '');
+    return route || '';
+  }
+
+  function shouldShowModuleRefresh(route) {
+    return route === 'dashboard' || !!ROUTE_MODULE[route];
+  }
+
+  function formatModuleUpdatedAt_(ts) {
+    if (!ts) return '';
+    var age = Date.now() - ts;
+    if (age < 20000) return 'Updated just now';
+    if (age < 90000) return 'Updated a moment ago';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return 'Updated ' + d.toLocaleTimeString();
+  }
+
+  function moduleRefreshControlsHtml() {
+    if (!shouldShowModuleRefresh(state.currentRoute)) return '';
+    var key = moduleViewKey(state.currentRoute, state.routeParams);
+    var rec = moduleViewCache_[key];
+    var loading = !!refreshBusy_;
+    var stamp = '';
+    if (rec && rec.lastLoadedAt && !loading) {
+      stamp = '<span class="module-updated" id="module-updated-stamp">' +
+        escapeHtml(formatModuleUpdatedAt_(rec.lastLoadedAt)) + '</span>';
+    }
+    return stamp +
+      '<button type="button" class="btn btn-secondary btn-sm js-module-refresh" id="btn-module-refresh"' +
+      (loading ? ' disabled aria-busy="true"' : '') + '>' +
+      (loading
+        ? '<span class="spinner-sm" aria-hidden="true"></span> Refreshing…'
+        : '<span class="module-refresh-icon" aria-hidden="true">↻</span> Refresh') +
+      '</button>';
+  }
+
+  function ensureModuleRefreshControls() {
+    var page = $('page-content');
+    if (!page || !shouldShowModuleRefresh(state.currentRoute)) return;
+    var header = page.querySelector('.page-header');
+    if (!header) return;
+    var actions = header.querySelector('.page-header-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'page-header-actions';
+      header.appendChild(actions);
+    }
+    var existing = actions.querySelector('.js-module-refresh');
+    var stamp = actions.querySelector('#module-updated-stamp');
+    if (existing) {
+      if (stamp) stamp.remove();
+      existing.remove();
+    }
+    var hold = document.createElement('div');
+    hold.innerHTML = moduleRefreshControlsHtml();
+    while (hold.lastChild) {
+      actions.insertBefore(hold.lastChild, actions.firstChild);
+    }
+  }
+
+  function shouldRestoreModuleView(key) {
+    if (!key) return false;
+    if (refreshForceKey_ && (refreshForceKey_ === key || refreshForceKey_ === '*')) return false;
+    var rec = moduleViewCache_[key];
+    if (!rec || !rec.loaded) return false;
+    var sk = sessionCacheKey_();
+    if (!sk || !rec.sessionKey || rec.sessionKey !== sk) return false;
+    if (rec.consumedNavSeq === state.navSeq) return false;
+    return true;
+  }
+
+  function consumeModuleViewRestore(key) {
+    if (!shouldRestoreModuleView(key)) return false;
+    moduleViewCache_[key].consumedNavSeq = state.navSeq;
+    logClientPerf_({ kind: 'module-view-restore', key: key, route: state.currentRoute });
+    scheduleRefreshControls_();
+    return true;
+  }
+
+  function markModuleViewLoaded(key, meta) {
+    key = key || moduleViewKey(state.currentRoute, state.routeParams);
+    if (!key) return;
+    moduleViewCache_[key] = {
+      loaded: true,
+      lastLoadedAt: Date.now(),
+      consumedNavSeq: state.navSeq,
+      sessionKey: sessionCacheKey_(),
+      route: (meta && meta.route) || state.currentRoute,
+      params: (meta && meta.params) || state.routeParams || {},
+      moduleId: (meta && meta.moduleId) || moduleIdForRoute_(state.currentRoute)
+    };
+    if (refreshForceKey_ === key || refreshForceKey_ === '*') refreshForceKey_ = '';
+    refreshBusy_ = false;
+    clearRefreshWatchdog_();
+    scheduleRefreshControls_();
+    logClientPerf_({ kind: 'module-view-loaded', key: key, route: state.currentRoute });
+  }
+
+  function isModuleRefresh(key) {
+    key = key || moduleViewKey(state.currentRoute, state.routeParams);
+    return refreshForceKey_ === key || refreshForceKey_ === '*';
+  }
+
+  function finishModuleRefresh(failed) {
+    refreshForceKey_ = '';
+    refreshBusy_ = false;
+    clearRefreshWatchdog_();
+    var pageBusy = $('page-content');
+    if (pageBusy) pageBusy.removeAttribute('aria-busy');
+    var btn = $('btn-module-refresh');
+    if (btn) {
+      try { restoreButton(btn); } catch (ignore) {}
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+    }
+    scheduleRefreshControls_();
+    if (failed) {
+      logClientPerf_({ kind: 'module-view-refresh-fail', route: state.currentRoute });
+    }
+  }
+
+  function clearRefreshWatchdog_() {
+    if (refreshWatchdog_) {
+      clearTimeout(refreshWatchdog_);
+      refreshWatchdog_ = null;
+    }
+  }
+
+  function armRefreshWatchdog_() {
+    clearRefreshWatchdog_();
+    refreshWatchdog_ = setTimeout(function () {
+      refreshWatchdog_ = null;
+      if (refreshBusy_) finishModuleRefresh(true);
+    }, 45000);
+  }
+
+  function scheduleRefreshControls_() {
+    var run = function () { ensureModuleRefreshControls(); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  }
+
+  function refreshCurrentModuleView() {
+    if (!state.session || !state.session.authorized) return;
+    var route = state.currentRoute;
+    if (!shouldShowModuleRefresh(route)) return;
+    if (refreshBusy_) return;
+    var key = moduleViewKey(route, state.routeParams);
+    refreshBusy_ = true;
+    refreshForceKey_ = key;
+    armRefreshWatchdog_();
+    var pageBusy = $('page-content');
+    if (pageBusy) pageBusy.setAttribute('aria-busy', 'true');
+    var btn = $('btn-module-refresh');
+    if (btn) setButtonLoading(btn, 'Refreshing…');
+    logClientPerf_({ kind: 'module-view-refresh', key: key, route: route });
+    var def = ROUTES[route];
+    state.navSeq = (state.navSeq || 0) + 1;
+    if (def && def.render) {
+      def.render(state.routeParams);
+    }
+    scheduleRefreshControls_();
+  }
+
+  function bindModuleRefreshUi() {
+    var page = $('page-content');
+    if (!page || page.getAttribute('data-refresh-bound') === '1') return;
+    page.setAttribute('data-refresh-bound', '1');
+    page.addEventListener('click', function (evt) {
+      var el = evt.target;
+      if (el && el.nodeType !== 1) el = el.parentElement;
+      var btn = el && el.closest ? el.closest('.js-module-refresh') : null;
+      if (!btn || !page.contains(btn)) return;
+      evt.preventDefault();
+      refreshCurrentModuleView();
+    });
+  }
+
+  function getModuleViewCache() {
+    return moduleViewCache_;
+  }
+
+  function clearModuleViewCache() {
+    moduleViewCache_ = {};
+    dashViewCache_ = { payload: null, actions: '', complete: false };
+    refreshForceKey_ = '';
+    refreshBusy_ = false;
+    clearRefreshWatchdog_();
+  }
+
+  function invalidateModuleViewCache(keys) {
+    if (keys == null) return;
+    var list = Array.isArray(keys) ? keys : [keys];
+    list.forEach(function (key) {
+      if (key && moduleViewCache_[key]) delete moduleViewCache_[key];
+    });
+    if (list.length) logClientPerf_({ kind: 'module-view-invalidate', keys: list });
+  }
+
+  function invalidateModuleViewCachePrefix(prefix) {
+    if (!prefix) return;
+    var keys = [];
+    Object.keys(moduleViewCache_).forEach(function (key) {
+      if (key === prefix || key.indexOf(prefix) === 0) {
+        keys.push(key);
+        delete moduleViewCache_[key];
+      }
+    });
+    if (keys.length) logClientPerf_({ kind: 'module-view-invalidate-prefix', prefix: prefix, keys: keys });
+  }
+
+  function invalidateDashboardView() {
+    delete moduleViewCache_.dashboard;
+    dashViewCache_ = { payload: null, actions: '', complete: false };
+    logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard'] });
+  }
+
+  function registerModuleRoutes(extra) {
+    extra = extra || {};
+    Object.keys(extra).forEach(function (key) {
+      ROUTES[key] = extra[key];
+    });
+  }
+
+  function $(id) { return document.getElementById(id); }
+
+  function getSessionToken() {
+    try {
+      return sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function setSessionToken(token) {
+    try {
+      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (ignore) {}
+  }
+
+  var lastToast_ = { message: '', at: 0 };
+
+  function showToast(message, type) {
+    var container = $('toast-container');
+    if (!container) return;
+    var text = String(message || '');
+    var now = Date.now();
+    if (text && text === lastToast_.message && now - lastToast_.at < 2000) return;
+    lastToast_ = { message: text, at: now };
+    var el = document.createElement('div');
+    el.className = 'toast' + (type ? ' ' + type : '');
+    el.textContent = text;
+    container.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+
+  function routeStill(seq, route) {
+    return seq === state.navSeq && (!route || state.currentRoute === route);
+  }
+
+  function setHtml(el, html) {
+    if (!el) return false;
+    el.innerHTML = html;
+    return true;
+  }
+
+  function isActionOpts_(obj) {
+    if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
+    if (Object.prototype.toString.call(obj) === '[object Array]') return false;
+    var btn = obj.button || obj.loadingButton;
+    if (btn && btn.nodeType === 1) return true;
+    var fb = obj.feedback || obj.feedbackEl;
+    if (fb && fb.nodeType === 1) return true;
+    if (obj.background === true) return true;
+    return false;
+  }
+
+  function extractActionOpts_(args) {
+    if (!args.length) return null;
+    var last = args[args.length - 1];
+    if (!isActionOpts_(last)) return null;
+    args.pop();
+    return last;
+  }
+
+  function isButtonLoading(button) {
+    return !!(button && button.getAttribute && button.getAttribute('data-hrms-loading') === '1');
+  }
+
+  function setButtonLoading(button, loadingText) {
+    if (!button || button.nodeType !== 1) return false;
+    if (isButtonLoading(button)) return false;
+    try {
+      button.setAttribute('data-hrms-loading', '1');
+      button._hrmsBtnSnap = {
+        html: button.innerHTML,
+        disabled: !!button.disabled,
+        minWidth: button.style ? (button.style.minWidth || '') : ''
+      };
+      if (button.style && !button.style.minWidth) {
+        try {
+          if (button.offsetWidth) button.style.minWidth = button.offsetWidth + 'px';
+        } catch (ignoreWidth) {}
+      }
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (button.classList) button.classList.add('btn-loading');
+      var label = escapeHtml(loadingText || 'Working…');
+      button.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span class="btn-loading-label">' + label + '</span>';
+      return true;
+    } catch (e) {
+      try {
+        button.disabled = true;
+        button.setAttribute('data-hrms-loading', '1');
+      } catch (e2) {}
+      return true;
+    }
+  }
+
+  function restoreButton(button) {
+    if (!button || button.nodeType !== 1) return;
+    try {
+      var snap = button._hrmsBtnSnap;
+      button.removeAttribute('data-hrms-loading');
+      button.removeAttribute('aria-busy');
+      if (button.classList) button.classList.remove('btn-loading');
+      if (snap) {
+        button.innerHTML = snap.html;
+        button.disabled = snap.disabled;
+        if (button.style) button.style.minWidth = snap.minWidth || '';
+      } else {
+        button.disabled = false;
+      }
+      button._hrmsBtnSnap = null;
+      button._hrmsInflight = null;
+    } catch (e) {
+      try {
+        button.disabled = false;
+        button.removeAttribute('data-hrms-loading');
+        button.removeAttribute('aria-busy');
+        if (button.classList) button.classList.remove('btn-loading');
+      } catch (e2) {}
+    }
+  }
+
+  function resolveFeedbackEl_(target) {
+    if (!target) return null;
+    if (typeof target === 'string') return $(target);
+    if (target.nodeType !== 1) return null;
+    if (target.classList && (target.classList.contains('action-feedback') || target.classList.contains('js-action-feedback'))) {
+      return target;
+    }
+    var id = target.getAttribute && target.getAttribute('data-feedback');
+    if (id) {
+      var byId = $(id);
+      if (byId) return byId;
+    }
+    var host = target.parentNode;
+    if (host && host.querySelector) {
+      var found = host.querySelector('.action-feedback, .js-action-feedback');
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function setActionFeedback(el, message, type) {
+    var target = resolveFeedbackEl_(el);
+    if (!target) return;
+    var text = message ? String(message) : '';
+    target.textContent = text;
+    if (target.classList) {
+      target.classList.remove('is-success', 'is-error', 'is-info');
+      if (!text) {
+        target.classList.add('hidden');
+        return;
+      }
+      target.classList.remove('hidden');
+      target.classList.add(type === 'error' ? 'is-error' : (type === 'info' ? 'is-info' : 'is-success'));
+    }
+    if (target.setAttribute) {
+      target.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    }
+  }
+
+  function clearActionFeedback(el) {
+    setActionFeedback(el, '', '');
+  }
+
+  function setFlash(message, type, route) {
+    if (!message) {
+      state.flash = null;
+      return;
+    }
+    state.flash = { message: String(message), type: type || 'success', route: route || '' };
+  }
+
+  function consumeFlash(route) {
+    var f = state.flash;
+    if (!f) return null;
+    state.flash = null;
+    if (f.route && route && f.route !== route) return null;
+    return f;
+  }
+
+  function flashBannerHtml(flash) {
+    if (!flash || !flash.message) return '';
+    var cls = 'action-feedback';
+    if (flash.type === 'error') cls += ' is-error';
+    else if (flash.type === 'info') cls += ' is-info';
+    else cls += ' is-success';
+    var role = flash.type === 'error' ? 'alert' : 'status';
+    return '<div class="' + cls + '" role="' + role + '">' + escapeHtml(flash.message) + '</div>';
+  }
+
+  var perfLog_ = [];
+  var perfSeq_ = 0;
+
+  function clientPerfEnabled_() {
+    try {
+      if (window.HRMS_PERF_TIMING === 1 || window.HRMS_PERF_TIMING === '1') return true;
+      if (window.localStorage && localStorage.getItem('HRMS_PERF_TIMING') === '1') return true;
+    } catch (ignore) {}
+    return false;
+  }
+
+  function newClientReqId_() {
+    perfSeq_ += 1;
+    return 'c' + Date.now().toString(36) + '-' + perfSeq_;
+  }
+
+  function logClientPerf_(entry) {
+    if (!entry) return;
+    if (!clientPerfEnabled_() && !entry.server) return;
+    perfLog_.push(entry);
+    if (perfLog_.length > 80) perfLog_.shift();
+    try {
+      if (window.console && console.info) console.info('HRMS_PERF', entry);
+    } catch (ignore) {}
+  }
+
+  function invokeRpc_(fnName, args, onPerf) {
+    return new Promise(function (resolve, reject) {
+      try {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            try {
+              var serverPerf = result && result._perf ? result._perf : null;
+              if (serverPerf && typeof onPerf === 'function') {
+                try { onPerf(serverPerf); } catch (ignorePerf) {}
+              }
+              if (result && result.ok === true) {
+                resolve(result.data);
+                return;
+              }
+              if (result && result.error) {
+                reject(result.error);
+                return;
+              }
+              if (result && typeof result === 'object') {
+                if (Array.isArray(result.items) || result.hasOwnProperty('unread_count') ||
+                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences')) {
+                  resolve(result);
+                  return;
+                }
+              }
+              reject({
+                message: (result && result.message) || 'Request failed',
+                code: (result && result.code) || ''
+              });
+            } catch (e) {
+              reject({ message: (e && e.message) || 'Request failed' });
+            }
+          })
+          .withFailureHandler(function (err) {
+            try {
+              reject({ message: (err && err.message) || 'Server error' });
+            } catch (e) {
+              reject({ message: 'Server error' });
+            }
+          })[fnName].apply(null, args);
+      } catch (e) {
+        reject({ message: (e && e.message) || 'Request failed' });
+      }
+    });
+  }
+
+  function finishAction_(action, started, ok, value) {
+    var button = action && (action.button || action.loadingButton);
+    var feedback = action && (action.feedback || action.feedbackEl);
+    try {
+      if (button) restoreButton(button);
+    } catch (ignore) {
+      try { if (button) restoreButton(button); } catch (e2) {}
+    }
+    if (!ok) {
+      if (feedback && !(value && value.silent) && !(value && value.code === 'IN_PROGRESS')) {
+        setActionFeedback(feedback, (value && value.message) || 'Request failed', 'error');
+      }
+      return Promise.reject(value);
+    }
+    if (action && action.successMessage && feedback) {
+      setActionFeedback(feedback, action.successMessage, 'success');
+    }
+    return value;
+  }
+
+  function callServer(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var action = extractActionOpts_(args);
+    args.push(getSessionToken());
+
+    var button = action && (action.button || action.loadingButton);
+    var feedback = action && (action.feedback || action.feedbackEl);
+    var loadingText = (action && action.loadingText) || 'Working…';
+    var clientRequestId = newClientReqId_();
+    var tClick = Date.now();
+
+    if (button && button._hrmsInflight) {
+      return button._hrmsInflight;
+    }
+
+    var started = false;
+    if (button && !isButtonLoading(button)) {
+      started = setButtonLoading(button, loadingText);
+    } else if (button && isButtonLoading(button) && action && action.loadingText) {
+      try {
+        var labelEl = button.querySelector ? button.querySelector('.btn-loading-label') : null;
+        if (labelEl) labelEl.textContent = action.loadingText;
+      } catch (ignoreLabel) {}
+    }
+    if (feedback) clearActionFeedback(feedback);
+
+    var tRpc = Date.now();
+    var sawServerPerf = false;
+    var p = invokeRpc_(fnName, args, function (serverPerf) {
+      sawServerPerf = true;
+      var now = Date.now();
+      logClientPerf_({
+        kind: 'rpc',
+        fn: fnName,
+        clientRequestId: clientRequestId,
+        serverRequestId: serverPerf && serverPerf.requestId,
+        clickToRpcMs: tRpc - tClick,
+        rpcMs: now - tRpc,
+        perceivedMs: now - tClick,
+        transportEstimateMs: serverPerf ? Math.max(0, (now - tRpc) - (serverPerf.totalMs || 0)) : null,
+        server: serverPerf || null
+      });
+    }).then(function (data) {
+      if (!sawServerPerf && clientPerfEnabled_()) {
+        logClientPerf_({
+          kind: 'rpc',
+          fn: fnName,
+          clientRequestId: clientRequestId,
+          clickToRpcMs: tRpc - tClick,
+          rpcMs: Date.now() - tRpc,
+          perceivedMs: Date.now() - tClick
+        });
+      }
+      return finishAction_(action, started, true, data);
+    }, function (err) {
+      logClientPerf_({
+        kind: 'rpc-error',
+        fn: fnName,
+        clientRequestId: clientRequestId,
+        clickToRpcMs: tRpc - tClick,
+        rpcMs: Date.now() - tRpc,
+        perceivedMs: Date.now() - tClick,
+        error: (err && err.message) || 'Request failed'
+      });
+      return finishAction_(action, started, false, err);
+    });
+
+    var background = !!(action && action.background);
+    if (!background) {
+      userRpcBusy_ += 1;
+      pauseBackgroundPreload();
+      p = p.then(function (value) {
+        userRpcBusy_ = Math.max(0, userRpcBusy_ - 1);
+        if (userRpcBusy_ === 0) resumeBackgroundPreload();
+        return value;
+      }, function (err) {
+        userRpcBusy_ = Math.max(0, userRpcBusy_ - 1);
+        if (userRpcBusy_ === 0) resumeBackgroundPreload();
+        return Promise.reject(err);
+      });
+    }
+    if (button) button._hrmsInflight = p;
+    return p;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function pageHeaderHtml(title, lede, actionsHtml) {
+    var refresh = shouldShowModuleRefresh(state.currentRoute) ? moduleRefreshControlsHtml() : '';
+    return '<div class="page-header">' +
+      '<div class="page-header-text">' +
+        '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
+        (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
+      '</div>' +
+      '<div class="page-header-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+  }
+
+  function navIconSvg(name) {
+    var paths = {
+      dashboard: 'M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z',
+      person: 'M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5z',
+      people: 'M9 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 9 11zm9 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM9 13c-3.9 0-7 1.8-7 4v2h14v-2c0-2.2-3.1-4-7-4zm8.2.1c3 .4 5.8 2 5.8 3.9V19h-5v-2c0-.7-.2-1.3-.5-1.9a8.4 8.4 0 0 0-1.3-1z',
+      group: 'M9 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 9 11zm9 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM9 13c-3.9 0-7 1.8-7 4v2h14v-2c0-2.2-3.1-4-7-4zm8.2.1c3 .4 5.8 2 5.8 3.9V19h-5v-2c0-.7-.2-1.3-.5-1.9a8.4 8.4 0 0 0-1.3-1z',
+      event: 'M7 3h2v2h6V3h2v2h3v15H4V5h3V3zm13 7H4v9h16v-9z',
+      calendar: 'M7 3h2v2h6V3h2v2h3v15H4V5h3V3zm13 7H4v9h16v-9z',
+      approval: 'M9.5 16.5 5 12l1.4-1.4 3.1 3.1 8.1-8.1L19 7z',
+      payments: 'M3 6h18v4H3zm0 6h18v6H3zm3 3h4v2H6z',
+      account_balance: 'M12 3 3 8v2h18V8zm-7 9h3v6H5zm5.5 0h3v6h-3zM16 12h3v6h-3zM3 20h18v2H3z',
+      receipt: 'M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21V3zm3 4h7v1.5h-7zm0 3h7v1.5h-7z',
+      mail: 'M3 6h18v12H3zm9 6L5 8h14z',
+      settings: 'M10 3h4l.5 2.6c.5.2 1 .4 1.5.8L18.4 5l2 2-1.6 2c.3.5.6 1 .8 1.5L22 11v2l-2.4.5c-.2.5-.5 1-.8 1.5l1.6 2-2 2-2.4-1.4c-.5.3-1 .6-1.5.8L14 21h-4l-.5-2.6c-.5-.2-1-.4-1.5-.8L5.6 19l-2-2 1.6-2c-.3-.5-.6-1-.8-1.5L2 13v-2l2.4-.5c.2-.5.5-1 .8-1.5l-1.6-2 2-2 2.4 1.4c.5-.3 1-.6 1.5-.8zm2 6.5A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5z',
+      admin_panel_settings: 'M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z'
+    };
+    var d = paths[name] || paths.dashboard;
+    return '<svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="' + d + '"/></svg>';
+  }
+
+  function isNavRouteActive(itemRoute, current) {
+    if (itemRoute === current) return true;
+    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
+    if (itemRoute === 'payroll' && current === 'payroll-run') return true;
+    if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
+    if (itemRoute === 'pms' && (current === 'pms-cycle' || current === 'pms-review')) return true;
+    if (itemRoute === 'pms-cycles' && current === 'pms-cycle') return true;
+    if (itemRoute === 'pms-team' && current === 'pms-review') return true;
+    if (itemRoute === 'pms-appraisal' && current === 'pms-review') return true;
+    if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
+    if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
+    if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
+    return false;
+  }
+
+  function isNavGroupActive(group) {
+    if (!group || !group.items) return false;
+    for (var i = 0; i < group.items.length; i++) {
+      if (isNavRouteActive(group.items[i].route, state.currentRoute)) return true;
+    }
+    return false;
+  }
+
+  function isNavGroupExpanded(group) {
+    if (!group.collapsible) return true;
+    if (isNavGroupActive(group)) return true;
+    return navSectionExpanded_[group.id] === true;
+  }
+
+  function groupedNavItems() {
+    var items = state.navigation || [];
+    var used = {};
+    var groups = [];
+    NAV_GROUPS.forEach(function (g) {
+      var members = [];
+      g.routes.forEach(function (route) {
+        items.forEach(function (item) {
+          if (item.route === route) {
+            members.push(item);
+            used[item.route] = true;
+          }
+        });
+      });
+      if (members.length) {
+        groups.push({
+          id: g.id,
+          label: g.label,
+          items: members,
+          collapsible: !!g.collapsible
+        });
+      }
+    });
+    var rest = items.filter(function (item) { return !used[item.route]; });
+    if (rest.length) groups.push({ id: 'other', label: '', items: rest, collapsible: false });
+    return groups;
+  }
+
+  function setSidebarOpen(open) {
+    var sidebar = $('sidebar');
+    var backdrop = $('sidebar-backdrop');
+    if (sidebar) sidebar.classList.toggle('open', !!open);
+    if (backdrop) backdrop.classList.toggle('open', !!open);
+  }
+
+  function setAuthedChrome(authed) {
+    var app = $('app');
+    if (app) app.classList.toggle('is-authed', !!authed);
+    var out = $('btn-sign-out');
+    if (out) out.classList.toggle('hidden', !authed);
+  }
+
+  function navHas(route) {
+    return (state.navigation || []).some(function (n) {
+      return n.route === route && !n.placeholder;
+    });
+  }
+
+  /* —— Shared perceived-loading helpers —— */
+
+  function skeletonLine(widthClass) {
+    return '<div class="skeleton skeleton-line hrms-skeleton-line ' + (widthClass || 'w80') + '" aria-hidden="true"></div>';
+  }
+
+  function skeletonTableRows(colCount, rowCount) {
+    var rows = '';
+    var r;
+    var c;
+    for (r = 0; r < (rowCount || 5); r++) {
+      rows += '<tr class="skeleton-row" aria-hidden="true">';
+      for (c = 0; c < colCount; c++) {
+        rows += '<td><div class="skeleton skeleton-line ' + (c === 0 ? 'w60' : 'w80') + '"></div></td>';
+      }
+      rows += '</tr>';
+    }
+    return rows;
+  }
+
+  function skeletonKpiRow(labels) {
+    labels = labels || ['Metric', 'Metric', 'Metric', 'Metric'];
+    return '<div class="kpi-row" aria-hidden="true">' + labels.map(function (label) {
+      return '<div class="card kpi-card skeleton-card" aria-busy="true">' +
+        '<div class="kpi-label">' + escapeHtml(label) + '</div>' +
+        '<div class="skeleton skeleton-xl"></div></div>';
+    }).join('') + '</div>';
+  }
+
+  /**
+   * Preferred data-loading placeholder. Replaces plain "Loading…" text.
+   * opts.lines — number of text lines (default 3)
+   * opts.variant — 'block' | 'card' | 'detail' | 'list'
+   */
+  function sectionSkeleton(opts) {
+    opts = opts || {};
+    var variant = opts.variant || 'block';
+    var label = opts.label || 'Loading';
+    var i;
+    var html = '<div class="hrms-loading-block" aria-busy="true">' +
+      '<span class="visually-hidden">' + escapeHtml(label) + '</span>';
+    if (variant === 'detail') {
+      html += '<div class="card" aria-hidden="true">' +
+        '<div class="skeleton skeleton-xl" style="width:55%;max-width:280px"></div>' +
+        '<div class="skeleton skeleton-line w40" style="margin-top:12px"></div>' +
+        '<div class="skeleton skeleton-block" style="margin-top:16px"></div>' +
+        '<div class="skeleton skeleton-block"></div></div>';
+    } else if (variant === 'list') {
+      html += '<div class="hrms-skeleton-table" aria-hidden="true">';
+      for (i = 0; i < (opts.rows || 5); i++) {
+        html += '<div class="hrms-skeleton-row">' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+          '<div class="skeleton skeleton-line w60"></div>' +
+          '<div class="skeleton skeleton-line w40"></div>' +
+          '<div class="skeleton skeleton-line w60"></div></div>';
+      }
+      html += '</div>';
+    } else if (variant === 'card') {
+      html += '<div class="card" aria-hidden="true"><div class="hrms-skeleton-stack">' +
+        skeletonLine('w60') + skeletonLine('w100') + skeletonLine('w80') +
+        '</div></div>';
+    } else {
+      html += '<div class="hrms-skeleton-stack" aria-hidden="true">';
+      for (i = 0; i < (opts.lines || 3); i++) {
+        html += skeletonLine(i === 0 ? 'w60' : (i === 1 ? 'w100' : 'w80'));
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  /** @deprecated Prefer sectionSkeleton — kept as alias for existing call sites. */
+  function sectionSpinner(label) {
+    return sectionSkeleton({ label: label || 'Loading', variant: 'block', lines: 3 });
+  }
+
+  /**
+   * Inline error that keeps the page shell. Caller binds Retry via bindSectionRetry.
+   */
+  function sectionErrorHtml(message) {
+    return '<div class="inline-error" role="alert">' +
+      '<span class="inline-error-msg">' + escapeHtml(message || 'Failed to load.') + '</span>' +
+      '<button type="button" class="btn btn-secondary btn-sm js-section-retry">Retry</button>' +
+      '</div>';
+  }
+
+  function bindSectionRetry(root, onRetry) {
+    if (!root || !onRetry) return;
+    var btn = root.querySelector('.js-section-retry');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        onRetry();
+      });
+    }
+  }
+
+  function paintSectionError(el, message, onRetry) {
+    if (!el) return;
+    el.innerHTML = sectionErrorHtml(message);
+    bindSectionRetry(el, onRetry);
+  }
+
+  function tableShell(headers, bodyId, rowCount) {
+    var th = headers.map(function (h) { return '<th>' + escapeHtml(h) + '</th>'; }).join('');
+    return '<div class="table-wrap" aria-busy="true"><table class="data-table"><thead><tr>' + th + '</tr></thead>' +
+      '<tbody id="' + escapeHtml(bodyId) + '">' + skeletonTableRows(headers.length, rowCount || 6) +
+      '</tbody></table></div>';
+  }
+
+  /**
+   * Immediate shell while module JS is still loading (before registerRoute).
+   */
+  function paintPendingModuleShell(route) {
+    var page = $('page-content');
+    if (!page) return;
+    page.classList.remove('hidden');
+    var title = ROUTE_TITLES[route] || 'HRMS';
+    var html = '';
+
+    if (route === 'employees' || route === 'my-team') {
+      html =
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label">Search</label>' +
+        '<div class="hrms-skeleton-control" style="min-width:200px" aria-hidden="true"></div></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+        '<div class="hrms-skeleton-control" style="width:140px" aria-hidden="true"></div></div>' +
+        '</div></div>' +
+        tableShell(['Employee ID', 'Name', 'Department', 'Designation', 'Location', 'Type', 'Status', 'Manager'], 'shell-tbody', 8);
+    } else if (route === 'my-profile' || route === 'employee-profile') {
+      html =
+        '<div class="card"><div class="profile-header"><div>' +
+        '<div class="skeleton skeleton-xl" style="width:220px" aria-hidden="true"></div>' +
+        '<div class="skeleton skeleton-line w40" style="margin-top:10px" aria-hidden="true"></div></div></div>' +
+        '<div class="emp-tabs" aria-hidden="true"><span class="skeleton skeleton-line" style="width:80px;height:28px;display:inline-block;margin-right:8px"></span>' +
+        '<span class="skeleton skeleton-line" style="width:90px;height:28px;display:inline-block"></span></div>' +
+        skeletonLine('w100') + skeletonLine('w80') + skeletonLine('w60') + '</div>';
+    } else if (route === 'employee-create') {
+      html = '<div class="card" aria-hidden="true">' + skeletonLine('w60') +
+        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    } else if (route === 'my-leave') {
+      html =
+        '<div class="card"><h2 class="section-title">Balances</h2>' + tableShell(['Code', 'Type', 'Entitled', 'Carried', 'Used', 'Pending', 'Available'], 'shell-bal', 4) + '</div>' +
+        '<div class="card"><h2 class="section-title">My requests</h2>' + tableShell(['ID', 'Type', 'Dates', 'Days', 'Status', 'Reason', ''], 'shell-req', 4) + '</div>';
+    } else if (route === 'leave-approvals') {
+      html = tableShell(['Employee ID', 'Name', 'Type', 'Dates', 'Days', 'Reason', ''], 'shell-appr', 5);
+    } else if (route === 'leave-admin') {
+      html = '<div class="card">' +
+        tableShell(['Employee ID', 'Type', 'Dates', 'Days', 'Status', ''], 'shell-admin', 5) + '</div>';
+    } else if (route === 'leave-apply') {
+      html = '<div class="card" aria-hidden="true">' + skeletonLine('w80') +
+        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    } else if (route === 'leave-calendar') {
+      html = '<div class="card"><div class="skeleton skeleton-block" style="height:280px" aria-hidden="true"></div></div>';
+    } else if (route === 'payroll') {
+      html = skeletonKpiRow(['Period', 'Status', 'Employees', 'Net pay']) +
+        '<div class="card"><h2>Payroll period</h2>' + sectionSkeleton({ lines: 2 }) + '</div>' +
+        '<div class="card">' + tableShell(['Period', 'Run', 'Status', 'Created', ''], 'shell-pr', 5) + '</div>';
+    } else if (route === 'payroll-run') {
+      html = sectionSkeleton({ variant: 'detail', label: 'Loading run' });
+    } else if (route === 'compensation') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading employees' }) + '<div id="comp-editor"></div>';
+    } else if (route === 'my-payslips') {
+      html = '<div class="card">' + tableShell(['Title', 'Run', 'Date', ''], 'shell-ps', 4) + '</div>';
+    } else if (route === 'ats-jobs') {
+      html =
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label">Search</label>' +
+        '<div class="hrms-skeleton-control" style="min-width:200px" aria-hidden="true"></div></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+        '<div class="hrms-skeleton-control" style="width:148px" aria-hidden="true"></div></div>' +
+        '</div></div>' +
+        tableShell(['Job ID', 'Title', 'Department', 'Location', 'Status', 'Apps', 'Manager'], 'shell-ats-jobs', 7);
+    } else if (route === 'ats-candidates') {
+      html =
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label">Search</label>' +
+        '<div class="hrms-skeleton-control" style="min-width:200px" aria-hidden="true"></div></div>' +
+        '</div></div>' +
+        tableShell(['Candidate ID', 'Name', 'Email', 'Phone', 'Location', 'Apps', 'Resume'], 'shell-ats-cands', 7);
+    } else if (route === 'ats-job' || route === 'ats-candidate' || route === 'ats-job-new' || route === 'ats-job-edit') {
+      html = sectionSkeleton({ variant: 'detail', label: 'Loading' });
+    } else if (route.indexOf('pms') === 0) {
+      html = skeletonKpiRow(['Active cycles', 'Pending self-assessment', 'Pending reviews']) +
+        sectionSkeleton({ variant: 'card', label: 'Loading performance' });
+    } else if (route.indexOf('ats') === 0) {
+      html = skeletonKpiRow(['Open jobs', 'Applications', 'Interviews']) +
+        '<div class="card"><div class="skeleton skeleton-block" aria-hidden="true"></div></div>';
+    } else if (route === 'notifications') {
+      html = '<div class="card">' + tableShell(['Status', 'Notification', 'Type', 'When', ''], 'shell-ntf', 6) + '</div>';
+    } else {
+      html = '<div class="card"><h2>' + escapeHtml(title) + '</h2>' + sectionSkeleton({ label: 'Loading' }) + '</div>';
+    }
+
+    page.innerHTML = pageHeaderHtml(title, ROUTE_LEDES[route] || '', '') + html;
+  }
+
+  /**
+   * Inject module HTML from apiGetModuleUi. Scripts must be re-created to execute.
+   */
+  function injectModuleHtml(html) {
+    var root = $('module-ui-root') || document.body;
+    var holder = document.createElement('div');
+    holder.innerHTML = html;
+    var scripts = [];
+    Array.prototype.forEach.call(holder.querySelectorAll('script'), function (oldScript) {
+      scripts.push(oldScript.textContent || '');
+      oldScript.parentNode.removeChild(oldScript);
+    });
+    while (holder.firstChild) {
+      root.appendChild(holder.firstChild);
+    }
+    scripts.forEach(function (code) {
+      if (!code) return;
+      var el = document.createElement('script');
+      el.text = code;
+      document.body.appendChild(el);
+    });
+  }
+
+  function ensureModule(moduleId, opts) {
+    opts = opts || {};
+    if (opts.userInitiated) pauseBackgroundPreload();
+    if (moduleLoaded_[moduleId]) {
+      return Promise.resolve();
+    }
+    if (moduleLoading_[moduleId]) {
+      return moduleLoading_[moduleId];
+    }
+    var tMod = Date.now();
+    var rpcOpts = opts.background ? { background: true } : null;
+    moduleLoading_[moduleId] = (rpcOpts
+      ? callServer('apiGetModuleUi', moduleId, rpcOpts)
+      : callServer('apiGetModuleUi', moduleId))
+      .then(function (data) {
+        var tInject = Date.now();
+        injectModuleHtml(data && data.html ? data.html : '');
+        logClientPerf_({
+          kind: 'module-ui',
+          moduleId: moduleId,
+          rpcAndInjectMs: Date.now() - tMod,
+          injectMs: Date.now() - tInject,
+          htmlChars: data && data.html ? data.html.length : 0
+        });
+        moduleLoaded_[moduleId] = true;
+        delete moduleLoading_[moduleId];
+      })
+      .catch(function (err) {
+        delete moduleLoading_[moduleId];
+        throw err;
+      });
+    return moduleLoading_[moduleId];
+  }
+
+  function pauseBackgroundPreload() {
+    preloadPaused_ = true;
+  }
+
+  function resumeBackgroundPreload() {
+    preloadPaused_ = false;
+    scheduleNextPreload_();
+  }
+
+  function scheduleNextPreload_() {
+    if (preloadScheduled_ || preloadPaused_ || userRpcBusy_ > 0) return;
+    if (!preloadQueue_.length) return;
+    preloadScheduled_ = true;
+    var run = function () {
+      preloadScheduled_ = false;
+      if (preloadPaused_ || userRpcBusy_ > 0) return;
+      var mid = '';
+      while (preloadQueue_.length) {
+        mid = preloadQueue_.shift();
+        if (mid && !moduleLoaded_[mid] && !moduleLoading_[mid]) break;
+        mid = '';
+      }
+      if (!mid) return;
+      logClientPerf_({ kind: 'preload-one', moduleId: mid, remaining: preloadQueue_.length });
+      ensureModule(mid, { background: true }).catch(function () { /* ignore preload failures */ }).then(function () {
+        scheduleNextPreload_();
+      });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: 8000 });
+    } else {
+      setTimeout(run, 1200);
+    }
+  }
+
+  /** Idle, one-at-a-time module preload. Never starts until the user is idle. */
+  function preloadModulesFromNav() {
+    var needed = {};
+    (state.navigation || []).forEach(function (item) {
+      var mid = ROUTE_MODULE[item.route];
+      if (mid) needed[mid] = true;
+    });
+    var currentMid = ROUTE_MODULE[state.currentRoute];
+    var ids = Object.keys(needed).filter(function (mid) {
+      return mid && mid !== currentMid && !moduleLoaded_[mid] && !moduleLoading_[mid];
+    });
+    preloadQueue_ = ids;
+    logClientPerf_({ kind: 'preload-queue', modules: ids, rpcCount: ids.length, mode: 'idle-one-at-a-time' });
+    scheduleNextPreload_();
+  }
+
+  function registerLazyRouteStubs() {
+    Object.keys(ROUTE_MODULE).forEach(function (route) {
+      var moduleId = ROUTE_MODULE[route];
+      ROUTES[route] = {
+        title: ROUTE_TITLES[route] || route,
+        _lazy: true,
+        render: function (params) {
+          var seq = state.navSeq;
+          var tNav = Date.now();
+          var viewKey = moduleViewKey(route, params);
+          if (moduleLoaded_[moduleId] && shouldRestoreModuleView(viewKey)) {
+            ensureModule(moduleId, { userInitiated: true })
+              .then(function () {
+                if (seq !== state.navSeq || state.currentRoute !== route) return;
+                var def = ROUTES[route];
+                if (def && def.render && !def._lazy) def.render(params);
+                else renderPlaceholder();
+              });
+            return;
+          }
+          // Paint layout immediately — never wait for module RPC.
+          paintPendingModuleShell(route);
+          logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
+          ensureModule(moduleId, { userInitiated: true })
+            .then(function () {
+              logClientPerf_({
+                kind: 'nav-module-ready',
+                route: route,
+                moduleId: moduleId,
+                untilModuleReadyMs: Date.now() - tNav,
+                cached: !!moduleLoaded_[moduleId]
+              });
+              if (seq !== state.navSeq || state.currentRoute !== route) return;
+              var def = ROUTES[route];
+              if (def && def.render && !def._lazy) {
+                def.render(params);
+              } else {
+                renderPlaceholder();
+              }
+            })
+            .catch(function (err) {
+              if (seq !== state.navSeq || state.currentRoute !== route) return;
+              var page = $('page-content');
+              paintSectionError(page, err.message || 'Failed to load module.', function () {
+                navigate(route, params);
+              });
+              showToast(err.message || 'Failed to load module', 'error');
+            });
+        }
+      };
+    });
+  }
+
+  function hideAllMainStates() {
+    $('loading-state').classList.add('hidden');
+    $('page-content').classList.add('hidden');
+    $('unauthorized-state').classList.add('hidden');
+    $('setup-state').classList.add('hidden');
+    $('auth-state').classList.add('hidden');
+    $('error-state').classList.add('hidden');
+  }
+
+  function renderNav() {
+    var nav = $('sidebar-nav');
+    if (!nav) return;
+    nav.innerHTML = '';
+    groupedNavItems().forEach(function (group) {
+      var wrap = document.createElement('div');
+      wrap.className = 'nav-group' + (group.collapsible ? ' nav-group-collapsible' : '');
+      if (group.id) wrap.dataset.navGroup = group.id;
+      var expanded = isNavGroupExpanded(group);
+
+      if (group.label) {
+        if (group.collapsible) {
+          var toggle = document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = 'nav-group-toggle' + (expanded ? ' is-expanded' : '');
+          toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          toggle.innerHTML =
+            '<span class="nav-group-label">' + escapeHtml(group.label) + '</span>' +
+            '<svg class="nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+            '<path fill="currentColor" d="M7 10l5 5 5-5"/></svg>';
+          toggle.addEventListener('click', function () {
+            if (isNavGroupActive(group)) return;
+            navSectionExpanded_[group.id] = !navSectionExpanded_[group.id];
+            renderNav();
+          });
+          wrap.appendChild(toggle);
+        } else {
+          var lab = document.createElement('div');
+          lab.className = 'nav-group-label';
+          lab.textContent = group.label;
+          wrap.appendChild(lab);
+        }
+      }
+
+      var body = document.createElement('div');
+      body.className = 'nav-group-items' + (expanded ? '' : ' is-collapsed');
+      if (!expanded) body.setAttribute('aria-hidden', 'true');
+
+      group.items.forEach(function (item) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        var active = isNavRouteActive(item.route, state.currentRoute);
+        btn.className = 'nav-item' + (active ? ' active' : '') + (item.placeholder ? ' placeholder' : '');
+        btn.innerHTML = navIconSvg(item.icon) + '<span class="nav-label">' + escapeHtml(item.label) + '</span>';
+        btn.dataset.route = item.route;
+        if (active) btn.setAttribute('aria-current', 'page');
+        btn.addEventListener('click', function () {
+          navigate(item.route);
+        });
+        body.appendChild(btn);
+      });
+      wrap.appendChild(body);
+      nav.appendChild(wrap);
+    });
+  }
+
+  function navigate(route, params) {
+    if (!state.session || !state.session.authorized) return;
+    if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
+    if (route === 'pms-review' && params && !params.employeeId) {
+      route = 'pms-team';
+    }
+    state.navSeq = (state.navSeq || 0) + 1;
+    pauseBackgroundPreload();
+    state.currentRoute = route;
+    state.routeParams = params || {};
+    var item = state.navigation.filter(function (n) { return n.route === route; })[0];
+    var def = ROUTES[route];
+    var title = item ? item.label : (def ? def.title : 'HRMS');
+    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('pms-') === 0 || route.indexOf('ats-') === 0)) {
+      title = def.title;
+    }
+    $('page-title').textContent = title;
+    renderNav();
+    setSidebarOpen(false);
+    if (def && def.render) {
+      def.render(state.routeParams);
+    } else {
+      renderPlaceholder();
+    }
+    scheduleRefreshControls_();
+  }
+
+  function renderPlaceholder() {
+    var page = $('page-content');
+    if (!page) return;
+    page.classList.remove('hidden');
+    var title = ($('page-title') && $('page-title').textContent) || 'Coming soon';
+    var route = state.currentRoute;
+    var lede = ROUTE_LEDES[route] || 'This area will be built in a later phase.';
+    page.innerHTML = pageHeaderHtml(title, lede, '') +
+      '<div class="empty-state">' +
+        '<div class="empty-state-icon" aria-hidden="true"></div>' +
+        '<h2 class="empty-state-title">Not available yet</h2>' +
+        '<p class="empty-state-text">This module is on the roadmap. Navigation and permissions for it are already in place.</p>' +
+      '</div>';
+  }
+
+  function dashCard(label, value, hint) {
+    return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
+      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</div>' +
+      (hint ? '<div class="kpi-hint">' + escapeHtml(hint) + '</div>' : '') + '</div>';
+  }
+
+  function dashActionList(items, emptyText) {
+    if (!items || !items.length) {
+      return '<div class="empty-state empty-state-inline"><p class="empty-state-text">' + escapeHtml(emptyText) + '</p></div>';
+    }
+    var rows = items.map(function (it) {
+      return '<tr>' +
+        '<td>' + escapeHtml(it.label || '') + '</td>' +
+        '<td>' + escapeHtml(it.meta || '') + '</td>' +
+        '<td>' + (it.route
+          ? '<button type="button" class="btn btn-secondary btn-sm dash-go" data-route="' + escapeHtml(it.route) +
+            '" data-params="' + escapeHtml(JSON.stringify(it.params || {})) + '">Open</button>'
+          : '') + '</td></tr>';
+    }).join('');
+    return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Item</th><th></th><th></th></tr></thead><tbody>' +
+      rows + '</tbody></table></div>';
+  }
+
+  function renderDashboard() {
+    var page = $('page-content');
+    if (!page) return;
+    page.classList.remove('hidden');
+    var s = state.session || {};
+    var seq = state.navSeq;
+    var dashKey = 'dashboard';
+    var actions = '';
+    if (navHas('leave-approvals')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-approvals">Approvals</button>';
+    }
+    if (navHas('payroll')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-payroll">Payroll</button>';
+    }
+    if (navHas('ats')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-ats">Recruitment</button>';
+    }
+    if (navHas('employees')) {
+      actions += '<button type="button" class="btn btn-primary" id="dash-add-emp">Add employee</button>';
+    } else if (navHas('my-leave')) {
+      actions += '<button type="button" class="btn btn-primary" id="dash-leave">Apply leave</button>';
+    }
+
+    if (consumeModuleViewRestore(dashKey) && dashViewCache_.payload) {
+      paintHomeDashboard(dashViewCache_.payload, dashViewCache_.actions || actions, { secondaryPending: false });
+      return;
+    }
+
+    var keepPainted = isModuleRefresh(dashKey) && dashViewCache_.payload;
+    if (!keepPainted) {
+      page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
+        skeletonKpiRow(['Employee ID', 'Role', 'Unread']) +
+        '<div class="card dash-section">' + sectionSkeleton({ variant: 'list', rows: 4, label: 'Loading workspace' }) + '</div>';
+      if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
+      if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
+      if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
+      if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
+      if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
+    }
+
+    var primary = keepPainted ? (dashViewCache_.payload || null) : null;
+    callServer('apiGetHomeDashboard')
+      .then(function (data) {
+        if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return null;
+        primary = data || {};
+        dashViewCache_.actions = actions;
+        dashViewCache_.payload = primary;
+        dashViewCache_.complete = false;
+        paintHomeDashboard(primary, actions, { secondaryPending: true });
+        if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
+          window.HrmsNotificationBell.applyUnreadCount(primary.unread_count);
+        }
+        return callServer('apiGetHomeDashboardMore');
+      })
+      .then(function (more) {
+        if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
+        if (more) {
+          dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
+          dashViewCache_.complete = true;
+        }
+        if (dashViewCache_.payload) {
+          paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
+        }
+        markModuleViewLoaded(dashKey);
+      })
+      .catch(function (err) {
+        if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
+        if (primary) {
+          dashViewCache_.payload = primary;
+          dashViewCache_.actions = actions;
+          paintHomeDashboard(primary, actions, { secondaryPending: false });
+          markModuleViewLoaded(dashKey);
+          showToast(err.message || 'Could not load extra dashboard cards', 'error');
+          return;
+        }
+        finishModuleRefresh(true);
+        paintSectionError(page, err.message || 'Could not load dashboard.', function () {
+          navigate('dashboard');
+        });
+      });
+  }
+
+  function mergeDashboardPayload_(primary, more) {
+    var out = {};
+    [primary || {}, more || {}].forEach(function (src) {
+      Object.keys(src).forEach(function (k) {
+        if (k === 'notes') return;
+        if (src[k] != null) out[k] = src[k];
+      });
+    });
+    var notes = [];
+    if (primary && primary.notes) notes = notes.concat(primary.notes);
+    if (more && more.notes) notes = notes.concat(more.notes);
+    out.notes = notes;
+    return out;
+  }
+
+  function paintHomeDashboard(data, actions, opts) {
+    var page = $('page-content');
+    if (!page) return;
+    var s = state.session || {};
+    var kpis = '';
+    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '—', 'In-app notifications');
+    if (data.leave_approvals_count != null) {
+      kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
+    }
+    if (data.pms && data.pms.kpis) {
+      var pk = data.pms.kpis;
+      if (pk.pending_self_assessment != null) {
+        kpis += dashCard('Self-assessments due', pk.pending_self_assessment);
+      } else if (pk.employees_pending_self != null) {
+        kpis += dashCard('Self-assessments due', pk.employees_pending_self);
+      }
+      if (pk.pending_manager_review != null) {
+        kpis += dashCard('Reviews due', pk.pending_manager_review);
+      } else if (pk.managers_pending_review != null) {
+        kpis += dashCard('Reviews due', pk.managers_pending_review);
+      }
+    }
+    if (data.payroll && data.payroll.latest) {
+      var run = data.payroll.latest;
+      kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
+    }
+    if (data.ats) {
+      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '—');
+      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '—');
+    }
+    if (!kpis) {
+      kpis = dashCard('Employee ID', s.employee_id || '—') + dashCard('Role', s.role || '—');
+    }
+
+    var sections = '';
+    if (data.leave_approvals && data.leave_approvals.length) {
+      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
+        dashActionList(data.leave_approvals, 'No leave waiting for you.') + '</div>';
+    } else if (data.leave_approvals_count === 0 && navHas('leave-approvals')) {
+      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
+        '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
+    }
+    if (data.pms_actions && data.pms_actions.length) {
+      sections += '<div class="card dash-section"><h2>Performance</h2>' +
+        dashActionList(data.pms_actions, 'No performance actions right now.') + '</div>';
+    }
+    if (data.ats_actions && data.ats_actions.length) {
+      sections += '<div class="card dash-section"><h2>Recruitment</h2>' +
+        dashActionList(data.ats_actions, 'No recruitment actions in your scope.') + '</div>';
+    }
+    if (opts && opts.secondaryPending) {
+      sections += '<div class="card dash-section" id="dash-secondary" aria-busy="true">' +
+        sectionSkeleton({ lines: 3, label: 'Loading more dashboard cards' }) + '</div>';
+    }
+    if (!sections) {
+      sections = '<div class="card dash-welcome">' +
+        '<h2>Welcome to AyurCentral HRMS</h2>' +
+        '<p>Use the sidebar for people, time off, pay, and — if your role allows — performance and recruitment.</p></div>';
+    }
+    if (state.app && !state.app.configured) {
+      sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
+    }
+    if (data.notes && data.notes.length) {
+      sections += '<p class="hint">' + escapeHtml(data.notes.join(' ')) + '</p>';
+    }
+
+    page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
+      '<div class="kpi-row">' + kpis + '</div>' + sections;
+
+    if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
+    if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
+    if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
+    if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
+    if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
+    Array.prototype.forEach.call(page.querySelectorAll('.dash-go'), function (btn) {
+      btn.addEventListener('click', function () {
+        var route = btn.getAttribute('data-route');
+        var params = {};
+        try { params = JSON.parse(btn.getAttribute('data-params') || '{}'); } catch (ignore) {}
+        navigate(route, params);
+      });
+    });
+  }
+
+  function showUnauthorized(message) {
+    hideAllMainStates();
+    setAuthedChrome(false);
+    $('unauthorized-state').classList.remove('hidden');
+    $('unauthorized-message').textContent = message || 'You do not have access to this application.';
+    syncAskHrVisibility();
+  }
+
+  function showAuthError(el, message) {
+    if (!el) return;
+    if (message) {
+      el.textContent = message;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function showAuthEmailStep() {
+    $('auth-step-email').classList.remove('hidden');
+    $('auth-step-code').classList.add('hidden');
+    showAuthError($('auth-email-error'), '');
+    showAuthError($('auth-code-error'), '');
+  }
+
+  function showAuthCodeStep(email) {
+    state.authEmail = email;
+    $('auth-email-display').textContent = email;
+    $('auth-step-email').classList.add('hidden');
+    $('auth-step-code').classList.remove('hidden');
+    $('auth-code').value = '';
+    showAuthError($('auth-code-error'), '');
+  }
+
+  /**
+   * Canonical unauthenticated UI. Tears down the authenticated shell so
+   * #page-content / sidebar / bell cannot remain visible or be repainted
+   * by in-flight navigation after logout or session expiry.
+   */
+  function showAuthLogin(sessionHint) {
+    clearUserSessionViewState_();
+    state.navigation = [];
+    state.currentRoute = '';
+    state.routeParams = {};
+    state.session = {
+      authorized: false,
+      authRequired: true,
+      reason: (sessionHint && sessionHint.reason) || '',
+      message: (sessionHint && sessionHint.message) || ''
+    };
+    var page = $('page-content');
+    if (page) {
+      page.innerHTML = '';
+      try { page.removeAttribute('aria-busy'); } catch (ignoreBusy) {}
+    }
+    var nav = $('sidebar-nav');
+    if (nav) nav.innerHTML = '';
+    setSidebarOpen(false);
+    if (window.HrmsNotificationBell && window.HrmsNotificationBell.unmount) {
+      try { window.HrmsNotificationBell.unmount(); } catch (ignoreBell) {}
+    }
+    var slot = $('ntf-bell-slot');
+    if (slot) slot.innerHTML = '';
+    var title = $('page-title');
+    if (title) title.textContent = '';
+    hideAllMainStates();
+    setAuthedChrome(false);
+    $('auth-state').classList.remove('hidden');
+    showAuthEmailStep();
+    if (state.authEmail) {
+      $('auth-email').value = state.authEmail;
+    }
+    var hint = $('auth-google-hint');
+    if (hint) {
+      if (sessionHint && sessionHint.reason === 'UNKNOWN_USER') {
+        hint.textContent = 'The Google account currently selected in this browser is not registered in HRMS. Sign in with your registered email below.';
+        hint.classList.remove('hidden');
+      } else {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+      }
+    }
+    syncAskHrVisibility();
+  }
+
+  var signOutBusy_ = false;
+
+  /** Shared sign-out lifecycle: immediate button feedback → apiLogout → auth screen. */
+  function performSignOut_(button) {
+    if (signOutBusy_) {
+      return (button && button._hrmsInflight) || Promise.resolve();
+    }
+    if (button && isButtonLoading(button)) {
+      return button._hrmsInflight || Promise.resolve();
+    }
+    signOutBusy_ = true;
+    if (button) setButtonLoading(button, 'Signing out…');
+    var p = callServer('apiLogout')
+      .then(function () {
+        setSessionToken('');
+        if (button) restoreButton(button);
+        showAuthLogin({ authRequired: true });
+        signOutBusy_ = false;
+      })
+      .catch(function (err) {
+        signOutBusy_ = false;
+        if (button) restoreButton(button);
+        showToast((err && err.message) || 'Sign out failed. Please try again.', 'error');
+        return Promise.reject(err);
+      });
+    if (button) button._hrmsInflight = p;
+    return p;
+  }
+
+  function bindAuthUi() {
+    $('auth-send-btn').addEventListener('click', function () {
+      var email = ($('auth-email').value || '').trim();
+      showAuthError($('auth-email-error'), '');
+      if (!email || email.indexOf('@') < 1) {
+        showAuthError($('auth-email-error'), 'Enter a valid email address.');
+        return;
+      }
+      var btn = $('auth-send-btn');
+      callServer('apiRequestAuthOtp', email, { button: btn, loadingText: 'Sending…' })
+        .then(function (data) {
+          if (data && data.ok === false) {
+            showAuthError($('auth-email-error'), data.message || 'Unable to send verification code.');
+            return;
+          }
+          showAuthCodeStep(email);
+          showToast('Verification code sent', 'success');
+        })
+        .catch(function (err) {
+          showAuthError($('auth-email-error'), err.message || 'Unable to send verification code.');
+        });
+    });
+
+    $('auth-verify-btn').addEventListener('click', function () {
+      var code = ($('auth-code').value || '').trim();
+      showAuthError($('auth-code-error'), '');
+      if (!/^\d{6}$/.test(code)) {
+        showAuthError($('auth-code-error'), 'Enter the 6-digit verification code.');
+        return;
+      }
+      var btn = $('auth-verify-btn');
+      callServer('apiVerifyAuthOtp', state.authEmail, code, { button: btn, loadingText: 'Verifying…' })
+        .then(function (data) {
+          setSessionToken(data.sessionToken);
+          applyBootstrapSuccess({
+            session: data.session,
+            app: state.app,
+            navigation: data.navigation || []
+          });
+        })
+        .catch(function (err) {
+          showAuthError($('auth-code-error'), err.message || 'Verification failed.');
+        });
+    });
+
+    $('auth-resend-btn').addEventListener('click', function () {
+      showAuthEmailStep();
+      $('auth-email').value = state.authEmail;
+      $('auth-send-btn').click();
+    });
+
+    $('auth-change-email-btn').addEventListener('click', function () {
+      state.authEmail = '';
+      showAuthEmailStep();
+    });
+  }
+
+  function showSetupRequired() {
+    hideAllMainStates();
+    setAuthedChrome(false);
+    $('setup-state').classList.remove('hidden');
+    syncAskHrVisibility();
+    $('btn-run-setup').addEventListener('click', function () {
+      var btn = $('btn-run-setup');
+      var resultEl = $('setup-result');
+      if (resultEl) resultEl.textContent = 'Setting up…';
+      callServer('apiRunDatabaseSetup', '', { button: btn, loadingText: 'Setting up…' })
+        .then(function () {
+          if (resultEl) resultEl.textContent = 'Setup complete. Reloading…';
+          setTimeout(function () { window.location.reload(); }, 800);
+        })
+        .catch(function (err) {
+          if (resultEl) resultEl.textContent = err.message || 'Setup failed';
+        });
+    });
+  }
+
+  function updateUserChip() {
+    var s = state.session;
+    if (!s || !s.authorized) return;
+    var name = s.displayName || s.email || 'User';
+    $('user-name').textContent = name;
+    $('user-role').textContent = s.role || '';
+    var av = $('user-avatar');
+    if (av) av.textContent = (String(name).replace(/^\s+/, '').charAt(0) || '?').toUpperCase();
+  }
+
+  function initShell() {
+    var toggle = $('sidebar-toggle');
+    if (toggle && !toggle.getAttribute('data-bound')) {
+      toggle.setAttribute('data-bound', '1');
+      toggle.addEventListener('click', function () {
+        var sidebar = $('sidebar');
+        setSidebarOpen(!(sidebar && sidebar.classList.contains('open')));
+      });
+    }
+    var backdrop = $('sidebar-backdrop');
+    if (backdrop && !backdrop.getAttribute('data-bound')) {
+      backdrop.setAttribute('data-bound', '1');
+      backdrop.addEventListener('click', function () { setSidebarOpen(false); });
+    }
+    var out = $('btn-sign-out');
+    if (out && !out.getAttribute('data-bound')) {
+      out.setAttribute('data-bound', '1');
+      out.addEventListener('click', function () {
+        performSignOut_(out);
+      });
+    }
+    if (state.app && state.app.companyName) {
+      $('brand-title').textContent = state.app.companyName.split(' ')[0] || 'AyurCentral';
+    }
+  }
+
+  function applyBootstrapSuccess(data) {
+    clearUserSessionViewState_();
+    state.session = data.session;
+    state.app = data.app;
+    state.navigation = data.navigation || [];
+    askHrUi.sessionKnown = true;
+    hideAllMainStates();
+    setAuthedChrome(true);
+    updateUserChip();
+    initShell();
+    bindModuleRefreshUi();
+    renderNav();
+    navigate('dashboard');
+    syncAskHrVisibility();
+    if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
+      window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
+    }
+    // Idle, one-at-a-time preload — never compete with the first dashboard RPCs.
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(function () { preloadModulesFromNav(); }, { timeout: 12000 });
+    } else {
+      setTimeout(preloadModulesFromNav, 2500);
+    }
+  }
+
+  function bootstrap() {
+    callServer('apiGetAppBootstrap')
+      .then(function (data) {
+        state.app = data.app;
+        if (data.session) state.session = data.session;
+        askHrUi.sessionKnown = true;
+
+        if (!data.app.configured && !data.session.authorized) {
+          $('loading-state').classList.add('hidden');
+          showSetupRequired();
+          return;
+        }
+
+        if (data.session.authorized) {
+          applyBootstrapSuccess(data);
+          return;
+        }
+
+        $('loading-state').classList.add('hidden');
+
+        if (data.session.authRequired) {
+          showAuthLogin(data.session);
+          return;
+        }
+
+        showUnauthorized(data.session.message);
+      })
+      .catch(function (err) {
+        $('loading-state').classList.add('hidden');
+        var el = $('error-state');
+        el.classList.remove('hidden');
+        el.textContent = err.message || 'Failed to load application.';
+        showToast(err.message || 'Failed to load', 'error');
+        askHrUi.sessionKnown = true;
+        setAuthedChrome(false);
+        syncAskHrVisibility();
+      });
+  }
+
+  var ASK_HR_MAX_CHARS = 1000;
+  var ASK_HR_STATUS_MS = 4000;
+  var ASK_HR_STATUS_STEPS = [
+    'Searching HR knowledge base…',
+    'Reading relevant documents…',
+    'Preparing your answer…'
+  ];
+  var ASK_HR_ERROR_COPY = {
+    UNAUTHORIZED: 'You need to be signed in to use Ask HR.',
+    AUTHORIZATION: 'You need to be signed in to use Ask HR.',
+    AUTHORIZATION_ERROR: 'You need to be signed in to use Ask HR.',
+    EXPIRED: 'Your session has expired. Please sign in again to use Ask HR.',
+    REPLAY: 'This request could not be completed. Please try again.',
+    VALIDATION: 'Your request was too long. Please keep it under 1000 characters.',
+    VALIDATION_ERROR: 'Your request was too long. Please keep it under 1000 characters.',
+    RATE_LIMITED: 'You\'re sending requests too quickly. Please wait a moment.',
+    NOT_CONFIGURED: 'Ask HR is not available yet. Please try again later.',
+    CONFIGURATION: 'Ask HR is not available yet. Please try again later.',
+    CONFIGURATION_ERROR: 'Ask HR is not available yet. Please try again later.',
+    NOT_FOUND: 'I couldn\'t find enough information in the HR knowledge base to answer this confidently.',
+    UPSTREAM: 'Unable to search the HR knowledge base right now. Please try again.',
+    RETRIEVAL_FAILED: 'Unable to search the HR knowledge base right now. Please try again.',
+    GENERATION_FAILED: 'I found the relevant HR information, but I\'m unable to generate the answer right now. Please try again.',
+    TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
+    LOCK_TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
+    SYSTEM: 'Unable to search the HR knowledge base right now. Please try again.',
+    SYSTEM_ERROR: 'Unable to search the HR knowledge base right now. Please try again.'
+  };
+  var ASK_HR_NOT_FOUND_HINT =
+    'Try asking about a specific HR policy, leave rule, payroll process, employee procedure or benefit.';
+
+  var askHrUi = {
+    open: false,
+    busy: false,
+    expanded: false,
+    requestSeq: 0,
+    statusTimer: null,
+    statusIndex: 0,
+    messages: [],
+    sessionKnown: false
+  };
+
+  function isAskHrAllowed() {
+    if (state.session && state.session.authorized) return true;
+    if (state.session && state.session.authorized === false) return false;
+    if (askHrUi.sessionKnown) return false;
+    return !!getSessionToken();
+  }
+
+  function askHrFriendlyError(code) {
+    var key = String(code || 'UPSTREAM').toUpperCase();
+    return ASK_HR_ERROR_COPY[key] || ASK_HR_ERROR_COPY.UPSTREAM;
+  }
+
+  function mapAskHrTransportError(err) {
+    var raw = String((err && err.message) || err || '').toLowerCase();
+    if (raw.indexOf('not found') !== -1 || raw.indexOf('is not a function') !== -1) {
+      return { code: 'NOT_CONFIGURED' };
+    }
+    if (raw.indexOf('timed out') !== -1 || raw.indexOf('timeout') !== -1) {
+      return { code: 'TIMEOUT' };
+    }
+    return { code: 'UPSTREAM' };
+  }
+
+  /**
+   * Same sessionToken injection as other RPCs. Business errors arrive as
+   * { ok: false, error } inside the unwrapped callServer payload.
+   */
+  function callAskHr(question) {
+    return callServer('apiAskHr', question)
+      .then(function (payload) {
+        if (!payload || typeof payload !== 'object') {
+          return Promise.reject({ code: 'UPSTREAM' });
+        }
+        if (payload.ok === false || (payload.error && payload.ok !== true)) {
+          return Promise.reject(payload.error || { code: 'UPSTREAM' });
+        }
+        return payload;
+      })
+      .catch(function (err) {
+        if (err && err.code) {
+          return Promise.reject({ code: err.code });
+        }
+        return Promise.reject(mapAskHrTransportError(err));
+      });
+  }
+
+  function sanitizeAskHrFileUrl(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    var trimmed = raw.replace(/^\s+|\s+$/g, '');
+    if (!trimmed) return '';
+    var lower = trimmed.toLowerCase();
+    if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 ||
+        lower.indexOf('vbscript:') === 0 || lower.indexOf('file:') === 0) {
+      return '';
+    }
+    try {
+      var parsed = new URL(trimmed);
+      if (parsed.protocol !== 'https:') return '';
+      var host = String(parsed.hostname || '').toLowerCase().replace(/\.$/, '');
+      if (host === 'drive.google.com' || host === 'docs.google.com') {
+        return parsed.href;
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
+  function appendMultilineText(el, text) {
+    var parts = String(text == null ? '' : text).split('\n');
+    var i;
+    for (i = 0; i < parts.length; i++) {
+      if (i) el.appendChild(document.createElement('br'));
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+
+  function appendInlineMarkdown(el, text) {
+    var raw = String(text == null ? '' : text);
+    var re = /\*\*([^*]+)\*\*|\*([^*\n]+)\*/g;
+    var last = 0;
+    var match;
+    while ((match = re.exec(raw))) {
+      if (match.index > last) {
+        el.appendChild(document.createTextNode(raw.slice(last, match.index)));
+      }
+      var strong = document.createElement('strong');
+      strong.textContent = match[1] || match[2] || '';
+      el.appendChild(strong);
+      last = match.index + match[0].length;
+    }
+    if (last < raw.length) {
+      el.appendChild(document.createTextNode(raw.slice(last)));
+    }
+  }
+
+  function isAskHrTableSeparator_(line) {
+    return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+  }
+
+  function splitAskHrTableRow_(line) {
+    var trimmed = String(line || '').trim();
+    if (trimmed.charAt(0) === '|') trimmed = trimmed.slice(1);
+    if (trimmed.charAt(trimmed.length - 1) === '|') trimmed = trimmed.slice(0, -1);
+    return trimmed.split('|').map(function (cell) {
+      return cell.replace(/^\s+|\s+$/g, '');
+    });
+  }
+
+  function askHrAnswerLooksStructured(text) {
+    return /(^|\n)\s*#{1,3}\s|(^|\n)\s*[-*•]\s|(^|\n)\s*\d+[.)]\s|(^|\n)\s*\|.+\|/.test(
+      String(text || '')
+    );
+  }
+
+  /**
+   * Safe markdown-lite renderer for Ask HR answers (text nodes / elements only).
+   * Supports headings, bold, bullets, numbered lists, and simple tables.
+   */
+  function renderAskHrMarkdown(container, text) {
+    var lines = String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n');
+    var i = 0;
+    var paraLines = [];
+
+    function flushPara() {
+      if (!paraLines.length) return;
+      var p = document.createElement('p');
+      p.className = 'ask-hr-p';
+      appendInlineMarkdown(p, paraLines.join(' '));
+      container.appendChild(p);
+      paraLines = [];
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+      var trimmed = line.replace(/^\s+|\s+$/g, '');
+
+      if (!trimmed) {
+        flushPara();
+        i += 1;
+        continue;
+      }
+
+      if (/^#{1,3}\s+/.test(trimmed)) {
+        flushPara();
+        var level = trimmed.match(/^(#{1,3})\s+/)[1].length;
+        var heading = document.createElement(level === 1 ? 'h3' : 'h4');
+        heading.className = 'ask-hr-heading';
+        appendInlineMarkdown(heading, trimmed.replace(/^#{1,3}\s+/, ''));
+        container.appendChild(heading);
+        i += 1;
+        continue;
+      }
+
+      if (trimmed.indexOf('|') !== -1 && i + 1 < lines.length && isAskHrTableSeparator_(lines[i + 1])) {
+        flushPara();
+        var headers = splitAskHrTableRow_(trimmed);
+        var table = document.createElement('table');
+        table.className = 'ask-hr-table';
+        var thead = document.createElement('thead');
+        var headRow = document.createElement('tr');
+        var h;
+        for (h = 0; h < headers.length; h++) {
+          var th = document.createElement('th');
+          appendInlineMarkdown(th, headers[h]);
+          headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        var tbody = document.createElement('tbody');
+        i += 2;
+        while (i < lines.length && lines[i].indexOf('|') !== -1 && !isAskHrTableSeparator_(lines[i])) {
+          var cells = splitAskHrTableRow_(lines[i]);
+          var tr = document.createElement('tr');
+          var c;
+          for (c = 0; c < headers.length; c++) {
+            var td = document.createElement('td');
+            appendInlineMarkdown(td, cells[c] || '');
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+          i += 1;
+        }
+        table.appendChild(tbody);
+        container.appendChild(table);
+        continue;
+      }
+
+      if (/^[-*•]\s+/.test(trimmed)) {
+        flushPara();
+        var ul = document.createElement('ul');
+        ul.className = 'ask-hr-list';
+        while (i < lines.length && /^[-*•]\s+/.test(lines[i].replace(/^\s+/, ''))) {
+          var li = document.createElement('li');
+          appendInlineMarkdown(li, lines[i].replace(/^\s+/, '').replace(/^[-*•]\s+/, ''));
+          ul.appendChild(li);
+          i += 1;
+        }
+        container.appendChild(ul);
+        continue;
+      }
+
+      if (/^\d+[.)]\s+/.test(trimmed)) {
+        flushPara();
+        var ol = document.createElement('ol');
+        ol.className = 'ask-hr-list ask-hr-list-numbered';
+        while (i < lines.length && /^\d+[.)]\s+/.test(lines[i].replace(/^\s+/, ''))) {
+          var oli = document.createElement('li');
+          appendInlineMarkdown(oli, lines[i].replace(/^\s+/, '').replace(/^\d+[.)]\s+/, ''));
+          ol.appendChild(oli);
+          i += 1;
+        }
+        container.appendChild(ol);
+        continue;
+      }
+
+      paraLines.push(trimmed);
+      i += 1;
+    }
+    flushPara();
+  }
+
+  function setAskHrComposeError(message) {
+    var el = $('ask-hr-compose-error');
+    if (!el) return;
+    if (message) {
+      el.textContent = message;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function setAskHrBusyUi(busy) {
+    askHrUi.busy = !!busy;
+    var send = $('ask-hr-send');
+    var input = $('ask-hr-input');
+    var panel = $('ask-hr-panel');
+    if (send) {
+      send.disabled = !!busy;
+      send.textContent = busy ? 'Sending…' : 'Send';
+    }
+    if (input) input.disabled = !!busy;
+    if (panel) {
+      if (busy) panel.setAttribute('aria-busy', 'true');
+      else panel.removeAttribute('aria-busy');
+    }
+  }
+
+  function scrollAskHrToBottom() {
+    var scroller = $('ask-hr-messages');
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  function stopAskHrStatus() {
+    if (askHrUi.statusTimer) {
+      clearInterval(askHrUi.statusTimer);
+      askHrUi.statusTimer = null;
+    }
+    askHrUi.statusIndex = 0;
+    var existing = $('ask-hr-status');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  }
+
+  function startAskHrStatus() {
+    stopAskHrStatus();
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    var bubble = document.createElement('div');
+    bubble.id = 'ask-hr-status';
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-status';
+    bubble.setAttribute('role', 'status');
+    bubble.setAttribute('aria-live', 'polite');
+
+    var skel = document.createElement('div');
+    skel.className = 'ask-hr-skel-stack hrms-skeleton-stack';
+    skel.setAttribute('aria-hidden', 'true');
+    var widths = ['w60', 'w100', 'w80', 'w40'];
+    var si;
+    for (si = 0; si < widths.length; si++) {
+      var line = document.createElement('div');
+      line.className = 'skeleton skeleton-line hrms-skeleton-line ' + widths[si];
+      skel.appendChild(line);
+    }
+    bubble.appendChild(skel);
+
+    var copy = document.createElement('div');
+    copy.className = 'ask-hr-status-copy';
+    var label = document.createElement('span');
+    label.id = 'ask-hr-status-text';
+    label.className = 'ask-hr-status-label';
+    label.textContent = ASK_HR_STATUS_STEPS[0];
+    var hint = document.createElement('span');
+    hint.className = 'ask-hr-status-hint';
+    hint.textContent = 'This can take up to a minute.';
+    copy.appendChild(label);
+    copy.appendChild(hint);
+    bubble.appendChild(copy);
+
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+    askHrUi.statusTimer = setInterval(function () {
+      askHrUi.statusIndex = (askHrUi.statusIndex + 1) % ASK_HR_STATUS_STEPS.length;
+      var textEl = $('ask-hr-status-text');
+      if (textEl) textEl.textContent = ASK_HR_STATUS_STEPS[askHrUi.statusIndex];
+    }, ASK_HR_STATUS_MS);
+  }
+
+  function hideAskHrIntro() {
+    var intro = $('ask-hr-intro');
+    if (intro) intro.classList.add('hidden');
+  }
+
+  function restoreAskHrIntro() {
+    var intro = $('ask-hr-intro');
+    var thread = $('ask-hr-thread');
+    if (thread) thread.innerHTML = '';
+    if (intro) intro.classList.remove('hidden');
+  }
+
+  function appendAskHrUserBubble(text) {
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    hideAskHrIntro();
+    var bubble = document.createElement('div');
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-user';
+    appendMultilineText(bubble, text);
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+  }
+
+  function appendAskHrErrorBubble(message) {
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    hideAskHrIntro();
+    var bubble = document.createElement('div');
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-error';
+    bubble.setAttribute('role', 'alert');
+    bubble.textContent = message;
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+  }
+
+  function appendAskHrAnswerBubble(payload) {
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    hideAskHrIntro();
+    var bubble = document.createElement('div');
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-bot';
+
+    var notFound = !!(payload && payload.notFound);
+    var answerText = payload && typeof payload.answer === 'string' ? payload.answer : '';
+    if (notFound || !answerText) {
+      answerText = answerText || askHrFriendlyError('NOT_FOUND');
+      notFound = true;
+    }
+
+    var body = document.createElement('div');
+    body.className = 'ask-hr-answer';
+    if (notFound) {
+      var nf = document.createElement('p');
+      nf.className = 'ask-hr-p';
+      nf.textContent = askHrFriendlyError('NOT_FOUND');
+      body.appendChild(nf);
+      var hint = document.createElement('p');
+      hint.className = 'ask-hr-notfound-hint';
+      hint.textContent = ASK_HR_NOT_FOUND_HINT;
+      body.appendChild(hint);
+    } else {
+      renderAskHrMarkdown(body, answerText);
+    }
+    bubble.appendChild(body);
+
+    var keyPoints = payload && Array.isArray(payload.keyPoints) ? payload.keyPoints : [];
+    var safePoints = [];
+    var i;
+    for (i = 0; i < keyPoints.length; i++) {
+      if (keyPoints[i] != null && String(keyPoints[i]).replace(/^\s+|\s+$/g, '')) {
+        safePoints.push(String(keyPoints[i]));
+      }
+    }
+    // Structured answers already include lists/sections — avoid duplicating as Key points.
+    if (!notFound && safePoints.length && !askHrAnswerLooksStructured(answerText)) {
+      var keyLabel = document.createElement('div');
+      keyLabel.className = 'ask-hr-key-label';
+      keyLabel.textContent = 'Key points';
+      bubble.appendChild(keyLabel);
+      var list = document.createElement('ul');
+      list.className = 'ask-hr-keypoints';
+      for (i = 0; i < safePoints.length; i++) {
+        var li = document.createElement('li');
+        li.textContent = safePoints[i];
+        list.appendChild(li);
+      }
+      bubble.appendChild(list);
+    }
+
+    var refs = payload && Array.isArray(payload.references) ? payload.references : [];
+    var sourceItems = [];
+    if (!notFound) {
+      for (i = 0; i < refs.length; i++) {
+        var ref = refs[i] || {};
+        var fileName = String(ref.fileName || ref.name || 'Source document');
+        var href = sanitizeAskHrFileUrl(ref.fileUrl || ref.url || '');
+        sourceItems.push({ fileName: fileName, href: href });
+      }
+    }
+    if (sourceItems.length) {
+      var srcWrap = document.createElement('div');
+      srcWrap.className = 'ask-hr-sources-block';
+      var srcLabel = document.createElement('div');
+      srcLabel.className = 'ask-hr-src-label';
+      srcLabel.textContent = 'Sources';
+      srcWrap.appendChild(srcLabel);
+      var sources = document.createElement('ul');
+      sources.className = 'ask-hr-sources';
+      for (i = 0; i < sourceItems.length; i++) {
+        var sli = document.createElement('li');
+        var mark = document.createElement('span');
+        mark.className = 'ask-hr-src-mark';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = '📄';
+        sli.appendChild(mark);
+        if (sourceItems[i].href) {
+          var link = document.createElement('a');
+          link.href = sourceItems[i].href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = sourceItems[i].fileName;
+          sli.appendChild(link);
+        } else {
+          var nameSpan = document.createElement('span');
+          nameSpan.textContent = sourceItems[i].fileName;
+          sli.appendChild(nameSpan);
+        }
+        sources.appendChild(sli);
+      }
+      srcWrap.appendChild(sources);
+      bubble.appendChild(srcWrap);
+    }
+
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+  }
+
+  function setAskHrExpanded(expanded) {
+    askHrUi.expanded = !!expanded;
+    var panel = $('ask-hr-panel');
+    var btn = $('ask-hr-expand');
+    if (panel) {
+      if (askHrUi.expanded) panel.classList.add('is-expanded');
+      else panel.classList.remove('is-expanded');
+    }
+    if (btn) {
+      btn.textContent = askHrUi.expanded ? 'Compact' : 'Expand';
+      btn.setAttribute('aria-pressed', askHrUi.expanded ? 'true' : 'false');
+      btn.title = askHrUi.expanded ? 'Compact view' : 'Expand for longer answers';
+    }
+  }
+
+  function toggleAskHrExpanded() {
+    setAskHrExpanded(!askHrUi.expanded);
+  }
+
+  function clearAskHrConversation() {
+    askHrUi.requestSeq += 1;
+    askHrUi.messages = [];
+    stopAskHrStatus();
+    setAskHrBusyUi(false);
+    setAskHrComposeError('');
+    restoreAskHrIntro();
+    var input = $('ask-hr-input');
+    if (input && !input.disabled) input.focus();
+  }
+
+  function closeAskHrPanel() {
+    var panel = $('ask-hr-panel');
+    var fab = $('ask-hr-fab');
+    if (panel) panel.classList.add('hidden');
+    askHrUi.open = false;
+    setAskHrExpanded(false);
+    if (fab) {
+      fab.setAttribute('aria-expanded', 'false');
+      if (isAskHrAllowed()) {
+        fab.classList.remove('hidden');
+        fab.focus();
+      }
+    }
+  }
+
+  function openAskHrPanel() {
+    if (!isAskHrAllowed()) return;
+    var panel = $('ask-hr-panel');
+    var fab = $('ask-hr-fab');
+    var input = $('ask-hr-input');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    askHrUi.open = true;
+    if (fab) {
+      fab.classList.add('hidden');
+      fab.setAttribute('aria-expanded', 'true');
+    }
+    if (input && !askHrUi.busy) {
+      setTimeout(function () { input.focus(); }, 0);
+    }
+  }
+
+  function syncAskHrVisibility() {
+    var fab = $('ask-hr-fab');
+    var panel = $('ask-hr-panel');
+    if (!fab || !panel) return;
+    if (!isAskHrAllowed()) {
+      askHrUi.open = false;
+      panel.classList.add('hidden');
+      fab.classList.add('hidden');
+      fab.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    if (askHrUi.open) {
+      panel.classList.remove('hidden');
+      fab.classList.add('hidden');
+      fab.setAttribute('aria-expanded', 'true');
+    } else {
+      panel.classList.add('hidden');
+      fab.classList.remove('hidden');
+      fab.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function sendAskHrQuestion(rawQuestion) {
+    setAskHrComposeError('');
+    if (askHrUi.busy) return;
+
+    if (!isAskHrAllowed()) {
+      appendAskHrErrorBubble(askHrFriendlyError('UNAUTHORIZED'));
+      return;
+    }
+
+    var question = String(rawQuestion || '').replace(/^\s+|\s+$/g, '');
+    if (!question) {
+      setAskHrComposeError('Please enter a question.');
+      return;
+    }
+    if (question.length < 3) {
+      setAskHrComposeError('Please enter a question.');
+      return;
+    }
+    if (question.length > ASK_HR_MAX_CHARS) {
+      setAskHrComposeError('Your request was too long. Please keep it under 1000 characters.');
+      return;
+    }
+
+    var input = $('ask-hr-input');
+    if (input) input.value = '';
+
+    askHrUi.messages.push({ role: 'user', text: question });
+    appendAskHrUserBubble(question);
+    setAskHrBusyUi(true);
+    startAskHrStatus();
+    var seq = ++askHrUi.requestSeq;
+
+    callAskHr(question)
+      .then(function (payload) {
+        if (seq !== askHrUi.requestSeq) return;
+        stopAskHrStatus();
+        setAskHrBusyUi(false);
+        askHrUi.messages.push({ role: 'assistant', payload: payload });
+        appendAskHrAnswerBubble(payload || {});
+      })
+      .catch(function (err) {
+        if (seq !== askHrUi.requestSeq) return;
+        stopAskHrStatus();
+        setAskHrBusyUi(false);
+        var code = err && err.code ? err.code : 'UPSTREAM';
+        var message = askHrFriendlyError(code);
+        askHrUi.messages.push({ role: 'error', text: message });
+        appendAskHrErrorBubble(message);
+      });
+  }
+
+  function initAskHr() {
+    var fab = $('ask-hr-fab');
+    var panel = $('ask-hr-panel');
+    var form = $('ask-hr-form');
+    var input = $('ask-hr-input');
+    var closeBtn = $('ask-hr-close');
+    var clearBtn = $('ask-hr-clear');
+    var expandBtn = $('ask-hr-expand');
+    var messages = $('ask-hr-messages');
+    if (!fab || !panel || !form) return;
+
+    fab.addEventListener('click', function () {
+      if (!isAskHrAllowed()) return;
+      openAskHrPanel();
+    });
+
+    closeBtn && closeBtn.addEventListener('click', function () {
+      closeAskHrPanel();
+    });
+
+    clearBtn && clearBtn.addEventListener('click', function () {
+      clearAskHrConversation();
+    });
+
+    expandBtn && expandBtn.addEventListener('click', function () {
+      toggleAskHrExpanded();
+    });
+
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      sendAskHrQuestion(input ? input.value : '');
+    });
+
+    if (input) {
+      input.addEventListener('keydown', function (evt) {
+        if (evt.key === 'Enter' && !evt.shiftKey) {
+          evt.preventDefault();
+          sendAskHrQuestion(input.value);
+        }
+      });
+    }
+
+    if (messages) {
+      messages.addEventListener('click', function (evt) {
+        var el = evt.target;
+        if (el && el.nodeType !== 1) el = el.parentElement;
+        var btn = el && el.closest ? el.closest('[data-ask-hr-q]') : null;
+        if (!btn || askHrUi.busy) return;
+        var q = btn.getAttribute('data-ask-hr-q') || '';
+        if (input) input.value = q;
+        sendAskHrQuestion(q);
+      });
+    }
+
+    document.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Escape' && askHrUi.open) {
+        evt.preventDefault();
+        closeAskHrPanel();
+      }
+    });
+
+    syncAskHrVisibility();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    registerLazyRouteStubs();
+    bindAuthUi();
+    bindModuleRefreshUi();
+    initAskHr();
+    bootstrap();
+  });
+
+  window.HrmsApp = {
+    getState: function () { return state; },
+    registerRoute: function (id, def) { ROUTES[id] = def; },
+    registerModuleRoutes: registerModuleRoutes,
+    navigate: navigate,
+    callServer: callServer,
+    showToast: showToast,
+    routeStill: routeStill,
+    setHtml: setHtml,
+    escapeHtml: escapeHtml,
+    getSessionToken: getSessionToken,
+    setSessionToken: setSessionToken,
+    ensureModule: ensureModule,
+    skeletonTableRows: skeletonTableRows,
+    skeletonLine: skeletonLine,
+    skeletonKpiRow: skeletonKpiRow,
+    sectionSkeleton: sectionSkeleton,
+    sectionSpinner: sectionSpinner,
+    sectionErrorHtml: sectionErrorHtml,
+    paintSectionError: paintSectionError,
+    bindSectionRetry: bindSectionRetry,
+    tableShell: tableShell,
+    pageHeaderHtml: pageHeaderHtml,
+    moduleViewKey: moduleViewKey,
+    shouldRestoreModuleView: shouldRestoreModuleView,
+    consumeModuleViewRestore: consumeModuleViewRestore,
+    markModuleViewLoaded: markModuleViewLoaded,
+    isModuleRefresh: isModuleRefresh,
+    finishModuleRefresh: finishModuleRefresh,
+    refreshCurrentModuleView: refreshCurrentModuleView,
+    moduleRefreshControlsHtml: moduleRefreshControlsHtml,
+    ensureModuleRefreshControls: ensureModuleRefreshControls,
+    getModuleViewCache: getModuleViewCache,
+    clearModuleViewCache: clearModuleViewCache,
+    clearUserSessionViewState: clearUserSessionViewState_,
+    registerModuleDataCacheClear: registerModuleDataCacheClear,
+    sessionCacheKey: sessionCacheKey_,
+    invalidateModuleViewCache: invalidateModuleViewCache,
+    invalidateModuleViewCachePrefix: invalidateModuleViewCachePrefix,
+    invalidateDashboardView: invalidateDashboardView,
+    setButtonLoading: setButtonLoading,
+    restoreButton: restoreButton,
+    isButtonLoading: isButtonLoading,
+    setActionFeedback: setActionFeedback,
+    clearActionFeedback: clearActionFeedback,
+    setFlash: setFlash,
+    consumeFlash: consumeFlash,
+    flashBannerHtml: flashBannerHtml,
+    logout: function () {
+      return performSignOut_($('btn-sign-out'));
+    },
+    applyUnreadCount: function (n) {
+      if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
+        window.HrmsNotificationBell.applyUnreadCount(n);
+      }
+    },
+    isUserRpcBusy: function () { return userRpcBusy_ > 0; },
+    getPerfLog: function () { return perfLog_.slice(); },
+    enablePerfTiming: function () {
+      try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
+      window.HRMS_PERF_TIMING = 1;
+    },
+    disablePerfTiming: function () {
+      try { if (window.localStorage) localStorage.removeItem('HRMS_PERF_TIMING'); } catch (ignore) {}
+      window.HRMS_PERF_TIMING = 0;
+    },
+    $: $
+  };
+
+  window.__hrmsCtx = {
+    state: state,
+    callServer: callServer,
+    escapeHtml: escapeHtml,
+    showToast: showToast,
+    routeStill: routeStill,
+    setHtml: setHtml,
+    navigate: navigate,
+    getSessionToken: getSessionToken,
+    $: $,
+    skeletonTableRows: skeletonTableRows,
+    skeletonLine: skeletonLine,
+    skeletonKpiRow: skeletonKpiRow,
+    sectionSkeleton: sectionSkeleton,
+    sectionSpinner: sectionSpinner,
+    paintSectionError: paintSectionError,
+    setButtonLoading: setButtonLoading,
+    restoreButton: restoreButton,
+    setActionFeedback: setActionFeedback,
+    setFlash: setFlash,
+    consumeFlash: consumeFlash,
+    flashBannerHtml: flashBannerHtml
+  };
+})();
+</script>

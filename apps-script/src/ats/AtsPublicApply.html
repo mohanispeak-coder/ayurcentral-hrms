@@ -1,0 +1,328 @@
+<style>
+.careers-shell { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+.careers-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.careers-brand .brand-mark { width: 36px; height: 36px; }
+.careers-hero h1 { margin: 0 0 8px; font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; }
+.careers-hero p { margin: 0 0 24px; color: var(--color-text-muted); }
+.job-card { cursor: pointer; }
+.job-card:hover { border-color: var(--color-primary); }
+.job-card h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.job-meta { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: 8px; }
+.careers-back { margin-bottom: 16px; }
+.careers-success { text-align: center; padding: 32px 16px; }
+@media (max-width: 640px) {
+  .careers-shell { padding: 16px 12px 40px; }
+  .form-grid, .emp-form-grid { grid-template-columns: 1fr; }
+  .form-input, .form-select { max-width: none; }
+}
+</style>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <?!= include('ui/Styles'); ?>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Careers</title>
+</head>
+<body>
+  <div class="careers-shell">
+    <div class="careers-brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-title" id="careers-company">AyurCentral</div>
+        <div class="brand-sub">Careers</div>
+      </div>
+    </div>
+    <div id="careers-root">
+      <div class="loading-state">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Loading roles…</p>
+      </div>
+    </div>
+  </div>
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script>
+    var ATS_JOB_SLUG = <?!= JSON.stringify(jobSlug || '') ?>;
+    var ATS_COMPANY = <?!= JSON.stringify(companyName || 'AyurCentral') ?>;
+  </script>
+  <script>
+(function () {
+  'use strict';
+  var root = document.getElementById('careers-root');
+  var companyEl = document.getElementById('careers-company');
+  if (companyEl) companyEl.textContent = ATS_COMPANY || 'AyurCentral';
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function showToast(message, type) {
+    var container = document.getElementById('toast-container');
+    if (!container) return;
+    var el = document.createElement('div');
+    el.className = 'toast' + (type === 'error' ? ' error' : '');
+    el.textContent = message || '';
+    container.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+
+  function rpc(fnName, args) {
+    args = args || [];
+    return new Promise(function (resolve, reject) {
+      try {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (result && result.ok === true) {
+              resolve(result.data);
+              return;
+            }
+            if (result && result.error) {
+              reject(result.error);
+              return;
+            }
+            if (result && typeof result === 'object') {
+              if (Array.isArray(result.jobs) || result.public_slug || result.application_id) {
+                resolve(result);
+                return;
+              }
+            }
+            reject({ message: 'Request failed' });
+          })
+          .withFailureHandler(function (err) {
+            reject({ message: (err && err.message) || 'Server error' });
+          })[fnName].apply(null, args);
+      } catch (e) {
+        reject({ message: (e && e.message) || 'Request failed' });
+      }
+    });
+  }
+
+  function slugFromUrl() {
+    try {
+      var search = String(window.location.search || '');
+      if (!search || search.charAt(0) !== '?') return '';
+      var pairs = search.substring(1).split('&');
+      for (var i = 0; i < pairs.length; i++) {
+        var parts = pairs[i].split('=');
+        var key = decodeURIComponent(parts[0] || '').toLowerCase();
+        if (key === 'job' || key === 'slug') {
+          return decodeURIComponent((parts.slice(1).join('=') || '')).trim();
+        }
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
+  function setBusy(btn, busy, label) {
+    if (!btn) return;
+    if (busy) {
+      if (!btn.getAttribute('data-prev')) btn.setAttribute('data-prev', btn.innerHTML);
+      btn.disabled = true;
+      btn.innerHTML = escapeHtml(label || 'Working…');
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = btn.getAttribute('data-prev') || btn.innerHTML;
+    }
+  }
+
+  function metaLine(job) {
+    return [job.department, job.location, job.employment_type, job.experience].filter(Boolean).join(' · ');
+  }
+
+  function renderList(payload) {
+    var jobs = (payload && payload.jobs) || [];
+    var company = (payload && payload.company_name) || ATS_COMPANY;
+    if (companyEl) companyEl.textContent = company;
+    var html = '<div class="careers-hero"><h1>Open roles</h1>' +
+      '<p>Apply directly. You do not need an HRMS account.</p></div>';
+    if (!jobs.length) {
+      html += '<div class="card empty-state"><h2 class="empty-state-title">No open roles</h2>' +
+        '<p class="empty-state-text">There are no published jobs accepting applications right now.</p></div>';
+    } else {
+      html += jobs.map(function (job) {
+        return '<div class="card job-card" data-slug="' + escapeHtml(job.public_slug) + '">' +
+          '<h2>' + escapeHtml(job.title) + '</h2>' +
+          '<div class="job-meta">' + escapeHtml(metaLine(job) || 'Open role') + '</div>' +
+          (job.salary_range ? '<p>' + escapeHtml(job.salary_range) + '</p>' : '') +
+          '<button type="button" class="btn btn-primary btn-sm">View & apply</button></div>';
+      }).join('');
+    }
+    root.innerHTML = html;
+    Array.prototype.forEach.call(root.querySelectorAll('[data-slug]'), function (card) {
+      card.addEventListener('click', function () {
+        openJob(card.getAttribute('data-slug'));
+      });
+    });
+  }
+
+  function renderClosed(message) {
+    root.innerHTML = '<div class="card empty-state"><h2 class="empty-state-title">Role unavailable</h2>' +
+      '<p class="empty-state-text">' + escapeHtml(message || 'This job is not available.') + '</p>' +
+      '<button type="button" class="btn btn-secondary careers-back" id="careers-home">See open roles</button></div>';
+    document.getElementById('careers-home').addEventListener('click', loadBoard);
+  }
+
+  function renderJob(job) {
+    if (!job.accepting_applications) {
+      renderClosed(job.message || 'This role is not currently accepting applications.');
+      return;
+    }
+    root.innerHTML =
+      '<button type="button" class="btn btn-ghost btn-sm careers-back" id="careers-back">← All roles</button>' +
+      '<div class="careers-hero"><h1>' + escapeHtml(job.title) + '</h1>' +
+      '<p>' + escapeHtml(metaLine(job)) +
+      (job.salary_range ? ' · ' + escapeHtml(job.salary_range) : '') + '</p></div>' +
+      (job.description ? '<div class="card"><h2>About the role</h2><p class="prose" style="white-space:pre-wrap">' + escapeHtml(job.description) + '</p></div>' : '') +
+      (job.responsibilities ? '<div class="card"><h2>Responsibilities</h2><p style="white-space:pre-wrap">' + escapeHtml(job.responsibilities) + '</p></div>' : '') +
+      (job.requirements ? '<div class="card"><h2>Requirements</h2><p style="white-space:pre-wrap">' + escapeHtml(job.requirements) + '</p></div>' : '') +
+      '<div class="card"><h2>Apply</h2>' +
+        '<p class="hint">No login required. Your application is stored as a candidate record, not as an employee.</p>' +
+        '<form id="apply-form">' +
+          '<div class="form-group"><label class="form-label is-required" for="ap-name">Full name</label>' +
+          '<input class="form-input" id="ap-name" required autocomplete="name"></div>' +
+          '<div class="form-group"><label class="form-label is-required" for="ap-email">Email</label>' +
+          '<input class="form-input" id="ap-email" type="email" required autocomplete="email"></div>' +
+          '<div class="form-group"><label class="form-label is-required" for="ap-phone">Phone</label>' +
+          '<input class="form-input" id="ap-phone" type="tel" required autocomplete="tel"></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-loc">Location</label>' +
+          '<input class="form-input" id="ap-loc" autocomplete="address-level2"></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-edu">Education</label>' +
+          '<input class="form-input" id="ap-edu"></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-exp">Experience</label>' +
+          '<textarea class="form-input" id="ap-exp" rows="3"></textarea></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-skills">Skills</label>' +
+          '<input class="form-input" id="ap-skills"></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-cover">Cover letter</label>' +
+          '<textarea class="form-input" id="ap-cover" rows="4"></textarea></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-source">How did you hear about us?</label>' +
+          '<select class="form-select" id="ap-source">' +
+            '<option value="CAREERS_PAGE">Company careers page</option>' +
+            '<option value="REFERRAL">Referral</option>' +
+            '<option value="LINKEDIN">LinkedIn</option>' +
+            '<option value="NAUKRI">Naukri</option>' +
+            '<option value="AGENCY">Agency</option>' +
+            '<option value="CAMPUS">Campus</option>' +
+            '<option value="OTHER">Other</option>' +
+          '</select></div>' +
+          '<div class="form-group"><label class="form-label" for="ap-resume">Resume (PDF or Word, max 2 MB)</label>' +
+          '<input class="form-input" id="ap-resume" type="file" accept=".pdf,.doc,.docx,application/pdf"></div>' +
+          '<p class="alert alert-danger hidden" id="ap-error" role="alert"></p>' +
+          '<div class="form-actions"><button type="submit" class="btn btn-primary" id="ap-submit">Submit application</button></div>' +
+        '</form></div>';
+    document.getElementById('careers-back').addEventListener('click', loadBoard);
+    document.getElementById('apply-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      submitApply(job.public_slug);
+    });
+  }
+
+  function renderThanks(result) {
+    root.innerHTML = '<div class="card careers-success">' +
+      '<h2>Application received</h2>' +
+      '<p>Thank you. We have received your application' +
+      (result && result.job_title ? ' for <strong>' + escapeHtml(result.job_title) + '</strong>' : '') +
+      '. Our hiring team will contact you if there is a match.</p>' +
+      '<p class="hint">Reference: ' + escapeHtml((result && result.application_id) || '') + '</p>' +
+      '<button type="button" class="btn btn-secondary" id="careers-home">See other roles</button></div>';
+    document.getElementById('careers-home').addEventListener('click', loadBoard);
+  }
+
+  function readFileAsBase64(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file) { resolve(null); return; }
+      if (file.size > 2 * 1024 * 1024) {
+        reject({ message: 'Resume must be 2 MB or smaller.' });
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var result = String(reader.result || '');
+        var comma = result.indexOf(',');
+        resolve({
+          base64: comma >= 0 ? result.substring(comma + 1) : result,
+          fileName: file.name,
+          mimeType: file.type || 'application/pdf'
+        });
+      };
+      reader.onerror = function () { reject({ message: 'Could not read the resume file.' }); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function showFormError(message) {
+    var el = document.getElementById('ap-error');
+    if (!el) return;
+    if (message) {
+      el.textContent = message;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function submitApply(slug) {
+    var btn = document.getElementById('ap-submit');
+    var fileInput = document.getElementById('ap-resume');
+    var file = fileInput && fileInput.files && fileInput.files[0];
+    showFormError('');
+    setBusy(btn, true, 'Submitting…');
+    readFileAsBase64(file).then(function (resume) {
+      var payload = {
+        public_slug: slug,
+        full_name: document.getElementById('ap-name').value,
+        email: document.getElementById('ap-email').value,
+        phone: document.getElementById('ap-phone').value,
+        location: document.getElementById('ap-loc').value,
+        education: document.getElementById('ap-edu').value,
+        experience: document.getElementById('ap-exp').value,
+        skills: document.getElementById('ap-skills').value,
+        cover_letter: document.getElementById('ap-cover').value,
+        source: document.getElementById('ap-source').value
+      };
+      if (resume) {
+        payload.resume_base64 = resume.base64;
+        payload.resume_file_name = resume.fileName;
+        payload.resume_mime_type = resume.mimeType;
+      }
+      return rpc('apiAtsPublicApply', [payload]);
+    }).then(function (result) {
+      renderThanks(result);
+    }).catch(function (err) {
+      var msg = (err && err.message) || 'Could not submit your application.';
+      showFormError(msg);
+      showToast(msg, 'error');
+    }).then(function () {
+      setBusy(btn, false);
+    });
+  }
+
+  function openJob(slug) {
+    ATS_JOB_SLUG = slug;
+    root.innerHTML = '<div class="loading-state"><div class="spinner" aria-hidden="true"></div><p>Loading role…</p></div>';
+    rpc('apiAtsPublicGetJob', [slug]).then(renderJob).catch(function (err) {
+      renderClosed((err && err.message) || 'This job is not available.');
+    });
+  }
+
+  function loadBoard() {
+    ATS_JOB_SLUG = '';
+    root.innerHTML = '<div class="loading-state"><div class="spinner" aria-hidden="true"></div><p>Loading roles…</p></div>';
+    rpc('apiAtsPublicListJobs', []).then(renderList).catch(function (err) {
+      renderClosed((err && err.message) || 'Careers are not available right now.');
+    });
+  }
+
+  if (ATS_JOB_SLUG) openJob(ATS_JOB_SLUG);
+  else {
+    var urlSlug = slugFromUrl();
+    if (urlSlug) openJob(urlSlug);
+    else loadBoard();
+  }
+})();
+  </script>
+</body>
+</html>

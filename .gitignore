@@ -1,0 +1,6 @@
+.clasprc.json
+.cursor/
+node_modules/
+.DS_Store
+Thumbs.db
+apps-script-remote-backup/

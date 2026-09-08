@@ -1,0 +1,51 @@
+<template id="tpl-emp-list">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h2 class="page-heading" id="emp-list-heading" aria-hidden="true">Employees</h2>
+      <p class="page-lede" id="emp-list-lede">Search the directory. Open a row to view a profile.</p>
+    </div>
+    <div class="page-header-actions" id="emp-list-actions"></div>
+  </div>
+  <div class="page-toolbar">
+    <div class="filters">
+      <div class="form-group">
+        <label class="form-label" for="emp-search">Search</label>
+        <input class="form-input search-input" id="emp-search" type="search" placeholder="Employee ID or name">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="emp-filter-status">Status</label>
+        <select class="form-select" id="emp-filter-status">
+          <option value="">All</option>
+          <option value="ACTIVE">ACTIVE</option>
+          <option value="INACTIVE">INACTIVE</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="emp-filter-dept">Department</label>
+        <select class="form-select" id="emp-filter-dept"><option value="">All</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="emp-filter-loc">Location</label>
+        <select class="form-select" id="emp-filter-loc"><option value="">All</option></select>
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Employee ID</th>
+          <th>Name</th>
+          <th>Department</th>
+          <th>Designation</th>
+          <th>Location</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Manager</th>
+        </tr>
+      </thead>
+      <tbody id="emp-table-body"></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="emp-pagination"></div>
+</template>

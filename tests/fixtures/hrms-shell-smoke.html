@@ -1,0 +1,4278 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HRMS shell smoke</title><style>
+/* =============================================================================
+   AyurCentral HRMS — premium enterprise design system
+   Cool slate foundation + refined blue primary. System fonts only (no remote assets).
+   Modules reuse these tokens/classes; do not invent one-off palettes.
+   ============================================================================= */
+
+:root {
+  /* Surfaces */
+  --color-bg: #f3f5f8;
+  --color-bg-elevated: #ffffff;
+  --color-bg-muted: #e8ecf1;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-sidebar: #0b1220;
+  --color-sidebar-elevated: #121a2b;
+  --color-sidebar-border: rgba(255, 255, 255, 0.08);
+  --color-sidebar-text: #cbd5e1;
+  --color-sidebar-muted: #94a3b8;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --color-sidebar-active: rgba(37, 99, 235, 0.22);
+
+  /* Brand / actions */
+  --color-primary: #1d4ed8;
+  --color-primary-hover: #1e40af;
+  --color-primary-muted: rgba(29, 78, 216, 0.1);
+  --color-secondary: #64748b;
+  --color-accent: #0369a1;
+  --color-accent-muted: rgba(3, 105, 161, 0.12);
+
+  /* Text */
+  --color-text: #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #f8fafc;
+
+  /* Borders */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Status */
+  --color-success: #15803d;
+  --color-success-hover: #166534;
+  --color-success-bg: #ecfdf3;
+  --color-success-border: #bbf7d0;
+  --color-warning: #b45309;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-danger: #b91c1c;
+  --color-danger-hover: #991b1b;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-info: #0369a1;
+  --color-info-bg: #f0f9ff;
+  --color-info-border: #bae6fd;
+
+  /* Elevation & shape */
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.12);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --focus-ring: 0 0 0 3px rgba(29, 78, 216, 0.22);
+  --transition: 150ms ease;
+
+  /* Type & layout */
+  --font: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  --sidebar-width: 248px;
+  --header-height: 56px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.375rem;
+  --leading: 1.5;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--font);
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-size: 15px;
+  line-height: var(--leading);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+button, input, select, textarea { font-family: inherit; }
+
+.hidden { display: none !important; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ----- App chrome: fixed sidebar + independent main scroll ----- */
+
+.app-shell {
+  display: flex;
+  height: 100%;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.sidebar,
+.app-sidebar {
+  width: var(--sidebar-width);
+  height: 100%;
+  max-height: 100%;
+  background: var(--color-sidebar);
+  color: var(--color-sidebar-text);
+  border-right: 1px solid var(--color-sidebar-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  z-index: 40;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  min-height: var(--header-height);
+  border-bottom: 1px solid var(--color-sidebar-border);
+  flex-shrink: 0;
+}
+
+.brand-mark {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(145deg, #3b82f6 0%, var(--color-primary) 55%, #1e3a8a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.brand-title {
+  font-weight: 700; font-size: 0.9375rem;
+  color: var(--color-text-inverse); letter-spacing: -0.02em; line-height: 1.2;
+}
+.brand-sub {
+  font-size: 0.625rem; color: var(--color-sidebar-muted);
+  letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; font-weight: 600;
+}
+
+.careers-shell .brand-title { color: var(--color-text); }
+.careers-shell .brand-sub { color: var(--color-text-muted); }
+
+.sidebar-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 10px 10px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+.sidebar-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35); border-radius: 999px;
+}
+
+.nav-group { margin-bottom: 4px; }
+.nav-group + .nav-group { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--color-sidebar-border); }
+.nav-group:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+.nav-group-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-sidebar-muted);
+  padding: 10px 12px 6px;
+}
+
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-sidebar-muted);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+}
+.nav-group-toggle:hover { background: var(--color-sidebar-hover); color: var(--color-sidebar-text); }
+.nav-group-toggle:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
+.nav-group-toggle .nav-group-label { padding: 0; }
+
+.nav-group-chevron {
+  flex-shrink: 0;
+  opacity: 0.72;
+  transform: rotate(-90deg);
+  transition: transform 180ms ease;
+}
+.nav-group-toggle.is-expanded .nav-group-chevron { transform: rotate(0deg); }
+
+.nav-group-items {
+  overflow: hidden;
+  max-height: 640px;
+  opacity: 1;
+  transition: max-height 180ms ease, opacity 150ms ease;
+}
+.nav-group-items.is-collapsed {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-group-items,
+  .nav-group-chevron {
+    transition: none !important;
+  }
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; margin-bottom: 1px;
+  border-radius: var(--radius-sm);
+  color: var(--color-sidebar-text);
+  text-decoration: none; font-size: var(--text-sm);
+  cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+  line-height: 1.2;
+  transition: background var(--transition), color var(--transition);
+}
+.nav-item .nav-icon { flex-shrink: 0; opacity: 0.78; }
+.nav-item .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item:hover { background: var(--color-sidebar-hover); color: var(--color-text-inverse); }
+.nav-item:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
+.nav-item.active {
+  background: var(--color-sidebar-active);
+  color: #eff6ff;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #60a5fa;
+}
+.nav-item.active .nav-icon { opacity: 1; }
+.nav-item.placeholder { color: var(--color-sidebar-muted); }
+.nav-item.placeholder::after {
+  content: "Soon"; font-size: 0.625rem; font-weight: 600; margin-left: auto;
+  color: var(--color-sidebar-muted); background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px; border-radius: 4px; letter-spacing: 0.02em;
+}
+
+.sidebar-footer {
+  padding: 12px 16px 14px; font-size: var(--text-xs); color: var(--color-sidebar-muted);
+  border-top: 1px solid var(--color-sidebar-border);
+  flex-shrink: 0;
+}
+.sidebar-phase { letter-spacing: 0.02em; }
+.sidebar-footer a { color: var(--color-sidebar-muted); text-decoration: none; }
+.sidebar-footer a:hover { color: var(--color-text-inverse); }
+
+.sidebar-backdrop { display: none; }
+
+.main-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.header,
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: var(--header-height);
+  height: var(--header-height);
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-border);
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.page-title {
+  margin: 0; font-size: 1rem; font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1.25; color: var(--color-text);
+}
+
+.user-chip {
+  display: flex; align-items: center; gap: 8px; font-size: var(--text-sm);
+  padding: 4px 8px 4px 4px; border-radius: 999px;
+  border: 1px solid var(--color-border); background: var(--color-bg-elevated);
+}
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: var(--color-primary-muted); color: var(--color-primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.6875rem; font-weight: 700;
+}
+.user-name {
+  font-weight: 600; max-width: 160px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary);
+}
+.user-chip .badge {
+  background: var(--color-bg-muted); color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+.content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 22px 28px 48px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+@media (min-width: 769px) {
+  .app-shell.is-authed:has(#page-content .page-header) .header .page-title {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+}
+
+.app-shell:not(.is-authed) .sidebar,
+.app-shell:not(.is-authed) .app-sidebar { display: none; }
+.app-shell:not(.is-authed) .header-left .page-title,
+.app-shell:not(.is-authed) .sidebar-toggle { visibility: hidden; }
+.app-shell:not(.is-authed) .user-chip,
+.app-shell:not(.is-authed) #ntf-bell-slot,
+.app-shell:not(.is-authed) #btn-sign-out { display: none !important; }
+.app-shell:not(.is-authed) .content {
+  display: flex; flex-direction: column; align-items: center; padding-top: 56px;
+}
+.app-shell:not(.is-authed) .header {
+  background: transparent; border-bottom-color: transparent; backdrop-filter: none;
+}
+
+/* ----- Page header ----- */
+
+.page-header {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+  gap: 10px 24px; margin: 0 0 22px;
+}
+.page-header-text { min-width: 0; flex: 1; }
+.page-heading,
+.page-header h2,
+.page-header .page-heading {
+  margin: 0; font-size: var(--text-xl); font-weight: 700;
+  letter-spacing: -0.03em; line-height: 1.25; color: var(--color-text);
+}
+.page-lede,
+.page-header-desc {
+  margin: 6px 0 0; max-width: 42rem;
+  font-size: var(--text-md); color: var(--color-text-muted); line-height: 1.45;
+}
+.page-header > .page-lede,
+.page-header > .page-header-desc { flex-basis: 100%; margin-top: 0; }
+.page-header-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-shrink: 0;
+}
+.page-header-actions:empty { display: none; }
+.module-updated {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  margin-right: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-bg-muted);
+}
+.module-refresh-icon { display: inline-block; margin-right: 2px; flex-shrink: 0; }
+.btn.js-module-refresh {
+  font-weight: 600;
+  min-width: 10.5rem;
+  justify-content: center;
+}
+
+/* ----- Cards & KPI ----- */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.card h2 {
+  margin: 0 0 8px; font-size: var(--text-lg); font-weight: 700;
+  letter-spacing: -0.02em; color: var(--color-text);
+}
+.card p { margin: 0; color: var(--color-text-muted); line-height: 1.5; }
+.card > p + * { margin-top: 16px; }
+.section-title {
+  margin: 0 0 12px; font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.02em;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kpi-card {
+  padding: 16px 18px; margin-bottom: 0;
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.kpi-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.kpi-label {
+  font-size: 0.6875rem; font-weight: 700; color: var(--color-text-muted);
+  margin-bottom: 8px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.kpi-value {
+  font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em; line-height: 1.15; color: var(--color-text);
+}
+.kpi-value-text { font-size: 1.05rem; word-break: break-word; }
+.kpi-hint { margin-top: 6px; font-size: var(--text-xs); color: var(--color-text-muted); }
+
+.dash-welcome {
+  background:
+    linear-gradient(135deg, #eff6ff 0%, var(--color-surface) 48%, #f8fafc 100%);
+  border-color: #dbeafe;
+}
+.dash-section h2 { font-size: 0.9375rem; }
+
+.quick-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
+/* ----- Buttons ----- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px;
+  padding: 8px 14px; border-radius: var(--radius-sm);
+  font-size: var(--text-sm); font-weight: 600; cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: var(--color-text);
+  line-height: 1.2; white-space: nowrap;
+  transition: background var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition);
+}
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-primary {
+  background: var(--color-primary); color: #fff; border-color: var(--color-primary);
+  box-shadow: 0 1px 2px rgba(29, 78, 216, 0.25);
+}
+.btn-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.btn-secondary {
+  background: var(--color-bg-elevated); border-color: var(--color-border-strong); color: var(--color-text);
+}
+.btn-secondary:hover { background: var(--color-bg-muted); border-color: #b6c0cc; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--color-text-muted); }
+.btn-ghost:hover { background: var(--color-primary-muted); color: var(--color-text); }
+.btn-success {
+  background: var(--color-success); color: #fff; border-color: var(--color-success);
+}
+.btn-success:hover { background: var(--color-success-hover); border-color: var(--color-success-hover); }
+.btn-danger { background: transparent; border-color: var(--color-danger); color: var(--color-danger); }
+.btn-danger:hover { background: var(--color-danger-bg); }
+.btn-danger-solid,
+.btn-danger-primary { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+.btn-danger-solid:hover,
+.btn-danger-primary:hover { background: var(--color-danger-hover); }
+.btn:disabled,
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; pointer-events: none; box-shadow: none; }
+.btn-sm { min-height: 30px; padding: 5px 10px; font-size: var(--text-xs); }
+.btn-icon {
+  background: none; border: 1px solid transparent; font-size: 1.15rem; cursor: pointer;
+  padding: 6px 8px; line-height: 1; color: var(--color-text-muted); border-radius: var(--radius-sm);
+  min-width: 36px; min-height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--transition), color var(--transition);
+}
+.btn-icon:hover { background: var(--color-bg-muted); color: var(--color-text); }
+.btn-icon:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-row,
+.form-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.form-actions { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 16px; }
+.toolbar .form-label { margin-bottom: 0; }
+
+/* ----- Status badges ----- */
+
+.badge,
+.status-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.03em;
+  text-transform: uppercase; line-height: 1.4; white-space: nowrap;
+  background: var(--color-primary-muted); color: var(--color-primary);
+  border: 1px solid transparent;
+}
+.badge-draft { background: var(--color-bg-muted); color: #475569; }
+.badge-submitted,
+.badge-under_review { background: var(--color-warning-bg); color: var(--color-warning); border-color: var(--color-warning-border); }
+.badge-calculated { background: var(--color-info-bg); color: var(--color-info); border-color: var(--color-info-border); }
+.badge-approved { background: var(--color-success-bg); color: var(--color-success); border-color: var(--color-success-border); }
+.badge-rejected { background: var(--color-danger-bg); color: var(--color-danger); border-color: var(--color-danger-border); }
+.badge-cancelled { background: var(--color-bg-muted); color: var(--color-text-muted); }
+.badge-locked { background: #0f172a; color: #fff; }
+.badge-status-ACTIVE { background: var(--color-success-bg); color: var(--color-success); border-color: var(--color-success-border); }
+.badge-status-INACTIVE { background: var(--color-bg-muted); color: var(--color-text-muted); }
+
+/* ----- Stepper ----- */
+
+.stepper { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 16px; }
+.step {
+  padding: 5px 10px; border-radius: 999px; font-size: var(--text-xs); font-weight: 700;
+  background: var(--color-bg-muted); color: var(--color-text-muted); border: 1px solid var(--color-border);
+}
+.step.done { background: var(--color-primary-muted); color: var(--color-primary); border-color: transparent; }
+.step.current { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+
+/* ----- Tables ----- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow);
+}
+.table-wrap + .pagination { padding-left: 4px; padding-right: 4px; }
+
+table,
+.data-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th, td {
+  padding: 11px 14px; text-align: left;
+  border-bottom: 1px solid var(--color-border); vertical-align: middle;
+}
+th {
+  background: #f8fafc; font-weight: 700; font-size: 0.6875rem;
+  color: var(--color-text-muted); letter-spacing: 0.05em; text-transform: uppercase;
+  position: sticky; top: 0; white-space: nowrap; z-index: 1;
+}
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background var(--transition); }
+tbody tr:hover td { background: #f8fafc; }
+.table-row-click { cursor: pointer; }
+.table-row-click:hover td { background: var(--color-primary-muted); }
+
+td.num, th.num,
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 1%; }
+.mono { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.8125rem; }
+
+.table-empty-row td,
+.table-wrap td.table-empty {
+  text-align: center; padding: 40px 16px; color: var(--color-text-muted);
+  background: transparent;
+}
+.table-empty-row:hover td { background: transparent; }
+
+.pagination {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 12px; padding: 12px 0 0; font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.pagination .btn { margin-left: 6px; }
+
+/* ----- Forms ----- */
+
+.form-group { margin-bottom: 14px; }
+.form-label {
+  display: block; font-size: var(--text-xs); font-weight: 600;
+  margin-bottom: 6px; color: var(--color-text-secondary); letter-spacing: 0.01em;
+}
+.form-label.is-required::after {
+  content: " *"; color: var(--color-danger); font-weight: 700;
+}
+.form-input,
+.form-select {
+  width: 100%; max-width: 400px; padding: 9px 11px;
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+  font-size: var(--text-md); background: #fff; color: var(--color-text);
+  line-height: 1.3;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.form-input:hover, .form-select:hover { border-color: #94a3b8; }
+.form-input:focus, .form-select:focus {
+  outline: none; border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+.form-input:disabled, .form-select:disabled {
+  background: var(--color-bg-muted); color: var(--color-text-muted); cursor: not-allowed;
+}
+.form-grid .form-input, .form-grid .form-select, .form-textarea { max-width: none; }
+.form-textarea, textarea.form-input { min-height: 72px; resize: vertical; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.form-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-md); margin-right: 12px; }
+.form-span-2 { grid-column: 1 / -1; }
+.field-error { color: var(--color-danger); font-size: var(--text-xs); margin-top: 4px; min-height: 0; line-height: 1.35; }
+.form-group.has-error .form-input,
+.form-group.has-error .form-select { border-color: var(--color-danger); }
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: var(--text-md); }
+.form-input.narrow { max-width: 110px; }
+.table-wrap input.form-input { max-width: 100%; width: 100%; padding: 6px 8px; }
+.hint { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: 12px; line-height: 1.45; }
+.form-section { margin-bottom: 8px; }
+.form-section-title {
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--color-text-muted); margin: 16px 0 10px; padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.form-section:first-child .form-section-title { border-top: none; padding-top: 0; margin-top: 0; }
+
+.page-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.filters .form-group { margin: 0; }
+.filters .form-group .btn { margin-top: 0; }
+.filters .form-input, .filters .form-select { max-width: 180px; }
+.search-input { min-width: 200px; max-width: 260px; }
+
+.emp-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+.emp-form-grid .form-input, .emp-form-grid .form-select, .emp-form-grid textarea.form-input { max-width: none; }
+
+.dl-grid { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; font-size: var(--text-md); }
+.dl-grid dt { color: var(--color-text-muted); font-weight: 500; }
+.dl-grid dd { margin: 0; }
+
+/* ----- Tabs ----- */
+
+.tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.tab {
+  border: none; border-bottom: 2px solid transparent; background: transparent;
+  padding: 10px 14px; margin-bottom: -1px; cursor: pointer;
+  font-size: var(--text-sm); color: var(--color-text-muted); border-radius: 0;
+  transition: color var(--transition), border-color var(--transition);
+}
+.tab:hover { color: var(--color-text); }
+.tab.active { color: var(--color-primary); font-weight: 700; border-bottom-color: var(--color-primary); background: transparent; }
+
+.emp-tabs { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--color-border); margin-bottom: 20px; }
+.emp-tab {
+  background: none; border: none; padding: 10px 14px; cursor: pointer;
+  color: var(--color-text-muted); border-bottom: 2px solid transparent; font-size: var(--text-sm);
+  margin-bottom: -1px; transition: color var(--transition), border-color var(--transition);
+}
+.emp-tab:hover { color: var(--color-text); }
+.emp-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); font-weight: 700; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ----- Calendar ----- */
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-head { font-size: var(--text-xs); color: var(--color-text-muted); padding: 4px; font-weight: 700; text-align: center; }
+.cal-cell {
+  min-height: 72px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  padding: 6px; background: #fff; font-size: var(--text-xs);
+}
+.cal-empty { background: transparent; border-color: transparent; }
+.cal-leave { background: var(--color-primary-muted); }
+.cal-day { font-weight: 700; margin-bottom: 4px; }
+.cal-items { color: var(--color-text-muted); line-height: 1.3; }
+
+/* ----- Alerts, empty, toasts ----- */
+
+.alert {
+  padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 16px;
+  font-size: var(--text-md); line-height: 1.45; border: 1px solid transparent;
+}
+.alert-danger { background: var(--color-danger-bg); border-color: var(--color-danger-border); color: var(--color-danger); }
+.alert-info { background: var(--color-info-bg); border-color: var(--color-info-border); color: var(--color-text-secondary); }
+.alert-warning { background: var(--color-warning-bg); border-color: var(--color-warning-border); color: var(--color-warning); }
+.alert-success { background: var(--color-success-bg); border-color: var(--color-success-border); color: var(--color-success); }
+
+.empty-state { text-align: center; padding: 44px 24px; max-width: 440px; margin: 0 auto; }
+.empty-state-icon {
+  width: 48px; height: 48px; margin: 0 auto 14px;
+  border-radius: 12px; background: var(--color-bg-muted);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-muted);
+}
+.empty-state-icon::before {
+  content: "";
+  width: 22px; height: 22px;
+  background: currentColor;
+  opacity: 0.55;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.empty-state h2, .empty-state-title {
+  margin: 0 0 8px; font-size: var(--text-lg); font-weight: 700; color: var(--color-text);
+}
+.empty-state p, .empty-state-text { margin: 0; color: var(--color-text-muted); line-height: 1.5; }
+.card.empty-state { box-shadow: none; }
+.empty-state-inline { padding: 8px; max-width: none; }
+.empty-state-inline .empty-state-icon { display: none; }
+
+.profile-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
+
+.toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  padding: 12px 16px; border-radius: var(--radius-sm); background: #0f172a;
+  color: #fff; font-size: var(--text-sm); box-shadow: var(--shadow-md);
+  animation: fadeIn 0.16s ease; max-width: 360px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.toast.success { background: var(--color-success); }
+.toast.error { background: var(--color-danger); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* ----- Modals ----- */
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.48);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+  padding: 16px;
+  animation: fadeIn 0.14s ease;
+}
+.modal,
+.modal-dialog {
+  background: var(--color-bg-elevated); border-radius: var(--radius-lg);
+  padding: 0; max-width: 480px; width: 100%; box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-border);
+  animation: modalIn 0.16s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.modal > h3, .modal-title { margin: 0; font-size: 1.0625rem; font-weight: 700; letter-spacing: -0.02em; }
+.modal-header { padding: 20px 24px 0; }
+.modal > h3 { padding: 20px 24px 0; }
+.modal-desc { margin: 6px 0 0; font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.45; }
+.modal-body { padding: 16px 24px 0; }
+.modal > .form-group, .modal > p { margin-left: 24px; margin-right: 24px; }
+.modal-actions,
+.modal-footer {
+  display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  margin: 0; padding: 16px 24px 20px;
+}
+.modal > .btn-row { padding: 16px 24px 20px; margin: 0; }
+
+/* ----- Auth / setup ----- */
+
+.auth-card {
+  max-width: 420px; width: 100%; margin: 24px auto;
+  box-shadow: var(--shadow-md);
+}
+.auth-card h2 { margin-bottom: 8px; letter-spacing: -0.02em; }
+.auth-card > p { margin-bottom: 16px; }
+.auth-code-input { letter-spacing: 0.35em; font-size: 1.25rem; text-align: center; max-width: 220px; }
+.auth-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+
+/* ----- Loading / skeletons ----- */
+
+@keyframes hrms-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading-state { text-align: center; padding: 48px; color: var(--color-text-muted); }
+.spinner {
+  width: 32px; height: 32px; margin: 0 auto 12px;
+  border: 3px solid var(--color-border); border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: hrms-spin 0.85s linear infinite;
+  transform-origin: center center;
+}
+
+/* Shared skeleton surface + left→right shimmer (background-position — reliable in GAS iframe) */
+.skeleton,
+.hrms-skeleton,
+.hrms-skeleton-line,
+.hrms-skeleton-title,
+.hrms-skeleton-text,
+.hrms-skeleton-control,
+.hrms-skeleton-card,
+.skeleton-block,
+.skeleton-line,
+.skeleton-lg,
+.skeleton-xl {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  height: 12px;
+  background-color: var(--color-bg-muted);
+  background-image: linear-gradient(
+    90deg,
+    var(--color-bg-muted) 0%,
+    var(--color-bg-muted) 34%,
+    rgba(255, 255, 255, 0.62) 50%,
+    var(--color-bg-muted) 66%,
+    var(--color-bg-muted) 100%
+  );
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  animation: hrms-skeleton-shimmer 1.5s linear infinite;
+}
+@keyframes hrms-skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.skeleton-lg,
+.hrms-skeleton-title { height: 20px; }
+.skeleton-xl { height: 28px; }
+.skeleton-block,
+.hrms-skeleton-card {
+  height: 72px; width: 100%; margin: 8px 0; border-radius: var(--radius-sm);
+}
+.skeleton-line,
+.hrms-skeleton-line,
+.hrms-skeleton-text { height: 12px; margin: 8px 0; max-width: 100%; }
+.skeleton-line.w40, .hrms-skeleton-line.w40, .hrms-skeleton-text.w40 { width: 40%; }
+.skeleton-line.w60, .hrms-skeleton-line.w60, .hrms-skeleton-text.w60 { width: 60%; }
+.skeleton-line.w80, .hrms-skeleton-line.w80, .hrms-skeleton-text.w80 { width: 80%; }
+.skeleton-line.w100, .hrms-skeleton-line.w100, .hrms-skeleton-text.w100 { width: 100%; }
+.hrms-skeleton-control {
+  height: 36px; margin: 0; border-radius: var(--radius-sm); min-width: 120px;
+}
+
+.hrms-loading-block {
+  padding: 4px 0 8px;
+}
+.hrms-skeleton-stack {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.hrms-skeleton-row {
+  display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 0.6fr;
+  gap: 12px; align-items: center; padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.hrms-skeleton-row:last-child { border-bottom: none; }
+.hrms-skeleton-table {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  padding: 4px 14px 8px;
+  box-shadow: var(--shadow);
+}
+
+tr.skeleton-row td { padding-top: 14px; padding-bottom: 14px; vertical-align: middle; }
+.table-wrap.is-loading,
+#page-content[aria-busy="true"] .table-wrap {
+  /* keep table geometry stable while rows refresh */
+  min-height: 120px;
+}
+
+/* Stable filter/control widths — prevent Refresh layout jump */
+.page-toolbar .filters .form-select,
+.filters .form-select {
+  min-width: 140px;
+}
+.page-toolbar .filters .search-input,
+.filters .search-input,
+.search-input {
+  min-width: 200px;
+}
+.page-toolbar .form-group .form-select,
+.ats-page .form-select[data-move],
+.payroll-page .form-select,
+.emp-page .form-select {
+  min-width: 7.5rem;
+}
+#ats-job-status { min-width: 148px; }
+#emp-filter-status,
+#emp-filter-dept,
+#emp-filter-loc {
+  min-width: 140px;
+}
+
+.section-loading {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--text-sm); color: var(--color-text-muted); padding: 8px 0;
+}
+.section-loading .spinner-sm,
+.spinner-sm,
+.btn .spinner-sm {
+  width: 14px; height: 14px; border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary); border-radius: 50%;
+  animation: hrms-spin 0.85s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+.btn.js-module-refresh[aria-busy="true"] .spinner-sm {
+  animation: hrms-spin 0.85s linear infinite;
+}
+.inline-error {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius-sm);
+  background: var(--color-danger-bg); border: 1px solid var(--color-danger-border); color: var(--color-danger);
+  font-size: var(--text-md); margin: 8px 0;
+}
+.inline-error .inline-error-msg { flex: 1; min-width: 160px; }
+.kpi-card .skeleton-xl { margin-top: 8px; max-width: 120px; }
+
+.ntf-skel {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.ntf-skel .skeleton { margin: 6px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .hrms-skeleton,
+  .hrms-skeleton-line,
+  .hrms-skeleton-title,
+  .hrms-skeleton-text,
+  .hrms-skeleton-control,
+  .hrms-skeleton-card,
+  .skeleton-block,
+  .skeleton-line,
+  .skeleton-lg,
+  .skeleton-xl {
+    animation: none !important;
+    background-image: none;
+    background-color: var(--color-bg-muted);
+  }
+}
+
+/* ----- Ask HR ----- */
+
+.ask-hr-fab {
+  position: fixed; right: 24px; bottom: 24px; z-index: 900;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--color-primary); color: #fff; border: none;
+  border-radius: 999px; padding: 12px 18px;
+  font-family: var(--font); font-size: var(--text-md); font-weight: 600;
+  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.28); cursor: pointer;
+  transition: background var(--transition), box-shadow var(--transition);
+}
+.ask-hr-fab:hover { background: var(--color-primary-hover); }
+.ask-hr-fab:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ask-hr-fab-icon { display: block; flex-shrink: 0; }
+.ask-hr-panel {
+  position: fixed; right: 24px; bottom: 24px; z-index: 901;
+  width: 380px; max-width: calc(100vw - 32px);
+  height: 520px; max-height: calc(100vh - 48px);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.ask-hr-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 14px 16px 12px; border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated); flex-shrink: 0;
+}
+.ask-hr-header-text { min-width: 0; }
+.ask-hr-header h2 { margin: 0; font-size: 1.05rem; color: var(--color-text); font-weight: 700; }
+.ask-hr-header-desc { margin: 4px 0 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; }
+.ask-hr-header-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ask-hr-close { font-size: 1.35rem; line-height: 1; color: var(--color-text-muted); padding: 2px 8px; }
+.ask-hr-close:hover { color: var(--color-text); }
+.ask-hr-messages { flex: 1; overflow-y: auto; padding: 16px; background: var(--color-bg); }
+.ask-hr-intro p { margin: 0 0 12px; font-size: var(--text-md); color: var(--color-text); line-height: 1.5; }
+.ask-hr-suggest-label {
+  margin: 16px 0 8px !important; font-size: var(--text-xs) !important; font-weight: 700;
+  color: var(--color-text-muted) !important; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ask-hr-suggests { display: flex; flex-direction: column; gap: 8px; }
+.ask-hr-suggest {
+  text-align: left; background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 0.8125rem; color: var(--color-text);
+  cursor: pointer; font-family: var(--font); line-height: 1.4;
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+.ask-hr-suggest:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-muted); }
+.ask-hr-suggest:focus-visible { outline: none; border-color: var(--color-primary); box-shadow: var(--focus-ring); }
+.ask-hr-thread { display: flex; flex-direction: column; gap: 12px; }
+.ask-hr-bubble {
+  max-width: 92%; padding: 10px 12px; border-radius: var(--radius-md);
+  font-size: var(--text-md); line-height: 1.5; word-wrap: break-word; overflow-wrap: anywhere;
+}
+.ask-hr-bubble-user {
+  align-self: flex-end; background: var(--color-primary); color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.ask-hr-bubble-bot {
+  align-self: flex-start; background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border); color: var(--color-text);
+  border-bottom-left-radius: 4px;
+}
+.ask-hr-bubble-error {
+  align-self: flex-start; background: var(--color-danger-bg); border: 1px solid var(--color-danger-border);
+  color: var(--color-danger); border-bottom-left-radius: 4px;
+}
+.ask-hr-bubble-status {
+  align-self: flex-start; display: flex; align-items: flex-start; gap: 8px;
+  background: var(--color-bg-elevated); border: 1px solid var(--color-border);
+  color: var(--color-text-muted); font-size: 0.8125rem;
+}
+.ask-hr-status-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ask-hr-status-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
+.ask-hr-keypoints { margin: 10px 0 0; padding-left: 18px; }
+.ask-hr-keypoints li { margin: 0 0 4px; }
+.ask-hr-key-label, .ask-hr-src-label {
+  margin: 10px 0 4px; font-size: var(--text-xs); font-weight: 700;
+  color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ask-hr-sources { margin: 0; padding-left: 18px; }
+.ask-hr-sources a { color: var(--color-primary); text-decoration: none; }
+.ask-hr-sources a:hover { text-decoration: underline; }
+.ask-hr-composer {
+  display: grid; grid-template-columns: 1fr auto; gap: 8px;
+  padding: 12px 16px 14px; border-top: 1px solid var(--color-border);
+  background: var(--color-bg-elevated); flex-shrink: 0; align-items: end;
+}
+.ask-hr-input {
+  max-width: none; min-height: 44px; resize: none; font-family: var(--font);
+}
+.ask-hr-composer .btn { min-height: 44px; }
+.ask-hr-compose-error {
+  grid-column: 1 / -1; margin: 0; font-size: var(--text-xs); color: var(--color-danger);
+}
+
+/* Public careers pages: allow normal document scroll */
+body:has(> .careers-shell) {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+  background: var(--color-bg);
+}
+
+/* ----- Responsive ----- */
+
+@media (max-width: 1100px) {
+  .content { padding: 16px 20px 36px; }
+  .header, .app-header { padding: 0 16px; }
+}
+
+@media (max-width: 768px) {
+  .sidebar, .app-sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
+    height: 100%; max-height: 100dvh;
+    transform: translateX(-100%); transition: transform 0.2s ease;
+  }
+  .sidebar.open, .app-sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop.open {
+    display: block; position: fixed; inset: 0;
+    background: rgba(15, 23, 42, 0.45); z-index: 99;
+  }
+  .main-wrap { width: 100%; }
+  .emp-form-grid { grid-template-columns: 1fr; }
+  .dl-grid { grid-template-columns: 1fr; }
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-header .page-heading { display: none; }
+  .page-header-actions { width: 100%; }
+  .page-header-actions .btn { flex: 1; }
+  .page-header-actions .js-module-refresh { flex: 0 0 auto; }
+  .page-header-actions .module-updated { width: 100%; }
+  .user-name { max-width: 88px; }
+  .user-chip { padding-right: 6px; }
+  .content { padding: 16px 14px 96px; }
+  .ask-hr-fab { right: 16px; bottom: 16px; }
+  .ask-hr-panel {
+    right: 8px; left: 8px; bottom: 8px; width: auto;
+    height: min(560px, calc(100vh - 16px)); max-height: none;
+  }
+  .cal-grid { font-size: 0.7rem; }
+  .cal-cell { min-height: 56px; padding: 4px; }
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Loading buttons, spinners, inline action feedback */
+.btn.btn-loading {
+  pointer-events: none;
+  gap: 8px;
+}
+#btn-sign-out.btn-loading {
+  /* Keep width stable while label becomes "Signing out…" */
+  min-width: 7.5rem;
+}
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: hrms-spin 0.85s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+.btn-loading-label { white-space: nowrap; }
+.action-feedback {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.action-feedback.is-success {
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success);
+}
+.action-feedback.is-error {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+}
+.action-feedback.is-info {
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  color: var(--color-text-secondary);
+}
+.skeleton-card[aria-busy="true"] { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style></head><body>
+<div id="app" class="app-shell">
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <aside class="sidebar app-sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-title" id="brand-title">AyurCentral</div>
+        <div class="brand-sub">HRMS</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav" aria-label="Main navigation"></nav>
+    <div class="sidebar-footer"><span class="sidebar-phase">AyurCentral HRMS</span></div>
+  </aside>
+  <div class="main-wrap">
+    <header class="header app-header">
+      <div class="header-left">
+        <button type="button" class="btn-icon sidebar-toggle" id="sidebar-toggle" aria-label="Toggle menu">☰</button>
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+      </div>
+      <div class="header-right">
+        <div id="ntf-bell-slot"></div>
+        <div class="user-chip" id="user-chip">
+          <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
+          <span class="user-name" id="user-name">Loading…</span>
+          <span class="user-role badge" id="user-role"></span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm hidden" id="btn-sign-out">Sign out</button>
+      </div>
+    </header>
+    <main class="content" id="main-content">
+      <div id="loading-state" class="loading-state"><p>Loading HRMS…</p></div>
+      <div id="error-state" class="alert alert-danger hidden" role="alert"></div>
+      <div id="unauthorized-state" class="empty-state hidden">
+        <h2 class="empty-state-title">Access not available</h2>
+        <p class="empty-state-text" id="unauthorized-message"></p>
+      </div>
+      <div id="auth-state" class="hidden">
+        <div class="card auth-card" id="auth-step-email">
+          <h2>Sign in to HRMS</h2>
+          <div class="form-group">
+            <label class="form-label" for="auth-email">Email address</label>
+            <input class="form-input" type="email" id="auth-email">
+          </div>
+          <p id="auth-google-hint" class="hint hidden"></p>
+          <p id="auth-email-error" class="alert alert-danger hidden"></p>
+          <button type="button" class="btn btn-primary" id="auth-send-btn">Send verification code</button>
+        </div>
+        <div class="card auth-card hidden" id="auth-step-code">
+          <h2>Enter verification code</h2>
+          <strong id="auth-email-display"></strong>
+          <input class="form-input" type="text" id="auth-code">
+          <p id="auth-code-error" class="alert alert-danger hidden"></p>
+          <button type="button" class="btn btn-primary" id="auth-verify-btn">Verify</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="auth-resend-btn">Resend code</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="auth-change-email-btn">Change email</button>
+        </div>
+      </div>
+      <div id="setup-state" class="card auth-card hidden">
+        <h2>System setup required</h2>
+        <button type="button" class="btn btn-primary" id="btn-run-setup">Initialize database</button>
+        <p id="setup-result" class="hint"></p>
+      </div>
+      <div id="page-content" class="hidden"></div>
+    </main>
+  </div>
+</div>
+<div id="toast-container" class="toast-container"></div>
+<div id="module-ui-root" class="hidden"></div>
+<button type="button" id="ask-hr-fab" class="ask-hr-fab hidden">Ask HR</button>
+<div id="ask-hr-panel" class="ask-hr-panel hidden">
+  <button type="button" id="ask-hr-clear">Clear</button>
+  <button type="button" id="ask-hr-close">×</button>
+  <div id="ask-hr-messages"><div id="ask-hr-intro"></div><div id="ask-hr-thread"></div></div>
+  <form id="ask-hr-form"><textarea id="ask-hr-input"></textarea><button type="submit" id="ask-hr-send">Send</button>
+    <p id="ask-hr-compose-error" class="hidden"></p></form>
+</div>
+<pre id="smoke-log" style="position:fixed;bottom:0;left:0;right:0;max-height:28vh;overflow:auto;background:#111;color:#9f9;font:12px/1.4 monospace;margin:0;padding:8px;z-index:9999;"></pre>
+<script>(function () {
+  'use strict';
+  var logEl;
+  window.__HRMS_SMOKE_ERRORS = [];
+  window.__HRMS_SMOKE_RPC = [];
+  window.addEventListener('error', function (ev) {
+    window.__HRMS_SMOKE_ERRORS.push(String(ev.message || ev.error || ev));
+    smokeLog('ERROR ' + (ev.message || ev.error));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    var msg = ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason);
+    window.__HRMS_SMOKE_ERRORS.push(msg);
+    smokeLog('REJECT ' + msg);
+  });
+  function smokeLog(msg) {
+    try {
+      logEl = logEl || document.getElementById('smoke-log');
+      if (logEl) logEl.textContent += msg + '\n';
+    } catch (ignore) {}
+    try { console.info('[SMOKE]', msg); } catch (e) {}
+  }
+  window.__HRMS_SMOKE_LOG = smokeLog;
+
+  function resultFor(name, args) {
+    window.__HRMS_SMOKE_RPC.push({ name: name, args: args });
+    smokeLog('RPC ' + name);
+    if (name === 'apiGetAppBootstrap') {
+      return {
+        ok: true,
+        data: {
+          app: { configured: true, companyName: 'AyurCentral HRMS' },
+          session: {
+            authorized: true,
+            authRequired: false,
+            role: 'ADMIN',
+            employee_id: 'EMP001',
+            displayName: 'Ada Admin',
+            email: 'ada@x.com'
+          },
+          navigation: [
+            { route: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+            { route: 'employees', label: 'Employees', icon: 'people' },
+            { route: 'my-leave', label: 'My Leave', icon: 'leave' },
+            { route: 'payroll', label: 'Payroll', icon: 'pay' },
+            { route: 'pms', label: 'Performance', icon: 'person' },
+            { route: 'ats', label: 'Recruitment', icon: 'people' },
+            { route: 'notifications', label: 'Notifications', icon: 'person' }
+          ]
+        }
+      };
+    }
+    if (name === 'apiGetHomeDashboard') {
+      return {
+        ok: true,
+        data: {
+          unread_count: 2,
+          attention: [{ label: 'Leave to approve', meta: '2', route: 'leave-approvals' }],
+          kpis: []
+        }
+      };
+    }
+    if (name === 'apiGetHomeDashboardMore') {
+      return { ok: true, data: { notes: [] } };
+    }
+    if (name === 'apiGetModuleUi') {
+      var id = args[0];
+      return {
+        ok: true,
+        data: {
+          html: '<script>(function(){var A=window.HrmsApp;if(!A)return;' +
+            'A.registerModuleRoutes({"' + id + '":{title:"' + id + '",render:function(){' +
+            'var p=A.$("page-content");if(!p)return;p.classList.remove("hidden");' +
+            'p.innerHTML="<div class=\\"card\\" data-mod=\\"' + id + '\\">Loaded ' + id + '</div>";}}});' +
+            '})();<\/script>'
+        }
+      };
+    }
+    if (name === 'apiGetUnreadNotificationCount') {
+      return { ok: true, data: { unread_count: 2 } };
+    }
+    if (name === 'apiGetNotificationBellState') {
+      return {
+        ok: true,
+        data: {
+          unread_count: 2,
+          items: [
+            { notification_id: 'N1', status: 'UNREAD', unread: true, title: 'Leave approved', type: 'LEAVE_APPROVED', action_route: 'my-leave' },
+            { notification_id: 'N2', status: 'READ', unread: false, title: 'Payslip ready', type: 'PAYSLIP' }
+          ]
+        }
+      };
+    }
+    if (name === 'apiMarkNotificationRead') {
+      return { ok: true, data: { unread_count: 1, record: { notification_id: args[0], read_at: new Date().toISOString() } } };
+    }
+    if (name === 'apiMarkAllNotificationsRead') {
+      return { ok: true, data: { changed: 1, unread_count: 0 } };
+    }
+    return { ok: true, data: {} };
+  }
+
+  var handlers = { success: null, failure: null };
+  var run = {
+    withSuccessHandler: function (fn) { handlers.success = fn; return run; },
+    withFailureHandler: function (fn) {
+      handlers.failure = fn;
+      return new Proxy({}, {
+        get: function (t, prop) {
+          if (prop === 'then' || prop === 'catch' || prop === 'finally') return undefined;
+          return function () {
+            var args = Array.prototype.slice.call(arguments);
+            try {
+              handlers.success(resultFor(String(prop), args));
+            } catch (e) {
+              handlers.failure(e);
+            }
+          };
+        }
+      });
+    }
+  };
+  window.google = { script: { run: run } };
+  smokeLog('mock rpc installed');
+})();
+</script>
+<style>
+/* Self-contained Notification Center bell. Uses shared :root tokens from Styles.html. */
+.ntf-bell-wrap { position: relative; flex-shrink: 0; }
+.ntf-bell-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--color-border, #e2e8f0); border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg-elevated, #fff); color: var(--color-text-muted, #64748b);
+  cursor: pointer; padding: 0;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.ntf-bell-btn:hover {
+  background: var(--color-bg-muted, #e8ecf1); color: var(--color-text, #0f172a);
+  border-color: var(--color-border-strong, #cbd5e1);
+}
+.ntf-bell-btn:focus-visible {
+  outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(29, 78, 216, 0.22));
+}
+.ntf-bell-btn[aria-expanded="true"] {
+  background: var(--color-primary-muted, rgba(29, 78, 216, 0.1));
+  color: var(--color-primary, #1d4ed8);
+  border-color: #bfdbfe;
+}
+.ntf-bell-badge {
+  position: absolute; top: -2px; right: -2px;
+  min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 999px; background: var(--color-danger, #b91c1c); color: #fff;
+  font-size: 0.625rem; font-weight: 700; line-height: 17px; text-align: center;
+  font-variant-numeric: tabular-nums;
+  border: 2px solid var(--color-bg-elevated, #fff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.ntf-panel {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 80px));
+  display: flex; flex-direction: column;
+  background: var(--color-bg-elevated, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-lg, 0 16px 40px rgba(15, 23, 42, 0.12));
+  z-index: 1200; overflow: hidden;
+  animation: ntfPanelIn 0.14s ease;
+}
+@keyframes ntfPanelIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.ntf-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 14px 16px 12px; border-bottom: 1px solid var(--color-border, #e2e8f0);
+  background: #f8fafc;
+}
+.ntf-panel-title { margin: 0; font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.02em; }
+.ntf-panel-actions { display: flex; gap: 4px; }
+.ntf-list { overflow-y: auto; flex: 1; min-height: 120px; }
+.ntf-item {
+  display: grid; grid-template-columns: 8px 1fr; gap: 10px; align-items: start;
+  width: 100%; text-align: left; border: none; background: transparent;
+  padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--color-border, #e2e8f0);
+  color: inherit; font: inherit;
+  transition: background 150ms ease;
+}
+.ntf-item:hover { background: #f8fafc; }
+.ntf-item:focus-visible {
+  outline: none; box-shadow: inset 0 0 0 2px var(--color-primary, #1d4ed8);
+}
+.ntf-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: transparent; }
+.ntf-item.is-unread { background: var(--color-primary-muted, rgba(29, 78, 216, 0.06)); }
+.ntf-item.is-unread .ntf-dot { background: var(--color-primary, #1d4ed8); }
+.ntf-item.is-unread .ntf-item-title { font-weight: 700; }
+.ntf-item-title { font-size: 0.8125rem; line-height: 1.35; color: var(--color-text, #0f172a); }
+.ntf-item-msg {
+  margin: 4px 0 0; font-size: 0.75rem; color: var(--color-text-muted, #64748b);
+  line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ntf-item-meta {
+  margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px 10px;
+  font-size: 0.6875rem; color: var(--color-text-muted, #64748b);
+}
+.ntf-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  background: var(--color-bg-muted, #e8ecf1); font-weight: 600; letter-spacing: 0.02em;
+}
+.ntf-chip-high {
+  background: var(--color-danger-bg, #fef2f2); color: var(--color-danger, #b91c1c);
+}
+.ntf-empty {
+  padding: 40px 20px; text-align: center; color: var(--color-text-muted, #64748b); font-size: 0.8125rem; line-height: 1.5;
+}
+.ntf-panel-foot {
+  padding: 10px 12px; border-top: 1px solid var(--color-border, #e2e8f0);
+  display: flex; justify-content: space-between; gap: 8px; background: #f8fafc;
+}
+.ntf-error { padding: 12px 14px; color: var(--color-danger, #b91c1c); font-size: 0.8125rem; }
+</style>
+<script>
+(function () {
+  'use strict';
+  if (window.HrmsNotificationBell && window.HrmsNotificationBell._bound) return;
+
+  function app() { return window.HrmsApp || window.__hrmsCtx || null; }
+  function callServer(name) {
+    var a = app();
+    var fn = a && a.callServer;
+    if (!fn) return Promise.reject(new Error('HRMS is still loading.'));
+    return fn.apply(a, arguments);
+  }
+  function escapeHtml(str) {
+    var a = app();
+    if (a && a.escapeHtml) return a.escapeHtml(str);
+    var d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+  function showToast(msg, type) {
+    var a = app();
+    if (a && a.showToast) a.showToast(msg, type);
+  }
+  function navigate(route, params) {
+    var a = app();
+    if (a && a.navigate) a.navigate(route, params);
+  }
+
+  function relTime(value) {
+    if (!value) return '';
+    var d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    var sec = Math.round((Date.now() - d.getTime()) / 1000);
+    if (sec < 45) return 'Just now';
+    if (sec < 3600) return Math.max(1, Math.round(sec / 60)) + ' min ago';
+    if (sec < 86400) return Math.max(1, Math.round(sec / 3600)) + 'h ago';
+    if (sec < 604800) return Math.max(1, Math.round(sec / 86400)) + 'd ago';
+    return d.toLocaleDateString();
+  }
+
+  function typeLabel(type) {
+    return String(type || '').replace(/_/g, ' ').toLowerCase();
+  }
+
+  var state = { open: false, items: [], unread: 0, loading: false, timer: null, pollInFlight: false };
+
+  function slotEl() {
+    return document.getElementById('ntf-bell-slot');
+  }
+
+  function ensureDom(container) {
+    if (!container) return null;
+    if (container.querySelector('.ntf-bell-wrap')) return container.querySelector('.ntf-bell-wrap');
+    container.innerHTML =
+      '<div class="ntf-bell-wrap">' +
+        '<button type="button" class="ntf-bell-btn" id="ntf-bell-btn" aria-label="Notifications" aria-expanded="false" aria-controls="ntf-panel">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+            '<path fill="currentColor" d="M12 3a6 6 0 0 1 6 6v3.2l1.6 2.4A1 1 0 0 1 18.8 16H5.2a1 1 0 0 1-.8-1.4L6 12.2V9a6 6 0 0 1 6-6zm0 18a2.5 2.5 0 0 1-2.45-2h4.9A2.5 2.5 0 0 1 12 21z"/>' +
+          '</svg>' +
+          '<span class="ntf-bell-badge hidden" id="ntf-bell-badge">0</span>' +
+        '</button>' +
+        '<div class="ntf-panel hidden" id="ntf-panel" role="dialog" aria-label="Notification center">' +
+          '<div class="ntf-panel-head">' +
+            '<h2 class="ntf-panel-title">Notifications</h2>' +
+            '<div class="ntf-panel-actions">' +
+              '<button type="button" class="btn btn-ghost btn-sm" id="ntf-mark-all">Mark all read</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="ntf-list" id="ntf-list"></div>' +
+          '<div class="ntf-panel-foot">' +
+            '<button type="button" class="btn btn-ghost btn-sm" id="ntf-open-center">View all</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" id="ntf-open-prefs">Preferences</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    return container.querySelector('.ntf-bell-wrap');
+  }
+
+  function paintBadge() {
+    var badge = document.getElementById('ntf-bell-badge');
+    var btn = document.getElementById('ntf-bell-btn');
+    if (!badge) return;
+    var n = Number(state.unread) || 0;
+    if (n < 1) {
+      badge.classList.add('hidden');
+      badge.textContent = '0';
+      if (btn) btn.setAttribute('aria-label', 'Notifications');
+    } else {
+      badge.classList.remove('hidden');
+      badge.textContent = n > 99 ? '99+' : String(n);
+      if (btn) btn.setAttribute('aria-label', 'Notifications, ' + n + ' unread');
+    }
+  }
+
+  function itemHtml(item) {
+    var unread = !!(item.unread || item.status === 'UNREAD');
+    var pri = String(item.priority || '').toUpperCase();
+    var chip = pri === 'HIGH' ? ' ntf-chip-high' : '';
+    return '<button type="button" class="ntf-item' + (unread ? ' is-unread' : '') + '" data-id="' +
+      escapeHtml(item.notification_id) + '" data-route="' + escapeHtml(item.action_route || '') + '">' +
+      '<span class="ntf-dot" aria-hidden="true"></span>' +
+      '<span>' +
+        '<span class="ntf-item-title">' + escapeHtml(item.title || '') + '</span>' +
+        (item.message ? '<span class="ntf-item-msg">' + escapeHtml(item.message) + '</span>' : '') +
+        '<span class="ntf-item-meta">' +
+          '<span class="ntf-chip' + chip + '">' + escapeHtml(typeLabel(item.type)) + '</span>' +
+          '<span>' + escapeHtml(relTime(item.created_at)) + '</span>' +
+        '</span>' +
+      '</span></button>';
+  }
+
+  function paintList() {
+    var list = document.getElementById('ntf-list');
+    if (!list) return;
+    if (state.loading && !state.items.length) {
+      list.innerHTML =
+        '<div class="ntf-skel" aria-busy="true" aria-hidden="true">' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+          '<div class="skeleton skeleton-line w100"></div>' +
+          '<div class="skeleton skeleton-line w40"></div>' +
+        '</div>' +
+        '<div class="ntf-skel" aria-hidden="true">' +
+          '<div class="skeleton skeleton-line w60"></div>' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+        '</div>' +
+        '<div class="ntf-skel" aria-hidden="true">' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+          '<div class="skeleton skeleton-line w40"></div>' +
+        '</div>' +
+        '<span class="visually-hidden">Loading notifications</span>';
+      return;
+    }
+    if (!state.items.length) {
+      list.innerHTML = '<div class="ntf-empty">You are all caught up.<br><span style="opacity:0.8">New updates will show here.</span></div>';
+      return;
+    }
+    list.innerHTML = state.items.map(itemHtml).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('.ntf-item'), function (btn) {
+      btn.addEventListener('click', function () {
+        onOpenItem(btn.getAttribute('data-id'), btn.getAttribute('data-route'));
+      });
+    });
+  }
+
+  function setOpen(open) {
+    state.open = !!open;
+    var panel = document.getElementById('ntf-panel');
+    var btn = document.getElementById('ntf-bell-btn');
+    if (panel) panel.classList.toggle('hidden', !state.open);
+    if (btn) btn.setAttribute('aria-expanded', state.open ? 'true' : 'false');
+    if (state.open) {
+      try {
+        if (window.console && console.info) {
+          console.info('HRMS_PERF', { kind: 'bell-open', willRpc: true, api: 'apiGetNotificationBellState' });
+        }
+      } catch (ignore) {}
+      refresh(true);
+    }
+  }
+
+  function applyUnreadCount(n) {
+    if (n == null || n === '') return;
+    var next = Number(n) || 0;
+    if (next === state.unread) return;
+    state.unread = next;
+    paintBadge();
+  }
+
+  function applyMarkReadResult(id, data) {
+    var item = null;
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].notification_id === id) { item = state.items[i]; break; }
+    }
+    if (item) {
+      item.status = 'READ';
+      item.unread = false;
+      item.read_at = (data && data.record && data.record.read_at) || item.read_at || new Date().toISOString();
+    }
+    if (data && data.unread_count != null) applyUnreadCount(data.unread_count);
+    else if (item) applyUnreadCount(Math.max(0, (Number(state.unread) || 0) - 1));
+    if (state.open) paintList();
+  }
+
+  function refresh(full) {
+    var sess = app() && app().getState && app().getState().session;
+    if (!sess || !sess.authorized) return Promise.resolve();
+    state.loading = true;
+    if (full) paintList();
+    return callServer('apiGetNotificationBellState').then(function (data) {
+      state.loading = false;
+      var nextUnread = data && data.unread_count || 0;
+      var nextItems = (data && data.items) || [];
+      var unreadChanged = nextUnread !== state.unread;
+      state.unread = nextUnread;
+      state.items = nextItems;
+      if (unreadChanged || full) paintBadge();
+      if (state.open || full) paintList();
+    }).catch(function (err) {
+      state.loading = false;
+      var list = document.getElementById('ntf-list');
+      if (state.open && list) {
+        list.innerHTML = '<div class="ntf-error">' + escapeHtml(err.message || 'Could not load notifications.') + '</div>';
+      }
+    });
+  }
+
+  function pollUnread() {
+    if (state.pollInFlight) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    var a = app();
+    if (a && a.isUserRpcBusy && a.isUserRpcBusy()) return;
+    var sess = a && a.getState && a.getState().session;
+    if (!sess || !sess.authorized) return;
+    state.pollInFlight = true;
+    callServer('apiGetUnreadNotificationCount', { background: true }).then(function (data) {
+      state.pollInFlight = false;
+      applyUnreadCount(data && data.unread_count);
+    }).catch(function () {
+      state.pollInFlight = false;
+    });
+  }
+
+  function onOpenItem(id, route) {
+    var item = null;
+    var snapshot = null;
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].notification_id === id) { item = state.items[i]; break; }
+    }
+    var wasUnread = !!(item && (item.unread || item.status === 'UNREAD'));
+    if (wasUnread) {
+      snapshot = { unread: state.unread, status: item.status, itemUnread: item.unread, read_at: item.read_at };
+      item.status = 'READ';
+      item.unread = false;
+      applyUnreadCount(Math.max(0, (Number(state.unread) || 0) - 1));
+      if (state.open) paintList();
+    }
+    try {
+      if (window.console && console.info) {
+        console.info('HRMS_PERF', { kind: 'bell-mark-read', rpcCount: 1, apis: ['apiMarkNotificationRead'] });
+      }
+    } catch (ignore) {}
+    if (wasUnread) {
+      callServer('apiMarkNotificationRead', id).then(function (data) {
+        applyMarkReadResult(id, data);
+      }).catch(function (err) {
+        if (item && snapshot) {
+          item.status = snapshot.status;
+          item.unread = snapshot.itemUnread;
+          item.read_at = snapshot.read_at;
+          applyUnreadCount(snapshot.unread);
+          if (state.open) paintList();
+        }
+        showToast((err && err.message) || 'Could not mark as read', 'error');
+      });
+    }
+    setOpen(false);
+    var params = item && item.action_params ? item.action_params : {};
+    var dest = route || (item && item.action_route) || '';
+    if (dest && typeof navigate === 'function') {
+      try {
+        navigate(dest, params);
+        return;
+      } catch (ignore) {}
+    }
+    if (!dest) showToast('No linked record for this notification.');
+  }
+
+  function bind(container) {
+    var wrap = ensureDom(container);
+    if (!wrap || wrap.getAttribute('data-bound') === '1') return wrap;
+    wrap.setAttribute('data-bound', '1');
+    var btn = document.getElementById('ntf-bell-btn');
+    if (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setOpen(!state.open);
+      });
+    }
+    var markAll = document.getElementById('ntf-mark-all');
+    if (markAll) {
+      markAll.addEventListener('click', function () {
+        var snapItems = state.items.map(function (it) {
+          return { notification_id: it.notification_id, status: it.status, unread: it.unread, read_at: it.read_at };
+        });
+        var snapUnread = state.unread;
+        state.items.forEach(function (it) {
+          it.status = 'READ';
+          it.unread = false;
+        });
+        applyUnreadCount(0);
+        paintList();
+        callServer('apiMarkAllNotificationsRead', { button: markAll, loadingText: 'Updating…' })
+          .then(function (res) {
+            applyUnreadCount(res && res.unread_count != null ? res.unread_count : 0);
+            paintList();
+            showToast(res && res.changed ? 'Marked ' + res.changed + ' read' : 'Already up to date', 'success');
+          })
+          .catch(function (err) {
+            state.items.forEach(function (it) {
+              snapItems.forEach(function (s) {
+                if (s.notification_id === it.notification_id) {
+                  it.status = s.status;
+                  it.unread = s.unread;
+                  it.read_at = s.read_at;
+                }
+              });
+            });
+            applyUnreadCount(snapUnread);
+            paintList();
+            showToast(err.message || 'Could not mark all read', 'error');
+          });
+      });
+    }
+    var viewAll = document.getElementById('ntf-open-center');
+    if (viewAll) {
+      viewAll.addEventListener('click', function () {
+        setOpen(false);
+        navigate('notifications');
+      });
+    }
+    var prefs = document.getElementById('ntf-open-prefs');
+    if (prefs) {
+      prefs.addEventListener('click', function () {
+        setOpen(false);
+        navigate('notifications', { tab: 'preferences' });
+      });
+    }
+    document.addEventListener('click', function (e) {
+      if (!state.open) return;
+      if (wrap.contains(e.target)) return;
+      setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && state.open) setOpen(false);
+    });
+    return wrap;
+  }
+
+  function isElement_(node) {
+    return !!(node && node.nodeType === 1);
+  }
+
+  function mount(container, opts) {
+    if (container && !isElement_(container)) {
+      opts = container;
+      container = null;
+    }
+    opts = opts || {};
+    var el = isElement_(container) ? container : slotEl();
+    if (!el) return null;
+    bind(el);
+    if (!opts.skipInitialFetch) {
+      pollUnread();
+    }
+    if (!state.timer) {
+      state.timer = setInterval(function () { pollUnread(); }, 60000);
+    }
+    return el;
+  }
+
+  function unmount() {
+    if (state.timer) {
+      clearInterval(state.timer);
+      state.timer = null;
+    }
+  }
+
+  window.HrmsNotificationBell = {
+    mount: mount,
+    refresh: refresh,
+    applyUnreadCount: applyUnreadCount,
+    applyMarkReadResult: applyMarkReadResult,
+    unmount: unmount,
+    _bound: true
+  };
+
+  function boot() {
+    if (slotEl()) mount(slotEl());
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  var SESSION_STORAGE_KEY = 'hrms_session_token';
+
+  var state = {
+    session: null,
+    app: null,
+    navigation: [],
+    currentRoute: 'dashboard',
+    authEmail: '',
+    navSeq: 0,
+    flash: null
+  };
+
+  var ROUTES = {
+    dashboard: { title: 'Dashboard', render: renderDashboard },
+    settings: { title: 'Settings', render: renderPlaceholder },
+    users: { title: 'Users', render: renderPlaceholder }
+  };
+
+  /** Route → module id for lazy UI load. */
+  var ROUTE_MODULE = {
+    employees: 'employee',
+    'my-team': 'employee',
+    'my-profile': 'employee',
+    'employee-create': 'employee',
+    'employee-profile': 'employee',
+    'my-leave': 'leave',
+    'leave-apply': 'leave',
+    'leave-approvals': 'leave',
+    'leave-admin': 'leave',
+    'leave-calendar': 'leave',
+    payroll: 'payroll',
+    'payroll-run': 'payroll',
+    compensation: 'payroll',
+    'my-payslips': 'payroll',
+    pms: 'pms',
+    'pms-cycles': 'pms',
+    'pms-cycle': 'pms',
+    'pms-my-review': 'pms',
+    'pms-team': 'pms',
+    'pms-review': 'pms',
+    'pms-appraisal': 'pms',
+    ats: 'ats',
+    'ats-jobs': 'ats',
+    'ats-job': 'ats',
+    'ats-job-new': 'ats',
+    'ats-job-edit': 'ats',
+    'ats-candidates': 'ats',
+    'ats-candidate': 'ats',
+    notifications: 'notifications'
+  };
+
+  var ROUTE_TITLES = {
+    employees: 'Employees',
+    'my-team': 'My Team',
+    'my-profile': 'My Profile',
+    'employee-create': 'Add employee',
+    'employee-profile': 'Employee',
+    'my-leave': 'My Leave',
+    'leave-apply': 'Apply Leave',
+    'leave-approvals': 'Leave Approvals',
+    'leave-admin': 'Leave',
+    'leave-calendar': 'Leave Calendar',
+    payroll: 'Payroll',
+    'payroll-run': 'Payroll run',
+    compensation: 'Compensation',
+    'my-payslips': 'My Payslips',
+    pms: 'Performance',
+    'pms-cycles': 'Review cycles',
+    'pms-cycle': 'Review cycle',
+    'pms-my-review': 'My review',
+    'pms-team': 'Team reviews',
+    'pms-review': 'Review',
+    'pms-appraisal': 'Appraisals',
+    ats: 'Recruitment',
+    'ats-jobs': 'Jobs',
+    'ats-job': 'Job',
+    'ats-job-new': 'New job',
+    'ats-job-edit': 'Edit job',
+    'ats-candidates': 'Candidates',
+    'ats-candidate': 'Candidate',
+    notifications: 'Notifications'
+  };
+
+  var ROUTE_LEDES = {
+    dashboard: 'What needs your attention, based on your role.',
+    employees: 'Search the directory. Open a row to view a profile.',
+    'my-team': 'Direct reports. Open a row to view work details.',
+    'my-profile': 'Your employee record and the details you are allowed to see.',
+    'employee-create': 'Employee ID is assigned on save. Payroll identifiers are optional.',
+    'employee-profile': 'Employee master record.',
+    'my-leave': 'Balances for the current leave year and your requests.',
+    'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
+    'leave-approvals': 'Submitted requests waiting for a decision.',
+    'leave-admin': 'Company leave requests and configurable leave types.',
+    'leave-calendar': 'Approved leave for the month, scoped to your role.',
+    payroll: 'Process one month: enter days, calculate on the server, review, then lock.',
+    'payroll-run': 'One primary next step. Locked amounts never change.',
+    compensation: 'Save a first structure, then revise so history stays intact.',
+    'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
+    pms: 'Goals, self-assessment, and reviews for the current cycle.',
+    'pms-cycles': 'Create a cycle, then add goals before you open it.',
+    'pms-cycle': 'Assign goals, then move the cycle forward.',
+    'pms-my-review': 'Update progress and comments, then submit.',
+    'pms-team': 'People assigned to you in the current cycles.',
+    'pms-review': 'Self-assessment, manager ratings, and final appraisal.',
+    'pms-appraisal': 'Finalize ratings after managers submit.',
+    ats: 'Open jobs, pipeline, and interviews in your scope.',
+    'ats-jobs': 'Create, publish, and share requisitions.',
+    'ats-job': 'Applications, pipeline, and the public apply link.',
+    'ats-job-new': 'Describe the role. Publishing creates the careers link.',
+    'ats-job-edit': 'Update the requisition. Candidates are not employees.',
+    'ats-candidates': 'Applicants for jobs you can access.',
+    'ats-candidate': 'Profile, applications, interviews, and notes.',
+    notifications: 'Your inbox and, for HR, the email delivery log.',
+    settings: 'Company configuration will be available in a later phase.',
+    users: 'Role assignment will be available in a later phase.'
+  };
+
+  var NAV_GROUPS = [
+    { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
+    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'pms-my-review', 'my-payslips'], collapsible: true },
+    { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
+    { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
+    { id: 'performance', label: 'Performance', routes: ['pms', 'pms-team', 'pms-cycles', 'pms-appraisal'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
+    { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
+    { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
+  ];
+
+  /** Session-only sidebar section expand/collapse (never localStorage). */
+  var navSectionExpanded_ = {};
+
+  var ROUTE_ALIASES = {
+    'pms-self': 'pms-my-review',
+    'ats-applications': 'ats-candidates',
+    'ats-interviews': 'ats-candidates'
+  };
+
+  var moduleLoaded_ = {};
+  var moduleLoading_ = {};
+  var userRpcBusy_ = 0;
+  var preloadPaused_ = false;
+  var preloadQueue_ = [];
+  var preloadScheduled_ = false;
+
+  /**
+   * Session-only module view cache. HTML/JS download (moduleLoaded_) is not the same
+   * as a successfully initialized view. Never persisted to localStorage.
+   * Entries bind to sessionCacheKey_ (employee_id|role) and clear on login/logout.
+   * Never used for RBAC / ownership / session validity.
+   */
+  var moduleViewCache_ = {};
+  var moduleDataCacheClearHooks_ = [];
+  var refreshForceKey_ = '';
+  var refreshBusy_ = false;
+  var refreshWatchdog_ = null;
+  var dashViewCache_ = { payload: null, actions: '', complete: false };
+
+  function sessionCacheKey_() {
+    var s = state.session || {};
+    if (!s.authorized) return '';
+    return String(s.employee_id || s.email || '') + '|' + String(s.role || '');
+  }
+
+  function registerModuleDataCacheClear(fn) {
+    if (typeof fn === 'function') moduleDataCacheClearHooks_.push(fn);
+  }
+
+  function clearUserSessionViewState_() {
+    clearModuleViewCache();
+    state.flash = null;
+    state.navSeq = (state.navSeq || 0) + 1;
+    moduleDataCacheClearHooks_.forEach(function (fn) {
+      try { fn(); } catch (ignore) {}
+    });
+    logClientPerf_({ kind: 'session-view-state-clear' });
+  }
+
+  function moduleIdForRoute_(route) {
+    if (route === 'dashboard') return 'dashboard';
+    return ROUTE_MODULE[route] || '';
+  }
+
+  function moduleViewKey(route, params) {
+    params = params || {};
+    if (route === 'employee-profile') return 'employee-profile:' + String(params.employeeId || '');
+    if (route === 'payroll-run') return 'payroll-run:' + String(params.runId || '');
+    if (route === 'pms-cycle') return 'pms-cycle:' + String(params.cycleId || '');
+    if (route === 'pms-my-review' || route === 'pms-team' || route === 'pms-appraisal') {
+      return route + ':' + String(params.cycleId || '');
+    }
+    if (route === 'pms-review') {
+      return 'pms-review:' + String(params.cycleId || '') + ':' + String(params.employeeId || '');
+    }
+    if (route === 'ats-job' || route === 'ats-job-edit') return route + ':' + String(params.jobId || '');
+    if (route === 'ats-candidate') return 'ats-candidate:' + String(params.candidateId || '');
+    return route || '';
+  }
+
+  function shouldShowModuleRefresh(route) {
+    return route === 'dashboard' || !!ROUTE_MODULE[route];
+  }
+
+  function formatModuleUpdatedAt_(ts) {
+    if (!ts) return '';
+    var age = Date.now() - ts;
+    if (age < 20000) return 'Updated just now';
+    if (age < 90000) return 'Updated a moment ago';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return 'Updated ' + d.toLocaleTimeString();
+  }
+
+  function moduleRefreshControlsHtml() {
+    if (!shouldShowModuleRefresh(state.currentRoute)) return '';
+    var key = moduleViewKey(state.currentRoute, state.routeParams);
+    var rec = moduleViewCache_[key];
+    var loading = !!refreshBusy_;
+    var stamp = '';
+    if (rec && rec.lastLoadedAt && !loading) {
+      stamp = '<span class="module-updated" id="module-updated-stamp">' +
+        escapeHtml(formatModuleUpdatedAt_(rec.lastLoadedAt)) + '</span>';
+    }
+    return stamp +
+      '<button type="button" class="btn btn-secondary btn-sm js-module-refresh" id="btn-module-refresh"' +
+      (loading ? ' disabled aria-busy="true"' : '') + '>' +
+      (loading
+        ? '<span class="spinner-sm" aria-hidden="true"></span> Refreshing…'
+        : '<span class="module-refresh-icon" aria-hidden="true">↻</span> Refresh') +
+      '</button>';
+  }
+
+  function ensureModuleRefreshControls() {
+    var page = $('page-content');
+    if (!page || !shouldShowModuleRefresh(state.currentRoute)) return;
+    var header = page.querySelector('.page-header');
+    if (!header) return;
+    var actions = header.querySelector('.page-header-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'page-header-actions';
+      header.appendChild(actions);
+    }
+    var existing = actions.querySelector('.js-module-refresh');
+    var stamp = actions.querySelector('#module-updated-stamp');
+    if (existing) {
+      if (stamp) stamp.remove();
+      existing.remove();
+    }
+    var hold = document.createElement('div');
+    hold.innerHTML = moduleRefreshControlsHtml();
+    while (hold.lastChild) {
+      actions.insertBefore(hold.lastChild, actions.firstChild);
+    }
+  }
+
+  function shouldRestoreModuleView(key) {
+    if (!key) return false;
+    if (refreshForceKey_ && (refreshForceKey_ === key || refreshForceKey_ === '*')) return false;
+    var rec = moduleViewCache_[key];
+    if (!rec || !rec.loaded) return false;
+    var sk = sessionCacheKey_();
+    if (!sk || !rec.sessionKey || rec.sessionKey !== sk) return false;
+    if (rec.consumedNavSeq === state.navSeq) return false;
+    return true;
+  }
+
+  function consumeModuleViewRestore(key) {
+    if (!shouldRestoreModuleView(key)) return false;
+    moduleViewCache_[key].consumedNavSeq = state.navSeq;
+    logClientPerf_({ kind: 'module-view-restore', key: key, route: state.currentRoute });
+    scheduleRefreshControls_();
+    return true;
+  }
+
+  function markModuleViewLoaded(key, meta) {
+    key = key || moduleViewKey(state.currentRoute, state.routeParams);
+    if (!key) return;
+    moduleViewCache_[key] = {
+      loaded: true,
+      lastLoadedAt: Date.now(),
+      consumedNavSeq: state.navSeq,
+      sessionKey: sessionCacheKey_(),
+      route: (meta && meta.route) || state.currentRoute,
+      params: (meta && meta.params) || state.routeParams || {},
+      moduleId: (meta && meta.moduleId) || moduleIdForRoute_(state.currentRoute)
+    };
+    if (refreshForceKey_ === key || refreshForceKey_ === '*') refreshForceKey_ = '';
+    refreshBusy_ = false;
+    clearRefreshWatchdog_();
+    scheduleRefreshControls_();
+    logClientPerf_({ kind: 'module-view-loaded', key: key, route: state.currentRoute });
+  }
+
+  function isModuleRefresh(key) {
+    key = key || moduleViewKey(state.currentRoute, state.routeParams);
+    return refreshForceKey_ === key || refreshForceKey_ === '*';
+  }
+
+  function finishModuleRefresh(failed) {
+    refreshForceKey_ = '';
+    refreshBusy_ = false;
+    clearRefreshWatchdog_();
+    var pageBusy = $('page-content');
+    if (pageBusy) pageBusy.removeAttribute('aria-busy');
+    var btn = $('btn-module-refresh');
+    if (btn) {
+      try { restoreButton(btn); } catch (ignore) {}
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+    }
+    scheduleRefreshControls_();
+    if (failed) {
+      logClientPerf_({ kind: 'module-view-refresh-fail', route: state.currentRoute });
+    }
+  }
+
+  function clearRefreshWatchdog_() {
+    if (refreshWatchdog_) {
+      clearTimeout(refreshWatchdog_);
+      refreshWatchdog_ = null;
+    }
+  }
+
+  function armRefreshWatchdog_() {
+    clearRefreshWatchdog_();
+    refreshWatchdog_ = setTimeout(function () {
+      refreshWatchdog_ = null;
+      if (refreshBusy_) finishModuleRefresh(true);
+    }, 45000);
+  }
+
+  function scheduleRefreshControls_() {
+    var run = function () { ensureModuleRefreshControls(); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  }
+
+  function refreshCurrentModuleView() {
+    if (!state.session || !state.session.authorized) return;
+    var route = state.currentRoute;
+    if (!shouldShowModuleRefresh(route)) return;
+    if (refreshBusy_) return;
+    var key = moduleViewKey(route, state.routeParams);
+    refreshBusy_ = true;
+    refreshForceKey_ = key;
+    armRefreshWatchdog_();
+    var pageBusy = $('page-content');
+    if (pageBusy) pageBusy.setAttribute('aria-busy', 'true');
+    var btn = $('btn-module-refresh');
+    if (btn) setButtonLoading(btn, 'Refreshing…');
+    logClientPerf_({ kind: 'module-view-refresh', key: key, route: route });
+    var def = ROUTES[route];
+    state.navSeq = (state.navSeq || 0) + 1;
+    if (def && def.render) {
+      def.render(state.routeParams);
+    }
+    scheduleRefreshControls_();
+  }
+
+  function bindModuleRefreshUi() {
+    var page = $('page-content');
+    if (!page || page.getAttribute('data-refresh-bound') === '1') return;
+    page.setAttribute('data-refresh-bound', '1');
+    page.addEventListener('click', function (evt) {
+      var el = evt.target;
+      if (el && el.nodeType !== 1) el = el.parentElement;
+      var btn = el && el.closest ? el.closest('.js-module-refresh') : null;
+      if (!btn || !page.contains(btn)) return;
+      evt.preventDefault();
+      refreshCurrentModuleView();
+    });
+  }
+
+  function getModuleViewCache() {
+    return moduleViewCache_;
+  }
+
+  function clearModuleViewCache() {
+    moduleViewCache_ = {};
+    dashViewCache_ = { payload: null, actions: '', complete: false };
+    refreshForceKey_ = '';
+    refreshBusy_ = false;
+    clearRefreshWatchdog_();
+  }
+
+  function invalidateModuleViewCache(keys) {
+    if (keys == null) return;
+    var list = Array.isArray(keys) ? keys : [keys];
+    list.forEach(function (key) {
+      if (key && moduleViewCache_[key]) delete moduleViewCache_[key];
+    });
+    if (list.length) logClientPerf_({ kind: 'module-view-invalidate', keys: list });
+  }
+
+  function invalidateModuleViewCachePrefix(prefix) {
+    if (!prefix) return;
+    var keys = [];
+    Object.keys(moduleViewCache_).forEach(function (key) {
+      if (key === prefix || key.indexOf(prefix) === 0) {
+        keys.push(key);
+        delete moduleViewCache_[key];
+      }
+    });
+    if (keys.length) logClientPerf_({ kind: 'module-view-invalidate-prefix', prefix: prefix, keys: keys });
+  }
+
+  function invalidateDashboardView() {
+    delete moduleViewCache_.dashboard;
+    dashViewCache_ = { payload: null, actions: '', complete: false };
+    logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard'] });
+  }
+
+  function registerModuleRoutes(extra) {
+    extra = extra || {};
+    Object.keys(extra).forEach(function (key) {
+      ROUTES[key] = extra[key];
+    });
+  }
+
+  function $(id) { return document.getElementById(id); }
+
+  function getSessionToken() {
+    try {
+      return sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function setSessionToken(token) {
+    try {
+      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (ignore) {}
+  }
+
+  var lastToast_ = { message: '', at: 0 };
+
+  function showToast(message, type) {
+    var container = $('toast-container');
+    if (!container) return;
+    var text = String(message || '');
+    var now = Date.now();
+    if (text && text === lastToast_.message && now - lastToast_.at < 2000) return;
+    lastToast_ = { message: text, at: now };
+    var el = document.createElement('div');
+    el.className = 'toast' + (type ? ' ' + type : '');
+    el.textContent = text;
+    container.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+
+  function routeStill(seq, route) {
+    return seq === state.navSeq && (!route || state.currentRoute === route);
+  }
+
+  function setHtml(el, html) {
+    if (!el) return false;
+    el.innerHTML = html;
+    return true;
+  }
+
+  function isActionOpts_(obj) {
+    if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
+    if (Object.prototype.toString.call(obj) === '[object Array]') return false;
+    var btn = obj.button || obj.loadingButton;
+    if (btn && btn.nodeType === 1) return true;
+    var fb = obj.feedback || obj.feedbackEl;
+    if (fb && fb.nodeType === 1) return true;
+    if (obj.background === true) return true;
+    return false;
+  }
+
+  function extractActionOpts_(args) {
+    if (!args.length) return null;
+    var last = args[args.length - 1];
+    if (!isActionOpts_(last)) return null;
+    args.pop();
+    return last;
+  }
+
+  function isButtonLoading(button) {
+    return !!(button && button.getAttribute && button.getAttribute('data-hrms-loading') === '1');
+  }
+
+  function setButtonLoading(button, loadingText) {
+    if (!button || button.nodeType !== 1) return false;
+    if (isButtonLoading(button)) return false;
+    try {
+      button.setAttribute('data-hrms-loading', '1');
+      button._hrmsBtnSnap = {
+        html: button.innerHTML,
+        disabled: !!button.disabled,
+        minWidth: button.style ? (button.style.minWidth || '') : ''
+      };
+      if (button.style && !button.style.minWidth) {
+        try {
+          if (button.offsetWidth) button.style.minWidth = button.offsetWidth + 'px';
+        } catch (ignoreWidth) {}
+      }
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (button.classList) button.classList.add('btn-loading');
+      var label = escapeHtml(loadingText || 'Working…');
+      button.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span class="btn-loading-label">' + label + '</span>';
+      return true;
+    } catch (e) {
+      try {
+        button.disabled = true;
+        button.setAttribute('data-hrms-loading', '1');
+      } catch (e2) {}
+      return true;
+    }
+  }
+
+  function restoreButton(button) {
+    if (!button || button.nodeType !== 1) return;
+    try {
+      var snap = button._hrmsBtnSnap;
+      button.removeAttribute('data-hrms-loading');
+      button.removeAttribute('aria-busy');
+      if (button.classList) button.classList.remove('btn-loading');
+      if (snap) {
+        button.innerHTML = snap.html;
+        button.disabled = snap.disabled;
+        if (button.style) button.style.minWidth = snap.minWidth || '';
+      } else {
+        button.disabled = false;
+      }
+      button._hrmsBtnSnap = null;
+      button._hrmsInflight = null;
+    } catch (e) {
+      try {
+        button.disabled = false;
+        button.removeAttribute('data-hrms-loading');
+        button.removeAttribute('aria-busy');
+        if (button.classList) button.classList.remove('btn-loading');
+      } catch (e2) {}
+    }
+  }
+
+  function resolveFeedbackEl_(target) {
+    if (!target) return null;
+    if (typeof target === 'string') return $(target);
+    if (target.nodeType !== 1) return null;
+    if (target.classList && (target.classList.contains('action-feedback') || target.classList.contains('js-action-feedback'))) {
+      return target;
+    }
+    var id = target.getAttribute && target.getAttribute('data-feedback');
+    if (id) {
+      var byId = $(id);
+      if (byId) return byId;
+    }
+    var host = target.parentNode;
+    if (host && host.querySelector) {
+      var found = host.querySelector('.action-feedback, .js-action-feedback');
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function setActionFeedback(el, message, type) {
+    var target = resolveFeedbackEl_(el);
+    if (!target) return;
+    var text = message ? String(message) : '';
+    target.textContent = text;
+    if (target.classList) {
+      target.classList.remove('is-success', 'is-error', 'is-info');
+      if (!text) {
+        target.classList.add('hidden');
+        return;
+      }
+      target.classList.remove('hidden');
+      target.classList.add(type === 'error' ? 'is-error' : (type === 'info' ? 'is-info' : 'is-success'));
+    }
+    if (target.setAttribute) {
+      target.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    }
+  }
+
+  function clearActionFeedback(el) {
+    setActionFeedback(el, '', '');
+  }
+
+  function setFlash(message, type, route) {
+    if (!message) {
+      state.flash = null;
+      return;
+    }
+    state.flash = { message: String(message), type: type || 'success', route: route || '' };
+  }
+
+  function consumeFlash(route) {
+    var f = state.flash;
+    if (!f) return null;
+    state.flash = null;
+    if (f.route && route && f.route !== route) return null;
+    return f;
+  }
+
+  function flashBannerHtml(flash) {
+    if (!flash || !flash.message) return '';
+    var cls = 'action-feedback';
+    if (flash.type === 'error') cls += ' is-error';
+    else if (flash.type === 'info') cls += ' is-info';
+    else cls += ' is-success';
+    var role = flash.type === 'error' ? 'alert' : 'status';
+    return '<div class="' + cls + '" role="' + role + '">' + escapeHtml(flash.message) + '</div>';
+  }
+
+  var perfLog_ = [];
+  var perfSeq_ = 0;
+
+  function clientPerfEnabled_() {
+    try {
+      if (window.HRMS_PERF_TIMING === 1 || window.HRMS_PERF_TIMING === '1') return true;
+      if (window.localStorage && localStorage.getItem('HRMS_PERF_TIMING') === '1') return true;
+    } catch (ignore) {}
+    return false;
+  }
+
+  function newClientReqId_() {
+    perfSeq_ += 1;
+    return 'c' + Date.now().toString(36) + '-' + perfSeq_;
+  }
+
+  function logClientPerf_(entry) {
+    if (!entry) return;
+    if (!clientPerfEnabled_() && !entry.server) return;
+    perfLog_.push(entry);
+    if (perfLog_.length > 80) perfLog_.shift();
+    try {
+      if (window.console && console.info) console.info('HRMS_PERF', entry);
+    } catch (ignore) {}
+  }
+
+  function invokeRpc_(fnName, args, onPerf) {
+    return new Promise(function (resolve, reject) {
+      try {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            try {
+              var serverPerf = result && result._perf ? result._perf : null;
+              if (serverPerf && typeof onPerf === 'function') {
+                try { onPerf(serverPerf); } catch (ignorePerf) {}
+              }
+              if (result && result.ok === true) {
+                resolve(result.data);
+                return;
+              }
+              if (result && result.error) {
+                reject(result.error);
+                return;
+              }
+              if (result && typeof result === 'object') {
+                if (Array.isArray(result.items) || result.hasOwnProperty('unread_count') ||
+                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences')) {
+                  resolve(result);
+                  return;
+                }
+              }
+              reject({
+                message: (result && result.message) || 'Request failed',
+                code: (result && result.code) || ''
+              });
+            } catch (e) {
+              reject({ message: (e && e.message) || 'Request failed' });
+            }
+          })
+          .withFailureHandler(function (err) {
+            try {
+              reject({ message: (err && err.message) || 'Server error' });
+            } catch (e) {
+              reject({ message: 'Server error' });
+            }
+          })[fnName].apply(null, args);
+      } catch (e) {
+        reject({ message: (e && e.message) || 'Request failed' });
+      }
+    });
+  }
+
+  function finishAction_(action, started, ok, value) {
+    var button = action && (action.button || action.loadingButton);
+    var feedback = action && (action.feedback || action.feedbackEl);
+    try {
+      if (button) restoreButton(button);
+    } catch (ignore) {
+      try { if (button) restoreButton(button); } catch (e2) {}
+    }
+    if (!ok) {
+      if (feedback && !(value && value.silent) && !(value && value.code === 'IN_PROGRESS')) {
+        setActionFeedback(feedback, (value && value.message) || 'Request failed', 'error');
+      }
+      return Promise.reject(value);
+    }
+    if (action && action.successMessage && feedback) {
+      setActionFeedback(feedback, action.successMessage, 'success');
+    }
+    return value;
+  }
+
+  function callServer(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var action = extractActionOpts_(args);
+    args.push(getSessionToken());
+
+    var button = action && (action.button || action.loadingButton);
+    var feedback = action && (action.feedback || action.feedbackEl);
+    var loadingText = (action && action.loadingText) || 'Working…';
+    var clientRequestId = newClientReqId_();
+    var tClick = Date.now();
+
+    if (button && button._hrmsInflight) {
+      return button._hrmsInflight;
+    }
+
+    var started = false;
+    if (button && !isButtonLoading(button)) {
+      started = setButtonLoading(button, loadingText);
+    } else if (button && isButtonLoading(button) && action && action.loadingText) {
+      try {
+        var labelEl = button.querySelector ? button.querySelector('.btn-loading-label') : null;
+        if (labelEl) labelEl.textContent = action.loadingText;
+      } catch (ignoreLabel) {}
+    }
+    if (feedback) clearActionFeedback(feedback);
+
+    var tRpc = Date.now();
+    var sawServerPerf = false;
+    var p = invokeRpc_(fnName, args, function (serverPerf) {
+      sawServerPerf = true;
+      var now = Date.now();
+      logClientPerf_({
+        kind: 'rpc',
+        fn: fnName,
+        clientRequestId: clientRequestId,
+        serverRequestId: serverPerf && serverPerf.requestId,
+        clickToRpcMs: tRpc - tClick,
+        rpcMs: now - tRpc,
+        perceivedMs: now - tClick,
+        transportEstimateMs: serverPerf ? Math.max(0, (now - tRpc) - (serverPerf.totalMs || 0)) : null,
+        server: serverPerf || null
+      });
+    }).then(function (data) {
+      if (!sawServerPerf && clientPerfEnabled_()) {
+        logClientPerf_({
+          kind: 'rpc',
+          fn: fnName,
+          clientRequestId: clientRequestId,
+          clickToRpcMs: tRpc - tClick,
+          rpcMs: Date.now() - tRpc,
+          perceivedMs: Date.now() - tClick
+        });
+      }
+      return finishAction_(action, started, true, data);
+    }, function (err) {
+      logClientPerf_({
+        kind: 'rpc-error',
+        fn: fnName,
+        clientRequestId: clientRequestId,
+        clickToRpcMs: tRpc - tClick,
+        rpcMs: Date.now() - tRpc,
+        perceivedMs: Date.now() - tClick,
+        error: (err && err.message) || 'Request failed'
+      });
+      return finishAction_(action, started, false, err);
+    });
+
+    var background = !!(action && action.background);
+    if (!background) {
+      userRpcBusy_ += 1;
+      pauseBackgroundPreload();
+      p = p.then(function (value) {
+        userRpcBusy_ = Math.max(0, userRpcBusy_ - 1);
+        if (userRpcBusy_ === 0) resumeBackgroundPreload();
+        return value;
+      }, function (err) {
+        userRpcBusy_ = Math.max(0, userRpcBusy_ - 1);
+        if (userRpcBusy_ === 0) resumeBackgroundPreload();
+        return Promise.reject(err);
+      });
+    }
+    if (button) button._hrmsInflight = p;
+    return p;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function pageHeaderHtml(title, lede, actionsHtml) {
+    var refresh = shouldShowModuleRefresh(state.currentRoute) ? moduleRefreshControlsHtml() : '';
+    return '<div class="page-header">' +
+      '<div class="page-header-text">' +
+        '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
+        (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
+      '</div>' +
+      '<div class="page-header-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+  }
+
+  function navIconSvg(name) {
+    var paths = {
+      dashboard: 'M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z',
+      person: 'M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5z',
+      people: 'M9 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 9 11zm9 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM9 13c-3.9 0-7 1.8-7 4v2h14v-2c0-2.2-3.1-4-7-4zm8.2.1c3 .4 5.8 2 5.8 3.9V19h-5v-2c0-.7-.2-1.3-.5-1.9a8.4 8.4 0 0 0-1.3-1z',
+      group: 'M9 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 9 11zm9 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM9 13c-3.9 0-7 1.8-7 4v2h14v-2c0-2.2-3.1-4-7-4zm8.2.1c3 .4 5.8 2 5.8 3.9V19h-5v-2c0-.7-.2-1.3-.5-1.9a8.4 8.4 0 0 0-1.3-1z',
+      event: 'M7 3h2v2h6V3h2v2h3v15H4V5h3V3zm13 7H4v9h16v-9z',
+      calendar: 'M7 3h2v2h6V3h2v2h3v15H4V5h3V3zm13 7H4v9h16v-9z',
+      approval: 'M9.5 16.5 5 12l1.4-1.4 3.1 3.1 8.1-8.1L19 7z',
+      payments: 'M3 6h18v4H3zm0 6h18v6H3zm3 3h4v2H6z',
+      account_balance: 'M12 3 3 8v2h18V8zm-7 9h3v6H5zm5.5 0h3v6h-3zM16 12h3v6h-3zM3 20h18v2H3z',
+      receipt: 'M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21V3zm3 4h7v1.5h-7zm0 3h7v1.5h-7z',
+      mail: 'M3 6h18v12H3zm9 6L5 8h14z',
+      settings: 'M10 3h4l.5 2.6c.5.2 1 .4 1.5.8L18.4 5l2 2-1.6 2c.3.5.6 1 .8 1.5L22 11v2l-2.4.5c-.2.5-.5 1-.8 1.5l1.6 2-2 2-2.4-1.4c-.5.3-1 .6-1.5.8L14 21h-4l-.5-2.6c-.5-.2-1-.4-1.5-.8L5.6 19l-2-2 1.6-2c-.3-.5-.6-1-.8-1.5L2 13v-2l2.4-.5c.2-.5.5-1 .8-1.5l-1.6-2 2-2 2.4 1.4c.5-.3 1-.6 1.5-.8zm2 6.5A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5z',
+      admin_panel_settings: 'M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z'
+    };
+    var d = paths[name] || paths.dashboard;
+    return '<svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="' + d + '"/></svg>';
+  }
+
+  function isNavRouteActive(itemRoute, current) {
+    if (itemRoute === current) return true;
+    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
+    if (itemRoute === 'payroll' && current === 'payroll-run') return true;
+    if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
+    if (itemRoute === 'pms' && (current === 'pms-cycle' || current === 'pms-review')) return true;
+    if (itemRoute === 'pms-cycles' && current === 'pms-cycle') return true;
+    if (itemRoute === 'pms-team' && current === 'pms-review') return true;
+    if (itemRoute === 'pms-appraisal' && current === 'pms-review') return true;
+    if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
+    if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
+    if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
+    return false;
+  }
+
+  function isNavGroupActive(group) {
+    if (!group || !group.items) return false;
+    for (var i = 0; i < group.items.length; i++) {
+      if (isNavRouteActive(group.items[i].route, state.currentRoute)) return true;
+    }
+    return false;
+  }
+
+  function isNavGroupExpanded(group) {
+    if (!group.collapsible) return true;
+    if (isNavGroupActive(group)) return true;
+    return navSectionExpanded_[group.id] === true;
+  }
+
+  function groupedNavItems() {
+    var items = state.navigation || [];
+    var used = {};
+    var groups = [];
+    NAV_GROUPS.forEach(function (g) {
+      var members = [];
+      g.routes.forEach(function (route) {
+        items.forEach(function (item) {
+          if (item.route === route) {
+            members.push(item);
+            used[item.route] = true;
+          }
+        });
+      });
+      if (members.length) {
+        groups.push({
+          id: g.id,
+          label: g.label,
+          items: members,
+          collapsible: !!g.collapsible
+        });
+      }
+    });
+    var rest = items.filter(function (item) { return !used[item.route]; });
+    if (rest.length) groups.push({ id: 'other', label: '', items: rest, collapsible: false });
+    return groups;
+  }
+
+  function setSidebarOpen(open) {
+    var sidebar = $('sidebar');
+    var backdrop = $('sidebar-backdrop');
+    if (sidebar) sidebar.classList.toggle('open', !!open);
+    if (backdrop) backdrop.classList.toggle('open', !!open);
+  }
+
+  function setAuthedChrome(authed) {
+    var app = $('app');
+    if (app) app.classList.toggle('is-authed', !!authed);
+    var out = $('btn-sign-out');
+    if (out) out.classList.toggle('hidden', !authed);
+  }
+
+  function navHas(route) {
+    return (state.navigation || []).some(function (n) {
+      return n.route === route && !n.placeholder;
+    });
+  }
+
+  /* —— Shared perceived-loading helpers —— */
+
+  function skeletonLine(widthClass) {
+    return '<div class="skeleton skeleton-line hrms-skeleton-line ' + (widthClass || 'w80') + '" aria-hidden="true"></div>';
+  }
+
+  function skeletonTableRows(colCount, rowCount) {
+    var rows = '';
+    var r;
+    var c;
+    for (r = 0; r < (rowCount || 5); r++) {
+      rows += '<tr class="skeleton-row" aria-hidden="true">';
+      for (c = 0; c < colCount; c++) {
+        rows += '<td><div class="skeleton skeleton-line ' + (c === 0 ? 'w60' : 'w80') + '"></div></td>';
+      }
+      rows += '</tr>';
+    }
+    return rows;
+  }
+
+  function skeletonKpiRow(labels) {
+    labels = labels || ['Metric', 'Metric', 'Metric', 'Metric'];
+    return '<div class="kpi-row" aria-hidden="true">' + labels.map(function (label) {
+      return '<div class="card kpi-card skeleton-card" aria-busy="true">' +
+        '<div class="kpi-label">' + escapeHtml(label) + '</div>' +
+        '<div class="skeleton skeleton-xl"></div></div>';
+    }).join('') + '</div>';
+  }
+
+  /**
+   * Preferred data-loading placeholder. Replaces plain "Loading…" text.
+   * opts.lines — number of text lines (default 3)
+   * opts.variant — 'block' | 'card' | 'detail' | 'list'
+   */
+  function sectionSkeleton(opts) {
+    opts = opts || {};
+    var variant = opts.variant || 'block';
+    var label = opts.label || 'Loading';
+    var i;
+    var html = '<div class="hrms-loading-block" aria-busy="true">' +
+      '<span class="visually-hidden">' + escapeHtml(label) + '</span>';
+    if (variant === 'detail') {
+      html += '<div class="card" aria-hidden="true">' +
+        '<div class="skeleton skeleton-xl" style="width:55%;max-width:280px"></div>' +
+        '<div class="skeleton skeleton-line w40" style="margin-top:12px"></div>' +
+        '<div class="skeleton skeleton-block" style="margin-top:16px"></div>' +
+        '<div class="skeleton skeleton-block"></div></div>';
+    } else if (variant === 'list') {
+      html += '<div class="hrms-skeleton-table" aria-hidden="true">';
+      for (i = 0; i < (opts.rows || 5); i++) {
+        html += '<div class="hrms-skeleton-row">' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+          '<div class="skeleton skeleton-line w60"></div>' +
+          '<div class="skeleton skeleton-line w40"></div>' +
+          '<div class="skeleton skeleton-line w60"></div></div>';
+      }
+      html += '</div>';
+    } else if (variant === 'card') {
+      html += '<div class="card" aria-hidden="true"><div class="hrms-skeleton-stack">' +
+        skeletonLine('w60') + skeletonLine('w100') + skeletonLine('w80') +
+        '</div></div>';
+    } else {
+      html += '<div class="hrms-skeleton-stack" aria-hidden="true">';
+      for (i = 0; i < (opts.lines || 3); i++) {
+        html += skeletonLine(i === 0 ? 'w60' : (i === 1 ? 'w100' : 'w80'));
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  /** @deprecated Prefer sectionSkeleton — kept as alias for existing call sites. */
+  function sectionSpinner(label) {
+    return sectionSkeleton({ label: label || 'Loading', variant: 'block', lines: 3 });
+  }
+
+  /**
+   * Inline error that keeps the page shell. Caller binds Retry via bindSectionRetry.
+   */
+  function sectionErrorHtml(message) {
+    return '<div class="inline-error" role="alert">' +
+      '<span class="inline-error-msg">' + escapeHtml(message || 'Failed to load.') + '</span>' +
+      '<button type="button" class="btn btn-secondary btn-sm js-section-retry">Retry</button>' +
+      '</div>';
+  }
+
+  function bindSectionRetry(root, onRetry) {
+    if (!root || !onRetry) return;
+    var btn = root.querySelector('.js-section-retry');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        onRetry();
+      });
+    }
+  }
+
+  function paintSectionError(el, message, onRetry) {
+    if (!el) return;
+    el.innerHTML = sectionErrorHtml(message);
+    bindSectionRetry(el, onRetry);
+  }
+
+  function tableShell(headers, bodyId, rowCount) {
+    var th = headers.map(function (h) { return '<th>' + escapeHtml(h) + '</th>'; }).join('');
+    return '<div class="table-wrap" aria-busy="true"><table class="data-table"><thead><tr>' + th + '</tr></thead>' +
+      '<tbody id="' + escapeHtml(bodyId) + '">' + skeletonTableRows(headers.length, rowCount || 6) +
+      '</tbody></table></div>';
+  }
+
+  /**
+   * Immediate shell while module JS is still loading (before registerRoute).
+   */
+  function paintPendingModuleShell(route) {
+    var page = $('page-content');
+    if (!page) return;
+    page.classList.remove('hidden');
+    var title = ROUTE_TITLES[route] || 'HRMS';
+    var html = '';
+
+    if (route === 'employees' || route === 'my-team') {
+      html =
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label">Search</label>' +
+        '<div class="hrms-skeleton-control" style="min-width:200px" aria-hidden="true"></div></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+        '<div class="hrms-skeleton-control" style="width:140px" aria-hidden="true"></div></div>' +
+        '</div></div>' +
+        tableShell(['Employee ID', 'Name', 'Department', 'Designation', 'Location', 'Type', 'Status', 'Manager'], 'shell-tbody', 8);
+    } else if (route === 'my-profile' || route === 'employee-profile') {
+      html =
+        '<div class="card"><div class="profile-header"><div>' +
+        '<div class="skeleton skeleton-xl" style="width:220px" aria-hidden="true"></div>' +
+        '<div class="skeleton skeleton-line w40" style="margin-top:10px" aria-hidden="true"></div></div></div>' +
+        '<div class="emp-tabs" aria-hidden="true"><span class="skeleton skeleton-line" style="width:80px;height:28px;display:inline-block;margin-right:8px"></span>' +
+        '<span class="skeleton skeleton-line" style="width:90px;height:28px;display:inline-block"></span></div>' +
+        skeletonLine('w100') + skeletonLine('w80') + skeletonLine('w60') + '</div>';
+    } else if (route === 'employee-create') {
+      html = '<div class="card" aria-hidden="true">' + skeletonLine('w60') +
+        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    } else if (route === 'my-leave') {
+      html =
+        '<div class="card"><h2 class="section-title">Balances</h2>' + tableShell(['Code', 'Type', 'Entitled', 'Carried', 'Used', 'Pending', 'Available'], 'shell-bal', 4) + '</div>' +
+        '<div class="card"><h2 class="section-title">My requests</h2>' + tableShell(['ID', 'Type', 'Dates', 'Days', 'Status', 'Reason', ''], 'shell-req', 4) + '</div>';
+    } else if (route === 'leave-approvals') {
+      html = tableShell(['Employee ID', 'Name', 'Type', 'Dates', 'Days', 'Reason', ''], 'shell-appr', 5);
+    } else if (route === 'leave-admin') {
+      html = '<div class="card">' +
+        tableShell(['Employee ID', 'Type', 'Dates', 'Days', 'Status', ''], 'shell-admin', 5) + '</div>';
+    } else if (route === 'leave-apply') {
+      html = '<div class="card" aria-hidden="true">' + skeletonLine('w80') +
+        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    } else if (route === 'leave-calendar') {
+      html = '<div class="card"><div class="skeleton skeleton-block" style="height:280px" aria-hidden="true"></div></div>';
+    } else if (route === 'payroll') {
+      html = skeletonKpiRow(['Period', 'Status', 'Employees', 'Net pay']) +
+        '<div class="card"><h2>Payroll period</h2>' + sectionSkeleton({ lines: 2 }) + '</div>' +
+        '<div class="card">' + tableShell(['Period', 'Run', 'Status', 'Created', ''], 'shell-pr', 5) + '</div>';
+    } else if (route === 'payroll-run') {
+      html = sectionSkeleton({ variant: 'detail', label: 'Loading run' });
+    } else if (route === 'compensation') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading employees' }) + '<div id="comp-editor"></div>';
+    } else if (route === 'my-payslips') {
+      html = '<div class="card">' + tableShell(['Title', 'Run', 'Date', ''], 'shell-ps', 4) + '</div>';
+    } else if (route === 'ats-jobs') {
+      html =
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label">Search</label>' +
+        '<div class="hrms-skeleton-control" style="min-width:200px" aria-hidden="true"></div></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+        '<div class="hrms-skeleton-control" style="width:148px" aria-hidden="true"></div></div>' +
+        '</div></div>' +
+        tableShell(['Job ID', 'Title', 'Department', 'Location', 'Status', 'Apps', 'Manager'], 'shell-ats-jobs', 7);
+    } else if (route === 'ats-candidates') {
+      html =
+        '<div class="page-toolbar"><div class="filters">' +
+        '<div class="form-group"><label class="form-label">Search</label>' +
+        '<div class="hrms-skeleton-control" style="min-width:200px" aria-hidden="true"></div></div>' +
+        '</div></div>' +
+        tableShell(['Candidate ID', 'Name', 'Email', 'Phone', 'Location', 'Apps', 'Resume'], 'shell-ats-cands', 7);
+    } else if (route === 'ats-job' || route === 'ats-candidate' || route === 'ats-job-new' || route === 'ats-job-edit') {
+      html = sectionSkeleton({ variant: 'detail', label: 'Loading' });
+    } else if (route.indexOf('pms') === 0) {
+      html = skeletonKpiRow(['Active cycles', 'Pending self-assessment', 'Pending reviews']) +
+        sectionSkeleton({ variant: 'card', label: 'Loading performance' });
+    } else if (route.indexOf('ats') === 0) {
+      html = skeletonKpiRow(['Open jobs', 'Applications', 'Interviews']) +
+        '<div class="card"><div class="skeleton skeleton-block" aria-hidden="true"></div></div>';
+    } else if (route === 'notifications') {
+      html = '<div class="card">' + tableShell(['Status', 'Notification', 'Type', 'When', ''], 'shell-ntf', 6) + '</div>';
+    } else {
+      html = '<div class="card"><h2>' + escapeHtml(title) + '</h2>' + sectionSkeleton({ label: 'Loading' }) + '</div>';
+    }
+
+    page.innerHTML = pageHeaderHtml(title, ROUTE_LEDES[route] || '', '') + html;
+  }
+
+  /**
+   * Inject module HTML from apiGetModuleUi. Scripts must be re-created to execute.
+   */
+  function injectModuleHtml(html) {
+    var root = $('module-ui-root') || document.body;
+    var holder = document.createElement('div');
+    holder.innerHTML = html;
+    var scripts = [];
+    Array.prototype.forEach.call(holder.querySelectorAll('script'), function (oldScript) {
+      scripts.push(oldScript.textContent || '');
+      oldScript.parentNode.removeChild(oldScript);
+    });
+    while (holder.firstChild) {
+      root.appendChild(holder.firstChild);
+    }
+    scripts.forEach(function (code) {
+      if (!code) return;
+      var el = document.createElement('script');
+      el.text = code;
+      document.body.appendChild(el);
+    });
+  }
+
+  function ensureModule(moduleId, opts) {
+    opts = opts || {};
+    if (opts.userInitiated) pauseBackgroundPreload();
+    if (moduleLoaded_[moduleId]) {
+      return Promise.resolve();
+    }
+    if (moduleLoading_[moduleId]) {
+      return moduleLoading_[moduleId];
+    }
+    var tMod = Date.now();
+    var rpcOpts = opts.background ? { background: true } : null;
+    moduleLoading_[moduleId] = (rpcOpts
+      ? callServer('apiGetModuleUi', moduleId, rpcOpts)
+      : callServer('apiGetModuleUi', moduleId))
+      .then(function (data) {
+        var tInject = Date.now();
+        injectModuleHtml(data && data.html ? data.html : '');
+        logClientPerf_({
+          kind: 'module-ui',
+          moduleId: moduleId,
+          rpcAndInjectMs: Date.now() - tMod,
+          injectMs: Date.now() - tInject,
+          htmlChars: data && data.html ? data.html.length : 0
+        });
+        moduleLoaded_[moduleId] = true;
+        delete moduleLoading_[moduleId];
+      })
+      .catch(function (err) {
+        delete moduleLoading_[moduleId];
+        throw err;
+      });
+    return moduleLoading_[moduleId];
+  }
+
+  function pauseBackgroundPreload() {
+    preloadPaused_ = true;
+  }
+
+  function resumeBackgroundPreload() {
+    preloadPaused_ = false;
+    scheduleNextPreload_();
+  }
+
+  function scheduleNextPreload_() {
+    if (preloadScheduled_ || preloadPaused_ || userRpcBusy_ > 0) return;
+    if (!preloadQueue_.length) return;
+    preloadScheduled_ = true;
+    var run = function () {
+      preloadScheduled_ = false;
+      if (preloadPaused_ || userRpcBusy_ > 0) return;
+      var mid = '';
+      while (preloadQueue_.length) {
+        mid = preloadQueue_.shift();
+        if (mid && !moduleLoaded_[mid] && !moduleLoading_[mid]) break;
+        mid = '';
+      }
+      if (!mid) return;
+      logClientPerf_({ kind: 'preload-one', moduleId: mid, remaining: preloadQueue_.length });
+      ensureModule(mid, { background: true }).catch(function () { /* ignore preload failures */ }).then(function () {
+        scheduleNextPreload_();
+      });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: 8000 });
+    } else {
+      setTimeout(run, 1200);
+    }
+  }
+
+  /** Idle, one-at-a-time module preload. Never starts until the user is idle. */
+  function preloadModulesFromNav() {
+    var needed = {};
+    (state.navigation || []).forEach(function (item) {
+      var mid = ROUTE_MODULE[item.route];
+      if (mid) needed[mid] = true;
+    });
+    var currentMid = ROUTE_MODULE[state.currentRoute];
+    var ids = Object.keys(needed).filter(function (mid) {
+      return mid && mid !== currentMid && !moduleLoaded_[mid] && !moduleLoading_[mid];
+    });
+    preloadQueue_ = ids;
+    logClientPerf_({ kind: 'preload-queue', modules: ids, rpcCount: ids.length, mode: 'idle-one-at-a-time' });
+    scheduleNextPreload_();
+  }
+
+  function registerLazyRouteStubs() {
+    Object.keys(ROUTE_MODULE).forEach(function (route) {
+      var moduleId = ROUTE_MODULE[route];
+      ROUTES[route] = {
+        title: ROUTE_TITLES[route] || route,
+        _lazy: true,
+        render: function (params) {
+          var seq = state.navSeq;
+          var tNav = Date.now();
+          var viewKey = moduleViewKey(route, params);
+          if (moduleLoaded_[moduleId] && shouldRestoreModuleView(viewKey)) {
+            ensureModule(moduleId, { userInitiated: true })
+              .then(function () {
+                if (seq !== state.navSeq || state.currentRoute !== route) return;
+                var def = ROUTES[route];
+                if (def && def.render && !def._lazy) def.render(params);
+                else renderPlaceholder();
+              });
+            return;
+          }
+          // Paint layout immediately — never wait for module RPC.
+          paintPendingModuleShell(route);
+          logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
+          ensureModule(moduleId, { userInitiated: true })
+            .then(function () {
+              logClientPerf_({
+                kind: 'nav-module-ready',
+                route: route,
+                moduleId: moduleId,
+                untilModuleReadyMs: Date.now() - tNav,
+                cached: !!moduleLoaded_[moduleId]
+              });
+              if (seq !== state.navSeq || state.currentRoute !== route) return;
+              var def = ROUTES[route];
+              if (def && def.render && !def._lazy) {
+                def.render(params);
+              } else {
+                renderPlaceholder();
+              }
+            })
+            .catch(function (err) {
+              if (seq !== state.navSeq || state.currentRoute !== route) return;
+              var page = $('page-content');
+              paintSectionError(page, err.message || 'Failed to load module.', function () {
+                navigate(route, params);
+              });
+              showToast(err.message || 'Failed to load module', 'error');
+            });
+        }
+      };
+    });
+  }
+
+  function hideAllMainStates() {
+    $('loading-state').classList.add('hidden');
+    $('page-content').classList.add('hidden');
+    $('unauthorized-state').classList.add('hidden');
+    $('setup-state').classList.add('hidden');
+    $('auth-state').classList.add('hidden');
+    $('error-state').classList.add('hidden');
+  }
+
+  function renderNav() {
+    var nav = $('sidebar-nav');
+    if (!nav) return;
+    nav.innerHTML = '';
+    groupedNavItems().forEach(function (group) {
+      var wrap = document.createElement('div');
+      wrap.className = 'nav-group' + (group.collapsible ? ' nav-group-collapsible' : '');
+      if (group.id) wrap.dataset.navGroup = group.id;
+      var expanded = isNavGroupExpanded(group);
+
+      if (group.label) {
+        if (group.collapsible) {
+          var toggle = document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = 'nav-group-toggle' + (expanded ? ' is-expanded' : '');
+          toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          toggle.innerHTML =
+            '<span class="nav-group-label">' + escapeHtml(group.label) + '</span>' +
+            '<svg class="nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+            '<path fill="currentColor" d="M7 10l5 5 5-5"/></svg>';
+          toggle.addEventListener('click', function () {
+            if (isNavGroupActive(group)) return;
+            navSectionExpanded_[group.id] = !navSectionExpanded_[group.id];
+            renderNav();
+          });
+          wrap.appendChild(toggle);
+        } else {
+          var lab = document.createElement('div');
+          lab.className = 'nav-group-label';
+          lab.textContent = group.label;
+          wrap.appendChild(lab);
+        }
+      }
+
+      var body = document.createElement('div');
+      body.className = 'nav-group-items' + (expanded ? '' : ' is-collapsed');
+      if (!expanded) body.setAttribute('aria-hidden', 'true');
+
+      group.items.forEach(function (item) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        var active = isNavRouteActive(item.route, state.currentRoute);
+        btn.className = 'nav-item' + (active ? ' active' : '') + (item.placeholder ? ' placeholder' : '');
+        btn.innerHTML = navIconSvg(item.icon) + '<span class="nav-label">' + escapeHtml(item.label) + '</span>';
+        btn.dataset.route = item.route;
+        if (active) btn.setAttribute('aria-current', 'page');
+        btn.addEventListener('click', function () {
+          navigate(item.route);
+        });
+        body.appendChild(btn);
+      });
+      wrap.appendChild(body);
+      nav.appendChild(wrap);
+    });
+  }
+
+  function navigate(route, params) {
+    if (!state.session || !state.session.authorized) return;
+    if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
+    if (route === 'pms-review' && params && !params.employeeId) {
+      route = 'pms-team';
+    }
+    state.navSeq = (state.navSeq || 0) + 1;
+    pauseBackgroundPreload();
+    state.currentRoute = route;
+    state.routeParams = params || {};
+    var item = state.navigation.filter(function (n) { return n.route === route; })[0];
+    var def = ROUTES[route];
+    var title = item ? item.label : (def ? def.title : 'HRMS');
+    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('pms-') === 0 || route.indexOf('ats-') === 0)) {
+      title = def.title;
+    }
+    $('page-title').textContent = title;
+    renderNav();
+    setSidebarOpen(false);
+    if (def && def.render) {
+      def.render(state.routeParams);
+    } else {
+      renderPlaceholder();
+    }
+    scheduleRefreshControls_();
+  }
+
+  function renderPlaceholder() {
+    var page = $('page-content');
+    if (!page) return;
+    page.classList.remove('hidden');
+    var title = ($('page-title') && $('page-title').textContent) || 'Coming soon';
+    var route = state.currentRoute;
+    var lede = ROUTE_LEDES[route] || 'This area will be built in a later phase.';
+    page.innerHTML = pageHeaderHtml(title, lede, '') +
+      '<div class="empty-state">' +
+        '<div class="empty-state-icon" aria-hidden="true"></div>' +
+        '<h2 class="empty-state-title">Not available yet</h2>' +
+        '<p class="empty-state-text">This module is on the roadmap. Navigation and permissions for it are already in place.</p>' +
+      '</div>';
+  }
+
+  function dashCard(label, value, hint) {
+    return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
+      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</div>' +
+      (hint ? '<div class="kpi-hint">' + escapeHtml(hint) + '</div>' : '') + '</div>';
+  }
+
+  function dashActionList(items, emptyText) {
+    if (!items || !items.length) {
+      return '<div class="empty-state empty-state-inline"><p class="empty-state-text">' + escapeHtml(emptyText) + '</p></div>';
+    }
+    var rows = items.map(function (it) {
+      return '<tr>' +
+        '<td>' + escapeHtml(it.label || '') + '</td>' +
+        '<td>' + escapeHtml(it.meta || '') + '</td>' +
+        '<td>' + (it.route
+          ? '<button type="button" class="btn btn-secondary btn-sm dash-go" data-route="' + escapeHtml(it.route) +
+            '" data-params="' + escapeHtml(JSON.stringify(it.params || {})) + '">Open</button>'
+          : '') + '</td></tr>';
+    }).join('');
+    return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Item</th><th></th><th></th></tr></thead><tbody>' +
+      rows + '</tbody></table></div>';
+  }
+
+  function renderDashboard() {
+    var page = $('page-content');
+    if (!page) return;
+    page.classList.remove('hidden');
+    var s = state.session || {};
+    var seq = state.navSeq;
+    var dashKey = 'dashboard';
+    var actions = '';
+    if (navHas('leave-approvals')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-approvals">Approvals</button>';
+    }
+    if (navHas('payroll')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-payroll">Payroll</button>';
+    }
+    if (navHas('ats')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-ats">Recruitment</button>';
+    }
+    if (navHas('employees')) {
+      actions += '<button type="button" class="btn btn-primary" id="dash-add-emp">Add employee</button>';
+    } else if (navHas('my-leave')) {
+      actions += '<button type="button" class="btn btn-primary" id="dash-leave">Apply leave</button>';
+    }
+
+    if (consumeModuleViewRestore(dashKey) && dashViewCache_.payload) {
+      paintHomeDashboard(dashViewCache_.payload, dashViewCache_.actions || actions, { secondaryPending: false });
+      return;
+    }
+
+    var keepPainted = isModuleRefresh(dashKey) && dashViewCache_.payload;
+    if (!keepPainted) {
+      page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
+        skeletonKpiRow(['Employee ID', 'Role', 'Unread']) +
+        '<div class="card dash-section">' + sectionSkeleton({ variant: 'list', rows: 4, label: 'Loading workspace' }) + '</div>';
+      if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
+      if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
+      if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
+      if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
+      if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
+    }
+
+    var primary = keepPainted ? (dashViewCache_.payload || null) : null;
+    callServer('apiGetHomeDashboard')
+      .then(function (data) {
+        if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return null;
+        primary = data || {};
+        dashViewCache_.actions = actions;
+        dashViewCache_.payload = primary;
+        dashViewCache_.complete = false;
+        paintHomeDashboard(primary, actions, { secondaryPending: true });
+        if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
+          window.HrmsNotificationBell.applyUnreadCount(primary.unread_count);
+        }
+        return callServer('apiGetHomeDashboardMore');
+      })
+      .then(function (more) {
+        if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
+        if (more) {
+          dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
+          dashViewCache_.complete = true;
+        }
+        if (dashViewCache_.payload) {
+          paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
+        }
+        markModuleViewLoaded(dashKey);
+      })
+      .catch(function (err) {
+        if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
+        if (primary) {
+          dashViewCache_.payload = primary;
+          dashViewCache_.actions = actions;
+          paintHomeDashboard(primary, actions, { secondaryPending: false });
+          markModuleViewLoaded(dashKey);
+          showToast(err.message || 'Could not load extra dashboard cards', 'error');
+          return;
+        }
+        finishModuleRefresh(true);
+        paintSectionError(page, err.message || 'Could not load dashboard.', function () {
+          navigate('dashboard');
+        });
+      });
+  }
+
+  function mergeDashboardPayload_(primary, more) {
+    var out = {};
+    [primary || {}, more || {}].forEach(function (src) {
+      Object.keys(src).forEach(function (k) {
+        if (k === 'notes') return;
+        if (src[k] != null) out[k] = src[k];
+      });
+    });
+    var notes = [];
+    if (primary && primary.notes) notes = notes.concat(primary.notes);
+    if (more && more.notes) notes = notes.concat(more.notes);
+    out.notes = notes;
+    return out;
+  }
+
+  function paintHomeDashboard(data, actions, opts) {
+    var page = $('page-content');
+    if (!page) return;
+    var s = state.session || {};
+    var kpis = '';
+    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '—', 'In-app notifications');
+    if (data.leave_approvals_count != null) {
+      kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
+    }
+    if (data.pms && data.pms.kpis) {
+      var pk = data.pms.kpis;
+      if (pk.pending_self_assessment != null) {
+        kpis += dashCard('Self-assessments due', pk.pending_self_assessment);
+      } else if (pk.employees_pending_self != null) {
+        kpis += dashCard('Self-assessments due', pk.employees_pending_self);
+      }
+      if (pk.pending_manager_review != null) {
+        kpis += dashCard('Reviews due', pk.pending_manager_review);
+      } else if (pk.managers_pending_review != null) {
+        kpis += dashCard('Reviews due', pk.managers_pending_review);
+      }
+    }
+    if (data.payroll && data.payroll.latest) {
+      var run = data.payroll.latest;
+      kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
+    }
+    if (data.ats) {
+      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '—');
+      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '—');
+    }
+    if (!kpis) {
+      kpis = dashCard('Employee ID', s.employee_id || '—') + dashCard('Role', s.role || '—');
+    }
+
+    var sections = '';
+    if (data.leave_approvals && data.leave_approvals.length) {
+      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
+        dashActionList(data.leave_approvals, 'No leave waiting for you.') + '</div>';
+    } else if (data.leave_approvals_count === 0 && navHas('leave-approvals')) {
+      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
+        '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
+    }
+    if (data.pms_actions && data.pms_actions.length) {
+      sections += '<div class="card dash-section"><h2>Performance</h2>' +
+        dashActionList(data.pms_actions, 'No performance actions right now.') + '</div>';
+    }
+    if (data.ats_actions && data.ats_actions.length) {
+      sections += '<div class="card dash-section"><h2>Recruitment</h2>' +
+        dashActionList(data.ats_actions, 'No recruitment actions in your scope.') + '</div>';
+    }
+    if (opts && opts.secondaryPending) {
+      sections += '<div class="card dash-section" id="dash-secondary" aria-busy="true">' +
+        sectionSkeleton({ lines: 3, label: 'Loading more dashboard cards' }) + '</div>';
+    }
+    if (!sections) {
+      sections = '<div class="card dash-welcome">' +
+        '<h2>Welcome to AyurCentral HRMS</h2>' +
+        '<p>Use the sidebar for people, time off, pay, and — if your role allows — performance and recruitment.</p></div>';
+    }
+    if (state.app && !state.app.configured) {
+      sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
+    }
+    if (data.notes && data.notes.length) {
+      sections += '<p class="hint">' + escapeHtml(data.notes.join(' ')) + '</p>';
+    }
+
+    page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
+      '<div class="kpi-row">' + kpis + '</div>' + sections;
+
+    if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
+    if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
+    if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
+    if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
+    if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
+    Array.prototype.forEach.call(page.querySelectorAll('.dash-go'), function (btn) {
+      btn.addEventListener('click', function () {
+        var route = btn.getAttribute('data-route');
+        var params = {};
+        try { params = JSON.parse(btn.getAttribute('data-params') || '{}'); } catch (ignore) {}
+        navigate(route, params);
+      });
+    });
+  }
+
+  function showUnauthorized(message) {
+    hideAllMainStates();
+    setAuthedChrome(false);
+    $('unauthorized-state').classList.remove('hidden');
+    $('unauthorized-message').textContent = message || 'You do not have access to this application.';
+    syncAskHrVisibility();
+  }
+
+  function showAuthError(el, message) {
+    if (!el) return;
+    if (message) {
+      el.textContent = message;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function showAuthEmailStep() {
+    $('auth-step-email').classList.remove('hidden');
+    $('auth-step-code').classList.add('hidden');
+    showAuthError($('auth-email-error'), '');
+    showAuthError($('auth-code-error'), '');
+  }
+
+  function showAuthCodeStep(email) {
+    state.authEmail = email;
+    $('auth-email-display').textContent = email;
+    $('auth-step-email').classList.add('hidden');
+    $('auth-step-code').classList.remove('hidden');
+    $('auth-code').value = '';
+    showAuthError($('auth-code-error'), '');
+  }
+
+  /**
+   * Canonical unauthenticated UI. Tears down the authenticated shell so
+   * #page-content / sidebar / bell cannot remain visible or be repainted
+   * by in-flight navigation after logout or session expiry.
+   */
+  function showAuthLogin(sessionHint) {
+    clearUserSessionViewState_();
+    state.navigation = [];
+    state.currentRoute = '';
+    state.routeParams = {};
+    state.session = {
+      authorized: false,
+      authRequired: true,
+      reason: (sessionHint && sessionHint.reason) || '',
+      message: (sessionHint && sessionHint.message) || ''
+    };
+    var page = $('page-content');
+    if (page) {
+      page.innerHTML = '';
+      try { page.removeAttribute('aria-busy'); } catch (ignoreBusy) {}
+    }
+    var nav = $('sidebar-nav');
+    if (nav) nav.innerHTML = '';
+    setSidebarOpen(false);
+    if (window.HrmsNotificationBell && window.HrmsNotificationBell.unmount) {
+      try { window.HrmsNotificationBell.unmount(); } catch (ignoreBell) {}
+    }
+    var slot = $('ntf-bell-slot');
+    if (slot) slot.innerHTML = '';
+    var title = $('page-title');
+    if (title) title.textContent = '';
+    hideAllMainStates();
+    setAuthedChrome(false);
+    $('auth-state').classList.remove('hidden');
+    showAuthEmailStep();
+    if (state.authEmail) {
+      $('auth-email').value = state.authEmail;
+    }
+    var hint = $('auth-google-hint');
+    if (hint) {
+      if (sessionHint && sessionHint.reason === 'UNKNOWN_USER') {
+        hint.textContent = 'The Google account currently selected in this browser is not registered in HRMS. Sign in with your registered email below.';
+        hint.classList.remove('hidden');
+      } else {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+      }
+    }
+    syncAskHrVisibility();
+  }
+
+  var signOutBusy_ = false;
+
+  /** Shared sign-out lifecycle: immediate button feedback → apiLogout → auth screen. */
+  function performSignOut_(button) {
+    if (signOutBusy_) {
+      return (button && button._hrmsInflight) || Promise.resolve();
+    }
+    if (button && isButtonLoading(button)) {
+      return button._hrmsInflight || Promise.resolve();
+    }
+    signOutBusy_ = true;
+    if (button) setButtonLoading(button, 'Signing out…');
+    var p = callServer('apiLogout')
+      .then(function () {
+        setSessionToken('');
+        if (button) restoreButton(button);
+        showAuthLogin({ authRequired: true });
+        signOutBusy_ = false;
+      })
+      .catch(function (err) {
+        signOutBusy_ = false;
+        if (button) restoreButton(button);
+        showToast((err && err.message) || 'Sign out failed. Please try again.', 'error');
+        return Promise.reject(err);
+      });
+    if (button) button._hrmsInflight = p;
+    return p;
+  }
+
+  function bindAuthUi() {
+    $('auth-send-btn').addEventListener('click', function () {
+      var email = ($('auth-email').value || '').trim();
+      showAuthError($('auth-email-error'), '');
+      if (!email || email.indexOf('@') < 1) {
+        showAuthError($('auth-email-error'), 'Enter a valid email address.');
+        return;
+      }
+      var btn = $('auth-send-btn');
+      callServer('apiRequestAuthOtp', email, { button: btn, loadingText: 'Sending…' })
+        .then(function (data) {
+          if (data && data.ok === false) {
+            showAuthError($('auth-email-error'), data.message || 'Unable to send verification code.');
+            return;
+          }
+          showAuthCodeStep(email);
+          showToast('Verification code sent', 'success');
+        })
+        .catch(function (err) {
+          showAuthError($('auth-email-error'), err.message || 'Unable to send verification code.');
+        });
+    });
+
+    $('auth-verify-btn').addEventListener('click', function () {
+      var code = ($('auth-code').value || '').trim();
+      showAuthError($('auth-code-error'), '');
+      if (!/^\d{6}$/.test(code)) {
+        showAuthError($('auth-code-error'), 'Enter the 6-digit verification code.');
+        return;
+      }
+      var btn = $('auth-verify-btn');
+      callServer('apiVerifyAuthOtp', state.authEmail, code, { button: btn, loadingText: 'Verifying…' })
+        .then(function (data) {
+          setSessionToken(data.sessionToken);
+          applyBootstrapSuccess({
+            session: data.session,
+            app: state.app,
+            navigation: data.navigation || []
+          });
+        })
+        .catch(function (err) {
+          showAuthError($('auth-code-error'), err.message || 'Verification failed.');
+        });
+    });
+
+    $('auth-resend-btn').addEventListener('click', function () {
+      showAuthEmailStep();
+      $('auth-email').value = state.authEmail;
+      $('auth-send-btn').click();
+    });
+
+    $('auth-change-email-btn').addEventListener('click', function () {
+      state.authEmail = '';
+      showAuthEmailStep();
+    });
+  }
+
+  function showSetupRequired() {
+    hideAllMainStates();
+    setAuthedChrome(false);
+    $('setup-state').classList.remove('hidden');
+    syncAskHrVisibility();
+    $('btn-run-setup').addEventListener('click', function () {
+      var btn = $('btn-run-setup');
+      var resultEl = $('setup-result');
+      if (resultEl) resultEl.textContent = 'Setting up…';
+      callServer('apiRunDatabaseSetup', '', { button: btn, loadingText: 'Setting up…' })
+        .then(function () {
+          if (resultEl) resultEl.textContent = 'Setup complete. Reloading…';
+          setTimeout(function () { window.location.reload(); }, 800);
+        })
+        .catch(function (err) {
+          if (resultEl) resultEl.textContent = err.message || 'Setup failed';
+        });
+    });
+  }
+
+  function updateUserChip() {
+    var s = state.session;
+    if (!s || !s.authorized) return;
+    var name = s.displayName || s.email || 'User';
+    $('user-name').textContent = name;
+    $('user-role').textContent = s.role || '';
+    var av = $('user-avatar');
+    if (av) av.textContent = (String(name).replace(/^\s+/, '').charAt(0) || '?').toUpperCase();
+  }
+
+  function initShell() {
+    var toggle = $('sidebar-toggle');
+    if (toggle && !toggle.getAttribute('data-bound')) {
+      toggle.setAttribute('data-bound', '1');
+      toggle.addEventListener('click', function () {
+        var sidebar = $('sidebar');
+        setSidebarOpen(!(sidebar && sidebar.classList.contains('open')));
+      });
+    }
+    var backdrop = $('sidebar-backdrop');
+    if (backdrop && !backdrop.getAttribute('data-bound')) {
+      backdrop.setAttribute('data-bound', '1');
+      backdrop.addEventListener('click', function () { setSidebarOpen(false); });
+    }
+    var out = $('btn-sign-out');
+    if (out && !out.getAttribute('data-bound')) {
+      out.setAttribute('data-bound', '1');
+      out.addEventListener('click', function () {
+        performSignOut_(out);
+      });
+    }
+    if (state.app && state.app.companyName) {
+      $('brand-title').textContent = state.app.companyName.split(' ')[0] || 'AyurCentral';
+    }
+  }
+
+  function applyBootstrapSuccess(data) {
+    clearUserSessionViewState_();
+    state.session = data.session;
+    state.app = data.app;
+    state.navigation = data.navigation || [];
+    askHrUi.sessionKnown = true;
+    hideAllMainStates();
+    setAuthedChrome(true);
+    updateUserChip();
+    initShell();
+    bindModuleRefreshUi();
+    renderNav();
+    navigate('dashboard');
+    syncAskHrVisibility();
+    if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
+      window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
+    }
+    // Idle, one-at-a-time preload — never compete with the first dashboard RPCs.
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(function () { preloadModulesFromNav(); }, { timeout: 12000 });
+    } else {
+      setTimeout(preloadModulesFromNav, 2500);
+    }
+  }
+
+  function bootstrap() {
+    callServer('apiGetAppBootstrap')
+      .then(function (data) {
+        state.app = data.app;
+        if (data.session) state.session = data.session;
+        askHrUi.sessionKnown = true;
+
+        if (!data.app.configured && !data.session.authorized) {
+          $('loading-state').classList.add('hidden');
+          showSetupRequired();
+          return;
+        }
+
+        if (data.session.authorized) {
+          applyBootstrapSuccess(data);
+          return;
+        }
+
+        $('loading-state').classList.add('hidden');
+
+        if (data.session.authRequired) {
+          showAuthLogin(data.session);
+          return;
+        }
+
+        showUnauthorized(data.session.message);
+      })
+      .catch(function (err) {
+        $('loading-state').classList.add('hidden');
+        var el = $('error-state');
+        el.classList.remove('hidden');
+        el.textContent = err.message || 'Failed to load application.';
+        showToast(err.message || 'Failed to load', 'error');
+        askHrUi.sessionKnown = true;
+        setAuthedChrome(false);
+        syncAskHrVisibility();
+      });
+  }
+
+  var ASK_HR_MAX_CHARS = 1000;
+  var ASK_HR_STATUS_MS = 4000;
+  var ASK_HR_STATUS_STEPS = [
+    'Searching HR knowledge base…',
+    'Reading relevant documents…',
+    'Preparing your answer…'
+  ];
+  var ASK_HR_ERROR_COPY = {
+    UNAUTHORIZED: 'You need to be signed in to use Ask HR.',
+    AUTHORIZATION: 'You need to be signed in to use Ask HR.',
+    AUTHORIZATION_ERROR: 'You need to be signed in to use Ask HR.',
+    EXPIRED: 'Your session has expired. Please sign in again to use Ask HR.',
+    REPLAY: 'This request could not be completed. Please try again.',
+    VALIDATION: 'Your request was too long. Please keep it under 1000 characters.',
+    VALIDATION_ERROR: 'Your request was too long. Please keep it under 1000 characters.',
+    RATE_LIMITED: 'You\'re sending requests too quickly. Please wait a moment.',
+    NOT_CONFIGURED: 'Ask HR is not available yet. Please try again later.',
+    CONFIGURATION: 'Ask HR is not available yet. Please try again later.',
+    CONFIGURATION_ERROR: 'Ask HR is not available yet. Please try again later.',
+    NOT_FOUND: 'I couldn\'t find that in the HR knowledge base. Try asking about leave, policies, or HR procedures.',
+    UPSTREAM: 'Sorry, I couldn\'t reach the HR knowledge base. Please try again.',
+    TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
+    LOCK_TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
+    SYSTEM: 'Sorry, I couldn\'t reach the HR knowledge base. Please try again.',
+    SYSTEM_ERROR: 'Sorry, I couldn\'t reach the HR knowledge base. Please try again.'
+  };
+
+  var askHrUi = {
+    open: false,
+    busy: false,
+    requestSeq: 0,
+    statusTimer: null,
+    statusIndex: 0,
+    messages: [],
+    sessionKnown: false
+  };
+
+  function isAskHrAllowed() {
+    if (state.session && state.session.authorized) return true;
+    if (state.session && state.session.authorized === false) return false;
+    if (askHrUi.sessionKnown) return false;
+    return !!getSessionToken();
+  }
+
+  function askHrFriendlyError(code) {
+    var key = String(code || 'UPSTREAM').toUpperCase();
+    return ASK_HR_ERROR_COPY[key] || ASK_HR_ERROR_COPY.UPSTREAM;
+  }
+
+  function mapAskHrTransportError(err) {
+    var raw = String((err && err.message) || err || '').toLowerCase();
+    if (raw.indexOf('not found') !== -1 || raw.indexOf('is not a function') !== -1) {
+      return { code: 'NOT_CONFIGURED' };
+    }
+    if (raw.indexOf('timed out') !== -1 || raw.indexOf('timeout') !== -1) {
+      return { code: 'TIMEOUT' };
+    }
+    return { code: 'UPSTREAM' };
+  }
+
+  /**
+   * Same sessionToken injection as other RPCs. Business errors arrive as
+   * { ok: false, error } inside the unwrapped callServer payload.
+   */
+  function callAskHr(question) {
+    return callServer('apiAskHr', question)
+      .then(function (payload) {
+        if (!payload || typeof payload !== 'object') {
+          return Promise.reject({ code: 'UPSTREAM' });
+        }
+        if (payload.ok === false || (payload.error && payload.ok !== true)) {
+          return Promise.reject(payload.error || { code: 'UPSTREAM' });
+        }
+        return payload;
+      })
+      .catch(function (err) {
+        if (err && err.code) {
+          return Promise.reject({ code: err.code });
+        }
+        return Promise.reject(mapAskHrTransportError(err));
+      });
+  }
+
+  function sanitizeAskHrFileUrl(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    var trimmed = raw.replace(/^\s+|\s+$/g, '');
+    if (!trimmed) return '';
+    var lower = trimmed.toLowerCase();
+    if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 ||
+        lower.indexOf('vbscript:') === 0 || lower.indexOf('file:') === 0) {
+      return '';
+    }
+    try {
+      var parsed = new URL(trimmed);
+      if (parsed.protocol !== 'https:') return '';
+      var host = String(parsed.hostname || '').toLowerCase().replace(/\.$/, '');
+      if (host === 'drive.google.com' || host === 'docs.google.com') {
+        return parsed.href;
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
+  function appendMultilineText(el, text) {
+    var parts = String(text == null ? '' : text).split('\n');
+    var i;
+    for (i = 0; i < parts.length; i++) {
+      if (i) el.appendChild(document.createElement('br'));
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+
+  function setAskHrComposeError(message) {
+    var el = $('ask-hr-compose-error');
+    if (!el) return;
+    if (message) {
+      el.textContent = message;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function setAskHrBusyUi(busy) {
+    askHrUi.busy = !!busy;
+    var send = $('ask-hr-send');
+    var input = $('ask-hr-input');
+    var panel = $('ask-hr-panel');
+    if (send) {
+      send.disabled = !!busy;
+      send.textContent = busy ? 'Sending…' : 'Send';
+    }
+    if (input) input.disabled = !!busy;
+    if (panel) {
+      if (busy) panel.setAttribute('aria-busy', 'true');
+      else panel.removeAttribute('aria-busy');
+    }
+  }
+
+  function scrollAskHrToBottom() {
+    var scroller = $('ask-hr-messages');
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  function stopAskHrStatus() {
+    if (askHrUi.statusTimer) {
+      clearInterval(askHrUi.statusTimer);
+      askHrUi.statusTimer = null;
+    }
+    askHrUi.statusIndex = 0;
+    var existing = $('ask-hr-status');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  }
+
+  function startAskHrStatus() {
+    stopAskHrStatus();
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    var bubble = document.createElement('div');
+    bubble.id = 'ask-hr-status';
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-status';
+    bubble.setAttribute('role', 'status');
+    var spin = document.createElement('span');
+    spin.className = 'spinner-sm';
+    spin.setAttribute('aria-hidden', 'true');
+    var copy = document.createElement('div');
+    copy.className = 'ask-hr-status-copy';
+    var label = document.createElement('span');
+    label.id = 'ask-hr-status-text';
+    label.textContent = ASK_HR_STATUS_STEPS[0];
+    var hint = document.createElement('span');
+    hint.className = 'ask-hr-status-hint';
+    hint.textContent = 'This can take up to a minute.';
+    copy.appendChild(label);
+    copy.appendChild(hint);
+    bubble.appendChild(spin);
+    bubble.appendChild(copy);
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+    askHrUi.statusTimer = setInterval(function () {
+      askHrUi.statusIndex = (askHrUi.statusIndex + 1) % ASK_HR_STATUS_STEPS.length;
+      var textEl = $('ask-hr-status-text');
+      if (textEl) textEl.textContent = ASK_HR_STATUS_STEPS[askHrUi.statusIndex];
+    }, ASK_HR_STATUS_MS);
+  }
+
+  function hideAskHrIntro() {
+    var intro = $('ask-hr-intro');
+    if (intro) intro.classList.add('hidden');
+  }
+
+  function restoreAskHrIntro() {
+    var intro = $('ask-hr-intro');
+    var thread = $('ask-hr-thread');
+    if (thread) thread.innerHTML = '';
+    if (intro) intro.classList.remove('hidden');
+  }
+
+  function appendAskHrUserBubble(text) {
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    hideAskHrIntro();
+    var bubble = document.createElement('div');
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-user';
+    appendMultilineText(bubble, text);
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+  }
+
+  function appendAskHrErrorBubble(message) {
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    hideAskHrIntro();
+    var bubble = document.createElement('div');
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-error';
+    bubble.setAttribute('role', 'alert');
+    bubble.textContent = message;
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+  }
+
+  function appendAskHrAnswerBubble(payload) {
+    var thread = $('ask-hr-thread');
+    if (!thread) return;
+    hideAskHrIntro();
+    var bubble = document.createElement('div');
+    bubble.className = 'ask-hr-bubble ask-hr-bubble-bot';
+
+    var answerText = payload && typeof payload.answer === 'string' ? payload.answer : '';
+    if (payload && payload.notFound && !answerText) {
+      answerText = askHrFriendlyError('NOT_FOUND');
+    }
+    if (!answerText) {
+      answerText = askHrFriendlyError('NOT_FOUND');
+    }
+
+    var body = document.createElement('div');
+    appendMultilineText(body, answerText);
+    bubble.appendChild(body);
+
+    var keyPoints = payload && Array.isArray(payload.keyPoints) ? payload.keyPoints : [];
+    var safePoints = [];
+    var i;
+    for (i = 0; i < keyPoints.length; i++) {
+      if (keyPoints[i] != null && String(keyPoints[i]).replace(/^\s+|\s+$/g, '')) {
+        safePoints.push(String(keyPoints[i]));
+      }
+    }
+    if (safePoints.length) {
+      var keyLabel = document.createElement('div');
+      keyLabel.className = 'ask-hr-key-label';
+      keyLabel.textContent = 'Key points';
+      bubble.appendChild(keyLabel);
+      var list = document.createElement('ul');
+      list.className = 'ask-hr-keypoints';
+      for (i = 0; i < safePoints.length; i++) {
+        var li = document.createElement('li');
+        li.textContent = safePoints[i];
+        list.appendChild(li);
+      }
+      bubble.appendChild(list);
+    }
+
+    var refs = payload && Array.isArray(payload.references) ? payload.references : [];
+    var sourceItems = [];
+    for (i = 0; i < refs.length; i++) {
+      var ref = refs[i] || {};
+      var fileName = String(ref.fileName || ref.name || 'Source document');
+      var href = sanitizeAskHrFileUrl(ref.fileUrl || ref.url || '');
+      sourceItems.push({ fileName: fileName, href: href });
+    }
+    if (sourceItems.length) {
+      var srcLabel = document.createElement('div');
+      srcLabel.className = 'ask-hr-src-label';
+      srcLabel.textContent = 'Source documents';
+      bubble.appendChild(srcLabel);
+      var sources = document.createElement('ul');
+      sources.className = 'ask-hr-sources';
+      for (i = 0; i < sourceItems.length; i++) {
+        var sli = document.createElement('li');
+        if (sourceItems[i].href) {
+          var link = document.createElement('a');
+          link.href = sourceItems[i].href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = sourceItems[i].fileName;
+          sli.appendChild(link);
+        } else {
+          sli.textContent = sourceItems[i].fileName;
+        }
+        sources.appendChild(sli);
+      }
+      bubble.appendChild(sources);
+    }
+
+    thread.appendChild(bubble);
+    scrollAskHrToBottom();
+  }
+
+  function clearAskHrConversation() {
+    askHrUi.requestSeq += 1;
+    askHrUi.messages = [];
+    stopAskHrStatus();
+    setAskHrBusyUi(false);
+    setAskHrComposeError('');
+    restoreAskHrIntro();
+    var input = $('ask-hr-input');
+    if (input && !input.disabled) input.focus();
+  }
+
+  function closeAskHrPanel() {
+    var panel = $('ask-hr-panel');
+    var fab = $('ask-hr-fab');
+    if (panel) panel.classList.add('hidden');
+    askHrUi.open = false;
+    if (fab) {
+      fab.setAttribute('aria-expanded', 'false');
+      if (isAskHrAllowed()) {
+        fab.classList.remove('hidden');
+        fab.focus();
+      }
+    }
+  }
+
+  function openAskHrPanel() {
+    if (!isAskHrAllowed()) return;
+    var panel = $('ask-hr-panel');
+    var fab = $('ask-hr-fab');
+    var input = $('ask-hr-input');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    askHrUi.open = true;
+    if (fab) {
+      fab.classList.add('hidden');
+      fab.setAttribute('aria-expanded', 'true');
+    }
+    if (input && !askHrUi.busy) {
+      setTimeout(function () { input.focus(); }, 0);
+    }
+  }
+
+  function syncAskHrVisibility() {
+    var fab = $('ask-hr-fab');
+    var panel = $('ask-hr-panel');
+    if (!fab || !panel) return;
+    if (!isAskHrAllowed()) {
+      askHrUi.open = false;
+      panel.classList.add('hidden');
+      fab.classList.add('hidden');
+      fab.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    if (askHrUi.open) {
+      panel.classList.remove('hidden');
+      fab.classList.add('hidden');
+      fab.setAttribute('aria-expanded', 'true');
+    } else {
+      panel.classList.add('hidden');
+      fab.classList.remove('hidden');
+      fab.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function sendAskHrQuestion(rawQuestion) {
+    setAskHrComposeError('');
+    if (askHrUi.busy) return;
+
+    if (!isAskHrAllowed()) {
+      appendAskHrErrorBubble(askHrFriendlyError('UNAUTHORIZED'));
+      return;
+    }
+
+    var question = String(rawQuestion || '').replace(/^\s+|\s+$/g, '');
+    if (!question) {
+      setAskHrComposeError('Please enter a question.');
+      return;
+    }
+    if (question.length < 3) {
+      setAskHrComposeError('Please enter a question.');
+      return;
+    }
+    if (question.length > ASK_HR_MAX_CHARS) {
+      setAskHrComposeError('Your request was too long. Please keep it under 1000 characters.');
+      return;
+    }
+
+    var input = $('ask-hr-input');
+    if (input) input.value = '';
+
+    askHrUi.messages.push({ role: 'user', text: question });
+    appendAskHrUserBubble(question);
+    setAskHrBusyUi(true);
+    startAskHrStatus();
+    var seq = ++askHrUi.requestSeq;
+
+    callAskHr(question)
+      .then(function (payload) {
+        if (seq !== askHrUi.requestSeq) return;
+        stopAskHrStatus();
+        setAskHrBusyUi(false);
+        askHrUi.messages.push({ role: 'assistant', payload: payload });
+        appendAskHrAnswerBubble(payload || {});
+      })
+      .catch(function (err) {
+        if (seq !== askHrUi.requestSeq) return;
+        stopAskHrStatus();
+        setAskHrBusyUi(false);
+        var code = err && err.code ? err.code : 'UPSTREAM';
+        var message = askHrFriendlyError(code);
+        askHrUi.messages.push({ role: 'error', text: message });
+        appendAskHrErrorBubble(message);
+      });
+  }
+
+  function initAskHr() {
+    var fab = $('ask-hr-fab');
+    var panel = $('ask-hr-panel');
+    var form = $('ask-hr-form');
+    var input = $('ask-hr-input');
+    var closeBtn = $('ask-hr-close');
+    var clearBtn = $('ask-hr-clear');
+    var messages = $('ask-hr-messages');
+    if (!fab || !panel || !form) return;
+
+    fab.addEventListener('click', function () {
+      if (!isAskHrAllowed()) return;
+      openAskHrPanel();
+    });
+
+    closeBtn && closeBtn.addEventListener('click', function () {
+      closeAskHrPanel();
+    });
+
+    clearBtn && clearBtn.addEventListener('click', function () {
+      clearAskHrConversation();
+    });
+
+    form.addEventListener('submit', function (evt) {
+      evt.preventDefault();
+      sendAskHrQuestion(input ? input.value : '');
+    });
+
+    if (input) {
+      input.addEventListener('keydown', function (evt) {
+        if (evt.key === 'Enter' && !evt.shiftKey) {
+          evt.preventDefault();
+          sendAskHrQuestion(input.value);
+        }
+      });
+    }
+
+    if (messages) {
+      messages.addEventListener('click', function (evt) {
+        var el = evt.target;
+        if (el && el.nodeType !== 1) el = el.parentElement;
+        var btn = el && el.closest ? el.closest('[data-ask-hr-q]') : null;
+        if (!btn || askHrUi.busy) return;
+        var q = btn.getAttribute('data-ask-hr-q') || '';
+        if (input) input.value = q;
+        sendAskHrQuestion(q);
+      });
+    }
+
+    document.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Escape' && askHrUi.open) {
+        evt.preventDefault();
+        closeAskHrPanel();
+      }
+    });
+
+    syncAskHrVisibility();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    registerLazyRouteStubs();
+    bindAuthUi();
+    bindModuleRefreshUi();
+    initAskHr();
+    bootstrap();
+  });
+
+  window.HrmsApp = {
+    getState: function () { return state; },
+    registerRoute: function (id, def) { ROUTES[id] = def; },
+    registerModuleRoutes: registerModuleRoutes,
+    navigate: navigate,
+    callServer: callServer,
+    showToast: showToast,
+    routeStill: routeStill,
+    setHtml: setHtml,
+    escapeHtml: escapeHtml,
+    getSessionToken: getSessionToken,
+    setSessionToken: setSessionToken,
+    ensureModule: ensureModule,
+    skeletonTableRows: skeletonTableRows,
+    skeletonLine: skeletonLine,
+    skeletonKpiRow: skeletonKpiRow,
+    sectionSkeleton: sectionSkeleton,
+    sectionSpinner: sectionSpinner,
+    sectionErrorHtml: sectionErrorHtml,
+    paintSectionError: paintSectionError,
+    bindSectionRetry: bindSectionRetry,
+    tableShell: tableShell,
+    pageHeaderHtml: pageHeaderHtml,
+    moduleViewKey: moduleViewKey,
+    shouldRestoreModuleView: shouldRestoreModuleView,
+    consumeModuleViewRestore: consumeModuleViewRestore,
+    markModuleViewLoaded: markModuleViewLoaded,
+    isModuleRefresh: isModuleRefresh,
+    finishModuleRefresh: finishModuleRefresh,
+    refreshCurrentModuleView: refreshCurrentModuleView,
+    moduleRefreshControlsHtml: moduleRefreshControlsHtml,
+    ensureModuleRefreshControls: ensureModuleRefreshControls,
+    getModuleViewCache: getModuleViewCache,
+    clearModuleViewCache: clearModuleViewCache,
+    clearUserSessionViewState: clearUserSessionViewState_,
+    registerModuleDataCacheClear: registerModuleDataCacheClear,
+    sessionCacheKey: sessionCacheKey_,
+    invalidateModuleViewCache: invalidateModuleViewCache,
+    invalidateModuleViewCachePrefix: invalidateModuleViewCachePrefix,
+    invalidateDashboardView: invalidateDashboardView,
+    setButtonLoading: setButtonLoading,
+    restoreButton: restoreButton,
+    isButtonLoading: isButtonLoading,
+    setActionFeedback: setActionFeedback,
+    clearActionFeedback: clearActionFeedback,
+    setFlash: setFlash,
+    consumeFlash: consumeFlash,
+    flashBannerHtml: flashBannerHtml,
+    logout: function () {
+      return performSignOut_($('btn-sign-out'));
+    },
+    applyUnreadCount: function (n) {
+      if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
+        window.HrmsNotificationBell.applyUnreadCount(n);
+      }
+    },
+    isUserRpcBusy: function () { return userRpcBusy_ > 0; },
+    getPerfLog: function () { return perfLog_.slice(); },
+    enablePerfTiming: function () {
+      try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
+      window.HRMS_PERF_TIMING = 1;
+    },
+    disablePerfTiming: function () {
+      try { if (window.localStorage) localStorage.removeItem('HRMS_PERF_TIMING'); } catch (ignore) {}
+      window.HRMS_PERF_TIMING = 0;
+    },
+    $: $
+  };
+
+  window.__hrmsCtx = {
+    state: state,
+    callServer: callServer,
+    escapeHtml: escapeHtml,
+    showToast: showToast,
+    routeStill: routeStill,
+    setHtml: setHtml,
+    navigate: navigate,
+    getSessionToken: getSessionToken,
+    $: $,
+    skeletonTableRows: skeletonTableRows,
+    skeletonLine: skeletonLine,
+    skeletonKpiRow: skeletonKpiRow,
+    sectionSkeleton: sectionSkeleton,
+    sectionSpinner: sectionSpinner,
+    paintSectionError: paintSectionError,
+    setButtonLoading: setButtonLoading,
+    restoreButton: restoreButton,
+    setActionFeedback: setActionFeedback,
+    setFlash: setFlash,
+    consumeFlash: consumeFlash,
+    flashBannerHtml: flashBannerHtml
+  };
+})();
+</script>
+
+<script>window.__HRMS_SMOKE_READY = true;</script>
+</body></html>

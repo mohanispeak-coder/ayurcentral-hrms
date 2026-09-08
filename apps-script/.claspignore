@@ -1,0 +1,6 @@
+# Local-only files (not pushed to Apps Script)
+SETUP.md
+**/.DS_Store
+**/Thumbs.db
+# Duplicate .js copies from clasp pull — project source of truth is .gs
+**/*.js

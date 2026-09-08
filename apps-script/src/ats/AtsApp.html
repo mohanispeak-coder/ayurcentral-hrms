@@ -1,0 +1,411 @@
+<style>
+.ats-standalone .sidebar-footer a { color: var(--color-text-muted); font-size: var(--text-xs); }
+</style>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <?!= include('ui/Styles'); ?>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recruitment</title>
+</head>
+<body>
+  <div id="app" class="app-shell ats-standalone">
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    <aside class="sidebar app-sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <div class="brand-title" id="brand-title"><?= companyName || 'AyurCentral' ?></div>
+          <div class="brand-sub">Recruitment</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav" aria-label="Recruitment navigation"></nav>
+      <div class="sidebar-footer">
+        <a href="#" id="ats-open-hrms">Open full HRMS</a>
+      </div>
+    </aside>
+    <div class="main-wrap">
+      <header class="header app-header">
+        <div class="header-left">
+          <button type="button" class="btn-icon sidebar-toggle" id="sidebar-toggle" aria-label="Toggle menu">☰</button>
+          <h1 class="page-title" id="page-title">Recruitment</h1>
+        </div>
+        <div class="header-right">
+          <div class="user-chip" id="user-chip">
+            <span class="user-avatar" id="user-avatar">?</span>
+            <span class="user-name" id="user-name">Loading…</span>
+            <span class="user-role badge" id="user-role"></span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm hidden" id="btn-sign-out">Sign out</button>
+        </div>
+      </header>
+      <main class="content" id="main-content">
+        <div id="loading-state" class="loading-state">
+          <div class="spinner" aria-hidden="true"></div>
+          <p>Loading recruitment…</p>
+        </div>
+        <div id="error-state" class="alert alert-danger hidden" role="alert"></div>
+        <div id="unauthorized-state" class="empty-state hidden">
+          <div class="empty-state-icon" aria-hidden="true"></div>
+          <h2 class="empty-state-title">Recruitment access not available</h2>
+          <p class="empty-state-text" id="unauthorized-message">Your role cannot open ATS.</p>
+        </div>
+        <div id="auth-state" class="hidden">
+          <div class="card auth-card" id="auth-step-email">
+            <h2>Sign in to recruitment</h2>
+            <p>Enter the email registered in HRMS. We will send a one-time verification code.</p>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-email">Email address</label>
+              <input class="form-input" type="email" id="auth-email" autocomplete="email" required>
+            </div>
+            <p id="auth-email-error" class="alert alert-danger hidden" role="alert"></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="auth-send-btn">Send verification code</button>
+            </div>
+          </div>
+          <div class="card auth-card hidden" id="auth-step-code">
+            <h2>Enter verification code</h2>
+            <p>We sent a 6-digit code to <strong id="auth-email-display"></strong></p>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-code">Verification code</label>
+              <input class="form-input auth-code-input" type="text" id="auth-code" inputmode="numeric" maxlength="6" required>
+            </div>
+            <p id="auth-code-error" class="alert alert-danger hidden" role="alert"></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="auth-verify-btn">Verify</button>
+            </div>
+          </div>
+        </div>
+        <div id="page-content" class="hidden"></div>
+      </main>
+    </div>
+  </div>
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <script>
+(function () {
+  'use strict';
+  var SESSION_STORAGE_KEY = 'hrms_session_token';
+  var TITLES = {
+    ats: 'Recruitment',
+    'ats-jobs': 'Jobs',
+    'ats-job': 'Job',
+    'ats-job-new': 'New job',
+    'ats-job-edit': 'Edit job',
+    'ats-candidates': 'Candidates',
+    'ats-candidate': 'Candidate'
+  };
+  var NAV = [
+    { route: 'ats', label: 'Recruitment' },
+    { route: 'ats-jobs', label: 'Jobs' },
+    { route: 'ats-candidates', label: 'Candidates' }
+  ];
+  var state = { session: null, navSeq: 0, currentRoute: 'ats', flash: null, routeParams: {} };
+  var ROUTES = {};
+
+  function $(id) { return document.getElementById(id); }
+  function getSessionToken() {
+    try { return sessionStorage.getItem(SESSION_STORAGE_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setSessionToken(token) {
+    try {
+      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (ignore) {}
+  }
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+  function showToast(message, type) {
+    var container = $('toast-container');
+    if (!container) return;
+    var el = document.createElement('div');
+    el.className = 'toast' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+    el.textContent = message || '';
+    container.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+  function isButtonLoading(button) {
+    return !!(button && button.getAttribute && button.getAttribute('data-hrms-loading') === '1');
+  }
+  function setButtonLoading(button, loadingText) {
+    if (!button || isButtonLoading(button)) return false;
+    button.setAttribute('data-hrms-loading', '1');
+    button._hrmsBtnSnap = { html: button.innerHTML, disabled: !!button.disabled };
+    button.disabled = true;
+    button.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span class="btn-loading-label">' +
+      escapeHtml(loadingText || 'Working…') + '</span>';
+    return true;
+  }
+  function restoreButton(button) {
+    if (!button) return;
+    var snap = button._hrmsBtnSnap;
+    button.removeAttribute('data-hrms-loading');
+    if (snap) {
+      button.innerHTML = snap.html;
+      button.disabled = snap.disabled;
+    } else button.disabled = false;
+    button._hrmsBtnSnap = null;
+    button._hrmsInflight = null;
+  }
+  function setActionFeedback(el, message, type) {
+    if (!el) return;
+    el.textContent = message ? String(message) : '';
+    el.classList.remove('hidden', 'is-success', 'is-error', 'is-info');
+    if (!message) { el.classList.add('hidden'); return; }
+    el.classList.add(type === 'error' ? 'is-error' : (type === 'info' ? 'is-info' : 'is-success'));
+  }
+  function clearActionFeedback(el) { setActionFeedback(el, '', ''); }
+  function setFlash(message, type, route) {
+    state.flash = message ? { message: String(message), type: type || 'success', route: route || '' } : null;
+  }
+  function consumeFlash(route) {
+    var f = state.flash;
+    state.flash = null;
+    if (!f) return null;
+    if (f.route && route && f.route !== route) return null;
+    return f;
+  }
+  function flashBannerHtml(flash) {
+    if (!flash || !flash.message) return '';
+    var cls = 'action-feedback' + (flash.type === 'error' ? ' is-error' : ' is-success');
+    return '<div class="' + cls + '">' + escapeHtml(flash.message) + '</div>';
+  }
+  function pageHeaderHtml(title, lede, actionsHtml) {
+    return '<div class="page-header"><div class="page-header-text"><h2 class="page-heading">' +
+      escapeHtml(title || '') + '</h2>' + (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
+      '</div><div class="page-header-actions">' + (actionsHtml || '') + '</div></div>';
+  }
+  function sectionSpinner(label) {
+    return '<div class="hrms-loading-block" aria-busy="true">' +
+      '<span class="visually-hidden">' + escapeHtml(label || 'Loading') + '</span>' +
+      '<div class="hrms-skeleton-stack" aria-hidden="true">' +
+      '<div class="skeleton skeleton-line w60"></div>' +
+      '<div class="skeleton skeleton-line w100"></div>' +
+      '<div class="skeleton skeleton-line w80"></div></div></div>';
+  }
+  function paintSectionError(el, message, retry) {
+    if (!el) return;
+    el.innerHTML = '<div class="inline-error"><span class="inline-error-msg">' + escapeHtml(message || 'Failed') +
+      '</span>' + (retry ? '<button type="button" class="btn btn-secondary btn-sm" data-retry="1">Retry</button>' : '') + '</div>';
+    var btn = el.querySelector('[data-retry]');
+    if (btn && retry) btn.addEventListener('click', retry);
+  }
+  function routeStill(seq, route) {
+    return seq === state.navSeq && (!route || state.currentRoute === route);
+  }
+  function invokeRpc_(fnName, args) {
+    return new Promise(function (resolve, reject) {
+      try {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (result && result.ok) resolve(result.data);
+            else if (result && result.error) reject(result.error);
+            else reject({ message: 'Request failed' });
+          })
+          .withFailureHandler(function (err) {
+            reject({ message: (err && err.message) || 'Server error' });
+          })[fnName].apply(null, args);
+      } catch (e) {
+        reject({ message: (e && e.message) || 'Request failed' });
+      }
+    });
+  }
+  function isActionOpts_(obj) {
+    if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
+    if (Object.prototype.toString.call(obj) === '[object Array]') return false;
+    return !!(obj.button || obj.loadingButton || obj.feedback || obj.feedbackEl);
+  }
+  function callServer(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var action = args.length && isActionOpts_(args[args.length - 1]) ? args.pop() : null;
+    args.push(getSessionToken());
+    var button = action && (action.button || action.loadingButton);
+    var feedback = action && (action.feedback || action.feedbackEl);
+    if (button) setButtonLoading(button, (action && action.loadingText) || 'Working…');
+    if (feedback) clearActionFeedback(feedback);
+    return invokeRpc_(fnName, args).then(function (data) {
+      if (button) restoreButton(button);
+      return data;
+    }, function (err) {
+      if (button) restoreButton(button);
+      if (feedback) setActionFeedback(feedback, (err && err.message) || 'Request failed', 'error');
+      return Promise.reject(err);
+    });
+  }
+  function hideAll() {
+    ['loading-state', 'error-state', 'unauthorized-state', 'auth-state', 'page-content'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.classList.add('hidden');
+    });
+  }
+  function navigate(route, params) {
+    state.navSeq += 1;
+    state.currentRoute = route;
+    state.routeParams = params || {};
+    var title = TITLES[route] || 'Recruitment';
+    if ($('page-title')) $('page-title').textContent = title;
+    hideAll();
+    var page = $('page-content');
+    if (page) page.classList.remove('hidden');
+    renderNav();
+    var def = ROUTES[route];
+    if (def && def.render) def.render(state.routeParams);
+  }
+  function renderNav() {
+    var nav = $('sidebar-nav');
+    if (!nav) return;
+    nav.innerHTML = '';
+    NAV.forEach(function (item) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'nav-item' + (state.currentRoute === item.route ||
+        (item.route === 'ats-jobs' && String(state.currentRoute).indexOf('ats-job') === 0) ||
+        (item.route === 'ats-candidates' && state.currentRoute === 'ats-candidate') ? ' active' : '');
+      btn.textContent = item.label;
+      btn.addEventListener('click', function () { navigate(item.route); });
+      nav.appendChild(btn);
+    });
+  }
+  function setAuthedChrome(authed) {
+    var app = $('app');
+    if (app) app.classList.toggle('is-authed', !!authed);
+    var out = $('btn-sign-out');
+    if (out) out.classList.toggle('hidden', !authed);
+  }
+  function paintUser(session) {
+    session = session || {};
+    if ($('user-name')) $('user-name').textContent = session.displayName || session.email || 'Signed in';
+    if ($('user-role')) $('user-role').textContent = session.role || '';
+    if ($('user-avatar')) $('user-avatar').textContent = String(session.displayName || session.email || '?').charAt(0).toUpperCase();
+  }
+  function showAuth() {
+    hideAll();
+    setAuthedChrome(false);
+    $('auth-state').classList.remove('hidden');
+  }
+  function showUnauthorized(message) {
+    hideAll();
+    setAuthedChrome(false);
+    $('unauthorized-state').classList.remove('hidden');
+    $('unauthorized-message').textContent = message || 'Recruitment is not available for your role.';
+  }
+  function showErr(message) {
+    hideAll();
+    $('error-state').classList.remove('hidden');
+    $('error-state').textContent = message || 'Something went wrong.';
+  }
+
+  window.HrmsApp = {
+    getState: function () { return state; },
+    registerRoute: function (id, def) { ROUTES[id] = def; },
+    navigate: navigate,
+    callServer: callServer,
+    showToast: showToast,
+    routeStill: routeStill,
+    escapeHtml: escapeHtml,
+    getSessionToken: getSessionToken,
+    setSessionToken: setSessionToken,
+    pageHeaderHtml: pageHeaderHtml,
+    setButtonLoading: setButtonLoading,
+    restoreButton: restoreButton,
+    isButtonLoading: isButtonLoading,
+    setActionFeedback: setActionFeedback,
+    clearActionFeedback: clearActionFeedback,
+    setFlash: setFlash,
+    consumeFlash: consumeFlash,
+    flashBannerHtml: flashBannerHtml,
+    sectionSpinner: sectionSpinner,
+    paintSectionError: paintSectionError,
+    $: $
+  };
+
+  function afterAuthorized(session) {
+    state.session = session;
+    paintUser(session);
+    setAuthedChrome(true);
+    callServer('apiAtsGetBootstrap').then(function () {
+      navigate('ats');
+    }).catch(function (err) {
+      showUnauthorized((err && err.message) || 'Recruitment is not available for your role.');
+    });
+  }
+
+  function bootstrap() {
+    callServer('apiGetAppBootstrap').then(function (data) {
+      var session = data && data.session;
+      if (session && session.authorized) {
+        afterAuthorized(session);
+        return;
+      }
+      if (data && data.app && !data.app.configured) {
+        showErr('HRMS is not configured yet. Open the main HRMS app to run setup.');
+        return;
+      }
+      showAuth();
+    }).catch(function (err) {
+      showErr((err && err.message) || 'Could not start recruitment.');
+    });
+  }
+
+  $('auth-send-btn').addEventListener('click', function () {
+    var email = $('auth-email').value;
+    var err = $('auth-email-error');
+    err.classList.add('hidden');
+    callServer('apiRequestAuthOtp', email, { button: $('auth-send-btn'), loadingText: 'Sending…' })
+      .then(function () {
+        $('auth-email-display').textContent = email;
+        $('auth-step-email').classList.add('hidden');
+        $('auth-step-code').classList.remove('hidden');
+      })
+      .catch(function (e) {
+        err.textContent = (e && e.message) || 'Could not send code.';
+        err.classList.remove('hidden');
+      });
+  });
+  $('auth-verify-btn').addEventListener('click', function () {
+    var email = $('auth-email').value;
+    var code = $('auth-code').value;
+    var err = $('auth-code-error');
+    err.classList.add('hidden');
+    callServer('apiVerifyAuthOtp', email, code, { button: $('auth-verify-btn'), loadingText: 'Verifying…' })
+      .then(function (res) {
+        if (res && res.sessionToken) setSessionToken(res.sessionToken);
+        afterAuthorized(res.session);
+      })
+      .catch(function (e) {
+        err.textContent = (e && e.message) || 'Verification failed.';
+        err.classList.remove('hidden');
+      });
+  });
+  $('btn-sign-out').addEventListener('click', function () {
+    callServer('apiLogout').finally(function () {
+      setSessionToken('');
+      window.location.reload();
+    });
+  });
+  $('sidebar-toggle').addEventListener('click', function () {
+    $('sidebar').classList.toggle('open');
+    $('sidebar-backdrop').classList.toggle('open');
+  });
+  $('sidebar-backdrop').addEventListener('click', function () {
+    $('sidebar').classList.remove('open');
+    $('sidebar-backdrop').classList.remove('open');
+  });
+  $('ats-open-hrms').addEventListener('click', function (ev) {
+    ev.preventDefault();
+    var url = String(window.location.href).replace(/[?&]ats=[^&]*/g, '').replace(/[?&]job=[^&]*/g, '');
+    url = url.replace(/\?&/, '?').replace(/[?&]$/, '');
+    window.location.href = url;
+  });
+
+  bootstrap();
+})();
+  </script>
+  <?!= include('ats/AtsClient'); ?>
+</body>
+</html>

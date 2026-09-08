@@ -1,0 +1,483 @@
+<style>
+/* Self-contained Notification Center bell. Uses shared :root tokens from Styles.html. */
+.ntf-bell-wrap { position: relative; flex-shrink: 0; }
+.ntf-bell-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--color-border, #e2e8f0); border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg-elevated, #fff); color: var(--color-text-muted, #64748b);
+  cursor: pointer; padding: 0;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.ntf-bell-btn:hover {
+  background: var(--color-bg-muted, #e8ecf1); color: var(--color-text, #0f172a);
+  border-color: var(--color-border-strong, #cbd5e1);
+}
+.ntf-bell-btn:focus-visible {
+  outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(29, 78, 216, 0.22));
+}
+.ntf-bell-btn[aria-expanded="true"] {
+  background: var(--color-primary-muted, rgba(29, 78, 216, 0.1));
+  color: var(--color-primary, #1d4ed8);
+  border-color: #bfdbfe;
+}
+.ntf-bell-badge {
+  position: absolute; top: -2px; right: -2px;
+  min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 999px; background: var(--color-danger, #b91c1c); color: #fff;
+  font-size: 0.625rem; font-weight: 700; line-height: 17px; text-align: center;
+  font-variant-numeric: tabular-nums;
+  border: 2px solid var(--color-bg-elevated, #fff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.ntf-panel {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 80px));
+  display: flex; flex-direction: column;
+  background: var(--color-bg-elevated, #fff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-lg, 0 16px 40px rgba(15, 23, 42, 0.12));
+  z-index: 1200; overflow: hidden;
+  animation: ntfPanelIn 0.14s ease;
+}
+@keyframes ntfPanelIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.ntf-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 14px 16px 12px; border-bottom: 1px solid var(--color-border, #e2e8f0);
+  background: #f8fafc;
+}
+.ntf-panel-title { margin: 0; font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.02em; }
+.ntf-panel-actions { display: flex; gap: 4px; }
+.ntf-list { overflow-y: auto; flex: 1; min-height: 120px; }
+.ntf-item {
+  display: grid; grid-template-columns: 8px 1fr; gap: 10px; align-items: start;
+  width: 100%; text-align: left; border: none; background: transparent;
+  padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--color-border, #e2e8f0);
+  color: inherit; font: inherit;
+  transition: background 150ms ease;
+}
+.ntf-item:hover { background: #f8fafc; }
+.ntf-item:focus-visible {
+  outline: none; box-shadow: inset 0 0 0 2px var(--color-primary, #1d4ed8);
+}
+.ntf-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: transparent; }
+.ntf-item.is-unread { background: var(--color-primary-muted, rgba(29, 78, 216, 0.06)); }
+.ntf-item.is-unread .ntf-dot { background: var(--color-primary, #1d4ed8); }
+.ntf-item.is-unread .ntf-item-title { font-weight: 700; }
+.ntf-item-title { font-size: 0.8125rem; line-height: 1.35; color: var(--color-text, #0f172a); }
+.ntf-item-msg {
+  margin: 4px 0 0; font-size: 0.75rem; color: var(--color-text-muted, #64748b);
+  line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ntf-item-meta {
+  margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px 10px;
+  font-size: 0.6875rem; color: var(--color-text-muted, #64748b);
+}
+.ntf-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  background: var(--color-bg-muted, #e8ecf1); font-weight: 600; letter-spacing: 0.02em;
+}
+.ntf-chip-high {
+  background: var(--color-danger-bg, #fef2f2); color: var(--color-danger, #b91c1c);
+}
+.ntf-empty {
+  padding: 40px 20px; text-align: center; color: var(--color-text-muted, #64748b); font-size: 0.8125rem; line-height: 1.5;
+}
+.ntf-panel-foot {
+  padding: 10px 12px; border-top: 1px solid var(--color-border, #e2e8f0);
+  display: flex; justify-content: space-between; gap: 8px; background: #f8fafc;
+}
+.ntf-error { padding: 12px 14px; color: var(--color-danger, #b91c1c); font-size: 0.8125rem; }
+</style>
+<script>
+(function () {
+  'use strict';
+  if (window.HrmsNotificationBell && window.HrmsNotificationBell._bound) return;
+
+  function app() { return window.HrmsApp || window.__hrmsCtx || null; }
+  function callServer(name) {
+    var a = app();
+    var fn = a && a.callServer;
+    if (!fn) return Promise.reject(new Error('HRMS is still loading.'));
+    return fn.apply(a, arguments);
+  }
+  function escapeHtml(str) {
+    var a = app();
+    if (a && a.escapeHtml) return a.escapeHtml(str);
+    var d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+  function showToast(msg, type) {
+    var a = app();
+    if (a && a.showToast) a.showToast(msg, type);
+  }
+  function navigate(route, params) {
+    var a = app();
+    if (a && a.navigate) a.navigate(route, params);
+  }
+
+  function relTime(value) {
+    if (!value) return '';
+    var d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    var sec = Math.round((Date.now() - d.getTime()) / 1000);
+    if (sec < 45) return 'Just now';
+    if (sec < 3600) return Math.max(1, Math.round(sec / 60)) + ' min ago';
+    if (sec < 86400) return Math.max(1, Math.round(sec / 3600)) + 'h ago';
+    if (sec < 604800) return Math.max(1, Math.round(sec / 86400)) + 'd ago';
+    return d.toLocaleDateString();
+  }
+
+  function typeLabel(type) {
+    return String(type || '').replace(/_/g, ' ').toLowerCase();
+  }
+
+  var state = { open: false, items: [], unread: 0, loading: false, timer: null, pollInFlight: false };
+
+  function slotEl() {
+    return document.getElementById('ntf-bell-slot');
+  }
+
+  function ensureDom(container) {
+    if (!container) return null;
+    if (container.querySelector('.ntf-bell-wrap')) return container.querySelector('.ntf-bell-wrap');
+    container.innerHTML =
+      '<div class="ntf-bell-wrap">' +
+        '<button type="button" class="ntf-bell-btn" id="ntf-bell-btn" aria-label="Notifications" aria-expanded="false" aria-controls="ntf-panel">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+            '<path fill="currentColor" d="M12 3a6 6 0 0 1 6 6v3.2l1.6 2.4A1 1 0 0 1 18.8 16H5.2a1 1 0 0 1-.8-1.4L6 12.2V9a6 6 0 0 1 6-6zm0 18a2.5 2.5 0 0 1-2.45-2h4.9A2.5 2.5 0 0 1 12 21z"/>' +
+          '</svg>' +
+          '<span class="ntf-bell-badge hidden" id="ntf-bell-badge">0</span>' +
+        '</button>' +
+        '<div class="ntf-panel hidden" id="ntf-panel" role="dialog" aria-label="Notification center">' +
+          '<div class="ntf-panel-head">' +
+            '<h2 class="ntf-panel-title">Notifications</h2>' +
+            '<div class="ntf-panel-actions">' +
+              '<button type="button" class="btn btn-ghost btn-sm" id="ntf-mark-all">Mark all read</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="ntf-list" id="ntf-list"></div>' +
+          '<div class="ntf-panel-foot">' +
+            '<button type="button" class="btn btn-ghost btn-sm" id="ntf-open-center">View all</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" id="ntf-open-prefs">Preferences</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    return container.querySelector('.ntf-bell-wrap');
+  }
+
+  function paintBadge() {
+    var badge = document.getElementById('ntf-bell-badge');
+    var btn = document.getElementById('ntf-bell-btn');
+    if (!badge) return;
+    var n = Number(state.unread) || 0;
+    if (n < 1) {
+      badge.classList.add('hidden');
+      badge.textContent = '0';
+      if (btn) btn.setAttribute('aria-label', 'Notifications');
+    } else {
+      badge.classList.remove('hidden');
+      badge.textContent = n > 99 ? '99+' : String(n);
+      if (btn) btn.setAttribute('aria-label', 'Notifications, ' + n + ' unread');
+    }
+  }
+
+  function itemHtml(item) {
+    var unread = !!(item.unread || item.status === 'UNREAD');
+    var pri = String(item.priority || '').toUpperCase();
+    var chip = pri === 'HIGH' ? ' ntf-chip-high' : '';
+    return '<button type="button" class="ntf-item' + (unread ? ' is-unread' : '') + '" data-id="' +
+      escapeHtml(item.notification_id) + '" data-route="' + escapeHtml(item.action_route || '') + '">' +
+      '<span class="ntf-dot" aria-hidden="true"></span>' +
+      '<span>' +
+        '<span class="ntf-item-title">' + escapeHtml(item.title || '') + '</span>' +
+        (item.message ? '<span class="ntf-item-msg">' + escapeHtml(item.message) + '</span>' : '') +
+        '<span class="ntf-item-meta">' +
+          '<span class="ntf-chip' + chip + '">' + escapeHtml(typeLabel(item.type)) + '</span>' +
+          '<span>' + escapeHtml(relTime(item.created_at)) + '</span>' +
+        '</span>' +
+      '</span></button>';
+  }
+
+  function paintList() {
+    var list = document.getElementById('ntf-list');
+    if (!list) return;
+    if (state.loading && !state.items.length) {
+      list.innerHTML =
+        '<div class="ntf-skel" aria-busy="true" aria-hidden="true">' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+          '<div class="skeleton skeleton-line w100"></div>' +
+          '<div class="skeleton skeleton-line w40"></div>' +
+        '</div>' +
+        '<div class="ntf-skel" aria-hidden="true">' +
+          '<div class="skeleton skeleton-line w60"></div>' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+        '</div>' +
+        '<div class="ntf-skel" aria-hidden="true">' +
+          '<div class="skeleton skeleton-line w80"></div>' +
+          '<div class="skeleton skeleton-line w40"></div>' +
+        '</div>' +
+        '<span class="visually-hidden">Loading notifications</span>';
+      return;
+    }
+    if (!state.items.length) {
+      list.innerHTML = '<div class="ntf-empty">You are all caught up.<br><span style="opacity:0.8">New updates will show here.</span></div>';
+      return;
+    }
+    list.innerHTML = state.items.map(itemHtml).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('.ntf-item'), function (btn) {
+      btn.addEventListener('click', function () {
+        onOpenItem(btn.getAttribute('data-id'), btn.getAttribute('data-route'));
+      });
+    });
+  }
+
+  function setOpen(open) {
+    state.open = !!open;
+    var panel = document.getElementById('ntf-panel');
+    var btn = document.getElementById('ntf-bell-btn');
+    if (panel) panel.classList.toggle('hidden', !state.open);
+    if (btn) btn.setAttribute('aria-expanded', state.open ? 'true' : 'false');
+    if (state.open) {
+      try {
+        if (window.console && console.info) {
+          console.info('HRMS_PERF', { kind: 'bell-open', willRpc: true, api: 'apiGetNotificationBellState' });
+        }
+      } catch (ignore) {}
+      refresh(true);
+    }
+  }
+
+  function applyUnreadCount(n) {
+    if (n == null || n === '') return;
+    var next = Number(n) || 0;
+    if (next === state.unread) return;
+    state.unread = next;
+    paintBadge();
+  }
+
+  function applyMarkReadResult(id, data) {
+    var item = null;
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].notification_id === id) { item = state.items[i]; break; }
+    }
+    if (item) {
+      item.status = 'READ';
+      item.unread = false;
+      item.read_at = (data && data.record && data.record.read_at) || item.read_at || new Date().toISOString();
+    }
+    if (data && data.unread_count != null) applyUnreadCount(data.unread_count);
+    else if (item) applyUnreadCount(Math.max(0, (Number(state.unread) || 0) - 1));
+    if (state.open) paintList();
+  }
+
+  function refresh(full) {
+    var sess = app() && app().getState && app().getState().session;
+    if (!sess || !sess.authorized) return Promise.resolve();
+    state.loading = true;
+    if (full) paintList();
+    return callServer('apiGetNotificationBellState').then(function (data) {
+      state.loading = false;
+      var nextUnread = data && data.unread_count || 0;
+      var nextItems = (data && data.items) || [];
+      var unreadChanged = nextUnread !== state.unread;
+      state.unread = nextUnread;
+      state.items = nextItems;
+      if (unreadChanged || full) paintBadge();
+      if (state.open || full) paintList();
+    }).catch(function (err) {
+      state.loading = false;
+      var list = document.getElementById('ntf-list');
+      if (state.open && list) {
+        list.innerHTML = '<div class="ntf-error">' + escapeHtml(err.message || 'Could not load notifications.') + '</div>';
+      }
+    });
+  }
+
+  function pollUnread() {
+    if (state.pollInFlight) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    var a = app();
+    if (a && a.isUserRpcBusy && a.isUserRpcBusy()) return;
+    var sess = a && a.getState && a.getState().session;
+    if (!sess || !sess.authorized) return;
+    state.pollInFlight = true;
+    callServer('apiGetUnreadNotificationCount', { background: true }).then(function (data) {
+      state.pollInFlight = false;
+      applyUnreadCount(data && data.unread_count);
+    }).catch(function () {
+      state.pollInFlight = false;
+    });
+  }
+
+  function onOpenItem(id, route) {
+    var item = null;
+    var snapshot = null;
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].notification_id === id) { item = state.items[i]; break; }
+    }
+    var wasUnread = !!(item && (item.unread || item.status === 'UNREAD'));
+    if (wasUnread) {
+      snapshot = { unread: state.unread, status: item.status, itemUnread: item.unread, read_at: item.read_at };
+      item.status = 'READ';
+      item.unread = false;
+      applyUnreadCount(Math.max(0, (Number(state.unread) || 0) - 1));
+      if (state.open) paintList();
+    }
+    try {
+      if (window.console && console.info) {
+        console.info('HRMS_PERF', { kind: 'bell-mark-read', rpcCount: 1, apis: ['apiMarkNotificationRead'] });
+      }
+    } catch (ignore) {}
+    if (wasUnread) {
+      callServer('apiMarkNotificationRead', id).then(function (data) {
+        applyMarkReadResult(id, data);
+      }).catch(function (err) {
+        if (item && snapshot) {
+          item.status = snapshot.status;
+          item.unread = snapshot.itemUnread;
+          item.read_at = snapshot.read_at;
+          applyUnreadCount(snapshot.unread);
+          if (state.open) paintList();
+        }
+        showToast((err && err.message) || 'Could not mark as read', 'error');
+      });
+    }
+    setOpen(false);
+    var params = item && item.action_params ? item.action_params : {};
+    var dest = route || (item && item.action_route) || '';
+    if (dest && typeof navigate === 'function') {
+      try {
+        navigate(dest, params);
+        return;
+      } catch (ignore) {}
+    }
+    if (!dest) showToast('No linked record for this notification.');
+  }
+
+  function bind(container) {
+    var wrap = ensureDom(container);
+    if (!wrap || wrap.getAttribute('data-bound') === '1') return wrap;
+    wrap.setAttribute('data-bound', '1');
+    var btn = document.getElementById('ntf-bell-btn');
+    if (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setOpen(!state.open);
+      });
+    }
+    var markAll = document.getElementById('ntf-mark-all');
+    if (markAll) {
+      markAll.addEventListener('click', function () {
+        var snapItems = state.items.map(function (it) {
+          return { notification_id: it.notification_id, status: it.status, unread: it.unread, read_at: it.read_at };
+        });
+        var snapUnread = state.unread;
+        state.items.forEach(function (it) {
+          it.status = 'READ';
+          it.unread = false;
+        });
+        applyUnreadCount(0);
+        paintList();
+        callServer('apiMarkAllNotificationsRead', { button: markAll, loadingText: 'Updating…' })
+          .then(function (res) {
+            applyUnreadCount(res && res.unread_count != null ? res.unread_count : 0);
+            paintList();
+            showToast(res && res.changed ? 'Marked ' + res.changed + ' read' : 'Already up to date', 'success');
+          })
+          .catch(function (err) {
+            state.items.forEach(function (it) {
+              snapItems.forEach(function (s) {
+                if (s.notification_id === it.notification_id) {
+                  it.status = s.status;
+                  it.unread = s.unread;
+                  it.read_at = s.read_at;
+                }
+              });
+            });
+            applyUnreadCount(snapUnread);
+            paintList();
+            showToast(err.message || 'Could not mark all read', 'error');
+          });
+      });
+    }
+    var viewAll = document.getElementById('ntf-open-center');
+    if (viewAll) {
+      viewAll.addEventListener('click', function () {
+        setOpen(false);
+        navigate('notifications');
+      });
+    }
+    var prefs = document.getElementById('ntf-open-prefs');
+    if (prefs) {
+      prefs.addEventListener('click', function () {
+        setOpen(false);
+        navigate('notifications', { tab: 'preferences' });
+      });
+    }
+    document.addEventListener('click', function (e) {
+      if (!state.open) return;
+      if (wrap.contains(e.target)) return;
+      setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && state.open) setOpen(false);
+    });
+    return wrap;
+  }
+
+  function isElement_(node) {
+    return !!(node && node.nodeType === 1);
+  }
+
+  function mount(container, opts) {
+    if (container && !isElement_(container)) {
+      opts = container;
+      container = null;
+    }
+    opts = opts || {};
+    var el = isElement_(container) ? container : slotEl();
+    if (!el) return null;
+    bind(el);
+    if (!opts.skipInitialFetch) {
+      pollUnread();
+    }
+    if (!state.timer) {
+      state.timer = setInterval(function () { pollUnread(); }, 60000);
+    }
+    return el;
+  }
+
+  function unmount() {
+    if (state.timer) {
+      clearInterval(state.timer);
+      state.timer = null;
+    }
+  }
+
+  window.HrmsNotificationBell = {
+    mount: mount,
+    refresh: refresh,
+    applyUnreadCount: applyUnreadCount,
+    applyMarkReadResult: applyMarkReadResult,
+    unmount: unmount,
+    _bound: true
+  };
+
+  function boot() {
+    if (slotEl()) mount(slotEl());
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>

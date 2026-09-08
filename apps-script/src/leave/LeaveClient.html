@@ -1,0 +1,39 @@
+<script>
+(function () {
+  'use strict';
+
+  function ready(fn) {
+    if (window.HrmsApp) fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  ready(function () {
+    var App = window.HrmsApp;
+    if (!App || !window.HRMSLeaveUi) return;
+    var titles = {
+      'my-leave': 'My Leave',
+      'leave-apply': 'Apply Leave',
+      'leave-approvals': 'Leave Approvals',
+      'leave-admin': 'Leave',
+      'leave-calendar': 'Leave Calendar'
+    };
+    Object.keys(titles).forEach(function (route) {
+      App.registerRoute(route, {
+        title: titles[route],
+        render: function () {
+          window.HRMSLeaveUi.render(route, {
+            callServer: App.callServer,
+            escapeHtml: App.escapeHtml,
+            showToast: App.showToast,
+            setButtonLoading: App.setButtonLoading,
+            restoreButton: App.restoreButton,
+            setActionFeedback: App.setActionFeedback,
+            navigate: App.navigate,
+            $: App.$
+          });
+        }
+      });
+    });
+  });
+})();
+</script>

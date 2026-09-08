@@ -1,0 +1,1390 @@
+<style>
+.pms-page .status-badge { margin-left: 6px; vertical-align: middle; }
+.pms-page .kpi-hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px; }
+.pms-page .primary-next { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.pms-page .weight-ok { color: var(--color-success); font-weight: 650; }
+.pms-page .weight-bad { color: var(--color-danger); font-weight: 650; }
+.pms-page .goal-card { margin-bottom: 12px; }
+.pms-page .goal-card h3 { margin: 0 0 8px; font-size: 1rem; }
+.pms-page .pms-meta { font-size: 0.8125rem; color: var(--color-text-muted); margin: 0 0 12px; }
+.pms-page .input-invalid { border-color: var(--color-danger) !important; }
+.pms-page .emp-block { margin-bottom: 20px; }
+.pms-page textarea.form-input { max-width: none; }
+.pms-page .form-wide { max-width: none; }
+.pms-page .rating-legend { font-size: 0.8125rem; color: var(--color-text-muted); margin: 0 0 12px; }
+.pms-page .pms-subnav { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+</style>
+<script>
+(function () {
+  'use strict';
+
+  function ready(fn) {
+    if (window.HrmsApp) fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  ready(function initPmsUi() {
+    var App = window.HrmsApp;
+    if (!App) return;
+    var $ = App.$;
+    var escapeHtml = App.escapeHtml;
+    var callServer = App.callServer;
+    var showToast = App.showToast;
+    var setActionFeedback = App.setActionFeedback;
+    var setFlash = App.setFlash;
+    var consumeFlash = App.consumeFlash;
+    var flashBannerHtml = App.flashBannerHtml;
+
+    var pmsState = {
+      dashboard: null,
+      cycles: null,
+      cycleDetail: null,
+      review: null,
+      team: null,
+      appraisals: null,
+      scale: null,
+      employees: []
+    };
+
+    function invalidatePmsShells_(cycleId, employeeId, keepReviewState) {
+      var keys = ['pms', 'pms-cycles'];
+      if (cycleId) {
+        keys.push('pms-cycle:' + cycleId, 'pms-team:' + cycleId, 'pms-my-review:' + cycleId, 'pms-appraisal:' + cycleId);
+        if (employeeId) keys.push('pms-review:' + cycleId + ':' + employeeId);
+      }
+      if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(keys);
+      if (cycleId && App.invalidateModuleViewCachePrefix) {
+        App.invalidateModuleViewCachePrefix('pms-review:' + cycleId + ':');
+      }
+      pmsState.dashboard = null;
+      pmsState.cycles = null;
+      pmsState.cycleDetail = null;
+      pmsState.team = null;
+      pmsState.appraisals = null;
+      if (!keepReviewState) pmsState.review = null;
+      if (App.invalidateDashboardView) App.invalidateDashboardView();
+    }
+
+    function invalidatePmsAll_() {
+      invalidatePmsShells_('', '', false);
+      if (App.invalidateModuleViewCachePrefix) {
+        App.invalidateModuleViewCachePrefix('pms-cycle:');
+        App.invalidateModuleViewCachePrefix('pms-my-review:');
+        App.invalidateModuleViewCachePrefix('pms-team:');
+        App.invalidateModuleViewCachePrefix('pms-review:');
+        App.invalidateModuleViewCachePrefix('pms-appraisal:');
+      }
+    }
+
+    if (App.registerModuleDataCacheClear) {
+      App.registerModuleDataCacheClear(function () {
+        pmsState.dashboard = null;
+        pmsState.cycles = null;
+        pmsState.cycleDetail = null;
+        pmsState.review = null;
+        pmsState.team = null;
+        pmsState.appraisals = null;
+        pmsState.scale = null;
+        pmsState.employees = [];
+      });
+    }
+
+    App.registerRoute('pms', { title: 'Performance', render: renderPmsHome });
+    App.registerRoute('pms-cycles', { title: 'Review cycles', render: renderCycles });
+    App.registerRoute('pms-cycle', { title: 'Review cycle', render: function (params) { renderCycleDetail(params && params.cycleId); } });
+    App.registerRoute('pms-my-review', { title: 'My review', render: function (params) { renderMyReview(params && params.cycleId); } });
+    App.registerRoute('pms-team', { title: 'Team reviews', render: function (params) { renderTeam(params && params.cycleId); } });
+    App.registerRoute('pms-review', { title: 'Review', render: function (params) {
+      renderReviewDetail(params && params.cycleId, params && params.employeeId);
+    } });
+    App.registerRoute('pms-appraisal', { title: 'Appraisals', render: function (params) { renderAppraisals(params && params.cycleId); } });
+
+    function pageEl() {
+      var page = $('page-content');
+      if (!page) return null;
+      page.classList.remove('hidden');
+      return page;
+    }
+
+    function stillOn(seq, route) {
+      if (App.routeStill) return App.routeStill(seq, route);
+      var s = App.getState();
+      return seq === s.navSeq && s.currentRoute === route;
+    }
+
+    function sessionRole() {
+      var s = App.getState() && App.getState().session;
+      return s && s.role ? String(s.role).toUpperCase() : '';
+    }
+
+    function caps(bundle) {
+      return (bundle && bundle.capabilities) || {};
+    }
+
+    function isHr() {
+      var r = sessionRole();
+      return r === 'HR' || r === 'ADMIN';
+    }
+
+    function header(title, lede, actionsHtml) {
+      if (App.pageHeaderHtml) return App.pageHeaderHtml(title, lede, actionsHtml || '');
+      return '<div class="page-header"><div class="page-header-text"><h2 class="page-heading">' +
+        escapeHtml(title) + '</h2>' + (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
+        '</div><div class="page-header-actions">' + (actionsHtml || '') + '</div></div>';
+    }
+
+    function paintErr(el, message, retry) {
+      if (App.paintSectionError) App.paintSectionError(el, message, retry);
+      else if (el) el.innerHTML = '<div class="alert alert-danger">' + escapeHtml(message || 'Failed') + '</div>';
+    }
+
+    function spinner(label) {
+      return App.sectionSkeleton
+        ? App.sectionSkeleton({ label: label || 'Loading' })
+        : (App.sectionSpinner ? App.sectionSpinner(label) : '<div class="hrms-loading-block" aria-busy="true"><div class="skeleton skeleton-line w80" aria-hidden="true"></div></div>');
+    }
+
+    function kpiCard(label, value, hint) {
+      return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
+        '<div class="kpi-value">' + value + '</div>' +
+        (hint ? '<div class="kpi-hint">' + escapeHtml(hint) + '</div>' : '') + '</div>';
+    }
+
+    function statusKey(status) {
+      return String(status || '').toUpperCase();
+    }
+
+    function cycleLabel(status) {
+      var s = statusKey(status);
+      if (s === 'DRAFT') return 'Draft';
+      if (s === 'OPEN') return 'Open';
+      if (s === 'EMPLOYEE_SUBMITTED') return 'Self-assessment closed';
+      if (s === 'MANAGER_REVIEW') return 'Manager review';
+      if (s === 'FINALIZED') return 'Finalized';
+      if (s === 'CLOSED') return 'Closed';
+      return s || '—';
+    }
+
+    function reviewLabel(status) {
+      var s = statusKey(status);
+      if (s === 'NOT_STARTED') return 'Not started';
+      if (s === 'IN_PROGRESS') return 'In progress';
+      if (s === 'SELF_SUBMITTED') return 'Self-assessment submitted';
+      if (s === 'MANAGER_SUBMITTED') return 'Manager review submitted';
+      if (s === 'FINALIZED') return 'Finalized';
+      return s || 'Not started';
+    }
+
+    function badgeClass(status) {
+      var s = statusKey(status);
+      if (s === 'DRAFT' || s === 'NOT_STARTED') return 'badge-draft';
+      if (s === 'OPEN' || s === 'IN_PROGRESS') return 'badge-calculated';
+      if (s === 'EMPLOYEE_SUBMITTED' || s === 'SELF_SUBMITTED') return 'badge-submitted';
+      if (s === 'MANAGER_REVIEW') return 'badge-under_review';
+      if (s === 'FINALIZED' || s === 'COMPLETED' || s === 'ACTIVE') return 'badge-approved';
+      if (s === 'CLOSED' || s === 'MANAGER_SUBMITTED') return 'badge-locked';
+      if (s === 'CANCELLED') return 'badge-cancelled';
+      return '';
+    }
+
+    function badge(status, labelFn) {
+      var s = statusKey(status);
+      var label = labelFn ? labelFn(s) : s;
+      return '<span class="badge status-badge ' + badgeClass(s) + '">' + escapeHtml(label) + '</span>';
+    }
+
+    function fmtDate(v) {
+      if (!v) return '—';
+      var s = String(v).substring(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        var p = s.split('-');
+        return p[2] + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(p[1]) - 1] + ' ' + p[0];
+      }
+      var d = new Date(v);
+      if (isNaN(d.getTime())) return String(v);
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function stepper(status) {
+      var steps = [
+        { key: 'DRAFT', label: 'Draft' },
+        { key: 'OPEN', label: 'Open' },
+        { key: 'EMPLOYEE_SUBMITTED', label: 'Self-assessment' },
+        { key: 'MANAGER_REVIEW', label: 'Manager review' },
+        { key: 'FINALIZED', label: 'Finalize' },
+        { key: 'CLOSED', label: 'Close' }
+      ];
+      var s = statusKey(status);
+      var idx = -1;
+      for (var i = 0; i < steps.length; i++) {
+        if (steps[i].key === s) idx = i;
+      }
+      return '<div class="stepper" aria-label="Performance cycle">' + steps.map(function (st, i) {
+        var cls = 'step';
+        if (i < idx) cls += ' done';
+        if (i === idx) cls += ' current';
+        return '<span class="' + cls + '">' + escapeHtml(st.label) + '</span>';
+      }).join('') + '</div>';
+    }
+
+    function ratingOptions(scale, selected) {
+      scale = scale || [];
+      var sel = selected === '' || selected === null || selected === undefined ? '' : String(selected);
+      var html = '<option value="">Select rating</option>';
+      scale.forEach(function (r) {
+        if (r.is_active === false) return;
+        var v = String(r.value);
+        html += '<option value="' + escapeHtml(v) + '"' + (v === sel ? ' selected' : '') + '>' +
+          escapeHtml(v + ' — ' + (r.label || '')) + '</option>';
+      });
+      return html;
+    }
+
+    function ratingLegend(scale) {
+      scale = scale || [];
+      if (!scale.length) return '';
+      return '<p class="rating-legend">' + scale.map(function (r) {
+        return escapeHtml(String(r.value) + ' ' + (r.label || ''));
+      }).join(' · ') + '</p>';
+    }
+
+    function weightHtml(w) {
+      w = w || {};
+      var cls = w.ok ? 'weight-ok' : 'weight-bad';
+      return '<span class="' + cls + '">Weights: ' + escapeHtml(String(w.total || 0)) + ' / 100</span>' +
+        (w.ok ? '' : ' <span class="hint">' + escapeHtml(w.message || '') + '</span>');
+    }
+
+    function rpc(fnName, args, btn, loadingText, feedback) {
+      var opts = { loadingText: loadingText || 'Working…' };
+      if (btn) opts.button = btn;
+      if (feedback) opts.feedback = feedback;
+      return callServer.apply(null, [fnName].concat(args || []).concat([opts]));
+    }
+
+    function confirmModal(opts) {
+      opts = opts || {};
+      return new Promise(function (resolve) {
+        var wrap = document.createElement('div');
+        wrap.className = 'modal-backdrop';
+        wrap.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+          '<h3>' + escapeHtml(opts.title || 'Confirm') + '</h3>' +
+          '<p>' + escapeHtml(opts.body || 'Are you sure?') + '</p>' +
+          '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-secondary" id="pms-modal-cancel">Cancel</button>' +
+          '<button type="button" class="btn ' + (opts.danger ? 'btn-danger-solid' : 'btn-primary') + '" id="pms-modal-ok">' +
+          escapeHtml(opts.okLabel || 'Confirm') + '</button></div></div>';
+        document.body.appendChild(wrap);
+        function close(ok) {
+          wrap.remove();
+          resolve(!!ok);
+        }
+        wrap.querySelector('#pms-modal-cancel').addEventListener('click', function () { close(false); });
+        wrap.querySelector('#pms-modal-ok').addEventListener('click', function () { close(true); });
+        wrap.addEventListener('click', function (ev) { if (ev.target === wrap) close(false); });
+      });
+    }
+
+    function val(id) {
+      var el = $(id);
+      return el ? String(el.value || '').trim() : '';
+    }
+
+    function markInvalid(id, on) {
+      var el = $(id);
+      if (!el) return;
+      if (on) el.classList.add('input-invalid');
+      else el.classList.remove('input-invalid');
+    }
+
+    function pmsSubnav(active) {
+      var c = caps(pmsState.dashboard || pmsState.cycles || {});
+      if (!c.canManageCycles && !c.canViewTeam && sessionRole() === 'EMPLOYEE') return '';
+      var links = [{ id: 'pms', label: 'Overview' }, { id: 'pms-my-review', label: 'My review' }];
+      if (c.canViewTeam || isHr() || sessionRole() === 'MANAGER') links.push({ id: 'pms-team', label: 'Team reviews' });
+      if (c.canManageCycles || isHr()) {
+        links.push({ id: 'pms-cycles', label: 'Cycles' });
+        links.push({ id: 'pms-appraisal', label: 'Appraisals' });
+      }
+      return '<div class="pms-subnav">' + links.map(function (l) {
+        var cls = 'btn btn-sm ' + (l.id === active ? 'btn-secondary' : 'btn-ghost');
+        return '<button type="button" class="' + cls + ' js-pms-nav" data-route="' + l.id + '">' + escapeHtml(l.label) + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function bindSubnav(page) {
+      if (!page) return;
+      page.querySelectorAll('.js-pms-nav').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          App.navigate(btn.getAttribute('data-route'));
+        });
+      });
+    }
+
+    function transitionLabel(to) {
+      var s = statusKey(to);
+      if (s === 'OPEN') return 'Open cycle';
+      if (s === 'EMPLOYEE_SUBMITTED') return 'Close self-assessment';
+      if (s === 'MANAGER_REVIEW') return 'Start manager review';
+      if (s === 'FINALIZED') return 'Mark cycle finalized';
+      if (s === 'CLOSED') return 'Close cycle';
+      if (s === 'DRAFT') return 'Return to draft';
+      return cycleLabel(s);
+    }
+
+    /* ---------- Home / dashboard ---------- */
+
+    function renderPmsHome() {
+      var page = pageEl();
+      if (!page) return;
+      var seq = App.getState().navSeq;
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('pms') && pmsState.dashboard) {
+        paintHome_(page, seq);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh('pms') && pmsState.dashboard)) {
+      page.innerHTML = '<div class="pms-page">' +
+        header('Performance', 'Goals, self-assessment, and reviews for the current cycle.', '') +
+        '<div class="kpi-row">' +
+        kpiCard('Active cycles', '<div class="skeleton skeleton-xl"></div>', '') +
+        kpiCard('Pending self-assessment', '<div class="skeleton skeleton-xl"></div>', '') +
+        kpiCard('Pending manager review', '<div class="skeleton skeleton-xl"></div>', '') +
+        kpiCard('Completed', '<div class="skeleton skeleton-xl"></div>', '') +
+        kpiCard('Overdue', '<div class="skeleton skeleton-xl"></div>', '') +
+        '</div>' +
+        '<div class="card">' + spinner('Loading performance…') + '</div></div>';
+      }
+
+      rpc('apiPmsGetDashboard', []).then(function (data) {
+        if (!stillOn(seq, 'pms')) return;
+        pmsState.dashboard = data || {};
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded('pms');
+        paintHome_(page, seq);
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        paintErr(page, err.message || 'Could not load performance.', function () { renderPmsHome(); });
+      });
+    }
+
+    function paintHome_(page, seq) {
+      var data = pmsState.dashboard || {};
+      var k = data.kpis || {};
+      var c = caps(data);
+      var flash = consumeFlash ? consumeFlash('pms') : null;
+      var actions = '';
+      if (c.canManageCycles) {
+        actions = '<button type="button" class="btn btn-primary" id="pms-new-cycle">New cycle</button>';
+      } else if (data.my_open_cycle) {
+        actions = '<button type="button" class="btn btn-primary" id="pms-open-mine">Continue self-assessment</button>';
+      } else if (c.canViewTeam) {
+        actions = '<button type="button" class="btn btn-primary" id="pms-open-team">Team reviews</button>';
+      }
+
+      var html = '<div class="pms-page">';
+      if (flashBannerHtml && flash) html += flashBannerHtml(flash);
+      html += header('Performance', 'Goals, self-assessment, and reviews for the current cycle.', actions);
+      html += pmsSubnav('pms');
+      html += '<div class="kpi-row">' +
+        kpiCard('Active cycles', String(k.active_cycles || 0), 'Open, in self-assessment, or in manager review') +
+        kpiCard('Pending self-assessment', String(k.employees_pending_self || 0), 'People who still need to submit') +
+        kpiCard('Pending manager review', String(k.managers_pending_review || 0), 'Submitted, waiting on a manager') +
+        kpiCard('Completed reviews', String(k.completed_reviews || 0), 'Manager submitted or finalized') +
+        kpiCard('Overdue reviews', String(k.overdue_reviews || 0), 'Past the manager review deadline') +
+        '</div>';
+
+      if (data.my_open_cycle) {
+        var mine = data.my_review || {};
+        html += '<div class="card"><h2>Your open cycle</h2>' +
+          '<p>' + escapeHtml(data.my_open_cycle.name || '') + ' ' + badge(data.my_open_cycle.status, cycleLabel) + '</p>' +
+          '<p class="pms-meta">Submit by ' + escapeHtml(fmtDate(data.my_open_cycle.submission_deadline)) +
+          ' · Status: ' + escapeHtml(reviewLabel(mine.status)) + '</p>' +
+          '<div class="primary-next"><button type="button" class="btn btn-primary" id="pms-open-mine">Open my review</button></div></div>';
+      } else if (!c.canManageCycles) {
+        html += '<div class="card empty-state"><h2>No open self-assessment</h2>' +
+          '<p>When HR opens a cycle and assigns goals, they will appear here.</p></div>';
+      }
+
+      var cycles = data.cycles || [];
+      if (c.canManageCycles || c.canViewTeam) {
+        html += '<div class="card"><h2>Cycles</h2>';
+        if (!cycles.length) {
+          html += '<div class="empty-state"><h2>No cycles yet</h2><p>Create a review cycle to assign goals and collect assessments.</p></div>';
+        } else {
+          html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+            '<th>Cycle</th><th>Dates</th><th>Status</th><th></th></tr></thead><tbody>' +
+            cycles.map(function (cy) {
+              return '<tr class="table-row-click js-open-cycle" data-id="' + escapeHtml(cy.cycle_id) + '">' +
+                '<td>' + escapeHtml(cy.name) + '</td>' +
+                '<td>' + escapeHtml(fmtDate(cy.start_date) + ' – ' + fmtDate(cy.end_date)) + '</td>' +
+                '<td>' + badge(cy.status, cycleLabel) + '</td>' +
+                '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-open-cycle" data-id="' +
+                escapeHtml(cy.cycle_id) + '">Open</button></td></tr>';
+            }).join('') + '</tbody></table></div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      page.innerHTML = html;
+      bindSubnav(page);
+      if ($('pms-new-cycle')) $('pms-new-cycle').addEventListener('click', function () { App.navigate('pms-cycles'); });
+      if ($('pms-open-mine')) $('pms-open-mine').addEventListener('click', function () {
+        App.navigate('pms-my-review', data.my_open_cycle ? { cycleId: data.my_open_cycle.cycle_id } : {});
+      });
+      if ($('pms-open-team')) $('pms-open-team').addEventListener('click', function () { App.navigate('pms-team'); });
+      page.querySelectorAll('.js-open-cycle').forEach(function (el) {
+        el.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          var id = el.getAttribute('data-id');
+          if (c.canManageCycles) App.navigate('pms-cycle', { cycleId: id });
+          else App.navigate('pms-team', { cycleId: id });
+        });
+      });
+    }
+
+    /* ---------- Cycles ---------- */
+
+    function renderCycles() {
+      var page = pageEl();
+      if (!page) return;
+      var seq = App.getState().navSeq;
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('pms-cycles') && pmsState.cycles) {
+        paintCycles_(page);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh('pms-cycles') && pmsState.cycles)) {
+        page.innerHTML = '<div class="pms-page">' +
+          header('Review cycles', 'Create a cycle, then add goals before you open it.', '') +
+          '<div class="card">' + spinner('Loading cycles…') + '</div></div>';
+      }
+      rpc('apiPmsListCycles', []).then(function (data) {
+        if (!stillOn(seq, 'pms-cycles')) return;
+        pmsState.cycles = data || {};
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded('pms-cycles');
+        paintCycles_(page);
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms-cycles')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        paintErr(page, err.message || 'Could not load cycles.', function () { renderCycles(); });
+      });
+    }
+
+    function paintCycles_(page) {
+      var data = pmsState.cycles || {};
+      var c = caps(data);
+      var cycles = data.cycles || [];
+      var flash = consumeFlash ? consumeFlash('pms-cycles') : null;
+      var actions = c.canManageCycles
+        ? '<button type="button" class="btn btn-primary" id="pms-show-create">New cycle</button>'
+        : '';
+      var html = '<div class="pms-page">';
+      if (flashBannerHtml && flash) html += flashBannerHtml(flash);
+      html += header('Review cycles', 'Create a cycle, then add goals before you open it.', actions);
+      html += pmsSubnav('pms-cycles');
+      html += '<div id="pms-cycle-form-wrap" class="card hidden"><h2>New cycle</h2>' + cycleFormHtml_({}) + '</div>';
+      html += '<div class="card"><h2>All cycles</h2>';
+      if (!cycles.length) {
+        html += '<div class="empty-state"><h2>No cycles yet</h2><p>Start with a draft cycle, add goals, then open it so people can submit.</p></div>';
+      } else {
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Name</th><th>Period</th><th>Self-assessment due</th><th>Review due</th><th>Status</th><th></th></tr></thead><tbody>' +
+          cycles.map(function (cy) {
+            return '<tr class="table-row-click js-open-cycle" data-id="' + escapeHtml(cy.cycle_id) + '">' +
+              '<td>' + escapeHtml(cy.name) + '</td>' +
+              '<td>' + escapeHtml(fmtDate(cy.start_date) + ' – ' + fmtDate(cy.end_date)) + '</td>' +
+              '<td>' + escapeHtml(fmtDate(cy.submission_deadline)) + '</td>' +
+              '<td>' + escapeHtml(fmtDate(cy.review_deadline)) + '</td>' +
+              '<td>' + badge(cy.status, cycleLabel) + '</td>' +
+              '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-open-cycle" data-id="' +
+              escapeHtml(cy.cycle_id) + '">Open</button></td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      html += '</div></div>';
+      page.innerHTML = html;
+      bindSubnav(page);
+      bindCycleForm_(page, null);
+      if ($('pms-show-create')) {
+        $('pms-show-create').addEventListener('click', function () {
+          var wrap = $('pms-cycle-form-wrap');
+          if (wrap) wrap.classList.toggle('hidden');
+        });
+      }
+      page.querySelectorAll('.js-open-cycle').forEach(function (el) {
+        el.addEventListener('click', function () {
+          App.navigate('pms-cycle', { cycleId: el.getAttribute('data-id') });
+        });
+      });
+    }
+
+    function cycleFormHtml_(cycle) {
+      cycle = cycle || {};
+      return '<div class="emp-form-grid">' +
+        '<div class="form-group form-span-2"><label class="form-label is-required" for="pms-cy-name">Name</label>' +
+        '<input class="form-input form-wide" id="pms-cy-name" maxlength="80" value="' + escapeHtml(cycle.name || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label is-required" for="pms-cy-start">Start date</label>' +
+        '<input class="form-input" type="date" id="pms-cy-start" value="' + escapeHtml(String(cycle.start_date || '').substring(0, 10)) + '"></div>' +
+        '<div class="form-group"><label class="form-label is-required" for="pms-cy-end">End date</label>' +
+        '<input class="form-input" type="date" id="pms-cy-end" value="' + escapeHtml(String(cycle.end_date || '').substring(0, 10)) + '"></div>' +
+        '<div class="form-group"><label class="form-label is-required" for="pms-cy-submit">Self-assessment deadline</label>' +
+        '<input class="form-input" type="date" id="pms-cy-submit" value="' + escapeHtml(String(cycle.submission_deadline || '').substring(0, 10)) + '"></div>' +
+        '<div class="form-group"><label class="form-label is-required" for="pms-cy-review">Manager review deadline</label>' +
+        '<input class="form-input" type="date" id="pms-cy-review" value="' + escapeHtml(String(cycle.review_deadline || '').substring(0, 10)) + '"></div>' +
+        '<div class="form-group form-span-2"><label class="form-label" for="pms-cy-notes">Notes</label>' +
+        '<textarea class="form-input" id="pms-cy-notes" rows="2">' + escapeHtml(cycle.notes || '') + '</textarea></div></div>' +
+        '<div class="form-actions"><button type="button" class="btn btn-primary" id="pms-cy-save">' +
+        (cycle.cycle_id ? 'Save cycle' : 'Create cycle') + '</button></div>' +
+        '<div id="pms-cy-feedback" class="action-feedback hidden" role="status"></div>';
+    }
+
+    function readCycleForm_() {
+      var payload = {
+        name: val('pms-cy-name'),
+        start_date: val('pms-cy-start'),
+        end_date: val('pms-cy-end'),
+        submission_deadline: val('pms-cy-submit'),
+        review_deadline: val('pms-cy-review'),
+        notes: val('pms-cy-notes')
+      };
+      var missing = !payload.name || !payload.start_date || !payload.end_date ||
+        !payload.submission_deadline || !payload.review_deadline;
+      markInvalid('pms-cy-name', !payload.name);
+      markInvalid('pms-cy-start', !payload.start_date);
+      markInvalid('pms-cy-end', !payload.end_date);
+      markInvalid('pms-cy-submit', !payload.submission_deadline);
+      markInvalid('pms-cy-review', !payload.review_deadline);
+      if (missing) return { error: 'Name, dates, and both deadlines are required.' };
+      if (payload.end_date < payload.start_date) return { error: 'End date cannot be before start date.' };
+      if (payload.review_deadline < payload.submission_deadline) {
+        return { error: 'Manager review deadline cannot be before the self-assessment deadline.' };
+      }
+      return { payload: payload };
+    }
+
+    function bindCycleForm_(page, cycleId) {
+      var btn = $('pms-cy-save');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var parsed = readCycleForm_();
+        var fb = $('pms-cy-feedback');
+        if (parsed.error) {
+          if (setActionFeedback) setActionFeedback(fb, parsed.error, 'error');
+          return;
+        }
+        var fn = cycleId ? 'apiPmsUpdateCycle' : 'apiPmsCreateCycle';
+        var args = cycleId ? [cycleId, parsed.payload] : [parsed.payload];
+        rpc(fn, args, btn, cycleId ? 'Saving…' : 'Creating…', fb).then(function (row) {
+          invalidatePmsAll_();
+          showToast(cycleId ? 'Cycle saved' : 'Cycle created', 'success');
+          if (setFlash) setFlash(cycleId ? 'Cycle saved.' : 'Cycle created. Add goals, then open it.', 'success', 'pms-cycle');
+          App.navigate('pms-cycle', { cycleId: row.cycle_id || cycleId });
+        }).catch(function () { /* feedback set by callServer */ });
+      });
+    }
+
+    function renderCycleDetail(cycleId) {
+      var page = pageEl();
+      if (!page) return;
+      if (!cycleId) {
+        page.innerHTML = '<div class="pms-page">' + header('Review cycle', 'Choose a cycle from the list.', '') +
+          '<div class="empty-state"><h2>No cycle selected</h2></div></div>';
+        return;
+      }
+      var seq = App.getState().navSeq;
+      var cycleKey = 'pms-cycle:' + String(cycleId);
+      var cachedCycle = pmsState.cycleDetail && pmsState.cycleDetail.cycle &&
+        (pmsState.cycleDetail.cycle.cycle_id === cycleId || pmsState.cycleDetail.cycle_id === cycleId);
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(cycleKey) && cachedCycle) {
+        paintCycleDetail_(page, seq);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh(cycleKey) && cachedCycle)) {
+        page.innerHTML = '<div class="pms-page">' + header('Review cycle', '', '') +
+          '<div class="card">' + spinner('Loading cycle…') + '</div></div>';
+      }
+      Promise.all([
+        rpc('apiPmsGetCycle', [cycleId]),
+        rpc('apiPmsListAssignableEmployees', [cycleId]).catch(function () { return []; }),
+        rpc('apiPmsListRatingScale', []).catch(function () { return { ratingScale: [] }; })
+      ]).then(function (parts) {
+        if (!stillOn(seq, 'pms-cycle')) return;
+        pmsState.cycleDetail = parts[0] || {};
+        pmsState.employees = parts[1] || [];
+        pmsState.scale = (parts[2] && parts[2].ratingScale) || (parts[0] && parts[0].ratingScale) || [];
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(cycleKey);
+        paintCycleDetail_(page, seq);
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms-cycle')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        paintErr(page, err.message || 'Could not load cycle.', function () { renderCycleDetail(cycleId); });
+      });
+    }
+
+    function paintCycleDetail_(page, seq) {
+      var detail = pmsState.cycleDetail || {};
+      var cycle = detail.cycle || {};
+      var c = caps(detail);
+      var employees = detail.employees || [];
+      var html = '<div class="pms-page">';
+      var flash = consumeFlash ? consumeFlash('pms-cycle') : null;
+      if (flashBannerHtml && flash) html += flashBannerHtml(flash);
+      var actions = '';
+      (cycle.allowed_transitions || []).forEach(function (to) {
+        var primary = to === 'OPEN' || to === 'MANAGER_REVIEW' || to === 'FINALIZED' || to === 'CLOSED';
+        actions += '<button type="button" class="btn ' + (primary ? 'btn-primary' : 'btn-secondary') +
+          ' js-pms-trans" data-to="' + escapeHtml(to) + '">' + escapeHtml(transitionLabel(to)) + '</button>';
+      });
+      html += header(cycle.name || 'Review cycle', 'Assign goals, then move the cycle forward. Invalid jumps are blocked.', actions);
+      html += pmsSubnav('pms-cycles');
+      html += stepper(cycle.status);
+      html += '<p class="pms-meta">' + escapeHtml(fmtDate(cycle.start_date) + ' – ' + fmtDate(cycle.end_date)) +
+        ' · Self-assessment due ' + escapeHtml(fmtDate(cycle.submission_deadline)) +
+        ' · Manager review due ' + escapeHtml(fmtDate(cycle.review_deadline)) +
+        ' ' + badge(cycle.status, cycleLabel) + '</p>';
+      html += '<div id="pms-cycle-feedback" class="action-feedback hidden" role="status"></div>';
+
+      if (c.canManageCycles && statusKey(cycle.status) !== 'CLOSED') {
+        html += '<div class="card"><h2>Cycle details</h2>' + cycleFormHtml_(cycle) + '</div>';
+      }
+
+      if (c.canManageCycles && (statusKey(cycle.status) === 'DRAFT' || statusKey(cycle.status) === 'OPEN')) {
+        html += '<div class="card"><h2>Add a goal</h2>' +
+          '<p class="hint">Weights for each person must add up to 100 before they can submit.</p>' +
+          '<div class="emp-form-grid">' +
+          '<div class="form-group"><label class="form-label is-required" for="pms-g-emp">Employee</label>' +
+          '<select class="form-select" id="pms-g-emp">' + employeeOptions_(pmsState.employees) + '</select></div>' +
+          '<div class="form-group"><label class="form-label is-required" for="pms-g-weight">Weight</label>' +
+          '<input class="form-input" id="pms-g-weight" type="number" min="0.01" max="100" step="0.01" placeholder="e.g. 25"></div>' +
+          '<div class="form-group form-span-2"><label class="form-label is-required" for="pms-g-title">Title</label>' +
+          '<input class="form-input form-wide" id="pms-g-title" maxlength="120"></div>' +
+          '<div class="form-group form-span-2"><label class="form-label" for="pms-g-desc">Description</label>' +
+          '<textarea class="form-input" id="pms-g-desc" rows="2"></textarea></div>' +
+          '<div class="form-group"><label class="form-label" for="pms-g-meas">How it is measured</label>' +
+          '<input class="form-input form-wide" id="pms-g-meas"></div>' +
+          '<div class="form-group"><label class="form-label" for="pms-g-target">Target</label>' +
+          '<input class="form-input form-wide" id="pms-g-target"></div></div>' +
+          '<div class="form-actions"><button type="button" class="btn btn-primary" id="pms-g-save">Add goal</button></div>' +
+          '<div id="pms-g-feedback" class="action-feedback hidden" role="status"></div></div>';
+      }
+
+      html += '<div class="card"><h2>People and goals</h2>';
+      if (!employees.length) {
+        html += '<div class="empty-state"><h2>No goals yet</h2><p>Add at least one goal for each person who should be in this cycle.</p></div>';
+      } else {
+        employees.forEach(function (block) {
+          html += '<div class="emp-block"><h3>' + escapeHtml(block.display_name || block.employee_id) +
+            ' <span class="mono">' + escapeHtml(block.employee_id) + '</span></h3>' +
+            '<p>' + weightHtml(block.weight) +
+            ' · <button type="button" class="btn btn-ghost btn-sm js-open-review" data-emp="' +
+            escapeHtml(block.employee_id) + '">Open review</button></p>';
+          html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+            '<th>Goal</th><th class="num">Weight</th><th>Progress</th><th></th></tr></thead><tbody>' +
+            (block.goals || []).map(function (g) {
+              return '<tr><td>' + escapeHtml(g.title) +
+                (g.measurement ? '<div class="hint">' + escapeHtml(g.measurement) + '</div>' : '') + '</td>' +
+                '<td class="num">' + escapeHtml(String(g.weight)) + '</td>' +
+                '<td>' + escapeHtml(String(g.progress || 0)) + '%</td>' +
+                '<td class="col-actions">' +
+                ((statusKey(cycle.status) === 'DRAFT' || statusKey(cycle.status) === 'OPEN') && c.canManageCycles
+                  ? '<button type="button" class="btn btn-danger btn-sm js-del-goal" data-id="' + escapeHtml(g.goal_id) + '">Remove</button>'
+                  : '') + '</td></tr>';
+            }).join('') + '</tbody></table></div></div>';
+        });
+      }
+      html += '</div>';
+
+      if (c.canManageRatings) {
+        html += ratingScaleCard_(pmsState.scale || detail.ratingScale || []);
+      }
+      html += '</div>';
+      page.innerHTML = html;
+      bindSubnav(page);
+      bindCycleForm_(page, cycle.cycle_id);
+      bindCycleActions_(page, cycle, seq);
+    }
+
+    function employeeOptions_(list) {
+      list = list || [];
+      if (!list.length) return '<option value="">No active employees</option>';
+      return '<option value="">Select employee</option>' + list.map(function (e) {
+        return '<option value="' + escapeHtml(e.employee_id) + '">' +
+          escapeHtml((e.display_name || e.employee_id) + ' (' + e.employee_id + ')') + '</option>';
+      }).join('');
+    }
+
+    function bindCycleActions_(page, cycle, seq) {
+      page.querySelectorAll('.js-pms-trans').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var to = btn.getAttribute('data-to');
+          confirmModal({
+            title: transitionLabel(to),
+            body: 'Move this cycle to “' + cycleLabel(to) + '”? This cannot skip steps.',
+            okLabel: transitionLabel(to)
+          }).then(function (ok) {
+            if (!ok) return;
+            rpc('apiPmsTransitionCycle', [cycle.cycle_id, to], btn, 'Updating…', $('pms-cycle-feedback'))
+              .then(function () {
+                invalidatePmsAll_();
+                showToast('Cycle updated', 'success');
+                renderCycleDetail(cycle.cycle_id);
+              }).catch(function () {});
+          });
+        });
+      });
+      if ($('pms-g-save')) {
+        $('pms-g-save').addEventListener('click', function () {
+          var payload = {
+            cycle_id: cycle.cycle_id,
+            employee_id: val('pms-g-emp'),
+            title: val('pms-g-title'),
+            description: val('pms-g-desc'),
+            measurement: val('pms-g-meas'),
+            target: val('pms-g-target'),
+            weight: val('pms-g-weight'),
+            status: 'ACTIVE'
+          };
+          markInvalid('pms-g-emp', !payload.employee_id);
+          markInvalid('pms-g-title', !payload.title);
+          markInvalid('pms-g-weight', !payload.weight);
+          if (!payload.employee_id || !payload.title || !payload.weight) {
+            if (setActionFeedback) setActionFeedback($('pms-g-feedback'), 'Employee, title, and weight are required.', 'error');
+            return;
+          }
+          rpc('apiPmsCreateGoal', [payload], $('pms-g-save'), 'Adding…', $('pms-g-feedback')).then(function () {
+            invalidatePmsShells_(cycle.cycle_id, '', false);
+            showToast('Goal added', 'success');
+            renderCycleDetail(cycle.cycle_id);
+          }).catch(function () {});
+        });
+      }
+      page.querySelectorAll('.js-del-goal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          confirmModal({
+            title: 'Remove goal',
+            body: 'Remove this goal from the cycle?',
+            danger: true,
+            okLabel: 'Remove'
+          }).then(function (ok) {
+            if (!ok) return;
+            rpc('apiPmsDeleteGoal', [btn.getAttribute('data-id')], btn, 'Removing…', $('pms-cycle-feedback'))
+              .then(function () {
+                invalidatePmsShells_(cycle.cycle_id, '', false);
+                showToast('Goal removed', 'success');
+                renderCycleDetail(cycle.cycle_id);
+              }).catch(function () {});
+          });
+        });
+      });
+      page.querySelectorAll('.js-open-review').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          App.navigate('pms-review', { cycleId: cycle.cycle_id, employeeId: btn.getAttribute('data-emp') });
+        });
+      });
+      bindRatingScale_(page);
+    }
+
+    function ratingScaleCard_(scale) {
+      scale = scale || [];
+      var rows = scale.map(function (r, i) {
+        return '<tr>' +
+          '<td><input class="form-input js-rs-value" data-i="' + i + '" type="number" min="1" step="1" value="' + escapeHtml(String(r.value)) + '"></td>' +
+          '<td><input class="form-input js-rs-label" data-i="' + i + '" value="' + escapeHtml(r.label || '') + '"></td>' +
+          '<td><input class="form-input js-rs-desc" data-i="' + i + '" value="' + escapeHtml(r.description || '') + '"></td></tr>';
+      }).join('');
+      return '<div class="card"><h2>Rating scale</h2>' +
+        '<p class="hint">Used for self, manager, and final ratings. Do not leave gaps if people already have scores on these values.</p>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Value</th><th>Label</th><th>Description</th></tr></thead><tbody id="pms-rs-body">' +
+        rows + '</tbody></table></div>' +
+        '<div class="form-actions">' +
+        '<button type="button" class="btn btn-secondary" id="pms-rs-add">Add rating</button>' +
+        '<button type="button" class="btn btn-primary" id="pms-rs-save">Save scale</button></div>' +
+        '<div id="pms-rs-feedback" class="action-feedback hidden" role="status"></div></div>';
+    }
+
+    function bindRatingScale_(page) {
+      if ($('pms-rs-add')) {
+        $('pms-rs-add').addEventListener('click', function () {
+          var body = $('pms-rs-body');
+          if (!body) return;
+          var i = body.querySelectorAll('tr').length;
+          var tr = document.createElement('tr');
+          tr.innerHTML = '<td><input class="form-input js-rs-value" data-i="' + i + '" type="number" min="1" step="1"></td>' +
+            '<td><input class="form-input js-rs-label" data-i="' + i + '"></td>' +
+            '<td><input class="form-input js-rs-desc" data-i="' + i + '"></td>';
+          body.appendChild(tr);
+        });
+      }
+      if ($('pms-rs-save')) {
+        $('pms-rs-save').addEventListener('click', function () {
+          var items = [];
+          page.querySelectorAll('#pms-rs-body tr').forEach(function (tr, idx) {
+            var value = tr.querySelector('.js-rs-value');
+            var label = tr.querySelector('.js-rs-label');
+            var desc = tr.querySelector('.js-rs-desc');
+            items.push({
+              value: value ? value.value : '',
+              label: label ? label.value : '',
+              description: desc ? desc.value : '',
+              sort_order: idx + 1,
+              is_active: true
+            });
+          });
+          rpc('apiPmsSaveRatingScale', [items], $('pms-rs-save'), 'Saving…', $('pms-rs-feedback')).then(function (res) {
+            invalidatePmsAll_();
+            pmsState.scale = (res && res.ratingScale) || items;
+            showToast('Rating scale saved', 'success');
+          }).catch(function () {});
+        });
+      }
+    }
+
+    /* ---------- My review ---------- */
+
+    function renderMyReview(cycleId) {
+      var page = pageEl();
+      if (!page) return;
+      var seq = App.getState().navSeq;
+      var myKey = 'pms-my-review:' + String(cycleId || '');
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(myKey) && pmsState.review) {
+        paintMyReview_(page, seq);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh(myKey) && pmsState.review)) {
+        page.innerHTML = '<div class="pms-page">' + header('My review', 'Update progress and comments, then submit.', '') +
+          '<div class="card">' + spinner('Loading your review…') + '</div></div>';
+      }
+
+      function loadWith(id) {
+        var sid = App.getState().session && App.getState().session.employee_id;
+        rpc('apiPmsGetReview', [id, sid]).then(function (bundle) {
+          if (!stillOn(seq, 'pms-my-review')) return;
+          pmsState.review = bundle;
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded(myKey);
+          paintMyReview_(page, seq);
+        }).catch(function (err) {
+          if (!stillOn(seq, 'pms-my-review')) return;
+          if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+          paintErr(page, err.message || 'Could not load your review.', function () { renderMyReview(cycleId); });
+        });
+      }
+
+      if (cycleId) {
+        loadWith(cycleId);
+        return;
+      }
+      rpc('apiPmsGetDashboard', []).then(function (dash) {
+        if (!stillOn(seq, 'pms-my-review')) return;
+        pmsState.dashboard = dash || {};
+        if (dash && dash.my_open_cycle) {
+          loadWith(dash.my_open_cycle.cycle_id);
+          return;
+        }
+        return rpc('apiPmsListCycles', []).then(function (list) {
+          if (!stillOn(seq, 'pms-my-review')) return;
+          var cycles = (list && list.cycles) || [];
+          if (!cycles.length) {
+            page.innerHTML = '<div class="pms-page">' + header('My review', 'Your goals and self-assessment.', '') +
+              pmsSubnav('pms-my-review') +
+              '<div class="card empty-state"><h2>No review assigned</h2>' +
+              '<p>When HR adds goals for you in a cycle, they will show up here.</p></div></div>';
+            bindSubnav(page);
+            return;
+          }
+          loadWith(cycles[0].cycle_id);
+        });
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms-my-review')) return;
+        paintErr(page, err.message || 'Could not load your review.', function () { renderMyReview(cycleId); });
+      });
+    }
+
+    function paintMyReview_(page, seq) {
+      var b = pmsState.review || {};
+      var cycle = b.cycle || {};
+      var review = b.review || {};
+      var goals = b.goals || [];
+      var html = '<div class="pms-page">';
+      html += header(cycle.name || 'My review', 'Update progress and comments, then submit. After submit, changes are locked unless HR reopens your review.', '');
+      html += pmsSubnav('pms-my-review');
+      html += stepper(cycle.status);
+      html += '<p class="pms-meta">Self-assessment due ' + escapeHtml(fmtDate(cycle.submission_deadline)) +
+        ' ' + badge(review.status || 'NOT_STARTED', reviewLabel) + '</p>';
+      html += ratingLegend(b.ratingScale);
+      html += '<p>' + weightHtml(b.weight) + '</p>';
+      html += '<div id="pms-self-feedback" class="action-feedback hidden" role="status"></div>';
+
+      if (!goals.length) {
+        html += '<div class="card empty-state"><h2>No goals in this cycle</h2><p>Ask HR to add goals before you submit.</p></div></div>';
+        page.innerHTML = html;
+        bindSubnav(page);
+        return;
+      }
+
+      goals.forEach(function (g, i) {
+        html += '<div class="card goal-card" data-goal-id="' + escapeHtml(g.goal_id) + '">' +
+          '<h3>' + escapeHtml(g.title) + ' <span class="hint">Weight ' + escapeHtml(String(g.weight)) + '</span></h3>' +
+          (g.description ? '<p>' + escapeHtml(g.description) + '</p>' : '') +
+          '<p class="pms-meta">' +
+          (g.measurement ? 'Measured by: ' + escapeHtml(g.measurement) + ' · ' : '') +
+          (g.target ? 'Target: ' + escapeHtml(g.target) : '') + '</p>' +
+          '<div class="emp-form-grid">' +
+          '<div class="form-group"><label class="form-label" for="pms-prog-' + i + '">Progress (%)</label>' +
+          '<input class="form-input js-self-progress" id="pms-prog-' + i + '" type="number" min="0" max="100" step="1" ' +
+          (b.can_edit_self ? '' : 'disabled ') + 'value="' + escapeHtml(String(g.progress || 0)) + '"></div>' +
+          '<div class="form-group"><label class="form-label" for="pms-srate-' + i + '">Self rating</label>' +
+          '<select class="form-select js-self-rating" id="pms-srate-' + i + '" ' + (b.can_edit_self ? '' : 'disabled ') + '>' +
+          ratingOptions(b.ratingScale, g.employee_rating) + '</select></div>' +
+          '<div class="form-group form-span-2"><label class="form-label" for="pms-ach-' + i + '">Achievement / notes</label>' +
+          '<textarea class="form-input js-self-ach" id="pms-ach-' + i + '" rows="2" ' + (b.can_edit_self ? '' : 'disabled ') + '>' +
+          escapeHtml(g.achievement || '') + '</textarea></div>' +
+          '<div class="form-group form-span-2"><label class="form-label" for="pms-scomm-' + i + '">Comments</label>' +
+          '<textarea class="form-input js-self-comm" id="pms-scomm-' + i + '" rows="2" ' + (b.can_edit_self ? '' : 'disabled ') + '>' +
+          escapeHtml(g.employee_comments || '') + '</textarea></div></div></div>';
+      });
+
+      html += '<div class="card"><label class="form-label" for="pms-self-overall">Overall comments</label>' +
+        '<textarea class="form-input form-wide" id="pms-self-overall" rows="3" ' + (b.can_edit_self ? '' : 'disabled ') + '>' +
+        escapeHtml(review.employee_overall_comments || '') + '</textarea>' +
+        '<div class="primary-next">';
+      if (b.can_edit_self) {
+        html += '<button type="button" class="btn btn-secondary" id="pms-self-save">Save draft</button>';
+        html += '<button type="button" class="btn btn-primary" id="pms-self-submit">Submit self-assessment</button>';
+      }
+      html += '</div></div></div>';
+      page.innerHTML = html;
+      bindSubnav(page);
+      bindSelfActions_(page, b);
+    }
+
+    function collectSelfPayload_(bundle) {
+      var goals = [];
+      var cards = document.querySelectorAll('.goal-card');
+      cards.forEach(function (card, i) {
+        var progress = card.querySelector('.js-self-progress');
+        var rating = card.querySelector('.js-self-rating');
+        var ach = card.querySelector('.js-self-ach');
+        var comm = card.querySelector('.js-self-comm');
+        var p = progress ? Number(progress.value) : 0;
+        if (progress && (progress.value === '' || !isFinite(p) || p < 0 || p > 100)) {
+          if (progress) progress.classList.add('input-invalid');
+          throw new Error('Progress must be between 0 and 100.');
+        }
+        if (progress) progress.classList.remove('input-invalid');
+        goals.push({
+          goal_id: card.getAttribute('data-goal-id'),
+          progress: p,
+          employee_rating: rating ? rating.value : '',
+          achievement: ach ? ach.value : '',
+          employee_comments: comm ? comm.value : ''
+        });
+      });
+      return {
+        cycle_id: bundle.cycle.cycle_id,
+        employee_overall_comments: val('pms-self-overall'),
+        goals: goals
+      };
+    }
+
+    function bindSelfActions_(page, bundle) {
+      function invReviewPeers_(keepReview) {
+        var empId = (bundle.employee && bundle.employee.employee_id) ||
+          ((App.getState().session || {}).employee_id);
+        invalidatePmsShells_(bundle.cycle.cycle_id, empId, keepReview);
+      }
+      if ($('pms-self-save')) {
+        $('pms-self-save').addEventListener('click', function () {
+          var payload;
+          try { payload = collectSelfPayload_(bundle); }
+          catch (e) {
+            if (setActionFeedback) setActionFeedback($('pms-self-feedback'), e.message, 'error');
+            return;
+          }
+          rpc('apiPmsSaveSelfAssessment', [payload], $('pms-self-save'), 'Saving…', $('pms-self-feedback'))
+            .then(function (next) {
+              pmsState.review = next;
+              invReviewPeers_(true);
+              showToast('Draft saved', 'success');
+            }).catch(function () {});
+        });
+      }
+      if ($('pms-self-submit')) {
+        $('pms-self-submit').addEventListener('click', function () {
+          confirmModal({
+            title: 'Submit self-assessment',
+            body: 'You will not be able to edit goals after submitting, unless HR reopens your review.',
+            okLabel: 'Submit'
+          }).then(function (ok) {
+            if (!ok) return;
+            var payload;
+            try { payload = collectSelfPayload_(bundle); }
+            catch (e) {
+              if (setActionFeedback) setActionFeedback($('pms-self-feedback'), e.message, 'error');
+              return;
+            }
+            rpc('apiPmsSaveSelfAssessment', [payload], $('pms-self-submit'), 'Submitting…', $('pms-self-feedback'))
+              .then(function () {
+                return rpc('apiPmsSubmitSelfAssessment', [bundle.cycle.cycle_id], $('pms-self-submit'), 'Submitting…', $('pms-self-feedback'));
+              })
+              .then(function (next) {
+                pmsState.review = next;
+                invReviewPeers_(true);
+                showToast('Self-assessment submitted', 'success');
+                if (setFlash) setFlash('Self-assessment submitted.', 'success', 'pms-my-review');
+                paintMyReview_(page, App.getState().navSeq);
+              }).catch(function () {});
+          });
+        });
+      }
+    }
+
+    /* ---------- Team / review detail / appraisals ---------- */
+
+    function renderTeam(cycleId) {
+      var page = pageEl();
+      if (!page) return;
+      var seq = App.getState().navSeq;
+      var teamKey = 'pms-team:' + String(cycleId || '');
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(teamKey) && pmsState.team) {
+        paintTeam_(page, cycleId);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh(teamKey) && pmsState.team)) {
+        page.innerHTML = '<div class="pms-page">' + header('Team reviews', 'People assigned to you in the current cycles.', '') +
+          '<div class="card">' + spinner('Loading team reviews…') + '</div></div>';
+      }
+      rpc('apiPmsListTeamReviews', [cycleId || '']).then(function (data) {
+        if (!stillOn(seq, 'pms-team')) return;
+        pmsState.team = data || {};
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(teamKey);
+        paintTeam_(page, cycleId);
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms-team')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        paintErr(page, err.message || 'Could not load team reviews.', function () { renderTeam(cycleId); });
+      });
+    }
+
+    function paintTeam_(page, cycleId) {
+      var data = pmsState.team || {};
+      var rows = data.rows || [];
+      var html = '<div class="pms-page">';
+      html += header('Team reviews', 'Open a row to see the self-assessment and add your ratings.', '');
+      html += pmsSubnav('pms-team');
+      html += '<div class="card">';
+      if (!rows.length) {
+        html += '<div class="empty-state"><h2>No assigned reviews</h2><p>When people on your team have goals in an open cycle, they appear here.</p></div>';
+      } else {
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Employee</th><th>Cycle</th><th>Status</th><th>Weights</th><th>Overdue</th><th></th></tr></thead><tbody>' +
+          rows.map(function (r) {
+            var emp = r.employee || {};
+            var st = (r.review && r.review.status) || 'NOT_STARTED';
+            return '<tr class="table-row-click js-open-rev" data-cycle="' + escapeHtml(r.cycle_id) +
+              '" data-emp="' + escapeHtml(emp.employee_id) + '">' +
+              '<td>' + escapeHtml(r.display_name || emp.display_name || emp.employee_id) +
+              ' <span class="mono">' + escapeHtml(emp.employee_id) + '</span></td>' +
+              '<td>' + escapeHtml(r.cycle_name || '') + '</td>' +
+              '<td>' + badge(st, reviewLabel) + '</td>' +
+              '<td>' + (r.weight && r.weight.ok ? '100' : escapeHtml(String((r.weight && r.weight.total) || 0))) + '</td>' +
+              '<td>' + (r.overdue ? 'Yes' : '—') + '</td>' +
+              '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-open-rev" data-cycle="' +
+              escapeHtml(r.cycle_id) + '" data-emp="' + escapeHtml(emp.employee_id) + '">Open</button></td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      html += '</div></div>';
+      page.innerHTML = html;
+      bindSubnav(page);
+      page.querySelectorAll('.js-open-rev').forEach(function (el) {
+        el.addEventListener('click', function () {
+          App.navigate('pms-review', { cycleId: el.getAttribute('data-cycle'), employeeId: el.getAttribute('data-emp') });
+        });
+      });
+    }
+
+    function renderReviewDetail(cycleId, employeeId) {
+      var page = pageEl();
+      if (!page) return;
+      if (!cycleId || !employeeId) {
+        page.innerHTML = '<div class="pms-page">' + header('Review', '', '') +
+          '<div class="empty-state"><h2>Select a person</h2><p>Open a review from Team reviews or a cycle.</p></div></div>';
+        return;
+      }
+      var seq = App.getState().navSeq;
+      var revKey = 'pms-review:' + String(cycleId || '') + ':' + String(employeeId || '');
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(revKey) && pmsState.review) {
+        paintReviewDetail_(page);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh(revKey) && pmsState.review)) {
+        page.innerHTML = '<div class="pms-page">' + header('Review', '', '') +
+          '<div class="card">' + spinner('Loading review…') + '</div></div>';
+      }
+      rpc('apiPmsGetReview', [cycleId, employeeId]).then(function (bundle) {
+        if (!stillOn(seq, 'pms-review')) return;
+        pmsState.review = bundle;
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(revKey);
+        paintReviewDetail_(page);
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms-review')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        paintErr(page, err.message || 'Could not load this review.', function () { renderReviewDetail(cycleId, employeeId); });
+      });
+    }
+
+    function paintReviewDetail_(page) {
+      var b = pmsState.review || {};
+      var cycle = b.cycle || {};
+      var emp = b.employee || {};
+      var review = b.review || {};
+      var goals = b.goals || [];
+      var html = '<div class="pms-page">';
+      html += header((emp.display_name || emp.employee_id || 'Review') + ' · ' + (cycle.name || ''),
+        'Self-assessment is shown as submitted. Ratings use the company scale.', '');
+      html += stepper(cycle.status);
+      html += '<p class="pms-meta"><span class="mono">' + escapeHtml(emp.employee_id || '') + '</span> · ' +
+        escapeHtml(emp.designation || '') +
+        (b.manager_name ? ' · Manager ' + escapeHtml(b.manager_name) : '') +
+        ' ' + badge(review.status || 'NOT_STARTED', reviewLabel) + '</p>';
+      html += ratingLegend(b.ratingScale);
+      html += '<p>' + weightHtml(b.weight) +
+        (b.overall_rating != null && b.overall_rating !== '' ? ' · Overall (computed) ' + escapeHtml(String(b.overall_rating)) : '') +
+        '</p>';
+      html += '<div id="pms-rev-feedback" class="action-feedback hidden" role="status"></div>';
+
+      if (!goals.length) {
+        html += '<div class="card empty-state"><h2>No goals</h2></div></div>';
+        page.innerHTML = html;
+        return;
+      }
+
+      goals.forEach(function (g, i) {
+        html += '<div class="card goal-card" data-goal-id="' + escapeHtml(g.goal_id) + '">' +
+          '<h3>' + escapeHtml(g.title) + ' <span class="hint">Weight ' + escapeHtml(String(g.weight)) + '</span></h3>' +
+          '<p class="pms-meta">Progress ' + escapeHtml(String(g.progress || 0)) + '%' +
+          (g.employee_rating_label ? ' · Self: ' + escapeHtml(g.employee_rating_label) : '') + '</p>' +
+          (g.achievement ? '<p><strong>Achievement</strong> — ' + escapeHtml(g.achievement) + '</p>' : '') +
+          (g.employee_comments ? '<p><strong>Employee comments</strong> — ' + escapeHtml(g.employee_comments) + '</p>' : '') +
+          '<div class="emp-form-grid">' +
+          '<div class="form-group"><label class="form-label" for="pms-mrate-' + i + '">Manager rating</label>' +
+          '<select class="form-select js-mgr-rating" id="pms-mrate-' + i + '" ' + (b.can_edit_manager ? '' : 'disabled ') + '>' +
+          ratingOptions(b.ratingScale, g.manager_rating) + '</select></div>' +
+          '<div class="form-group form-span-2"><label class="form-label" for="pms-mcomm-' + i + '">Manager comments</label>' +
+          '<textarea class="form-input js-mgr-comm" id="pms-mcomm-' + i + '" rows="2" ' + (b.can_edit_manager ? '' : 'disabled ') + '>' +
+          escapeHtml(g.manager_comments || '') + '</textarea></div></div></div>';
+      });
+
+      html += '<div class="card"><label class="form-label" for="pms-mgr-overall">Overall manager comments</label>' +
+        '<textarea class="form-input form-wide" id="pms-mgr-overall" rows="3" ' + (b.can_edit_manager ? '' : 'disabled ') + '>' +
+        escapeHtml(review.manager_overall_comments || '') + '</textarea>';
+      if (b.can_edit_manager) {
+        html += '<div class="primary-next">' +
+          '<button type="button" class="btn btn-secondary" id="pms-mgr-save">Save review</button>' +
+          '<button type="button" class="btn btn-primary" id="pms-mgr-submit">Submit manager review</button></div>';
+      }
+      if (caps(b).canReopen && statusKey(review.status) === 'SELF_SUBMITTED') {
+        html += '<div class="primary-next"><button type="button" class="btn btn-ghost" id="pms-reopen">Reopen self-assessment</button></div>';
+      }
+      if (b.can_finalize) {
+        html += '<hr><h2>Final appraisal</h2>' +
+          '<div class="emp-form-grid">' +
+          '<div class="form-group"><label class="form-label is-required" for="pms-final-rating">Final rating</label>' +
+          '<select class="form-select" id="pms-final-rating">' +
+          ratingOptions(b.ratingScale, review.final_rating || PmsNearest_(b.overall_rating, b.ratingScale)) +
+          '</select></div>' +
+          '<div class="form-group form-span-2"><label class="form-label" for="pms-hr-comm">HR comments</label>' +
+          '<textarea class="form-input" id="pms-hr-comm" rows="2">' + escapeHtml(review.hr_comments || '') + '</textarea></div></div>' +
+          '<div class="primary-next"><button type="button" class="btn btn-primary" id="pms-finalize">Finalize</button></div>';
+      } else if (review.final_rating) {
+        html += '<p class="pms-meta">Final rating: ' + escapeHtml(review.final_rating_label || String(review.final_rating)) + '</p>';
+        if (review.hr_comments) html += '<p>' + escapeHtml(review.hr_comments) + '</p>';
+      }
+      html += '</div></div>';
+      page.innerHTML = html;
+      bindManagerActions_(page, b);
+    }
+
+    function PmsNearest_(raw, scale) {
+      if (raw === '' || raw == null) return '';
+      var n = Number(raw);
+      var list = scale || [];
+      if (!list.length || !isFinite(n)) return '';
+      var best = list[0].value;
+      var dist = Math.abs(n - best);
+      list.forEach(function (r) {
+        var d = Math.abs(n - Number(r.value));
+        if (d < dist) { best = r.value; dist = d; }
+      });
+      return best;
+    }
+
+    function collectMgrPayload_(bundle) {
+      var goals = [];
+      document.querySelectorAll('.goal-card').forEach(function (card) {
+        var rating = card.querySelector('.js-mgr-rating');
+        var comm = card.querySelector('.js-mgr-comm');
+        goals.push({
+          goal_id: card.getAttribute('data-goal-id'),
+          manager_rating: rating ? rating.value : '',
+          manager_comments: comm ? comm.value : ''
+        });
+      });
+      return {
+        cycle_id: bundle.cycle.cycle_id,
+        employee_id: bundle.employee.employee_id,
+        manager_overall_comments: val('pms-mgr-overall'),
+        goals: goals
+      };
+    }
+
+    function bindManagerActions_(page, bundle) {
+      if ($('pms-mgr-save')) {
+        $('pms-mgr-save').addEventListener('click', function () {
+          rpc('apiPmsSaveManagerReview', [collectMgrPayload_(bundle)], $('pms-mgr-save'), 'Saving…', $('pms-rev-feedback'))
+            .then(function (next) {
+              pmsState.review = next;
+              invalidatePmsShells_(bundle.cycle.cycle_id, bundle.employee && bundle.employee.employee_id, true);
+              showToast('Review saved', 'success');
+            }).catch(function () {});
+        });
+      }
+      if ($('pms-mgr-submit')) {
+        $('pms-mgr-submit').addEventListener('click', function () {
+          var payload = collectMgrPayload_(bundle);
+          var missing = (payload.goals || []).some(function (g) { return !g.manager_rating; });
+          if (missing) {
+            if (setActionFeedback) setActionFeedback($('pms-rev-feedback'), 'Rate every goal before submitting the manager review.', 'error');
+            document.querySelectorAll('.js-mgr-rating').forEach(function (el) {
+              if (!el.value) el.classList.add('input-invalid');
+              else el.classList.remove('input-invalid');
+            });
+            return;
+          }
+          confirmModal({
+            title: 'Submit manager review',
+            body: 'Rate every goal before submitting. You will not be able to edit after submit.',
+            okLabel: 'Submit review'
+          }).then(function (ok) {
+            if (!ok) return;
+            rpc('apiPmsSaveManagerReview', [collectMgrPayload_(bundle)], $('pms-mgr-submit'), 'Submitting…', $('pms-rev-feedback'))
+              .then(function () {
+                return rpc('apiPmsSubmitManagerReview', [bundle.cycle.cycle_id, bundle.employee.employee_id],
+                  $('pms-mgr-submit'), 'Submitting…', $('pms-rev-feedback'));
+              })
+              .then(function (next) {
+                pmsState.review = next;
+                invalidatePmsShells_(bundle.cycle.cycle_id, bundle.employee && bundle.employee.employee_id, true);
+                showToast('Manager review submitted', 'success');
+                paintReviewDetail_(page);
+              }).catch(function () {});
+          });
+        });
+      }
+      if ($('pms-reopen')) {
+        $('pms-reopen').addEventListener('click', function () {
+          confirmModal({
+            title: 'Reopen self-assessment',
+            body: 'The employee will be able to edit and submit again. The cycle returns to Open if it was closed for self-assessment.',
+            okLabel: 'Reopen'
+          }).then(function (ok) {
+            if (!ok) return;
+            rpc('apiPmsReopenSelfAssessment', [bundle.cycle.cycle_id, bundle.employee.employee_id],
+              $('pms-reopen'), 'Reopening…', $('pms-rev-feedback'))
+              .then(function (next) {
+                pmsState.review = next;
+                invalidatePmsShells_(bundle.cycle.cycle_id, bundle.employee && bundle.employee.employee_id, true);
+                showToast('Self-assessment reopened', 'success');
+                paintReviewDetail_(page);
+              }).catch(function () {});
+          });
+        });
+      }
+      if ($('pms-finalize')) {
+        $('pms-finalize').addEventListener('click', function () {
+          var rating = val('pms-final-rating');
+          markInvalid('pms-final-rating', !rating);
+          if (!rating) {
+            if (setActionFeedback) setActionFeedback($('pms-rev-feedback'), 'Choose a final rating.', 'error');
+            return;
+          }
+          confirmModal({
+            title: 'Finalize appraisal',
+            body: 'This locks the review. The final rating is stored on the server.',
+            okLabel: 'Finalize'
+          }).then(function (ok) {
+            if (!ok) return;
+            rpc('apiPmsFinalizeReview', [bundle.cycle.cycle_id, bundle.employee.employee_id, {
+              final_rating: rating,
+              hr_comments: val('pms-hr-comm')
+            }], $('pms-finalize'), 'Finalizing…', $('pms-rev-feedback')).then(function (next) {
+              pmsState.review = next;
+              invalidatePmsShells_(bundle.cycle.cycle_id, bundle.employee && bundle.employee.employee_id, true);
+              showToast('Appraisal finalized', 'success');
+              paintReviewDetail_(page);
+            }).catch(function () {});
+          });
+        });
+      }
+    }
+
+    function renderAppraisals(cycleId) {
+      var page = pageEl();
+      if (!page) return;
+      var seq = App.getState().navSeq;
+      var apprKey = 'pms-appraisal:' + String(cycleId || '');
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(apprKey) && pmsState.appraisals) {
+        paintAppraisals_(page, pmsState.appraisals);
+        return;
+      }
+      if (!(App.isModuleRefresh && App.isModuleRefresh(apprKey) && pmsState.appraisals)) {
+        page.innerHTML = '<div class="pms-page">' + header('Appraisals', 'Finalize ratings after managers submit.', '') +
+          '<div class="card">' + spinner('Loading appraisals…') + '</div></div>';
+      }
+      rpc('apiPmsListAppraisals', [cycleId || '']).then(function (data) {
+        if (!stillOn(seq, 'pms-appraisal')) return;
+        pmsState.appraisals = data || {};
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(apprKey);
+        paintAppraisals_(page, data);
+      }).catch(function (err) {
+        if (!stillOn(seq, 'pms-appraisal')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        paintErr(page, err.message || 'Could not load appraisals.', function () { renderAppraisals(cycleId); });
+      });
+    }
+
+    function paintAppraisals_(page, data) {
+        var rows = data.rows || [];
+        var html = '<div class="pms-page">';
+        html += header('Appraisals', 'Open a review to set the final rating and HR comments.', '');
+        html += pmsSubnav('pms-appraisal');
+        html += '<div class="card">';
+        if (!rows.length) {
+          html += '<div class="empty-state"><h2>No appraisals yet</h2><p>They appear after goals are assigned in a cycle.</p></div>';
+        } else {
+          html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+            '<th>Employee</th><th>Cycle</th><th>Status</th><th>Overall</th><th>Final</th><th></th></tr></thead><tbody>' +
+            rows.map(function (r) {
+              var emp = r.employee || {};
+              var st = (r.review && r.review.status) || 'NOT_STARTED';
+              return '<tr class="table-row-click js-open-rev" data-cycle="' + escapeHtml(r.cycle_id) +
+                '" data-emp="' + escapeHtml(emp.employee_id) + '">' +
+                '<td>' + escapeHtml(r.display_name || emp.employee_id) +
+                ' <span class="mono">' + escapeHtml(emp.employee_id) + '</span></td>' +
+                '<td>' + escapeHtml(r.cycle_name || '') + '</td>' +
+                '<td>' + badge(st, reviewLabel) + '</td>' +
+                '<td>' + escapeHtml(r.overall_rating == null ? '—' : String(r.overall_rating)) + '</td>' +
+                '<td>' + escapeHtml((r.review && r.review.final_rating) ? String(r.review.final_rating) : '—') + '</td>' +
+                '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-open-rev" data-cycle="' +
+                escapeHtml(r.cycle_id) + '" data-emp="' + escapeHtml(emp.employee_id) + '">Open</button></td></tr>';
+            }).join('') + '</tbody></table></div>';
+        }
+        html += '</div></div>';
+        page.innerHTML = html;
+        bindSubnav(page);
+        page.querySelectorAll('.js-open-rev').forEach(function (el) {
+          el.addEventListener('click', function () {
+            App.navigate('pms-review', { cycleId: el.getAttribute('data-cycle'), employeeId: el.getAttribute('data-emp') });
+          });
+        });
+    }
+  });
+})();
+</script>

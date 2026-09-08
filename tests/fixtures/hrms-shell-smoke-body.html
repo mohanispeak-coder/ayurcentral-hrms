@@ -1,0 +1,77 @@
+<div id="app" class="app-shell">
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <aside class="sidebar app-sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-title" id="brand-title">AyurCentral</div>
+        <div class="brand-sub">HRMS</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav" aria-label="Main navigation"></nav>
+    <div class="sidebar-footer"><span class="sidebar-phase">AyurCentral HRMS</span></div>
+  </aside>
+  <div class="main-wrap">
+    <header class="header app-header">
+      <div class="header-left">
+        <button type="button" class="btn-icon sidebar-toggle" id="sidebar-toggle" aria-label="Toggle menu">☰</button>
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+      </div>
+      <div class="header-right">
+        <div id="ntf-bell-slot"></div>
+        <div class="user-chip" id="user-chip">
+          <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
+          <span class="user-name" id="user-name">Loading…</span>
+          <span class="user-role badge" id="user-role"></span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm hidden" id="btn-sign-out">Sign out</button>
+      </div>
+    </header>
+    <main class="content" id="main-content">
+      <div id="loading-state" class="loading-state"><p>Loading HRMS…</p></div>
+      <div id="error-state" class="alert alert-danger hidden" role="alert"></div>
+      <div id="unauthorized-state" class="empty-state hidden">
+        <h2 class="empty-state-title">Access not available</h2>
+        <p class="empty-state-text" id="unauthorized-message"></p>
+      </div>
+      <div id="auth-state" class="hidden">
+        <div class="card auth-card" id="auth-step-email">
+          <h2>Sign in to HRMS</h2>
+          <div class="form-group">
+            <label class="form-label" for="auth-email">Email address</label>
+            <input class="form-input" type="email" id="auth-email">
+          </div>
+          <p id="auth-google-hint" class="hint hidden"></p>
+          <p id="auth-email-error" class="alert alert-danger hidden"></p>
+          <button type="button" class="btn btn-primary" id="auth-send-btn">Send verification code</button>
+        </div>
+        <div class="card auth-card hidden" id="auth-step-code">
+          <h2>Enter verification code</h2>
+          <strong id="auth-email-display"></strong>
+          <input class="form-input" type="text" id="auth-code">
+          <p id="auth-code-error" class="alert alert-danger hidden"></p>
+          <button type="button" class="btn btn-primary" id="auth-verify-btn">Verify</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="auth-resend-btn">Resend code</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="auth-change-email-btn">Change email</button>
+        </div>
+      </div>
+      <div id="setup-state" class="card auth-card hidden">
+        <h2>System setup required</h2>
+        <button type="button" class="btn btn-primary" id="btn-run-setup">Initialize database</button>
+        <p id="setup-result" class="hint"></p>
+      </div>
+      <div id="page-content" class="hidden"></div>
+    </main>
+  </div>
+</div>
+<div id="toast-container" class="toast-container"></div>
+<div id="module-ui-root" class="hidden"></div>
+<button type="button" id="ask-hr-fab" class="ask-hr-fab hidden">Ask HR</button>
+<div id="ask-hr-panel" class="ask-hr-panel hidden">
+  <button type="button" id="ask-hr-clear">Clear</button>
+  <button type="button" id="ask-hr-close">×</button>
+  <div id="ask-hr-messages"><div id="ask-hr-intro"></div><div id="ask-hr-thread"></div></div>
+  <form id="ask-hr-form"><textarea id="ask-hr-input"></textarea><button type="submit" id="ask-hr-send">Send</button>
+    <p id="ask-hr-compose-error" class="hidden"></p></form>
+</div>
+<pre id="smoke-log" style="position:fixed;bottom:0;left:0;right:0;max-height:28vh;overflow:auto;background:#111;color:#9f9;font:12px/1.4 monospace;margin:0;padding:8px;z-index:9999;"></pre>

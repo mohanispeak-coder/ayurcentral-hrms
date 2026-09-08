@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <?!= include('ui/Styles'); ?>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AyurCentral HRMS</title>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    <aside class="sidebar app-sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <div class="brand-title" id="brand-title">AyurCentral</div>
+          <div class="brand-sub">Enterprise HRMS</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav" aria-label="Main navigation"></nav>
+      <div class="sidebar-footer">
+        <span class="sidebar-phase">AyurCentral · People platform</span>
+      </div>
+    </aside>
+
+    <div class="main-wrap">
+      <header class="header app-header">
+        <div class="header-left">
+          <button type="button" class="btn-icon sidebar-toggle" id="sidebar-toggle" aria-label="Toggle menu">☰</button>
+          <h1 class="page-title" id="page-title">Dashboard</h1>
+        </div>
+        <div class="header-right">
+          <div id="ntf-bell-slot"></div>
+          <div class="user-chip" id="user-chip">
+            <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
+            <span class="user-name" id="user-name">Loading…</span>
+            <span class="user-role badge" id="user-role"></span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm hidden" id="btn-sign-out">Sign out</button>
+        </div>
+      </header>
+
+      <main class="content" id="main-content">
+        <div id="loading-state" class="loading-state">
+          <div class="spinner" aria-hidden="true"></div>
+          <p>Preparing your workspace…</p>
+        </div>
+        <div id="error-state" class="alert alert-danger hidden" role="alert"></div>
+        <div id="unauthorized-state" class="empty-state hidden">
+          <div class="empty-state-icon" aria-hidden="true"></div>
+          <h2 class="empty-state-title">Access not available</h2>
+          <p class="empty-state-text" id="unauthorized-message"></p>
+        </div>
+        <div id="auth-state" class="hidden">
+          <div class="card auth-card" id="auth-step-email">
+            <h2>Sign in to HRMS</h2>
+            <p>Enter the email registered in HRMS. We will send a one-time verification code.</p>
+            <p id="auth-google-hint" class="hint hidden" role="status"></p>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-email">Email address</label>
+              <input class="form-input" type="email" id="auth-email" autocomplete="email" placeholder="you@example.com" required>
+            </div>
+            <p id="auth-email-error" class="alert alert-danger hidden" role="alert"></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="auth-send-btn">Send verification code</button>
+            </div>
+          </div>
+          <div class="card auth-card hidden" id="auth-step-code">
+            <h2>Enter verification code</h2>
+            <p>We sent a 6-digit code to <strong id="auth-email-display"></strong></p>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-code">Verification code</label>
+              <input class="form-input auth-code-input" type="text" id="auth-code" inputmode="numeric" maxlength="6" placeholder="000000" required>
+            </div>
+            <p id="auth-code-error" class="alert alert-danger hidden" role="alert"></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="auth-verify-btn">Verify</button>
+            </div>
+            <div class="auth-actions">
+              <button type="button" class="btn btn-ghost btn-sm" id="auth-resend-btn">Resend code</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="auth-change-email-btn">Change email</button>
+            </div>
+          </div>
+        </div>
+        <div id="setup-state" class="card auth-card hidden">
+          <h2>System setup required</h2>
+          <p>The HRMS database has not been configured yet. Run setup once to create the spreadsheet and sheets.</p>
+          <p class="hint">If you are the first administrator, this will also register your Google account.</p>
+          <div class="form-actions">
+            <button type="button" class="btn btn-primary" id="btn-run-setup">Initialize database</button>
+          </div>
+          <p id="setup-result" class="hint"></p>
+        </div>
+        <div id="page-content" class="hidden"></div>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <div id="module-ui-root" class="hidden" aria-hidden="true"></div>
+
+  <button type="button" id="ask-hr-fab" class="ask-hr-fab hidden" aria-label="Ask HR" aria-expanded="false" aria-controls="ask-hr-panel">
+    <svg class="ask-hr-fab-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-6.5L7 21v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+    </svg>
+    <span class="ask-hr-fab-label">Ask HR</span>
+  </button>
+
+  <div id="ask-hr-panel" class="ask-hr-panel hidden" role="dialog" aria-labelledby="ask-hr-title" aria-modal="true">
+    <div class="ask-hr-header">
+      <div class="ask-hr-header-text">
+        <h2 id="ask-hr-title">Ask HR</h2>
+        <p class="ask-hr-header-desc">Policies, procedures, and live HRMS answers you are authorized to see.</p>
+      </div>
+      <div class="ask-hr-header-actions">
+        <button type="button" class="btn btn-secondary btn-sm" id="ask-hr-expand" aria-pressed="false" title="Expand">Expand</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="ask-hr-clear">Clear</button>
+        <button type="button" class="btn-icon ask-hr-close" id="ask-hr-close" aria-label="Close Ask HR">×</button>
+      </div>
+    </div>
+    <div id="ask-hr-messages" class="ask-hr-messages" role="log" aria-live="polite" aria-relevant="additions">
+      <div id="ask-hr-intro" class="ask-hr-intro">
+        <p>Ask about company policies, SOPs, HR procedures, leave rules, benefits and other employee information.</p>
+        <p class="ask-hr-suggest-label">Try asking</p>
+        <div class="ask-hr-suggests">
+          <button type="button" class="ask-hr-suggest" data-ask-hr-q="What is the leave notice period?">What is the leave notice period?</button>
+          <button type="button" class="ask-hr-suggest" data-ask-hr-q="Where can I find the HR policy?">Where can I find the HR policy?</button>
+          <button type="button" class="ask-hr-suggest" data-ask-hr-q="How do I apply for leave?">How do I apply for leave?</button>
+        </div>
+      </div>
+      <div id="ask-hr-thread" class="ask-hr-thread"></div>
+    </div>
+    <form id="ask-hr-form" class="ask-hr-composer">
+      <label class="visually-hidden" for="ask-hr-input">Your question</label>
+      <textarea class="form-input ask-hr-input" id="ask-hr-input" rows="2" maxlength="1000" placeholder="Ask a question…" autocomplete="off"></textarea>
+      <button type="submit" class="btn btn-primary" id="ask-hr-send">Send</button>
+      <p id="ask-hr-compose-error" class="ask-hr-compose-error hidden" role="alert"></p>
+    </form>
+  </div>
+
+  <?!= include('notifications/NotificationBell'); ?>
+  <?!= include('ui/Scripts'); ?>
+</body>
+</html>
