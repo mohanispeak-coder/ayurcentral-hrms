@@ -3,7 +3,7 @@
  */
 var CompensationService = (function () {
   function requirePayrollAdmin_() {
-    return PermissionService.require(HRMS.ACTIONS.COMPENSATION_MANAGE);
+    return PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
   }
 
   function toDate_(v) {
@@ -34,21 +34,62 @@ var CompensationService = (function () {
   }
 
   function getEmployee_(employeeId) {
+    var emp = null;
     try {
       if (typeof EmployeeService !== 'undefined' && EmployeeService &&
           typeof EmployeeService.getMasterRecord === 'function') {
-        return EmployeeService.getMasterRecord(employeeId);
+        emp = EmployeeService.getMasterRecord(employeeId);
       }
     } catch (ignore) {}
+    if (emp) return emp;
     return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+  }
+
+  function serializeClientValue_(value) {
+    if (value == null || value === '') return value === 0 ? 0 : '';
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+      if (isNaN(value.getTime())) return '';
+      try {
+        return Utilities.formatDate(value, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd');
+      } catch (ignore) {
+        return String(value);
+      }
+    }
+    if (typeof value === 'object') return String(value);
+    return value;
+  }
+
+  function serializeClientRow_(row) {
+    if (!row) return row;
+    var out = {};
+    Object.keys(row).forEach(function (key) {
+      out[key] = serializeClientValue_(row[key]);
+    });
+    return out;
+  }
+
+  function serializeEditorBundle_(bundle) {
+    var current = null;
+    if (bundle.current) {
+      current = {
+        can_edit_in_place: bundle.current.can_edit_in_place !== false,
+        structure: serializeClientRow_(bundle.current.structure),
+        components: (bundle.current.components || []).map(serializeClientRow_)
+      };
+    }
+    return {
+      employee_id: String(bundle.employee_id || ''),
+      employee: serializeClientRow_(bundle.employee),
+      current: current,
+      history: (bundle.history || []).map(serializeClientRow_)
+    };
   }
 
   function listStructures(employeeId) {
     requirePayrollAdmin_();
-    var filter = employeeId ? { employee_id: employeeId } : {};
-    var rows = employeeId
-      ? DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, filter)
-      : DbService.getAllRecords(HRMS.SHEETS.SALARY_STRUCTURES);
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    var rows = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
     rows.sort(function (a, b) {
       return String(b.effective_from).localeCompare(String(a.effective_from));
     });
@@ -62,10 +103,41 @@ var CompensationService = (function () {
 
   function getCurrentForEmployee(employeeId) {
     requirePayrollAdmin_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
     var bundle = getCurrentBundle_(employeeId, true);
     if (!bundle) return null;
     bundle.can_edit_in_place = !isReferencedInLockedPayroll_(bundle.structure.salary_structure_id);
     return bundle;
+  }
+
+  function getEditorBundle(employeeId) {
+    requirePayrollAdmin_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    try {
+      var emp = getEmployee_(employeeId);
+      if (!emp) throw notFoundError_('Employee not found: ' + employeeId);
+      var current = getCurrentBundle_(employeeId, false);
+      if (current) {
+        delete current.employee;
+        current.can_edit_in_place = !isReferencedInLockedPayroll_(current.structure.salary_structure_id);
+      }
+      var history = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
+      history.sort(function (a, b) {
+        return String(b.effective_from).localeCompare(String(a.effective_from));
+      });
+      return serializeEditorBundle_({
+        employee_id: employeeId,
+        current: current,
+        history: history,
+        employee: publicEmployee_(emp, false)
+      });
+    } catch (e) {
+      if (e.hrmsCode) throw e;
+      Logger.log('getEditorBundle failed for ' + employeeId + ': ' + (e.message || e) + '\n' + (e.stack || ''));
+      throw systemError_('Could not load salary structure. ' + (e.message || 'Please try again.'));
+    }
   }
 
   function getOwnCurrentStructure() {
@@ -222,12 +294,18 @@ var CompensationService = (function () {
         currentByEmp[s.employee_id] = true;
       }
     });
-    var rows = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
+    var rows = typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll
+      ? EmployeeRepository.listAll()
+      : DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
     return (rows || []).map(function (e) {
       return {
         employee_id: e.employee_id,
         display_name: e.display_name || ((e.first_name || '') + ' ' + (e.last_name || '')).trim(),
+        first_name: e.first_name || '',
+        last_name: e.last_name || '',
+        work_email: e.work_email || '',
         department: e.department || '',
+        designation: e.designation || '',
         status: e.status || '',
         has_current_structure: !!currentByEmp[e.employee_id]
       };
@@ -379,6 +457,7 @@ var CompensationService = (function () {
     listEmployeeOptions: listEmployeeOptions,
     getStructure: getStructure,
     getCurrentForEmployee: getCurrentForEmployee,
+    getEditorBundle: getEditorBundle,
     getOwnCurrentStructure: getOwnCurrentStructure,
     getStructureInForce: getStructureInForce,
     saveStructure: saveStructure,

@@ -201,10 +201,44 @@ var EmployeeService = (function () {
     return out;
   }
 
+  function employeeDisplayName_(emp) {
+    if (!emp) return '';
+    var dn = trim_(emp.display_name);
+    if (dn) return dn;
+    return trim_((emp.first_name || '') + ' ' + (emp.last_name || ''));
+  }
+
+  function employeeSearchText_(emp) {
+    if (!emp) return '';
+    return [
+      emp.employee_id,
+      emp.display_name,
+      emp.first_name,
+      emp.last_name,
+      emp.work_email,
+      emp.department,
+      emp.designation,
+      emp.location
+    ].map(function (v) { return trim_(v); }).filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function matchesEmployeeSearch_(emp, q) {
+    q = trim_(q).toLowerCase();
+    if (!q) return true;
+    var hay = employeeSearchText_(emp);
+    if (hay.indexOf(q) >= 0) return true;
+    var terms = q.split(/\s+/).filter(Boolean);
+    if (terms.length <= 1) return false;
+    for (var i = 0; i < terms.length; i++) {
+      if (hay.indexOf(terms[i]) < 0) return false;
+    }
+    return true;
+  }
+
   function directoryRow_(emp, nameMap) {
     return {
       employee_id: emp.employee_id,
-      display_name: emp.display_name || trim_(emp.first_name + ' ' + emp.last_name),
+      display_name: employeeDisplayName_(emp) || emp.employee_id,
       department: emp.department || '',
       designation: emp.designation || '',
       location: emp.location || '',
@@ -257,15 +291,7 @@ var EmployeeService = (function () {
       if (status && String(e.status || '').toUpperCase() !== status) return false;
       if (department && String(e.department || '') !== department) return false;
       if (location && String(e.location || '') !== location) return false;
-      if (q) {
-        var hay = (
-          String(e.employee_id || '') + ' ' +
-          String(e.display_name || '') + ' ' +
-          String(e.first_name || '') + ' ' +
-          String(e.last_name || '')
-        ).toLowerCase();
-        if (hay.indexOf(q) < 0) return false;
-      }
+      if (q && !matchesEmployeeSearch_(e, q)) return false;
       return true;
     });
     filtered.sort(function (a, b) {
@@ -750,13 +776,18 @@ var EmployeeService = (function () {
       throw authorizationError_('You cannot view these payslips.');
     }
     return EmployeeRepository.listDocuments(emp.employee_id, HRMS.DOCUMENT_CATEGORY.PAYSLIP).map(function (d) {
+      var enriched = typeof PayslipService.enrichPayslipDoc === 'function'
+        ? PayslipService.enrichPayslipDoc(d, emp.employee_id)
+        : d;
       return {
-        document_id: d.document_id,
-        title: d.title,
+        document_id: enriched.document_id,
+        title: enriched.title,
+        period_label: enriched.period_label || enriched.title,
         category: d.category,
-        payroll_run_id: d.payroll_run_id || '',
-        uploaded_at: toIsoDateTime_(d.uploaded_at),
-        uploaded_by_email: d.uploaded_by_email
+        payroll_run_id: enriched.payroll_run_id || d.payroll_run_id || '',
+        net_pay: enriched.net_pay,
+        uploaded_at: toIsoDateTime_(enriched.uploaded_at || d.uploaded_at),
+        generated_at: enriched.generated_at || toIsoDateTime_(d.uploaded_at)
       };
     });
   }

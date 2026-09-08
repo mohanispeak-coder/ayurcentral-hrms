@@ -950,14 +950,17 @@
           empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
           empViewCache.extras[employeeId].payslips = rows;
           if (!rows.length) {
-            el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No payslips yet</p><p class="empty-state-text">Files appear here after payroll is locked.</p></div>';
+            el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No payslips available yet.</p></div>';
             return;
           }
-          el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Run</th><th>Uploaded</th><th class="col-actions"></th></tr></thead><tbody>' +
+          el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Net pay</th><th>Generated</th><th class="col-actions"></th></tr></thead><tbody>' +
             rows.map(function (d) {
-              return '<tr><td>' + escapeHtml(d.title) + '</td><td>' + escapeHtml(d.payroll_run_id || '—') + '</td><td>' +
-                escapeHtml(String(d.uploaded_at || '')) + '</td><td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' +
-                escapeHtml(d.document_id) + '">Download</button></td></tr>';
+              var period = d.period_label || d.title || 'Payslip';
+              var net = d.net_pay != null && d.net_pay !== '' ? ('₹' + Number(d.net_pay).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '—';
+              return '<tr><td>' + escapeHtml(period) + '</td><td class="num">' + escapeHtml(net) + '</td><td>' +
+                escapeHtml(String(d.generated_at || d.uploaded_at || '')) + '</td><td class="col-actions">' +
+                '<button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">View</button> ' +
+                '<button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">Download</button></td></tr>';
             }).join('') + '</tbody></table></div>';
           bindDownloads(el);
         })

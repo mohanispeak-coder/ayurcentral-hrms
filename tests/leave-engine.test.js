@@ -6,14 +6,14 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const root = path.join(__dirname, '..', 'apps-script');
+const root = path.join(__dirname, '..', 'apps-script', 'src');
 const context = {
   HRMS: {},
   Logger: { log: function () {} }
 };
 vm.createContext(context);
-vm.runInContext(fs.readFileSync(path.join(root, 'Constants.gs'), 'utf8'), context);
-vm.runInContext(fs.readFileSync(path.join(root, 'LeaveEngine.gs'), 'utf8'), context);
+vm.runInContext(fs.readFileSync(path.join(root, 'foundation', 'Constants.gs'), 'utf8'), context);
+vm.runInContext(fs.readFileSync(path.join(root, 'leave', 'LeaveEngine.gs'), 'utf8'), context);
 
 const LeaveEngine = context.LeaveEngine;
 const failures = [];

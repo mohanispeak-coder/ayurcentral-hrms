@@ -1,6 +1,6 @@
 /**
- * Payslip HTML files on Drive — Payslips/{year}/{month}. No public links.
- * Regeneration is idempotent: same Drive file name is replaced; Documents row is reused.
+ * Payslip HTML redesign — A4 print-friendly layout.
+ * One canonical generation path for Payroll, Employee Management, and My Payslips.
  */
 var PayslipService = (function () {
   function generateForRun(run, records, employeesById, session) {
@@ -14,10 +14,6 @@ var PayslipService = (function () {
     return created;
   }
 
-  /**
-   * Prefer the record's payslip_document_id, else the latest Documents row for that employee+run.
-   * Pure helper — used by generate and tests.
-   */
   function findReusableDocument(docs, rec) {
     docs = docs || [];
     var wantId = rec && rec.payslip_document_id ? String(rec.payslip_document_id) : '';
@@ -33,9 +29,6 @@ var PayslipService = (function () {
     return sorted[0];
   }
 
-  /**
-   * One payslip row per payroll_run_id (latest upload wins).
-   */
   function dedupePayslipsByRun(docs) {
     var byKey = {};
     (docs || []).forEach(function (d) {
@@ -68,10 +61,11 @@ var PayslipService = (function () {
     });
     var reuse = findReusableDocument(existingDocs, rec);
     var documentId;
+    var periodLabel = monthLabel_(run.period_month) + ' ' + run.period_year;
     if (reuse && reuse.document_id) {
       documentId = reuse.document_id;
       DbService.updateRecord(HRMS.SHEETS.DOCUMENTS, 'document_id', documentId, {
-        title: 'Payslip ' + run.payroll_run_id + ' ' + rec.employee_id,
+        title: 'Payslip — ' + periodLabel,
         drive_file_id: file.getId(),
         drive_folder_id: folder.getId(),
         uploaded_at: now,
@@ -83,7 +77,7 @@ var PayslipService = (function () {
         document_id: documentId,
         employee_id: rec.employee_id,
         category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
-        title: 'Payslip ' + run.payroll_run_id + ' ' + rec.employee_id,
+        title: 'Payslip — ' + periodLabel,
         drive_file_id: file.getId(),
         drive_folder_id: folder.getId(),
         payroll_run_id: run.payroll_run_id,
@@ -96,6 +90,40 @@ var PayslipService = (function () {
     });
     rec.payslip_document_id = documentId;
     return { document_id: documentId, employee_id: rec.employee_id, drive_file_id: file.getId(), reused: !!reuse };
+  }
+
+  function enrichPayslipDoc_(doc, employeeId) {
+    var runId = String(doc.payroll_run_id || '');
+    var periodLabel = doc.title || 'Payslip';
+    var netPay = null;
+    if (runId) {
+      var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
+      if (run) {
+        periodLabel = monthLabel_(run.period_month) + ' ' + run.period_year;
+      }
+      var rec = DbService.findOne(HRMS.SHEETS.PAYROLL_RECORDS, {
+        payroll_run_id: runId,
+        employee_id: employeeId
+      });
+      if (rec) netPay = rec.net_pay;
+    }
+    return {
+      document_id: doc.document_id,
+      title: doc.title,
+      period_label: periodLabel,
+      payroll_run_id: doc.payroll_run_id || '',
+      net_pay: netPay,
+      uploaded_at: doc.uploaded_at,
+      generated_at: serializeDateTime_(doc.uploaded_at)
+    };
+  }
+
+  function serializeDateTime_(value) {
+    if (value === null || value === undefined || value === '') return '';
+    if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+      return value.toISOString();
+    }
+    return String(value);
   }
 
   function getPayslipForDownload(documentId) {
@@ -128,17 +156,63 @@ var PayslipService = (function () {
       category: HRMS.DOCUMENT_CATEGORY.PAYSLIP
     });
     return dedupePayslipsByRun(docs).map(function (d) {
-      return {
-        document_id: d.document_id,
-        title: d.title,
-        payroll_run_id: d.payroll_run_id,
-        uploaded_at: d.uploaded_at
-      };
+      return enrichPayslipDoc_(d, session.employee_id);
     });
+  }
+
+  function daysInMonth_(year, month) {
+    return new Date(Number(year), Number(month), 0).getDate();
+  }
+
+  function formatDate_(value) {
+    if (!value) return '—';
+    var d = toDate_(value);
+    if (!d) return String(value);
+    return Utilities.formatDate(d, ConfigService.getTimezone(), 'dd MMM yyyy');
+  }
+
+  function toDate_(v) {
+    if (!v && v !== 0) return null;
+    if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) return v;
+    var s = String(v).substring(0, 10);
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function amountInWords_(amount) {
+    var n = Math.round(Number(amount) || 0);
+    if (n === 0) return 'Zero Rupees Only';
+    var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    function twoDigits(num) {
+      if (num < 20) return ones[num];
+      return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '');
+    }
+    function threeDigits(num) {
+      var h = Math.floor(num / 100);
+      var rest = num % 100;
+      return (h ? ones[h] + ' Hundred' + (rest ? ' ' : '') : '') + (rest ? twoDigits(rest) : '');
+    }
+    var parts = [];
+    var crore = Math.floor(n / 10000000);
+    n %= 10000000;
+    var lakh = Math.floor(n / 100000);
+    n %= 100000;
+    var thousand = Math.floor(n / 1000);
+    n %= 1000;
+    if (crore) parts.push(threeDigits(crore) + ' Crore');
+    if (lakh) parts.push(twoDigits(lakh) + ' Lakh');
+    if (thousand) parts.push(twoDigits(thousand) + ' Thousand');
+    if (n) parts.push(threeDigits(n));
+    return parts.join(' ') + ' Rupees Only';
   }
 
   function buildHtml_(run, rec, emp) {
     var company = ConfigService.getCompanyName();
+    var companyAddress = ConfigService.getSetting('company_address', '');
     var period = monthLabel_(run.period_month) + ' ' + run.period_year;
     var breakdown = {};
     try {
@@ -150,58 +224,122 @@ var PayslipService = (function () {
     var name = meta.display_name || emp.display_name || rec.employee_id;
     var dept = meta.department || emp.department || '';
     var desig = meta.designation || emp.designation || '';
-    var bankMasked = meta.bank_masked || PayrollEngine.maskBank(emp.bank_account_number);
+    var location = emp.location || meta.location || '';
+    var joiningDate = formatDate_(emp.joining_date || meta.joining_date);
+    var bankName = emp.bank_name || meta.bank_name || '';
+    var bankAccount = emp.bank_account_number || '';
+    var bankMasked = meta.bank_masked || PayrollEngine.maskBank(bankAccount);
+    var pan = emp.pan || meta.pan || '';
+    var workingDays = rec.working_days != null ? rec.working_days : '';
+    var paidDays = rec.paid_days != null ? rec.paid_days : '';
+    var lopDays = rec.lop_days != null ? rec.lop_days : '';
+    var dim = daysInMonth_(run.period_year, run.period_month);
     var lines = breakdown.lines || [];
     var earnRows = '';
     var dedRows = '';
+    var pfNumber = '';
+    var uan = '';
+    var esi = '';
     lines.forEach(function (line) {
+      var code = String(line.component_code || '').toUpperCase();
       var row = '<tr><td>' + esc_(line.component_name || line.component_code) +
-        '</td><td class="num">' + money_(line.amount) + '</td></tr>';
+        '</td><td class="num">' + moneyDisplay_(line.amount) + '</td></tr>';
       if (line.component_kind === 'EARNING') earnRows += row;
-      else if (line.component_kind === 'DEDUCTION') dedRows += row;
+      else if (line.component_kind === 'DEDUCTION') {
+        dedRows += row;
+        if (code === 'PF' || code.indexOf('PF') >= 0) pfNumber = pfNumber || 'On record';
+        if (code === 'ESI') esi = esi || moneyDisplay_(line.amount);
+      }
     });
     if (Number(rec.bonus) > 0) {
-      earnRows += '<tr><td>Bonus</td><td class="num">' + money_(rec.bonus) + '</td></tr>';
+      earnRows += '<tr><td>Bonus</td><td class="num">' + moneyDisplay_(rec.bonus) + '</td></tr>';
     }
     if (Number(rec.incentive) > 0) {
-      earnRows += '<tr><td>Incentive</td><td class="num">' + money_(rec.incentive) + '</td></tr>';
+      earnRows += '<tr><td>Incentive</td><td class="num">' + moneyDisplay_(rec.incentive) + '</td></tr>';
     }
     if (Number(rec.other_earnings) > 0) {
-      earnRows += '<tr><td>Other earnings</td><td class="num">' + money_(rec.other_earnings) + '</td></tr>';
+      earnRows += '<tr><td>Other earnings</td><td class="num">' + moneyDisplay_(rec.other_earnings) + '</td></tr>';
     }
     if (Number(rec.tds_amount) > 0) {
-      dedRows += '<tr><td>TDS</td><td class="num">' + money_(rec.tds_amount) + '</td></tr>';
+      dedRows += '<tr><td>TDS</td><td class="num">' + moneyDisplay_(rec.tds_amount) + '</td></tr>';
     }
     if (Number(rec.other_deductions) > 0) {
-      dedRows += '<tr><td>Other deductions</td><td class="num">' + money_(rec.other_deductions) + '</td></tr>';
+      dedRows += '<tr><td>Other deductions</td><td class="num">' + moneyDisplay_(rec.other_deductions) + '</td></tr>';
     }
 
-    var generated = Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'yyyy-MM-dd HH:mm');
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payslip ' + esc_(run.payroll_run_id) +
-      '</title><style>body{font-family:Segoe UI,Arial,sans-serif;color:#2c2c2c;margin:24px}' +
-      'h1{font-size:18px;color:#2d5a3d}table{width:100%;border-collapse:collapse;margin:12px 0}' +
-      'th,td{border:1px solid #ddd5c8;padding:8px;text-align:left}.num{text-align:right;font-variant-numeric:tabular-nums}' +
-      '.meta{color:#6b7f6e;font-size:13px}.total{font-weight:700}</style></head><body>' +
-      '<h1>' + esc_(company) + '</h1><p class="meta">Payslip — ' + esc_(period) + ' (' + esc_(run.payroll_run_id) + ')</p>' +
-      '<table><tr><th>Employee ID</th><td>' + esc_(rec.employee_id) + '</td><th>Name</th><td>' + esc_(name) + '</td></tr>' +
-      '<tr><th>Department</th><td>' + esc_(dept) + '</td><th>Designation</th><td>' + esc_(desig) + '</td></tr>' +
-      '<tr><th>Working days</th><td class="num">' + esc_(rec.working_days) + '</td><th>Paid days</th><td class="num">' + esc_(rec.paid_days) + '</td></tr>' +
-      '<tr><th>LOP days</th><td class="num">' + esc_(rec.lop_days) + '</td><th>Bank</th><td>' + esc_(bankMasked) + '</td></tr></table>' +
-      '<h2>Earnings</h2><table><thead><tr><th>Component</th><th class="num">Amount (INR)</th></tr></thead><tbody>' +
+    var generated = Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'dd MMM yyyy HH:mm');
+    var netPay = Number(rec.net_pay) || 0;
+
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payslip — ' + esc_(period) +
+      '</title><style>' +
+      '@page{size:A4;margin:16mm}' +
+      'body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:24px;background:#fff}' +
+      '.sheet{max-width:780px;margin:0 auto}' +
+      '.header{border-bottom:3px solid #2d5a3d;padding-bottom:16px;margin-bottom:20px}' +
+      '.company{font-size:22px;font-weight:700;color:#2d5a3d;margin:0}' +
+      '.address{font-size:12px;color:#5a6b5e;margin-top:4px;white-space:pre-line}' +
+      '.title-row{display:flex;justify-content:space-between;align-items:flex-end;margin:18px 0 12px}' +
+      '.title{font-size:18px;font-weight:600;margin:0}' +
+      '.period{font-size:13px;color:#5a6b5e}' +
+      '.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-bottom:18px}' +
+      '.field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;margin-bottom:2px}' +
+      '.field div{font-size:14px;font-weight:500}' +
+      '.section{margin-top:18px}' +
+      '.section h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#2d5a3d;margin:0 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px}' +
+      'th,td{padding:8px 10px;border-bottom:1px solid #eef0f2;text-align:left}' +
+      'th{font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600}' +
+      '.num{text-align:right;font-variant-numeric:tabular-nums}' +
+      '.totals td{font-weight:700;border-top:2px solid #2d5a3d}' +
+      '.net-box{margin-top:20px;padding:16px 18px;background:#f3faf5;border:1px solid #c8e6d0;border-radius:8px}' +
+      '.net-label{font-size:12px;color:#2d5a3d;text-transform:uppercase;letter-spacing:.05em}' +
+      '.net-value{font-size:28px;font-weight:700;color:#1f4330;margin-top:4px}' +
+      '.words{font-size:12px;color:#4b5563;margin-top:6px;font-style:italic}' +
+      '.statutory{margin-top:16px;font-size:12px;color:#374151}' +
+      '.footer{margin-top:28px;padding-top:12px;border-top:1px dashed #d1d5db;font-size:11px;color:#6b7280}' +
+      '@media print{body{padding:0}.net-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+      '</style></head><body><div class="sheet">' +
+      '<header class="header"><h1 class="company">' + esc_(company) + '</h1>' +
+      (companyAddress ? '<div class="address">' + esc_(companyAddress) + '</div>' : '') +
+      '</header>' +
+      '<div class="title-row"><h2 class="title">Salary Payslip</h2><div class="period">' + esc_(period) + '</div></div>' +
+      '<div class="grid">' +
+      field_('Employee name', name) + field_('Employee ID', rec.employee_id) +
+      field_('Designation', desig) + field_('Department', dept) +
+      field_('Location', location) + field_('Date of joining', joiningDate) +
+      field_('Days in month', dim) + field_('Effective work days', paidDays) +
+      field_('Working days', workingDays) + field_('LOP days', lopDays) +
+      '</div>' +
+      '<div class="section"><h3>Earnings</h3><table><thead><tr><th>Component</th><th class="num">Amount (₹)</th></tr></thead><tbody>' +
       (earnRows || '<tr><td colspan="2">None</td></tr>') +
-      '<tr class="total"><td>Gross earnings</td><td class="num">' + money_(rec.gross_earnings) + '</td></tr></tbody></table>' +
-      '<h2>Deductions</h2><table><thead><tr><th>Component</th><th class="num">Amount (INR)</th></tr></thead><tbody>' +
+      '<tr class="totals"><td>Total earnings</td><td class="num">' + moneyDisplay_(rec.gross_earnings) + '</td></tr></tbody></table></div>' +
+      '<div class="section"><h3>Deductions</h3><table><thead><tr><th>Component</th><th class="num">Amount (₹)</th></tr></thead><tbody>' +
       (dedRows || '<tr><td colspan="2">None</td></tr>') +
-      '<tr class="total"><td>Total deductions</td><td class="num">' + money_(rec.total_deductions) + '</td></tr></tbody></table>' +
-      '<p class="total">Net pay: INR ' + money_(rec.net_pay) + '</p>' +
-      '<p class="meta">Employer contributions (not in net): INR ' + money_(rec.employer_contributions) + '</p>' +
-      '<p class="meta">Generated at ' + esc_(generated) + '. This document is confidential.</p></body></html>';
+      '<tr class="totals"><td>Total deductions</td><td class="num">' + moneyDisplay_(rec.total_deductions) + '</td></tr></tbody></table></div>' +
+      '<div class="net-box"><div class="net-label">Net pay</div><div class="net-value">₹ ' + moneyDisplay_(netPay) + '</div>' +
+      '<div class="words">' + esc_(amountInWords_(netPay)) + '</div></div>' +
+      '<div class="statutory"><strong>Bank &amp; statutory details</strong><br>' +
+      'Bank: ' + esc_(bankName || '—') + ' · Account: ' + esc_(bankMasked || '—') + '<br>' +
+      'PAN: ' + esc_(pan || '—') + ' · PF: ' + esc_(pfNumber || '—') + ' · UAN: ' + esc_(uan || '—') +
+      (esi ? ' · ESI: ₹ ' + esc_(esi) : '') +
+      '</div>' +
+      '<div class="footer">This is a system-generated payslip. Generated on ' + esc_(generated) +
+      '. Confidential — for the intended recipient only.</div>' +
+      '</div></body></html>';
+  }
+
+  function field_(label, value) {
+    return '<div class="field"><label>' + esc_(label) + '</label><div>' + esc_(value == null || value === '' ? '—' : value) + '</div></div>';
+  }
+
+  function moneyDisplay_(n) {
+    var x = Number(n);
+    if (!isFinite(x)) x = 0;
+    return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function money_(n) {
-    var x = Number(n);
-    if (!isFinite(x)) x = 0;
-    return x.toFixed(2);
+    return moneyDisplay_(n);
   }
 
   function esc_(v) {
@@ -220,6 +358,7 @@ var PayslipService = (function () {
     getPayslipForDownload: getPayslipForDownload,
     listOwnPayslips: listOwnPayslips,
     findReusableDocument: findReusableDocument,
-    dedupePayslipsByRun: dedupePayslipsByRun
+    dedupePayslipsByRun: dedupePayslipsByRun,
+    enrichPayslipDoc: enrichPayslipDoc_
   };
 })();

@@ -75,6 +75,30 @@ function apiRegeneratePayslips(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiFinalizePayroll(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.finalizePayroll(runId);
+  }, sessionToken);
+}
+
+function apiDownloadPayrollTemplate(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.downloadTemplate(runId);
+  }, sessionToken);
+}
+
+function apiValidatePayrollUpload(runId, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.validateUpload(runId, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitPayrollUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
 function apiApplyPayrollLeaveLop(runId, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.applyLeaveLopToDays(runId);
@@ -96,6 +120,12 @@ function apiListSalaryStructures(employeeId, sessionToken) {
 function apiGetSalaryStructure(structureId, sessionToken) {
   return hrmsRun_(function () {
     return CompensationService.getStructure(structureId);
+  }, sessionToken);
+}
+
+function apiGetCompensationEditorBundle(employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationService.getEditorBundle(employeeId);
   }, sessionToken);
 }
 

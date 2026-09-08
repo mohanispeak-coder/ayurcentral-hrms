@@ -17,6 +17,20 @@
 .payroll-page .kpi-hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px; }
 .payroll-page .period-selects { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .payroll-page th.num, .payroll-page td.num { text-align: right; }
+.payroll-page .section-details { margin-top: 12px; }
+.payroll-page .section-details > summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.payroll-page .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+@media (max-width: 640px) { .payroll-page .check-grid { grid-template-columns: 1fr; } }
+.payroll-page .check-box { padding: 12px; border-radius: 8px; border: 1px solid var(--color-border); }
+.payroll-page .check-box.ready { background: var(--color-success-bg); border-color: var(--color-success-border); }
+.payroll-page .check-box.attention { background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.payroll-page .check-count { font-size: 1.5rem; font-weight: 700; }
+.payroll-page .problem-list { margin: 8px 0 0; padding-left: 18px; }
+.payroll-page .problem-list li { margin-bottom: 4px; }
+.payroll-page .upload-preview { margin-top: 12px; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; }
+.payroll-page .finalize-summary dt { font-weight: 600; margin-top: 8px; }
+.payroll-page .finalize-summary dd { margin: 2px 0 0; }
+.payroll-page .hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 </style>
 <script>
 (function () {
@@ -52,8 +66,9 @@
       dirty: false,
       inputDraft: {}
     };
-    var homeState = { runs: [], year: 0, month: 0, overview: null };
-    var compState = { employeeId: '', bundle: null, employees: [] };
+    var homeState = { runs: [], year: 0, month: 0, overview: null, salaryStructureOpen: false, prevPayrollsOpen: false };
+    var compState = { employeeId: '', bundle: null, employees: [], _loaded: false, _editorLoadedFor: '' };
+    var bulkState = { preview: null };
 
     function shellInv_(keys) {
       if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(keys);
@@ -74,6 +89,8 @@
     function invalidateCompensation_() {
       compState.bundle = null;
       compState.employees = [];
+      compState._loaded = false;
+      compState._editorLoadedFor = '';
       shellInv_('compensation');
     }
 
@@ -100,12 +117,14 @@
         payrollState.detail = null;
         payrollState.dirty = false;
         payrollState.inputDraft = {};
+        bulkState.preview = null;
+        homeState.salaryStructureOpen = false;
         payslipCache = null;
       });
     }
 
     App.registerRoute('payroll', { title: 'Payroll', render: renderPayrollHome });
-    App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollRun(params && params.runId); } });
+    App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollHome({ runId: params && params.runId }); } });
     App.registerRoute('compensation', { title: 'Compensation', render: renderCompensation });
     App.registerRoute('my-payslips', { title: 'My Payslips', render: renderMyPayslips });
 
@@ -131,10 +150,50 @@
       return sessionRole() === 'ADMIN';
     }
 
-    function fmtMoney(n) {
-      var x = Number(n);
-      if (!isFinite(x)) return '—';
-      return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function stillOnPayrollModule_(seq) {
+      var s = App.getState();
+      var route = s.currentRoute;
+      return seq === s.navSeq && (route === 'payroll' || route === 'payroll-run' || route === 'compensation');
+    }
+
+    function refreshPayrollPage_(opts) {
+      opts = opts || {};
+      invalidatePayrollHome_();
+      payrollState.detail = null;
+      homeState.overview = null;
+      bulkState.preview = null;
+      renderPayrollHome({
+        year: opts.year != null ? opts.year : homeState.year,
+        month: opts.month != null ? opts.month : homeState.month,
+        runId: opts.runId,
+        openSalaryStructure: !!opts.openSalaryStructure
+      });
+    }
+
+    function fmtMoneyInr(n) {
+      var m = fmtMoney(n);
+      return m === '—' ? m : ('₹ ' + m);
+    }
+
+    function employeeSearchHay_(emp) {
+      emp = emp || {};
+      return [
+        emp.display_name, emp.employee_id, emp.first_name, emp.last_name,
+        emp.work_email, emp.department, emp.designation
+      ].map(function (v) { return String(v || '').trim(); }).filter(Boolean).join(' ').toLowerCase();
+    }
+
+    function matchesEmployeeSearch_(emp, q) {
+      q = String(q || '').trim().toLowerCase();
+      if (!q) return true;
+      var hay = employeeSearchHay_(emp);
+      if (hay.indexOf(q) >= 0) return true;
+      var terms = q.split(/\s+/).filter(Boolean);
+      if (terms.length <= 1) return false;
+      for (var i = 0; i < terms.length; i++) {
+        if (hay.indexOf(terms[i]) < 0) return false;
+      }
+      return true;
     }
 
     function fmtWhen(v) {
@@ -153,11 +212,56 @@
       return String(status || '').toUpperCase();
     }
 
-    function phaseLabel(status) {
-      var s = statusKey(status);
-      if (s === 'DRAFT') return 'Draft';
-      if (s === 'LOCKED') return 'Completed';
-      return 'Processing';
+    function fmtMoney(n) {
+      var x = Number(n);
+      if (!isFinite(x)) return '—';
+      return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function hrStepIndex(st) {
+      if (st === 'LOCKED') return 3;
+      if (st === 'CALCULATED' || st === 'UNDER_REVIEW' || st === 'APPROVED') return 2;
+      return 0;
+    }
+
+    function hrPhaseStepper(detail) {
+      var steps = ['Prepare', 'Calculate', 'Review', 'Finalize'];
+      var st = detail && detail.run ? statusKey(detail.run.status) : '';
+      var idx = hrStepIndex(st);
+      return '<div class="stepper" aria-label="Payroll workflow">' + steps.map(function (label, i) {
+        var cls = 'step';
+        if (i < idx) cls += ' done';
+        if (i === idx) cls += ' current';
+        return '<span class="' + cls + '">' + escapeHtml(label) + '</span>';
+      }).join('') + '</div>';
+    }
+
+    function uiPhaseDisplay_(detail) {
+      if (detail && detail.uiPhaseLabel) return detail.uiPhaseLabel;
+      if (!detail || !detail.run) return 'Prepare';
+      var st = statusKey(detail.run.status);
+      if (st === 'LOCKED') return 'Finalized';
+      if (st === 'DRAFT') return 'Prepare';
+      return 'Review';
+    }
+
+    function exceptionMap_(detail) {
+      var map = {};
+      (detail.exceptions || []).forEach(function (e) {
+        map[e.employee_id] = e;
+      });
+      return map;
+    }
+
+    function exceptionMessagesForRow_(detail, row) {
+      var empId = row.employee && row.employee.employee_id;
+      var exc = empId ? exceptionMap_(detail)[empId] : null;
+      if (exc && exc.messages && exc.messages.length) return exc.messages.join('; ');
+      if (exc && exc.flags && exc.flags.length) return exc.flags.join('; ');
+      var warnings = row.warnings || [];
+      if (warnings.indexOf('LOP_MISMATCH') >= 0) return 'LOP days differ from approved leave';
+      if (warnings.indexOf('DAYS_INCONSISTENT') >= 0) return 'Paid days and LOP do not match working days';
+      return '';
     }
 
     function statusLabel(status) {
@@ -265,9 +369,12 @@
       return new Promise(function (resolve) {
         var wrap = document.createElement('div');
         wrap.className = 'modal-backdrop';
+        var bodyContent = opts.htmlBody
+          ? opts.htmlBody
+          : '<p>' + escapeHtml(opts.body || 'Are you sure?') + '</p>';
         wrap.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
           '<h3>' + escapeHtml(opts.title || 'Confirm') + '</h3>' +
-          '<p>' + escapeHtml(opts.body || 'Are you sure?') + '</p>' +
+          bodyContent +
           '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" id="payroll-modal-cancel">Cancel</button>' +
           '<button type="button" class="btn ' + (opts.danger ? 'btn-danger-solid' : 'btn-primary') + '" id="payroll-modal-ok">' +
@@ -318,7 +425,8 @@
       var blocks = (detail && detail.lockBlocks) || [];
       var st = statusKey(status);
       if (!blocks.length) return '';
-      if (st === 'DRAFT' && blocks.length === 1 && blocks[0] === 'No calculated records') return '';
+      if (st === 'DRAFT' && blocks.length === 1 &&
+          (blocks[0] === 'No calculated records' || blocks[0] === 'Payroll has not been calculated yet.')) return '';
       return '<div class="alert alert-danger">Cannot approve or lock until these are resolved: ' +
         escapeHtml(blocks.join('; ')) + '</div>';
     }
@@ -327,7 +435,8 @@
       var blocks = (detail && detail.lockBlocks) || [];
       if (!blocks.length) return false;
       var st = detail.run ? statusKey(detail.run.status) : '';
-      if (st === 'DRAFT' && blocks.length === 1 && blocks[0] === 'No calculated records') return false;
+      if (st === 'DRAFT' && blocks.length === 1 &&
+          (blocks[0] === 'No calculated records' || blocks[0] === 'Payroll has not been calculated yet.')) return false;
       return true;
     }
 
@@ -349,145 +458,818 @@
       return open || locked;
     }
 
-    function renderPayrollHome() {
+    function renderPayrollHome(params) {
+      params = params || {};
       var page = pageEl();
       if (!page) return;
       var now = new Date();
+      if (params.year) homeState.year = Number(params.year);
+      if (params.month) homeState.month = Number(params.month);
+      if (params.openSalaryStructure) homeState.salaryStructureOpen = true;
       var year = homeState.year || now.getFullYear();
       var month = homeState.month || (now.getMonth() + 1);
+      homeState.year = year;
+      homeState.month = month;
       var seq = App.getState().navSeq;
-      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('payroll') && homeState.runs && homeState.runs.length >= 0 && homeState.year) {
-        paintPayrollHome_(page, seq);
+      var cachedDetail = payrollState.detail;
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('payroll') &&
+          cachedDetail && cachedDetail.run &&
+          Number(cachedDetail.run.period_year) === year &&
+          Number(cachedDetail.run.period_month) === month) {
+        paintUnifiedPayroll_(page, seq, cachedDetail);
         return;
       }
-      if (!(App.isModuleRefresh && App.isModuleRefresh('payroll') && homeState.runs)) {
-        page.innerHTML = '<div class="payroll-page">' +
-          '<div class="page-header"><h2>Payroll</h2>' +
-          '<p class="page-lede">Process one month at a time: enter days, calculate on the server, review, then lock. Locked amounts never change.</p></div>' +
-          '<div class="kpi-row">' +
-          '<div class="card kpi-card"><div class="kpi-label">Period</div><div class="skeleton skeleton-xl"></div></div>' +
-          '<div class="card kpi-card"><div class="kpi-label">Status</div><div class="skeleton skeleton-xl"></div></div>' +
-          '<div class="card kpi-card"><div class="kpi-label">Employees</div><div class="skeleton skeleton-xl"></div></div>' +
-          '<div class="card kpi-card"><div class="kpi-label">Net pay</div><div class="skeleton skeleton-xl"></div></div>' +
-          '</div>' +
-          '<div class="card"><h2>Payroll period</h2>' + spinner('Loading runs…') + '</div></div>';
+      if (!(App.isModuleRefresh && App.isModuleRefresh('payroll') && homeState.runs && homeState.runs.length)) {
+        page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Payroll</h2>' +
+          '<p class="page-lede">Select a month, enter payroll data, calculate, review, and finalize.</p></div>' +
+          spinner('Loading payroll…') + '</div>';
       }
 
       callServer('apiListPayrollRuns').then(function (runs) {
-        if (!stillOn(seq, 'payroll')) return;
+        if (!stillOnPayrollModule_(seq)) return;
         homeState.runs = runs || [];
-        homeState.year = year;
-        homeState.month = month;
-        if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
-        paintPayrollHome_(page, seq);
+        var targetRun = null;
+        if (params.runId) {
+          targetRun = (runs || []).filter(function (r) { return r.payroll_run_id === params.runId; })[0];
+          if (targetRun) {
+            homeState.year = Number(targetRun.period_year);
+            homeState.month = Number(targetRun.period_month);
+          }
+        }
+        if (!targetRun) targetRun = latestRunForPeriod(runs, homeState.year, homeState.month);
+        if (!targetRun) {
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
+          paintUnifiedPayroll_(page, seq, null);
+          return;
+        }
+        return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
+          if (!stillOnPayrollModule_(seq)) return;
+          payrollState.detail = detail;
+          homeState.overview = detail;
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
+          paintUnifiedPayroll_(page, seq, detail);
+          prefetchCompEmployees_(seq);
+        });
       }).catch(function (err) {
-        if (!stillOn(seq, 'payroll')) return;
+        if (!stillOnPayrollModule_(seq)) return;
         if (App.finishModuleRefresh) App.finishModuleRefresh(true);
-        paintErr(page, err.message || 'Failed to load payroll', function () { renderPayrollHome(); });
+        paintErr(page, err.message || 'Failed to load payroll', function () { renderPayrollHome(params); });
       });
     }
 
-    function paintPayrollHome_(page, seq) {
-      var runs = homeState.runs || [];
+    function renderPayrollRun(params) {
+      renderPayrollHome({ runId: params && (params.runId || params) });
+    }
+
+    function renderCompensation() {
+      renderPayrollHome({ openSalaryStructure: true });
+    }
+
+    function paintUnifiedPayroll_(page, seq, detail) {
       var year = homeState.year;
       var month = homeState.month;
-      var current = latestRunForPeriod(runs, year, month);
+      var runs = homeState.runs || [];
       var periodRuns = runsForPeriod(runs, year, month);
-      var overview = homeState.overview && current && homeState.overview.run &&
-        homeState.overview.run.payroll_run_id === current.payroll_run_id ? homeState.overview : null;
+      var openRun = periodRuns.filter(function (r) { return statusKey(r.status) !== 'LOCKED'; })[0];
+      var lockedRun = periodRuns.filter(function (r) { return statusKey(r.status) === 'LOCKED'; })[0];
+      var currentRun = detail && detail.run ? detail.run : (openRun || lockedRun || null);
+      var st = currentRun ? statusKey(currentRun.status) : '';
+      var editable = st === 'DRAFT' || st === 'CALCULATED';
+      var summary = detail && detail.summary ? detail.summary : {};
+      var phaseLabel = uiPhaseDisplay_(detail);
 
       var html = '<div class="payroll-page">';
-      var homeFlash = consumeFlash ? consumeFlash('payroll') : null;
+      var homeFlash = consumeFlash ? (consumeFlash('payroll') || consumeFlash('payroll-run')) : null;
       if (flashBannerHtml && homeFlash) html += flashBannerHtml(homeFlash);
-      html += '<div class="page-header"><h2>Payroll</h2>' +
-        '<p class="page-lede">Process one month at a time: enter days, calculate on the server, review, then lock. Locked amounts never change.</p></div>';
+      html += '<div class="page-header"><h2>Payroll — ' + escapeHtml(fmtPeriod(year, month)) +
+        (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
+        '<p class="page-lede">Enter days and amounts, calculate on the server, review exceptions, then finalize and generate payslips.</p></div>';
 
-      var summary = overview && overview.summary ? overview.summary : {};
-      var st = current ? statusKey(current.status) : '';
+      if (detail) html += hrPhaseStepper(detail);
+
       html += '<div class="kpi-row">' +
-        kpiCard('Period', escapeHtml(fmtPeriod(year, month)), current ? escapeHtml(current.payroll_run_id) : 'No run yet') +
-        kpiCard('Status', current ? ('<span class="phase-chip">' + escapeHtml(phaseLabel(st)) + '</span>' + badgePayroll(st)) : '—',
-          current && current.correction_of_run_id ? 'Correction of ' + current.correction_of_run_id : '') +
-        kpiCard('Employees', overview ? String(summary.employee_count || 0) : (current ? '…' : '0'), '') +
-        kpiCard('Gross', overview && summary.has_totals ? fmtMoney(summary.gross_earnings) : '—', '') +
-        kpiCard('Deductions', overview && summary.has_totals ? fmtMoney(summary.total_deductions) : '—', '') +
-        kpiCard('Net pay', overview && summary.has_totals ? fmtMoney(summary.net_pay) : '—', '') +
-        kpiCard('LOP impact', overview ? ((summary.lop_days || 0) + ' days') : '—',
-          overview ? ((summary.lop_employees || 0) + ' employees') : '') +
+        kpiCard('Employees', String(summary.employee_count || 0),
+          detail ? ((summary.calculated_count || 0) + ' calculated' +
+            (summary.skipped_count ? ', ' + summary.skipped_count + ' skipped' : '')) : '—') +
+        kpiCard('Gross', summary.has_totals ? fmtMoneyInr(summary.gross_earnings) : '—', st === 'DRAFT' ? 'After calculate' : '') +
+        kpiCard('Deductions', summary.has_totals ? fmtMoneyInr(summary.total_deductions) : '—', '') +
+        kpiCard('Net pay', summary.has_totals ? fmtMoneyInr(summary.net_pay) : '—', '') +
+        kpiCard('LOP impact', detail ? ((summary.lop_days || 0) + ' days') : '—',
+          detail ? ((summary.lop_employees || 0) + ' employee' + ((summary.lop_employees || 0) === 1 ? '' : 's')) : '') +
         '</div>';
 
       html += '<div class="card"><h2>Payroll period</h2>' +
-        '<p class="page-lede">Select the month to work on. Only one open run is allowed per month.</p>' +
-        '<div class="page-toolbar" style="margin-top:12px"><div class="period-selects">' +
+        '<div class="period-selects">' +
         '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
         '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
-        '</div>';
+        '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
 
-      var openRun = periodRuns.filter(function (r) { return statusKey(r.status) !== 'LOCKED'; })[0];
-      var lockedRun = periodRuns.filter(function (r) { return statusKey(r.status) === 'LOCKED'; })[0];
-      html += '<div class="primary-next">';
-      if (openRun) {
-        html += '<button type="button" class="btn btn-primary" id="btn-open-period">Continue ' + escapeHtml(statusLabel(openRun.status)) + ' run</button>';
-      } else if (!lockedRun) {
-        html += '<button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' + escapeHtml(fmtPeriod(year, month)) + '</button>';
-      } else {
-        html += '<button type="button" class="btn btn-primary" id="btn-open-period">Open locked payroll</button>';
-        html += '<button type="button" class="btn btn-secondary" id="btn-create-correction">Create correction run</button>';
+      if (!currentRun) {
+        html += '<div class="card"><h2>Get started</h2>' +
+          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet.</p>' +
+          '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
+          escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
+      } else if (detail) {
+        html += paintPayrollDataSection_(detail, editable);
+        html += paintCalculateSection_(detail, editable, st);
+        html += paintPayrollCheck_(detail);
+        html += paintSalaryStructureCollapsible_();
+        html += paintReviewSection_(detail, st);
+        html += paintFinalizeSection_(detail, st);
+        html += paintPayslipsCard_(detail);
       }
-      html += '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div></div>';
 
-      var q = (homeState.search || '').toLowerCase();
-      var statusFilter = homeState.statusFilter || 'all';
-      var filtered = runs.filter(function (r) {
-        if (statusFilter !== 'all' && statusKey(r.status) !== statusFilter) return false;
-        if (!q) return true;
-        var hay = (r.payroll_run_id + ' ' + r.period_year + '-' + r.period_month + ' ' + statusLabel(r.status)).toLowerCase();
-        return hay.indexOf(q) >= 0;
+      html += paintPreviousPayrolls_(runs, year, month);
+      if (detail && currentRun) html += paintAdvancedSection_(detail, editable, st);
+      html += '</div>';
+
+      page.innerHTML = html;
+      bindUnifiedPayroll_(page, seq, detail, currentRun, openRun, lockedRun);
+      bindPayrollFixActions_(page);
+      if (homeState.salaryStructureOpen) ensureCompEmployeesLoaded_(page, seq);
+      else prefetchCompEmployees_(seq);
+    }
+
+    function paintPayrollDataSection_(detail, editable) {
+      var html = '<div class="card" id="payroll-data-card"><h2>Payroll data</h2>' +
+        '<p class="page-lede">Download the Excel template, upload filled data, or enter days manually in the table below.</p>';
+      if (editable) {
+        html += '<div class="primary-next">' +
+          '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download Excel Template</button>' +
+          '<button type="button" class="btn btn-secondary" id="btn-upload-excel">Upload Excel</button>' +
+          '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">' +
+          '</div>';
+        html += '<div id="pr-upload-preview">' + paintBulkPreview_(bulkState.preview) + '</div>';
+        html += '<div id="pr-upload-feedback" class="action-feedback hidden" role="status"></div>';
+      }
+      html += paintEmployeeTable_(detail, editable);
+      html += '</div>';
+      return html;
+    }
+
+    function paintBulkPreview_(preview) {
+      if (!preview) return '';
+      var html = '<div class="upload-preview"><h3>Upload preview</h3>' +
+        '<p><strong>' + preview.employeesFound + '</strong> employees found · ' +
+        '<strong>' + preview.readyCount + '</strong> ready · ' +
+        '<strong>' + preview.attentionCount + '</strong> need attention</p>';
+      if (preview.problemsByEmployee && preview.problemsByEmployee.length) {
+        html += '<div class="alert alert-warning"><strong>Needs attention</strong><ul class="problem-list">';
+        preview.problemsByEmployee.forEach(function (p) {
+          html += '<li><strong>' + escapeHtml(p.display_name || p.employee_id) + '</strong>: ' +
+            escapeHtml((p.messages || []).join('; ')) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      if (preview.readyCount > 0) {
+        html += '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-commit-upload">Confirm import (' +
+          preview.readyCount + ' employees)</button>' +
+          '<button type="button" class="btn btn-secondary" id="btn-cancel-upload">Cancel</button></div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function paintCalculateSection_(detail, editable, st) {
+      if (!detail) return '';
+      var html = '<div class="card" id="calculate-card"><h2>Calculate payroll</h2>' +
+        '<p class="page-lede">Server calculates basic, allowances, deductions, and net pay from salary structures and days entered.</p>' +
+        '<div class="primary-next">';
+      if (st === 'DRAFT' || st === 'CALCULATED') {
+        html += '<button type="button" class="btn btn-primary" id="btn-calc">' +
+          (st === 'CALCULATED' ? 'Recalculate payroll' : 'Calculate payroll') + '</button>';
+      }
+      if (editable) {
+        html += '<button type="button" class="btn btn-secondary" id="btn-save-inputs">Save days &amp; extras</button>';
+        html += '<span class="unsaved-hint' + (payrollState.dirty ? '' : ' hidden') + '" id="pr-unsaved">Unsaved changes</span>';
+      }
+      html += '</div><div id="pr-action-feedback" class="action-feedback hidden" role="status"></div></div>';
+      return html;
+    }
+
+    function paintPayrollCheck_(detail) {
+      if (!detail) return '';
+      var es = detail.exceptionSummary || {};
+      var ready = es.ready_count != null ? es.ready_count : 0;
+      var attention = es.attention_count != null ? es.attention_count : (detail.exceptions || []).length;
+      var total = es.total_employees != null ? es.total_employees : (detail.rows || []).length;
+      var html = '<div class="card" id="payroll-check-card"><h2>Payroll check</h2>' +
+        '<p class="page-lede">Review who is ready to pay and who needs attention before finalizing.</p>' +
+        '<div class="check-grid">' +
+        '<div class="check-box ready"><div class="check-count">' + ready + '</div><div>Ready to pay</div></div>' +
+        '<div class="check-box attention"><div class="check-count">' + attention + '</div><div>Need attention</div></div>' +
+        '</div><p class="hint">' + total + ' employees in this payroll</p>';
+      var problems = (es.exceptions && es.exceptions.length) ? es.exceptions : (detail.exceptions || []);
+      if (problems.length) {
+        html += '<div class="alert alert-warning" style="margin-top:12px"><strong>Issues to resolve</strong><ul class="problem-list">';
+        problems.forEach(function (p) {
+          var msgs = p.messages || p.flags || [];
+          html += '<li><strong>' + escapeHtml(p.display_name || p.employee_id) + '</strong>: ' +
+            escapeHtml(Array.isArray(msgs) ? msgs.join('; ') : String(msgs)) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      if (detail.lockBlocks && detail.lockBlocks.length) {
+        var st = detail.run ? statusKey(detail.run.status) : '';
+        var blocks = detail.lockBlocks;
+        if (!(st === 'DRAFT' && blocks.length === 1 && blocks[0] === 'Payroll has not been calculated yet.')) {
+          html += '<div class="alert alert-danger" style="margin-top:12px"><strong>Before finalizing</strong><ul class="problem-list">';
+          if (detail.finalizeBlockers && detail.finalizeBlockers.length) {
+            detail.finalizeBlockers.forEach(function (block) {
+              html += '<li><strong>' + escapeHtml(block.message) + '</strong>';
+              (block.employees || []).forEach(function (emp) {
+                html += '<div class="hint" style="margin-top:4px">' + escapeHtml(emp.display_name || emp.employee_id) +
+                  ' <span class="mono">(' + escapeHtml(emp.employee_id) + ')</span>';
+                if (block.code === 'MISSING_STRUCTURE') {
+                  html += ' <button type="button" class="btn btn-secondary btn-sm js-fix-structure" data-id="' +
+                    escapeHtml(emp.employee_id) + '">Set up salary</button>';
+                } else if (block.code === 'MISSING_BANK') {
+                  html += ' <button type="button" class="btn btn-secondary btn-sm js-fix-bank" data-id="' +
+                    escapeHtml(emp.employee_id) + '">Add bank details</button>';
+                }
+                html += '</div>';
+              });
+              html += '</li>';
+            });
+          } else {
+            html += '<li>' + escapeHtml(blocks.join('; ')) + '</li>';
+          }
+          html += '</ul><p class="hint">After fixing salary structure or bank details, click Recalculate payroll.</p></div>';
+        }
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function paintSalaryStructureCollapsible_() {
+      var open = homeState.salaryStructureOpen ? ' open' : '';
+      var mountInner = open ? spinner('Loading employees…') : '';
+      return '<details class="card section-details" id="salary-structure-details"' + open + '>' +
+        '<summary>Salary structure</summary>' +
+        '<p class="page-lede">Search an employee to view or edit their salary structure. Revisions create history.</p>' +
+        '<div id="salary-structure-mount">' + mountInner + '</div></details>';
+    }
+
+    function paintReviewSection_(detail, st) {
+      if (!detail || st === 'DRAFT') return '';
+      var html = '<div class="card"><h2>Review summary</h2>';
+      if (detail.summary && detail.summary.skipped_count && st !== 'DRAFT') {
+        html += '<div class="alert alert-warning">' + detail.summary.skipped_count +
+          ' employee(s) were skipped because working days must be greater than 0.</div>';
+      }
+      if (detail.summary && detail.summary.lop_mismatch_count) {
+        html += '<div class="alert alert-warning">LOP days differ from approved leave for ' +
+          detail.summary.lop_mismatch_count + ' employee(s).</div>';
+      }
+      if (detail.departmentTotals && detail.departmentTotals.length) {
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Department</th><th>Count</th><th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th></tr></thead><tbody>';
+        detail.departmentTotals.forEach(function (t) {
+          html += '<tr><td>' + escapeHtml(t.department) + '</td><td>' + t.count + '</td><td class="num">' + fmtMoneyInr(t.gross_earnings) +
+            '</td><td class="num">' + fmtMoneyInr(t.total_deductions) + '</td><td class="num">' + fmtMoneyInr(t.net_pay) + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p class="hint">Department breakdown appears after calculate.</p>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function paintFinalizeSection_(detail, st) {
+      if (!detail || st === 'LOCKED') return '';
+      var blocks = hasApproveLockBlocks(detail);
+      var disabled = (st === 'DRAFT' || blocks) ? ' disabled' : '';
+      var hint = st === 'DRAFT' ? 'Calculate payroll before finalizing.' :
+        (blocks ? 'Resolve all issues in Payroll check first.' : 'Finalizing locks amounts permanently.');
+      return '<div class="card" id="finalize-card"><h2>Finalize payroll</h2>' +
+        '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
+        '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-finalize"' + disabled +
+        '>Finalize payroll</button></div></div>';
+    }
+
+    function paintPreviousPayrolls_(runs, currentYear, currentMonth) {
+      var others = (runs || []).filter(function (r) {
+        return statusKey(r.status) === 'LOCKED' &&
+          (Number(r.period_year) !== Number(currentYear) || Number(r.period_month) !== Number(currentMonth));
+      });
+      var openAttr = homeState.prevPayrollsOpen ? ' open' : '';
+      var html = '<details class="card section-details" id="prev-payrolls"' + openAttr + '><summary>Previous payrolls</summary>';
+      if (!others.length) {
+        html += '<div class="empty-state"><p>No other finalized payrolls yet.</p></div>';
+      } else {
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Month</th><th>Status</th><th></th></tr></thead><tbody>';
+        others.forEach(function (r) {
+          html += '<tr><td>' + escapeHtml(fmtPeriod(r.period_year, r.period_month)) + '</td>' +
+            '<td><span class="phase-chip">Finalized</span></td>' +
+            '<td><button type="button" class="btn btn-secondary btn-sm js-view-period" data-year="' + r.period_year +
+            '" data-month="' + r.period_month + '">View</button></td></tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      html += '</details>';
+      return html;
+    }
+
+    function paintAdvancedSection_(detail, editable, st) {
+      return '<details class="card section-details" id="payroll-advanced-details">' +
+        '<summary>More actions</summary>' +
+        '<div class="advanced-actions" id="payroll-advanced">' +
+        (editable ? '<button type="button" class="btn btn-secondary" id="btn-refresh-lop">Refresh leave LOP</button> ' +
+          '<button type="button" class="btn btn-secondary" id="btn-apply-lop">Apply leave LOP to days</button> ' : '') +
+        ((st === 'UNDER_REVIEW' || st === 'CALCULATED' || (st === 'APPROVED' && isAdmin())) ?
+          '<button type="button" class="btn btn-secondary" id="btn-draft">Return to draft</button> ' : '') +
+        (st === 'LOCKED' ? '<button type="button" class="btn btn-secondary" id="btn-correct">Create correction run</button> ' : '') +
+        '<p class="hint" style="margin-top:8px">Advanced tools for admins. Leave LOP is a suggestion from approved leave.</p>' +
+        '</div></details>';
+    }
+
+    function openSalaryStructureForEmployee_(page, employeeId) {
+      employeeId = String(employeeId || '').trim();
+      if (!employeeId) return;
+      compState.employeeId = employeeId;
+      compState._editorLoadedFor = '';
+      compState.onlyMissing = false;
+      compState.empQuery = '';
+      homeState.salaryStructureOpen = true;
+      var details = $('salary-structure-details');
+      if (details) details.open = true;
+      ensureCompEmployeesLoaded_(page, App.getState().navSeq);
+      if (details && details.scrollIntoView) {
+        try { details.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (ignore) {}
+      }
+    }
+
+    function bindPayrollFixActions_(page) {
+      page.querySelectorAll('.js-fix-structure').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          openSalaryStructureForEmployee_(page, this.getAttribute('data-id'));
+        });
+      });
+      page.querySelectorAll('.js-fix-bank').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var employeeId = this.getAttribute('data-id');
+          if (App.navigate) App.navigate('employee-profile', { employeeId: employeeId });
+        });
+      });
+    }
+
+    function prefetchCompEmployees_(seq) {
+      if (compState._loaded && compState.employees.length) return;
+      callServer('apiListCompensationEmployees', { background: true }).then(function (emps) {
+        if (!stillOnPayrollModule_(seq)) return;
+        compState.employees = emps || [];
+        compState._loaded = true;
+        if (homeState.salaryStructureOpen) {
+          var page = document.querySelector('.payroll-page');
+          if (page) paintSalaryStructureMount_(page);
+        }
+      }).catch(function () { /* Prefetch is optional; section load will retry. */ });
+    }
+
+    function ensureCompEmployeesLoaded_(page, seq) {
+      var mount = $('salary-structure-mount');
+      if (!mount) return;
+      if (compState._loaded && compState.employees.length) {
+        paintSalaryStructureMount_(page);
+        return;
+      }
+      mount.innerHTML = spinner('Loading employees…');
+      callServer('apiListCompensationEmployees').then(function (emps) {
+        if (!stillOnPayrollModule_(seq)) return;
+        compState.employees = emps || [];
+        compState._loaded = true;
+        paintSalaryStructureMount_(page);
+      }).catch(function (err) {
+        if (mount) {
+          mount.innerHTML = '<div class="alert alert-danger">' +
+            escapeHtml((err && err.message) || 'Failed to load employees for salary structure.') +
+            '</div>';
+        }
+      });
+    }
+
+    function paintSalaryStructureMount_(page) {
+      var mount = $('salary-structure-mount');
+      if (!mount) return;
+      var emps = compState.employees || [];
+      var q = String(compState.empQuery || '').toLowerCase();
+      var onlyActive = compState.onlyActive !== false;
+      var onlyMissing = !!compState.onlyMissing;
+      var filtered = emps.filter(function (e) {
+        if (onlyActive && String(e.status || '').toUpperCase() === 'INACTIVE') return false;
+        if (onlyMissing && e.has_current_structure) return false;
+        if (!matchesEmployeeSearch_(e, q)) return false;
+        return true;
+      });
+      var selected = compState.employeeId;
+      if (selected && !filtered.some(function (e) { return e.employee_id === selected; })) {
+        selected = filtered.length ? filtered[0].employee_id : '';
+      }
+      if (!selected && filtered.length) selected = filtered[0].employee_id;
+      var opts = filtered.map(function (e) {
+        var miss = e.has_current_structure ? '' : ' — no structure';
+        return '<option value="' + escapeHtml(e.employee_id) + '"' + (e.employee_id === selected ? ' selected' : '') + '>' +
+          escapeHtml(e.employee_id + ' — ' + e.display_name) + escapeHtml(miss) + '</option>';
+      }).join('');
+      mount.innerHTML = '<div class="page-toolbar"><div class="filters">' +
+        '<label class="form-label" style="margin:0">Search <input class="form-input search-input" id="comp-search" placeholder="Name or ID" value="' + escapeHtml(compState.empQuery || '') + '"></label>' +
+        '<label class="form-check"><input type="checkbox" id="comp-active"' + (onlyActive ? ' checked' : '') + '> Active only</label>' +
+        '<label class="form-check"><input type="checkbox" id="comp-missing"' + (onlyMissing ? ' checked' : '') + '> Missing structure</label>' +
+        '</div></div>' +
+        (filtered.length
+          ? ('<label class="form-label">Employee <select class="form-select" id="comp-emp" style="max-width:420px">' + opts + '</select></label>')
+          : '<div class="empty-state"><p>No matching employees.</p></div>') +
+        '<div id="comp-editor"></div>';
+      if ($('comp-search')) $('comp-search').addEventListener('input', function () {
+        compState.empQuery = this.value;
+        paintSalaryStructureMount_(page);
+        var el = $('comp-search');
+        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      });
+      if ($('comp-active')) $('comp-active').addEventListener('change', function () {
+        compState.onlyActive = this.checked;
+        paintSalaryStructureMount_(page);
+      });
+      if ($('comp-missing')) $('comp-missing').addEventListener('change', function () {
+        compState.onlyMissing = this.checked;
+        paintSalaryStructureMount_(page);
+      });
+      if ($('comp-emp')) $('comp-emp').addEventListener('change', function () {
+        compState._editorLoadedFor = '';
+        loadCompEditor_(this.value);
+      });
+      if (selected && selected !== compState._editorLoadedFor) {
+        compState._editorLoadedFor = selected;
+        loadCompEditor_(selected);
+      }
+    }
+
+    function bindUnifiedPayroll_(page, seq, detail, currentRun, openRun, lockedRun) {
+      function syncPeriodFromInputs() {
+        var p = readPeriodInputs_();
+        if (!p) return;
+        if (p.year === homeState.year && p.month === homeState.month) return;
+        homeState.year = p.year;
+        homeState.month = p.month;
+        homeState.overview = null;
+        payrollState.detail = null;
+        bulkState.preview = null;
+        renderPayrollHome({ year: p.year, month: p.month });
+      }
+      if ($('pr-month')) $('pr-month').addEventListener('change', syncPeriodFromInputs);
+      if ($('pr-year')) $('pr-year').addEventListener('change', syncPeriodFromInputs);
+
+      var createBtn = $('btn-create-run');
+      if (createBtn) createBtn.addEventListener('click', function () {
+        var p = readPeriodInputs_();
+        if (!p) return;
+        if (!setButtonLoading(createBtn, 'Starting...')) return;
+        rpc('apiCreatePayrollRun', [p.year, p.month, ''], createBtn, 'Starting...', $('pr-home-feedback'))
+          .then(function (nextDetail) {
+            invalidatePayrollHome_();
+            payrollState.detail = nextDetail;
+            if (setFlash) setFlash('Payroll started for ' + fmtPeriod(p.year, p.month), 'success', 'payroll');
+            renderPayrollHome({ year: p.year, month: p.month, runId: nextDetail.run.payroll_run_id });
+          })
+          .catch(function () {});
       });
 
-      html += '<div class="card"><h2>All payroll runs</h2>' +
-        '<div class="page-toolbar"><div class="filters">' +
-        '<label class="form-label" style="margin:0">Search <input class="form-input search-input" id="pr-search" placeholder="Run ID or period" value="' + escapeHtml(homeState.search || '') + '"></label>' +
-        '<label class="form-label" style="margin:0">Status <select class="form-select" id="pr-status-filter" style="max-width:160px">' +
-        optFilter_('all', statusFilter, 'All') +
-        optFilter_('DRAFT', statusFilter, 'Draft') +
-        optFilter_('CALCULATED', statusFilter, 'Calculated') +
-        optFilter_('UNDER_REVIEW', statusFilter, 'In review') +
-        optFilter_('APPROVED', statusFilter, 'Approved') +
-        optFilter_('LOCKED', statusFilter, 'Locked') +
-        '</select></label></div></div>';
-
-      if (!filtered.length) {
-        html += '<div class="empty-state"><h2>' + (runs.length ? 'No matching runs' : 'No payroll runs yet') + '</h2>' +
-          '<p>' + (runs.length ? 'Try a different search or status filter.' : 'Start payroll for this month to begin.') + '</p></div>';
-      } else {
-        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-          '<th>Period</th><th>Run</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>' +
-          filtered.map(function (r) {
-            return '<tr class="table-row-click js-open-run" data-id="' + escapeHtml(r.payroll_run_id) + '">' +
-              '<td>' + escapeHtml(fmtPeriod(r.period_year, r.period_month)) +
-              (r.correction_of_run_id ? ' <span class="hint">correction</span>' : '') + '</td>' +
-              '<td class="mono">' + escapeHtml(r.payroll_run_id) + '</td>' +
-              '<td><span class="phase-chip">' + escapeHtml(phaseLabel(r.status)) + '</span>' + badgePayroll(r.status) + '</td>' +
-              '<td>' + escapeHtml(fmtWhen(r.created_at)) + '</td>' +
-              '<td><button type="button" class="btn btn-secondary btn-sm js-open-run" data-id="' + escapeHtml(r.payroll_run_id) + '">Open</button></td></tr>';
-          }).join('') + '</tbody></table></div>';
+      var prevDetails = $('prev-payrolls');
+      if (prevDetails) prevDetails.addEventListener('toggle', function () {
+        homeState.prevPayrollsOpen = prevDetails.open;
+      });
+      var ssDetails = $('salary-structure-details');
+      if (ssDetails) {
+        ssDetails.addEventListener('toggle', function () {
+          homeState.salaryStructureOpen = ssDetails.open;
+          if (ssDetails.open) {
+            var mount = $('salary-structure-mount');
+            if (mount && !compState._loaded) mount.innerHTML = spinner('Loading employees…');
+            ensureCompEmployeesLoaded_(page, seq);
+          }
+        });
+        if (ssDetails.open) ensureCompEmployeesLoaded_(page, seq);
       }
-      html += '</div></div>';
-      page.innerHTML = html;
 
-      bindHome_(page, seq, current, openRun, lockedRun);
+      var viewers = page.querySelectorAll('.js-view-period');
+      for (var vi = 0; vi < viewers.length; vi++) {
+        viewers[vi].addEventListener('click', function () {
+          var y = Number(this.getAttribute('data-year'));
+          var m = Number(this.getAttribute('data-month'));
+          refreshPayrollPage_({ year: y, month: m });
+        });
+      }
 
-      if (current && (!overview || overview.run.payroll_run_id !== current.payroll_run_id)) {
-        var wantId = current.payroll_run_id;
-        callServer('apiGetPayrollRun', wantId).then(function (detail) {
-          if (!stillOn(seq, 'payroll')) return;
-          var latest = latestRunForPeriod(homeState.runs, homeState.year, homeState.month);
-          if (!latest || latest.payroll_run_id !== wantId) return;
-          homeState.overview = detail;
-          paintPayrollHome_(page, seq);
-        }).catch(function () {
-          /* Overview is optional; the run list still works. */
+      if (detail && currentRun) {
+        var editable = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
+        bindRunTable_(page, detail, editable);
+        bindUnifiedActions_(currentRun.payroll_run_id, page, detail);
+        bindBulkUpload_(currentRun.payroll_run_id, page, detail);
+      }
+    }
+
+    function bindBulkUpload_(runId, page, detail) {
+      var dlBtn = $('btn-dl-template');
+      if (dlBtn) dlBtn.addEventListener('click', function () {
+        if (!setButtonLoading(dlBtn, 'Downloading...')) return;
+        rpc('apiDownloadPayrollTemplate', [runId], dlBtn, 'Downloading...', $('pr-upload-feedback'))
+          .then(function (file) {
+            if (!file || !file.base64) {
+              throw { message: 'Template file was empty. Check Apps Script Drive permissions.' };
+            }
+            downloadBlob(file);
+            if ((file.fileName || '').toLowerCase().indexOf('.csv') >= 0) {
+              showToast('Downloaded CSV fallback. Open in Excel and save as .xlsx before upload.', 'warning');
+            }
+          })
+          .catch(function (err) {
+            showToast((err && err.message) || 'Download failed', 'error');
+          });
+      });
+
+      var uploadBtn = $('btn-upload-excel');
+      var fileInput = $('pr-bulk-file');
+      if (uploadBtn && fileInput) {
+        uploadBtn.addEventListener('click', function () { fileInput.click(); });
+        fileInput.addEventListener('change', function () {
+          var file = fileInput.files && fileInput.files[0];
+          fileInput.value = '';
+          if (!file) return;
+          var name = (file.name || '').toLowerCase();
+          if (name.indexOf('.xlsx') < 0) {
+            showToast('Only .xlsx files are supported.', 'error');
+            return;
+          }
+          if (!setButtonLoading(uploadBtn, 'Validating...')) return;
+          var reader = new FileReader();
+          reader.onload = function () {
+            var base64 = String(reader.result || '').split(',')[1] || '';
+            rpc('apiValidatePayrollUpload', [runId, {
+              base64: base64,
+              fileName: file.name,
+              mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }], uploadBtn, 'Validating...', $('pr-upload-feedback'))
+              .then(function (preview) {
+                bulkState.preview = preview;
+                return callServer('apiGetPayrollRun', runId).then(function (detail) {
+                  payrollState.detail = detail;
+                  paintUnifiedPayroll_(page, App.getState().navSeq, detail);
+                  bulkState.preview = preview;
+                  var mount = $('pr-upload-preview');
+                  if (mount) mount.innerHTML = paintBulkPreview_(preview);
+                  bindBulkPreviewActions_(runId, page);
+                });
+              })
+              .catch(function () { restoreButton(uploadBtn); });
+          };
+          reader.onerror = function () {
+            restoreButton(uploadBtn);
+            showToast('Could not read file.', 'error');
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+      bindBulkPreviewActions_(runId, page);
+    }
+
+    function bindBulkPreviewActions_(runId, page) {
+      var commitBtn = $('btn-commit-upload');
+      if (commitBtn) commitBtn.addEventListener('click', function () {
+        if (!bulkState.preview || !bulkState.preview.uploadId) return;
+        if (!setButtonLoading(commitBtn, 'Importing...')) return;
+        rpc('apiCommitPayrollUpload', [runId, bulkState.preview.uploadId], commitBtn, 'Importing...', $('pr-upload-feedback'))
+          .then(function () {
+            bulkState.preview = null;
+            invalidatePayrollRunPeers_(runId);
+            return callServer('apiGetPayrollRun', runId);
+          })
+          .then(function (nextDetail) {
+            payrollState.detail = nextDetail;
+            homeState.overview = nextDetail;
+            paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
+            showToast('Imported payroll data from Excel.', 'success');
+          })
+          .catch(function (err) {
+            restoreButton(commitBtn);
+            showToast(err.message || 'Import failed', 'error');
+          });
+      });
+      var cancelBtn = $('btn-cancel-upload');
+      if (cancelBtn) cancelBtn.addEventListener('click', function () {
+        bulkState.preview = null;
+        var mount = $('pr-upload-preview');
+        if (mount) mount.innerHTML = '';
+      });
+    }
+
+    function buildFinalizeModalHtml_(detail) {
+      var run = detail.run;
+      var summary = detail.summary || {};
+      var html = '<dl class="finalize-summary">' +
+        '<dt>Month</dt><dd>' + escapeHtml(fmtPeriod(run.period_year, run.period_month)) + '</dd>' +
+        '<dt>Employees</dt><dd>' + (summary.employee_count || 0) + '</dd>' +
+        '<dt>Gross pay</dt><dd>' + fmtMoneyInr(summary.gross_earnings) + '</dd>' +
+        '<dt>Deductions</dt><dd>' + fmtMoneyInr(summary.total_deductions) + '</dd>' +
+        '<dt>Net pay</dt><dd>' + fmtMoneyInr(summary.net_pay) + '</dd></dl>';
+      var problems = (detail.exceptionSummary && detail.exceptionSummary.exceptions) || detail.exceptions || [];
+      var lockBlocks = detail.lockBlocks || [];
+      if (problems.length || lockBlocks.length) {
+        html += '<div class="alert alert-warning" style="margin-top:12px"><strong>Important exceptions</strong><ul class="problem-list">';
+        lockBlocks.forEach(function (b) {
+          html += '<li>' + escapeHtml(b) + '</li>';
+        });
+        problems.forEach(function (p) {
+          var msgs = p.messages || p.flags || [];
+          html += '<li><strong>' + escapeHtml(p.display_name || p.employee_id) + '</strong>: ' +
+            escapeHtml(Array.isArray(msgs) ? msgs.join('; ') : String(msgs)) + '</li>';
+        });
+        html += '</ul></div>';
+      }
+      html += '<p style="margin-top:12px">Finalizing locks all amounts permanently. Generate payslips after finalizing.</p>';
+      return html;
+    }
+
+    function bindUnifiedActions_(runId, page, detail) {
+      function afterUpdate(nextDetail, message) {
+        payrollState.detail = nextDetail;
+        payrollState.dirty = false;
+        payrollState.inputDraft = {};
+        invalidatePayrollRunPeers_(runId);
+        paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
+        if (message && setActionFeedback && $('pr-action-feedback')) {
+          setActionFeedback($('pr-action-feedback'), message, 'success');
+        } else if (message) {
+          showToast(message, 'success');
+        }
+      }
+
+      function saveIfNeeded() {
+        var st = statusKey(detail.run.status);
+        var editable = st === 'DRAFT' || st === 'CALCULATED';
+        if (!editable) return Promise.resolve(detail);
+        if (!clientValidateInputs_(page)) return Promise.reject({ message: 'Invalid payroll inputs.' });
+        return callServer('apiSavePayrollInputs', runId, collectInputs_(page));
+      }
+
+      function runAction(btn, fnName, extra, successMsg, loadingText) {
+        if (!setButtonLoading(btn, loadingText || 'Working…')) return Promise.resolve();
+        var args = extra !== undefined ? [runId, extra] : [runId];
+        return rpc(fnName, args, btn, loadingText || 'Working…', $('pr-action-feedback'))
+          .then(function (next) { afterUpdate(next, successMsg); })
+          .catch(function (err) {
+            if (!(setActionFeedback && $('pr-action-feedback'))) {
+              showToast(err.message || 'Failed', 'error');
+            }
+          });
+      }
+
+      var save = $('btn-save-inputs');
+      if (save) save.addEventListener('click', function () {
+        if (!clientValidateInputs_(page)) return;
+        if (!setButtonLoading(save, 'Saving...')) return;
+        rpc('apiSavePayrollInputs', [runId, collectInputs_(page)], save, 'Saving...', $('pr-action-feedback'))
+          .then(function (next) { afterUpdate(next, 'Days and extras saved'); })
+          .catch(function (err) {
+            if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Save failed', 'error');
+          });
+      });
+
+      var calc = $('btn-calc');
+      if (calc) calc.addEventListener('click', function () {
+        if (!setButtonLoading(calc, 'Calculating payroll...')) return;
+        saveIfNeeded()
+          .then(function () {
+            return rpc('apiCalculatePayroll', [runId, {}], calc, 'Calculating payroll...', $('pr-action-feedback'));
+          })
+          .then(function (next) { afterUpdate(next, 'Payroll calculated.'); })
+          .catch(function (err) {
+            restoreButton(calc);
+            if (setActionFeedback && $('pr-action-feedback')) {
+              setActionFeedback($('pr-action-feedback'), err.message || 'Calculate failed', 'error');
+            } else {
+              showToast(err.message || 'Calculate failed', 'error');
+            }
+          });
+      });
+
+      var finalize = $('btn-finalize');
+      if (finalize) finalize.addEventListener('click', function () {
+        if (hasApproveLockBlocks(detail)) {
+          showToast('Resolve all issues before finalizing.', 'error');
+          return;
+        }
+        confirmModal({
+          title: 'Finalize payroll?',
+          htmlBody: buildFinalizeModalHtml_(detail),
+          okLabel: 'Finalize payroll',
+          danger: true
+        }).then(function (ok) {
+          if (!ok) return;
+          if (!setButtonLoading(finalize, 'Finalizing...')) return;
+          rpc('apiFinalizePayroll', [runId], finalize, 'Finalizing...', $('pr-action-feedback'))
+            .then(function (next) {
+              invalidatePayslipViews_();
+              afterUpdate(next, 'Payroll finalized.');
+            })
+            .catch(function (err) {
+              if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Finalize failed', 'error');
+            });
+        });
+      });
+
+      var draft = $('btn-draft');
+      if (draft) draft.addEventListener('click', function () {
+        confirmModal({
+          title: 'Return to draft?',
+          body: 'This unfreezes days and extras so you can edit and calculate again.',
+          okLabel: 'Return to draft'
+        }).then(function (ok) {
+          if (!ok) return;
+          runAction(draft, 'apiReturnPayrollDraft', undefined, 'Returned to draft', 'Updating...');
+        });
+      });
+
+      var lop = $('btn-refresh-lop');
+      if (lop) lop.addEventListener('click', function () {
+        if (!setButtonLoading(lop, 'Refreshing...')) return;
+        saveIfNeeded()
+          .then(function () {
+            return rpc('apiRefreshPayrollLop', [runId], lop, 'Refreshing...', $('pr-action-feedback'));
+          })
+          .then(function (next) { afterUpdate(next, 'Leave LOP refreshed.'); })
+          .catch(function (err) {
+            restoreButton(lop);
+            showToast(err.message || 'Refresh failed', 'error');
+          });
+      });
+
+      var applyLop = $('btn-apply-lop');
+      if (applyLop) applyLop.addEventListener('click', function () {
+        confirmModal({
+          title: 'Apply leave LOP to payroll days?',
+          body: 'This copies approved leave LOP into LOP days and sets paid days to working days minus LOP. Recalculate after this.',
+          okLabel: 'Apply leave LOP'
+        }).then(function (ok) {
+          if (!ok) return;
+          if (!setButtonLoading(applyLop, 'Applying...')) return;
+          rpc('apiApplyPayrollLeaveLop', [runId], applyLop, 'Applying...', $('pr-action-feedback'))
+            .then(function (next) { afterUpdate(next, 'Leave LOP applied. Calculate to update net pay.'); })
+            .catch(function (err) {
+              showToast(err.message || 'Apply LOP failed', 'error');
+            });
+        });
+      });
+
+      var corr = $('btn-correct');
+      if (corr) corr.addEventListener('click', function () {
+        confirmModal({
+          title: 'Create a correction run?',
+          body: 'The finalized payroll stays unchanged. A new draft is created for the same month.',
+          okLabel: 'Create correction'
+        }).then(function (ok) {
+          if (!ok) return;
+          if (!setButtonLoading(corr, 'Creating...')) return;
+          rpc('apiCreatePayrollCorrection', [runId, ''], corr, 'Creating...', $('pr-action-feedback'))
+            .then(function (next) {
+              invalidatePayrollHome_();
+              payrollState.detail = next;
+              if (setFlash) setFlash('Correction draft created.', 'success', 'payroll');
+              renderPayrollHome({ runId: next.run.payroll_run_id });
+            })
+            .catch(function (err) {
+              showToast(err.message || 'Correction failed', 'error');
+            });
+        });
+      });
+
+      var regen = $('btn-regen-payslips');
+      if (regen) regen.addEventListener('click', function () {
+        confirmModal({
+          title: 'Generate all payslips?',
+          body: 'Creates or replaces payslip files for all employees in this payroll. Amounts stay unchanged.',
+          okLabel: 'Generate all payslips'
+        }).then(function (ok) {
+          if (!ok) return;
+          if (!setButtonLoading(regen, 'Generating...')) return;
+          rpc('apiRegeneratePayslips', [runId], regen, 'Generating...', $('pr-action-feedback'))
+            .then(function (next) {
+              invalidatePayslipViews_();
+              afterUpdate(next, 'Payslips generated.');
+            })
+            .catch(function (err) {
+              showToast(err.message || 'Generate failed', 'error');
+            });
+        });
+      });
+
+      var dls = page.querySelectorAll('.js-pay-dl');
+      for (var i = 0; i < dls.length; i++) {
+        dls[i].addEventListener('click', function () {
+          var btn = this;
+          if (!setButtonLoading(btn, 'Downloading...')) return;
+          rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Downloading...')
+            .then(function (file) { downloadBlob(file); })
+            .catch(function (err) { showToast(err.message || 'Download denied', 'error'); });
         });
       }
     }
@@ -510,224 +1292,6 @@
       return { year: y, month: m };
     }
 
-    function bindHome_(page, seq, current, openRun, lockedRun) {
-      function syncPeriodFromInputs() {
-        var p = readPeriodInputs_();
-        if (!p) return;
-        if (p.year === homeState.year && p.month === homeState.month) return;
-        homeState.year = p.year;
-        homeState.month = p.month;
-        homeState.overview = null;
-        paintPayrollHome_(page, seq);
-      }
-      if ($('pr-month')) $('pr-month').addEventListener('change', syncPeriodFromInputs);
-      if ($('pr-year')) $('pr-year').addEventListener('change', syncPeriodFromInputs);
-
-      if ($('pr-search')) $('pr-search').addEventListener('input', function () {
-        homeState.search = this.value;
-        paintPayrollHome_(page, seq);
-        var el = $('pr-search');
-        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
-      });
-      if ($('pr-status-filter')) $('pr-status-filter').addEventListener('change', function () {
-        homeState.statusFilter = this.value;
-        paintPayrollHome_(page, seq);
-      });
-
-      var createBtn = $('btn-create-run');
-      if (createBtn) createBtn.addEventListener('click', function () {
-        var p = readPeriodInputs_();
-        if (!p) return;
-        if (!setButtonLoading(createBtn, 'Creating run...')) return;
-        rpc('apiCreatePayrollRun', [p.year, p.month, ''], createBtn, 'Creating run...', $('pr-home-feedback'))
-          .then(function (detail) {
-            invalidatePayrollHome_();
-            if (setFlash) setFlash('Draft payroll created for ' + fmtPeriod(p.year, p.month), 'success', 'payroll-run');
-            App.navigate('payroll-run', { runId: detail.run.payroll_run_id });
-          })
-          .catch(function () { /* inline error on #pr-home-feedback */ });
-      });
-
-      var openBtn = $('btn-open-period');
-      if (openBtn) openBtn.addEventListener('click', function () {
-        var id = (openRun || lockedRun || current);
-        if (id) App.navigate('payroll-run', { runId: id.payroll_run_id });
-      });
-
-      var corrBtn = $('btn-create-correction');
-      if (corrBtn) corrBtn.addEventListener('click', function () {
-        if (!lockedRun) return;
-        confirmModal({
-          title: 'Create a correction run?',
-          body: 'The locked run stays unchanged. A new draft is created for the same month so you can fix amounts and lock again.',
-          okLabel: 'Create correction'
-        }).then(function (ok) {
-          if (!ok) return;
-          if (!setButtonLoading(corrBtn, 'Creating...')) return;
-          rpc('apiCreatePayrollCorrection', [lockedRun.payroll_run_id, ''], corrBtn, 'Creating...', $('pr-home-feedback'))
-            .then(function (detail) {
-              invalidatePayrollHome_();
-              if (setFlash) setFlash('Correction draft created.', 'success', 'payroll-run');
-              App.navigate('payroll-run', { runId: detail.run.payroll_run_id });
-            })
-            .catch(function () { /* inline error on #pr-home-feedback */ });
-        });
-      });
-
-      var openers = page.querySelectorAll('.js-open-run');
-      for (var i = 0; i < openers.length; i++) {
-        openers[i].addEventListener('click', function (ev) {
-          ev.preventDefault();
-          var id = this.getAttribute('data-id');
-          if (id) App.navigate('payroll-run', { runId: id });
-        });
-      }
-    }
-
-    function renderPayrollRun(runId) {
-      var page = pageEl();
-      if (!page) return;
-      if (!runId) {
-        page.innerHTML = '<div class="payroll-page"><div class="alert alert-danger">Missing payroll run. Go back to Payroll and open a period.</div></div>';
-        return;
-      }
-      var runKey = 'payroll-run:' + String(runId);
-      var seq = App.getState().navSeq;
-      var cached = payrollState.detail && payrollState.detail.run &&
-        payrollState.detail.run.payroll_run_id === runId ? payrollState.detail : null;
-      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(runKey) && cached) {
-        paintRun_(page, cached);
-        return;
-      }
-      if (!(App.isModuleRefresh && App.isModuleRefresh(runKey))) {
-        payrollState.tablePage = 1;
-        payrollState.dirty = false;
-        payrollState.inputDraft = {};
-      }
-      if (!(App.isModuleRefresh && App.isModuleRefresh(runKey) && cached)) {
-        page.innerHTML = '<div class="payroll-page"><div class="card"><h2>Payroll</h2>' + spinner('Loading run…') +
-          '<div class="skeleton skeleton-block"></div></div></div>';
-      }
-      callServer('apiGetPayrollRun', runId).then(function (detail) {
-        if (!stillOn(seq, 'payroll-run')) return;
-        payrollState.detail = detail;
-        if (App.markModuleViewLoaded) App.markModuleViewLoaded(runKey);
-        paintRun_(page, detail);
-      }).catch(function (err) {
-        if (!stillOn(seq, 'payroll-run')) return;
-        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
-        paintErr(page, err.message || 'Failed to load payroll run', function () { renderPayrollRun(runId); });
-      });
-    }
-
-    function nextAction_(st) {
-      if (st === 'DRAFT') return { id: 'btn-calc', label: 'Calculate payroll', kind: 'calc' };
-      if (st === 'CALCULATED') return { id: 'btn-review', label: 'Submit for review', kind: 'review' };
-      if (st === 'UNDER_REVIEW') return { id: 'btn-approve', label: 'Approve payroll', kind: 'approve' };
-      if (st === 'APPROVED') return { id: 'btn-lock', label: 'Lock payroll', kind: 'lock', danger: true };
-      if (st === 'LOCKED') return { id: 'btn-jump-payslips', label: 'View payslips', kind: 'payslips' };
-      return null;
-    }
-
-    function paintRun_(page, detail) {
-      var run = detail.run;
-      var st = statusKey(run.status);
-      var editable = st === 'DRAFT' || st === 'CALCULATED';
-      var rows = detail.rows || [];
-      var summary = detail.summary || {};
-      var next = nextAction_(st);
-      var blocksApprove = hasApproveLockBlocks(detail);
-
-      var html = '<div class="payroll-page">';
-      var runFlash = consumeFlash ? consumeFlash('payroll-run') : null;
-      if (flashBannerHtml && runFlash) html += flashBannerHtml(runFlash);
-      html += '<div class="page-toolbar"><button type="button" class="btn btn-secondary" id="btn-back-runs">All payroll</button></div>';
-      html += '<div class="page-header"><h2>' + escapeHtml(fmtPeriod(run.period_year, run.period_month)) +
-        ' <span class="phase-chip">' + escapeHtml(phaseLabel(st)) + '</span>' + badgePayroll(st) + '</h2>' +
-        '<p class="page-lede">' + escapeHtml(run.payroll_run_id) +
-        (run.correction_of_run_id ? ' · Correction of ' + escapeHtml(run.correction_of_run_id) : '') +
-        ' · Amounts are calculated on the server. Locking cannot be undone.</p></div>';
-      html += summaryKpis(summary, st);
-      html += displayLockBlocks(detail, st);
-      if (summary.skipped_count && st !== 'DRAFT') {
-        html += '<div class="alert alert-warning">' + summary.skipped_count +
-          ' employee(s) were skipped because working days must be greater than 0. They will not be paid in this run.</div>';
-      }
-      if (summary.lop_mismatch_count) {
-        html += '<div class="alert alert-warning">LOP days differ from approved leave for ' +
-          summary.lop_mismatch_count + ' employee(s). Refresh leave LOP, or apply it to payroll days, then recalculate.</div>';
-      }
-
-      html += '<div class="card" id="payroll-period-card"><h2>Payroll actions</h2>' +
-        stepper(st) +
-        '<p class="page-lede">' + escapeHtml(actionHint_(st, editable)) + '</p>' +
-        '<div class="primary-next">';
-      if (next) {
-        var disabled = ((next.kind === 'approve' || next.kind === 'lock') && blocksApprove) ? ' disabled' : '';
-        html += '<button type="button" class="btn ' + (next.danger ? 'btn-danger-solid' : 'btn-primary') + '" id="' + next.id + '"' + disabled + '>' +
-          escapeHtml(next.label) + '</button>';
-      }
-      if (editable) {
-        html += '<button type="button" class="btn btn-secondary" id="btn-save-inputs">Save days & extras</button>';
-        html += '<span class="unsaved-hint' + (payrollState.dirty ? '' : ' hidden') + '" id="pr-unsaved">Unsaved changes</span>';
-      }
-      if (st === 'CALCULATED') {
-        html += '<button type="button" class="btn btn-secondary" id="btn-calc">Recalculate</button>';
-      }
-      html += '<button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-advanced">' +
-        (payrollState.showAdvanced ? 'Hide more actions' : 'More actions') + '</button>';
-      html += '</div>';
-      html += '<div id="pr-action-feedback" class="action-feedback hidden" role="status"></div>';
-
-      html += '<div class="advanced-actions' + (payrollState.showAdvanced ? '' : ' hidden') + '" id="payroll-advanced">';
-      if (editable) {
-        html += '<button type="button" class="btn btn-secondary" id="btn-refresh-lop">Refresh leave LOP</button> ';
-        html += '<button type="button" class="btn btn-secondary" id="btn-apply-lop">Apply leave LOP to days</button> ';
-      }
-      if (st === 'UNDER_REVIEW' || st === 'CALCULATED' || (st === 'APPROVED' && isAdmin())) {
-        html += '<button type="button" class="btn btn-secondary" id="btn-draft">Return to draft</button> ';
-      }
-      if (st === 'LOCKED') {
-        html += '<button type="button" class="btn btn-secondary" id="btn-regen-payslips">Regenerate payslips</button> ';
-        html += '<button type="button" class="btn btn-secondary" id="btn-correct">Create correction run</button>';
-      }
-      html += '<p class="hint" style="margin-top:8px">Leave LOP is a suggestion from approved leave. Applying it overwrites LOP days and paid days (working − LOP). Recalculate afterwards.</p>';
-      html += '</div></div>';
-
-      html += paintEmployeeTable_(detail, editable);
-
-      if (detail.exceptions && detail.exceptions.length) {
-        html += '<div class="card"><h2>Exceptions</h2><p class="page-lede">Resolve these before approve or lock.</p><ul>' +
-          detail.exceptions.map(function (e) {
-            return '<li><span class="mono">' + escapeHtml(e.employee_id) + '</span>: ' + escapeHtml((e.flags || []).join(', ')) + '</li>';
-          }).join('') + '</ul></div>';
-      }
-      if (detail.departmentTotals && detail.departmentTotals.length) {
-        html += '<div class="card"><h2>Department totals</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Department</th><th>Count</th><th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th></tr></thead><tbody>' +
-          detail.departmentTotals.map(function (t) {
-            return '<tr><td>' + escapeHtml(t.department) + '</td><td>' + t.count + '</td><td class="num">' + fmtMoney(t.gross_earnings) +
-              '</td><td class="num">' + fmtMoney(t.total_deductions) + '</td><td class="num">' + fmtMoney(t.net_pay) + '</td></tr>';
-          }).join('') + '</tbody></table></div></div>';
-      }
-
-      html += paintPayslipsCard_(detail);
-      html += '</div>';
-
-      page.innerHTML = html;
-      if ($('btn-back-runs')) $('btn-back-runs').addEventListener('click', function () { App.navigate('payroll'); });
-      bindRunTable_(page, detail, editable);
-      bindRunActions_(run.payroll_run_id, page, detail);
-    }
-
-    function actionHint_(st, editable) {
-      if (st === 'DRAFT') return 'Enter working, paid, and LOP days, then calculate. Calculation always runs on the server.';
-      if (st === 'CALCULATED') return 'Review amounts and exceptions. Recalculate if you change days. Then submit for review.';
-      if (st === 'UNDER_REVIEW') return 'Inputs are frozen. Approve when exceptions are clear, or return to draft to edit.';
-      if (st === 'APPROVED') return 'Ready to lock. Locking generates payslips and freezes amounts permanently.';
-      if (st === 'LOCKED') return 'Completed. Amounts cannot change. Regenerate payslip files if a file failed; use a correction run to change pay.';
-      return '';
-    }
-
     function paintEmployeeTable_(detail, editable) {
       var rows = filterRows_(detail.rows || []);
       var total = rows.length;
@@ -736,7 +1300,7 @@
       var start = (payrollState.tablePage - 1) * PAGE_SIZE;
       var pageRows = rows.slice(start, start + PAGE_SIZE);
 
-      var html = '<div class="card" id="employee-payroll-card"><h2>Employee payroll</h2>' +
+      var html = '<div id="employee-payroll-section" style="margin-top:16px"><h3>Manual entry</h3>' +
         '<p class="page-lede">Basic, allowances, deductions, and net come from the last server calculation. Days and extras are this month only.</p>' +
         '<div class="page-toolbar"><div class="filters">' +
         '<label class="form-label" style="margin:0">Search <input class="form-input search-input" id="pr-emp-search" placeholder="Name or employee ID" value="' + escapeHtml(payrollState.tableQuery) + '"></label>' +
@@ -784,7 +1348,7 @@
           cell('lop_days', inputValue_(inp, 'lop_days'), '0.5') +
           '<td class="num">' + escapeHtml(inp.lop_from_leave || 0) + '</td>' +
           '<td class="num">' + (rec ? fmtMoney(rec.net_pay) : '—') + '</td>' +
-          '<td>' + escapeHtml((rec && rec.exception_flags) || (warnings.length ? warnings.join(', ') : '')) + extrasHint_(inp) + '</td></tr>';
+          '<td>' + escapeHtml(exceptionMessagesForRow_(detail, row)) + extrasHint_(inp) + '</td></tr>';
       });
       html += '</tbody></table></div>';
       html += extrasEditorNote_();
@@ -877,10 +1441,7 @@
         var inp = row.input || {};
         var rec = row.record;
         var warnings = row.warnings || [];
-        if (q) {
-          var hay = (emp.display_name + ' ' + emp.employee_id).toLowerCase();
-          if (hay.indexOf(q) < 0) return false;
-        }
+        if (q && !matchesEmployeeSearch_(emp, q)) return false;
         if (f === 'exceptions' && !(rec && rec.exception_flags)) return false;
         if (f === 'lop' && !(Number(inp.lop_days) > 0)) return false;
         if (f === 'mismatch' && warnings.indexOf('LOP_MISMATCH') < 0) return false;
@@ -893,29 +1454,31 @@
       var ps = detail.payslipStatus || {};
       var html = '<div class="card" id="payslips-card"><h2>Payslips</h2>';
       if (st !== 'LOCKED') {
-        html += '<div class="empty-state"><h2>Payslips generate after lock</h2>' +
-          '<p>When payroll is locked, HTML payslips are stored on Drive. Employees can download their own from My Payslips.</p></div></div>';
+        html += '<div class="empty-state"><h2>Payslips available after finalizing</h2>' +
+          '<p>Finalize payroll first, then generate payslip files for all employees.</p></div></div>';
         return html;
       }
+      html += '<p class="page-lede">Generate HTML payslips stored on Drive. Employees download their own from My Payslips.</p>' +
+        '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-regen-payslips">Generate all payslips</button></div>';
       if (ps.complete) {
-        html += '<div class="alert alert-success">Payslips generated for ' + ps.generated + ' of ' + ps.expected + ' employees.</div>';
-      } else {
-        html += '<div class="alert alert-warning">Payslips ready for ' + (ps.generated || 0) + ' of ' + (ps.expected || 0) +
-          '. Use Regenerate payslips if files are missing. Amounts stay frozen.</div>';
+        html += '<div class="alert alert-success" style="margin-top:12px">Payslips generated for ' + ps.generated + ' of ' + ps.expected + ' employees.</div>';
+      } else if (ps.expected) {
+        html += '<div class="alert alert-warning" style="margin-top:12px">Payslips ready for ' + (ps.generated || 0) + ' of ' + (ps.expected || 0) +
+          ' employees. Use Generate all payslips if files are missing.</div>';
       }
       var rows = (detail.rows || []).filter(function (r) { return r.record; });
       if (!rows.length) {
         html += '<div class="empty-state"><h2>No calculated employees</h2></div></div>';
         return html;
       }
-      html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee</th><th>Net pay</th><th>Payslip</th><th></th></tr></thead><tbody>';
+      html += '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Employee</th><th>Net pay</th><th>Status</th><th></th></tr></thead><tbody>';
       rows.forEach(function (row) {
         var rec = row.record;
         var ready = !!(rec && rec.payslip_document_id);
         html += '<tr><td>' + escapeHtml(row.employee.display_name) +
-          '<div class="hint mono">' + escapeHtml(row.employee.employee_id) + '</div></td>' +
+          '<div class="hint">' + escapeHtml(row.employee.employee_id) + '</div></td>' +
           '<td class="num">' + fmtMoney(rec.net_pay) + '</td>' +
-          '<td>' + (ready ? '<span class="badge badge-approved">Ready</span>' : '<span class="badge badge-draft">Missing</span>') + '</td>' +
+          '<td>' + (ready ? 'Ready to download' : 'Not generated yet') + '</td>' +
           '<td>' + (ready ? '<button type="button" class="btn btn-secondary btn-sm js-pay-dl" data-id="' +
             escapeHtml(rec.payslip_document_id) + '">Download</button>' : '—') + '</td></tr>';
       });
@@ -923,34 +1486,37 @@
       return html;
     }
 
-    function bindRunTable_(page, detail, editable) {
-      mountExtras_(page, detail, editable);
-      var search = $('pr-emp-search');
-      if (search) search.addEventListener('input', function () {
-        rememberInputs_(page);
-        payrollState.tableQuery = this.value;
-        payrollState.tablePage = 1;
-        paintRun_(page, payrollState.detail);
-        var el = $('pr-emp-search');
-        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
-      });
-      var filter = $('pr-emp-filter');
-      if (filter) filter.addEventListener('change', function () {
-        rememberInputs_(page);
-        payrollState.tableFilter = this.value;
-        payrollState.tablePage = 1;
-        paintRun_(page, payrollState.detail);
-      });
-      if ($('pr-page-prev')) $('pr-page-prev').addEventListener('click', function () {
-        rememberInputs_(page);
-        payrollState.tablePage = Math.max(1, payrollState.tablePage - 1);
-        paintRun_(page, payrollState.detail);
-      });
-      if ($('pr-page-next')) $('pr-page-next').addEventListener('click', function () {
-        rememberInputs_(page);
-        payrollState.tablePage += 1;
-        paintRun_(page, payrollState.detail);
-      });
+    function updateEmployeeTableDom_(page, detail, editable) {
+      if (!detail) return;
+      var card = $('payroll-data-card');
+      if (!card) return;
+      rememberInputs_(page);
+      var wrap = document.createElement('div');
+      wrap.innerHTML = paintEmployeeTable_(detail, editable);
+      var nextSection = wrap.querySelector('#employee-payroll-section');
+      var prevSection = $('employee-payroll-section');
+      if (nextSection && prevSection) {
+        prevSection.replaceWith(nextSection);
+        mountExtras_(page, detail, editable);
+        bindPayrollInputFields_(page);
+      }
+    }
+
+    function repaintPayrollTable_(page) {
+      var detail = payrollState.detail;
+      if (!detail || !detail.run) {
+        paintUnifiedPayroll_(page, App.getState().navSeq, detail);
+        return;
+      }
+      var editable = statusKey(detail.run.status) === 'DRAFT' || statusKey(detail.run.status) === 'CALCULATED';
+      if ($('employee-payroll-section')) {
+        updateEmployeeTableDom_(page, detail, editable);
+        return;
+      }
+      paintUnifiedPayroll_(page, App.getState().navSeq, detail);
+    }
+
+    function bindPayrollInputFields_(page) {
       var inputs = page.querySelectorAll('.js-inp');
       for (var i = 0; i < inputs.length; i++) {
         inputs[i].addEventListener('input', function () {
@@ -961,6 +1527,44 @@
           validateInputEl_(this);
         });
       }
+    }
+
+    function bindRunTable_(page, detail, editable) {
+      var card = $('payroll-data-card');
+      if (!card) return;
+      mountExtras_(page, detail, editable);
+      bindPayrollInputFields_(page);
+
+      if (card.getAttribute('data-table-bound') === '1') return;
+      card.setAttribute('data-table-bound', '1');
+
+      card.addEventListener('input', function (ev) {
+        if (ev.target && ev.target.id === 'pr-emp-search') {
+          payrollState.tableQuery = ev.target.value;
+          payrollState.tablePage = 1;
+          repaintPayrollTable_(page);
+          var el = $('pr-emp-search');
+          if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+        }
+      });
+      card.addEventListener('change', function (ev) {
+        if (ev.target && ev.target.id === 'pr-emp-filter') {
+          payrollState.tableFilter = ev.target.value;
+          payrollState.tablePage = 1;
+          repaintPayrollTable_(page);
+        }
+      });
+      card.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('#pr-page-prev, #pr-page-next') : null;
+        if (!btn) return;
+        rememberInputs_(page);
+        if (btn.id === 'pr-page-prev') {
+          payrollState.tablePage = Math.max(1, payrollState.tablePage - 1);
+        } else {
+          payrollState.tablePage += 1;
+        }
+        repaintPayrollTable_(page);
+      });
     }
 
     function validateInputEl_(el) {
@@ -1002,227 +1606,6 @@
       return ok;
     }
 
-    function bindRunActions_(runId, page, detail) {
-      function afterUpdate(nextDetail, message) {
-        payrollState.detail = nextDetail;
-        payrollState.dirty = false;
-        payrollState.inputDraft = {};
-        invalidatePayrollRunPeers_(runId);
-        paintRun_(page, nextDetail);
-        if (message && setActionFeedback && $('pr-action-feedback')) {
-          setActionFeedback($('pr-action-feedback'), message, 'success');
-        } else if (message) {
-          showToast(message, 'success');
-        }
-      }
-
-      function saveIfNeeded() {
-        var st = statusKey(detail.run.status);
-        var editable = st === 'DRAFT' || st === 'CALCULATED';
-        if (!editable) return Promise.resolve(detail);
-        if (!clientValidateInputs_(page)) return Promise.reject({ message: 'Invalid payroll inputs.' });
-        return callServer('apiSavePayrollInputs', runId, collectInputs_(page));
-      }
-
-      function runAction(btn, fnName, extra, successMsg, loadingText) {
-        if (!setButtonLoading(btn, loadingText || 'Working…')) return Promise.resolve();
-        var args = extra !== undefined ? [runId, extra] : [runId];
-        return rpc(fnName, args, btn, loadingText || 'Working…', $('pr-action-feedback'))
-          .then(function (next) { afterUpdate(next, successMsg); })
-          .catch(function (err) {
-            if (!(setActionFeedback && $('pr-action-feedback'))) {
-              showToast(err.message || 'Failed', 'error');
-            }
-          });
-      }
-
-      var adv = $('btn-toggle-advanced');
-      if (adv) adv.addEventListener('click', function () {
-        payrollState.showAdvanced = !payrollState.showAdvanced;
-        paintRun_(page, payrollState.detail);
-      });
-
-      var save = $('btn-save-inputs');
-      if (save) save.addEventListener('click', function () {
-        if (!clientValidateInputs_(page)) return;
-        if (!setButtonLoading(save, 'Saving...')) return;
-        rpc('apiSavePayrollInputs', [runId, collectInputs_(page)], save, 'Saving...', $('pr-action-feedback'))
-          .then(function (next) { afterUpdate(next, 'Days and extras saved'); })
-          .catch(function (err) {
-            if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Save failed', 'error');
-          });
-      });
-
-      var calc = $('btn-calc');
-      if (calc) calc.addEventListener('click', function () {
-        if (!setButtonLoading(calc, 'Calculating payroll...')) return;
-        saveIfNeeded()
-          .then(function () {
-            return rpc('apiCalculatePayroll', [runId, {}], calc, 'Calculating payroll...', $('pr-action-feedback'));
-          })
-          .then(function (next) { afterUpdate(next, 'Payroll calculated.'); })
-          .catch(function (err) {
-            restoreButton(calc);
-            if (setActionFeedback && $('pr-action-feedback')) {
-              setActionFeedback($('pr-action-feedback'), err.message || 'Calculate failed', 'error');
-            } else {
-              showToast(err.message || 'Calculate failed', 'error');
-            }
-          });
-      });
-
-      var review = $('btn-review');
-      if (review) review.addEventListener('click', function () {
-          runAction(review, 'apiSubmitPayrollReview', undefined, 'Submitted for review', 'Submitting...');
-      });
-
-      var draft = $('btn-draft');
-      if (draft) draft.addEventListener('click', function () {
-        confirmModal({
-          title: 'Return to draft?',
-          body: 'This unfreezes days and extras so you can edit and calculate again. Approval is cleared.',
-          okLabel: 'Return to draft'
-        }).then(function (ok) {
-          if (!ok) return;
-          runAction(draft, 'apiReturnPayrollDraft', undefined, 'Returned to draft', 'Updating...');
-        });
-      });
-
-      var appr = $('btn-approve');
-      if (appr) appr.addEventListener('click', function () {
-        if (hasApproveLockBlocks(detail)) {
-          showToast('Resolve exceptions before approving.', 'error');
-          return;
-        }
-        confirmModal({
-          title: 'Approve this payroll?',
-          body: 'Approve only after reviewing amounts and exceptions. You can still return to draft (Admin after approve) before lock.',
-          okLabel: 'Approve'
-        }).then(function (ok) {
-          if (!ok) return;
-          runAction(appr, 'apiApprovePayroll', undefined, 'Payroll approved', 'Approving...');
-        });
-      });
-
-      var lock = $('btn-lock');
-      if (lock) lock.addEventListener('click', function () {
-        if (hasApproveLockBlocks(detail)) {
-          showToast('Cannot lock until exceptions are resolved.', 'error');
-          return;
-        }
-        confirmModal({
-          title: 'Lock payroll? This cannot be undone.',
-          body: 'Amounts freeze permanently and payslips are generated. To change pay later, create a correction run. The locked run stays as paid history.',
-          okLabel: 'Lock payroll',
-          danger: true
-        }).then(function (ok) {
-          if (!ok) return;
-          if (!setButtonLoading(lock, 'Locking...')) return;
-          rpc('apiLockPayroll', [runId, {}], lock, 'Locking...', $('pr-action-feedback'))
-            .then(function (next) {
-              invalidatePayslipViews_();
-              afterUpdate(next, 'Payroll locked. Payslips generated.');
-            })
-            .catch(function (err) {
-              if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Lock failed', 'error');
-            });
-        });
-      });
-
-      var jump = $('btn-jump-payslips');
-      if (jump) jump.addEventListener('click', function () {
-        var el = $('payslips-card');
-        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-
-      var lop = $('btn-refresh-lop');
-      if (lop) lop.addEventListener('click', function () {
-        if (!setButtonLoading(lop, 'Refreshing...')) return;
-        saveIfNeeded()
-          .then(function () {
-            return rpc('apiRefreshPayrollLop', [runId], lop, 'Refreshing...', $('pr-action-feedback'));
-          })
-          .then(function (next) { afterUpdate(next, 'Leave LOP refreshed. Recalculate if you also apply it to days.'); })
-          .catch(function (err) {
-            restoreButton(lop);
-            if (setActionFeedback && $('pr-action-feedback')) {
-              setActionFeedback($('pr-action-feedback'), err.message || 'Refresh failed', 'error');
-            } else {
-              showToast(err.message || 'Refresh failed', 'error');
-            }
-          });
-      });
-
-      var applyLop = $('btn-apply-lop');
-      if (applyLop) applyLop.addEventListener('click', function () {
-        confirmModal({
-          title: 'Apply leave LOP to payroll days?',
-          body: 'This copies approved leave LOP into LOP days and sets paid days to working days minus LOP. Recalculate after this.',
-          okLabel: 'Apply leave LOP'
-        }).then(function (ok) {
-          if (!ok) return;
-          if (!setButtonLoading(applyLop, 'Applying...')) return;
-          rpc('apiApplyPayrollLeaveLop', [runId], applyLop, 'Applying...', $('pr-action-feedback'))
-            .then(function (next) { afterUpdate(next, 'Leave LOP applied to days. Calculate to update net pay.'); })
-            .catch(function (err) {
-              if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Apply LOP failed', 'error');
-            });
-        });
-      });
-
-      var regen = $('btn-regen-payslips');
-      if (regen) regen.addEventListener('click', function () {
-        confirmModal({
-          title: 'Regenerate payslip files?',
-          body: 'Payroll amounts stay frozen. Existing files for this run are replaced. Employees will still see one payslip per run.',
-          okLabel: 'Regenerate'
-        }).then(function (ok) {
-          if (!ok) return;
-          if (!setButtonLoading(regen, 'Generating...')) return;
-          rpc('apiRegeneratePayslips', [runId], regen, 'Generating...', $('pr-action-feedback'))
-            .then(function (next) {
-              invalidatePayslipViews_();
-              afterUpdate(next, 'Payslips regenerated');
-            })
-            .catch(function (err) {
-              if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Regenerate failed', 'error');
-            });
-        });
-      });
-
-      var corr = $('btn-correct');
-      if (corr) corr.addEventListener('click', function () {
-        confirmModal({
-          title: 'Create a correction run?',
-          body: 'This locked run will not change. A new draft for the same month is created so you can fix pay and lock again.',
-          okLabel: 'Create correction'
-        }).then(function (ok) {
-          if (!ok) return;
-          if (!setButtonLoading(corr, 'Creating...')) return;
-          rpc('apiCreatePayrollCorrection', [runId, ''], corr, 'Creating...', $('pr-action-feedback'))
-            .then(function (next) {
-              invalidatePayrollHome_();
-              if (setFlash) setFlash('Correction draft created.', 'success', 'payroll-run');
-              App.navigate('payroll-run', { runId: next.run.payroll_run_id });
-            })
-            .catch(function (err) {
-              if (!(setActionFeedback && $('pr-action-feedback'))) showToast(err.message || 'Correction failed', 'error');
-            });
-        });
-      });
-
-      var dls = page.querySelectorAll('.js-pay-dl');
-      for (var i = 0; i < dls.length; i++) {
-        dls[i].addEventListener('click', function () {
-          var btn = this;
-          if (!setButtonLoading(btn, 'Downloading...')) return;
-          rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Downloading...')
-            .then(function (file) { downloadBlob(file); })
-            .catch(function (err) { showToast(err.message || 'Download denied', 'error'); });
-        });
-      }
-    }
-
     function defaultComponents() {
       return [
         { component_code: 'BASIC', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'FIXED', amount: 0, percent: '', sort_order: 1 },
@@ -1235,217 +1618,165 @@
       ];
     }
 
-    function renderCompensation() {
-      var page = pageEl();
-      if (!page) return;
-      var seq = App.getState().navSeq;
-      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('compensation') && compState.employees && compState.employees.length >= 0 && compState._loaded) {
-        paintCompensationShell_(page);
-        return;
+    function renderCompEditor_(employeeId, bundle, notice) {
+      employeeId = String(employeeId || '').trim();
+      var editor = $('comp-editor');
+      if (!editor) return;
+      bundle = bundle || { employee_id: employeeId, current: null, history: [] };
+      var current = bundle.current;
+      var history = bundle.history || [];
+      var comps = current && current.components && current.components.length ? current.components : defaultComponents();
+      var fromVal = '';
+      if (current && current.structure && current.structure.effective_from) {
+        fromVal = String(current.structure.effective_from).substring(0, 10);
       }
-      if (!(App.isModuleRefresh && App.isModuleRefresh('compensation') && compState._loaded)) {
-        page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Compensation</h2>' +
-          '<p class="page-lede">Salary structures are contractual. Revisions create history; superseded amounts are never edited.</p></div>' +
-          '<div class="card">' + spinner('Loading employees…') + '</div><div id="comp-editor"></div></div>';
+      var ctc = current && current.structure ? (current.structure.ctc_monthly || '') : '';
+      var canEdit = !current || current.can_edit_in_place !== false;
+      var html = '';
+      if (bundle.loadWarning) {
+        html += '<div class="alert alert-warning">' + escapeHtml(bundle.loadWarning) +
+          ' You can still create or update a structure below.</div>';
       }
-      callServer('apiListCompensationEmployees').then(function (emps) {
-        if (!stillOn(seq, 'compensation')) return;
-        compState.employees = emps || [];
-        compState._loaded = true;
-        if (App.markModuleViewLoaded) App.markModuleViewLoaded('compensation');
-        paintCompensationShell_(page);
-      }).catch(function (err) {
-        if (!stillOn(seq, 'compensation')) return;
-        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
-        paintErr(page, err.message || 'Failed to load compensation', function () { renderCompensation(); });
-      });
-    }
-
-    function paintCompensationShell_(page) {
-      var emps = compState.employees || [];
-      var q = String(compState.empQuery || '').toLowerCase();
-      var onlyActive = compState.onlyActive !== false;
-      var onlyMissing = !!compState.onlyMissing;
-      var filtered = emps.filter(function (e) {
-        if (onlyActive && String(e.status || '').toUpperCase() === 'INACTIVE') return false;
-        if (onlyMissing && e.has_current_structure) return false;
-        if (!q) return true;
-        var hay = (e.employee_id + ' ' + e.display_name + ' ' + (e.department || '')).toLowerCase();
-        return hay.indexOf(q) >= 0;
-      });
-      var selected = compState.employeeId;
-      if (selected && !filtered.some(function (e) { return e.employee_id === selected; })) {
-        selected = filtered.length ? filtered[0].employee_id : '';
+      html += '<div class="card"><h2>' + (current ? 'Current structure' : 'New structure') + '</h2>';
+      if (current && !canEdit) {
+        html += '<div class="alert alert-info">This structure was used in locked payroll. Do not overwrite it — create a revision with a new effective date and reason.</div>';
       }
-      if (!selected && filtered.length) selected = filtered[0].employee_id;
-
-      var opts = filtered.map(function (e) {
-        var miss = e.has_current_structure ? '' : ' — no structure';
-        return '<option value="' + escapeHtml(e.employee_id) + '"' + (e.employee_id === selected ? ' selected' : '') + '>' +
-          escapeHtml(e.employee_id + ' — ' + e.display_name) + escapeHtml(miss) + '</option>';
-      }).join('');
-
-      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Compensation</h2>' +
-        '<p class="page-lede">Save a first structure in place. After payroll is locked against it, create a revision so history stays intact.</p></div>' +
-        '<div class="card"><h2>Employee</h2>' +
-        '<div class="page-toolbar"><div class="filters">' +
-        '<label class="form-label" style="margin:0">Search <input class="form-input search-input" id="comp-search" placeholder="Name or ID" value="' + escapeHtml(compState.empQuery || '') + '"></label>' +
-        '<label class="form-check"><input type="checkbox" id="comp-active"' + (onlyActive ? ' checked' : '') + '> Active only</label>' +
-        '<label class="form-check"><input type="checkbox" id="comp-missing"' + (onlyMissing ? ' checked' : '') + '> Missing structure</label>' +
-        '</div></div>' +
-        (filtered.length
-          ? ('<label class="form-label">Employee <select class="form-select" id="comp-emp" style="max-width:420px">' + opts + '</select></label>')
-          : '<div class="empty-state"><h2>No matching employees</h2><p>Adjust search or filters.</p></div>') +
-        '</div><div id="comp-editor"></div></div>';
-
-      if ($('comp-search')) $('comp-search').addEventListener('input', function () {
-        compState.empQuery = this.value;
-        paintCompensationShell_(page);
-        var el = $('comp-search');
-        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      html += '<div class="form-row">' +
+        '<label class="form-label">Effective from <input class="form-input" id="comp-from" type="date" value="' + escapeHtml(fromVal) + '"></label>' +
+        '<label class="form-label">Monthly CTC <input class="form-input" id="comp-ctc" type="number" min="0" step="0.01" value="' + escapeHtml(ctc) + '"></label>' +
+        '<label class="form-label">Revision reason <input class="form-input" id="comp-reason" placeholder="Required when creating a revision"></label>' +
+        '</div>' +
+        '<p id="comp-inline-error" class="field-error"></p>' +
+        '<div id="comp-action-feedback" class="action-feedback hidden" role="status"></div>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Method</th><th>Amount</th><th>%</th></tr></thead><tbody id="comp-rows">';
+      comps.forEach(function (c, i) {
+        html += componentRow_(c, i);
       });
-      if ($('comp-active')) $('comp-active').addEventListener('change', function () {
-        compState.onlyActive = this.checked;
-        paintCompensationShell_(page);
+      html += '</tbody></table></div>' +
+        '<div class="primary-next" style="margin-top:12px">' +
+        '<button type="button" class="btn btn-secondary" id="btn-add-comp-row">Add component</button>';
+      if (!current) {
+        html += '<button type="button" class="btn btn-primary" id="btn-save-comp">Save structure</button>';
+      } else {
+        html += '<button type="button" class="btn btn-primary" id="btn-revise-comp">Create revision</button>';
+        if (canEdit) {
+          html += '<button type="button" class="btn btn-secondary" id="btn-save-comp">Update current (no history)</button>';
+        }
+      }
+      html += '</div>' +
+        '<p class="hint">A BASIC earning line is required. Percent of basic is calculated from BASIC. TDS is not a structure line — enter it on the payroll run. After saving, recalculate payroll to clear finalize blockers.</p></div>';
+
+      html += '<div class="card"><h2>History</h2>';
+      if (!history.length) {
+        html += '<div class="empty-state"><h2>No history yet</h2><p>Revisions appear here with superseded dates.</p></div>';
+      } else {
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Status</th><th>From</th><th>To</th><th>Reason</th></tr></thead><tbody>' +
+          history.map(function (h) {
+            var hs = String(h.status || '').toUpperCase();
+            return '<tr><td class="mono">' + escapeHtml(h.salary_structure_id) + '</td><td>' +
+              '<span class="badge ' + (hs === 'CURRENT' ? 'badge-approved' : 'badge-draft') + '">' + escapeHtml(hs) + '</span></td><td>' +
+              escapeHtml(String(h.effective_from || '').substring(0, 10)) + '</td><td>' +
+              escapeHtml(String(h.effective_to || '').substring(0, 10) || '—') +
+              '</td><td>' + escapeHtml(h.revision_reason || '') + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      html += '</div>';
+      editor.innerHTML = html;
+      if (notice && setActionFeedback) setActionFeedback($('comp-action-feedback'), notice, 'success');
+
+      if ($('btn-add-comp-row')) $('btn-add-comp-row').addEventListener('click', function () {
+        var tbody = $('comp-rows');
+        if (!tbody) return;
+        tbody.insertAdjacentHTML('beforeend', componentRow_({
+          component_code: '', component_name: '', component_kind: 'EARNING',
+          calc_method: 'FIXED', amount: 0, percent: '', sort_order: tbody.children.length + 1
+        }, tbody.children.length));
       });
-      if ($('comp-missing')) $('comp-missing').addEventListener('change', function () {
-        compState.onlyMissing = this.checked;
-        paintCompensationShell_(page);
-      });
-      if ($('comp-emp')) {
-        $('comp-emp').addEventListener('change', function () {
-          loadCompEditor_(this.value);
+      if ($('btn-save-comp')) $('btn-save-comp').addEventListener('click', function () {
+        var payload = collectStructurePayload_();
+        var err = validateStructureClient_(payload, false);
+        if (err) { setCompError_(err); return; }
+        var btn = $('btn-save-comp');
+        var go = current
+          ? confirmModal({
+            title: 'Update current structure?',
+            body: 'This overwrites the current package without keeping a superseded row. Use Create revision if payroll has already used this structure.',
+            okLabel: 'Update current'
+          })
+          : Promise.resolve(true);
+        go.then(function (ok) {
+          if (!ok) return;
+          if (!setButtonLoading(btn, 'Saving...')) return;
+          rpc('apiSaveSalaryStructure', [payload], btn, 'Saving...')
+            .then(function () {
+              invalidateCompensation_();
+              invalidatePayrollRunPeers_(payrollState.detail && payrollState.detail.run
+                ? payrollState.detail.run.payroll_run_id : '');
+              setCompError_('');
+              loadCompEditor_(employeeId, 'Structure saved.');
+              showToast('Salary structure saved. Recalculate payroll to refresh finalize checks.', 'success');
+            })
+            .catch(function (e) { setCompError_(e.message || 'Save failed'); });
         });
-      }
-      if (selected) loadCompEditor_(selected);
+      });
+      if ($('btn-revise-comp')) $('btn-revise-comp').addEventListener('click', function () {
+        var payload = collectStructurePayload_();
+        var err = validateStructureClient_(payload, true);
+        if (err) { setCompError_(err); return; }
+        var btn = $('btn-revise-comp');
+        confirmModal({
+          title: 'Create a salary revision?',
+          body: 'The current structure becomes superseded the day before the new effective date. Locked payroll that used the old structure will not change.',
+          okLabel: 'Create revision'
+        }).then(function (ok) {
+          if (!ok) return;
+          if (!setButtonLoading(btn, 'Saving...')) return;
+          rpc('apiReviseSalaryStructure', [payload], btn, 'Saving...')
+            .then(function () {
+              invalidateCompensation_();
+              invalidatePayrollRunPeers_(payrollState.detail && payrollState.detail.run
+                ? payrollState.detail.run.payroll_run_id : '');
+              setCompError_('');
+              loadCompEditor_(employeeId, 'Revision created.');
+              showToast('Salary revision saved. Recalculate payroll to refresh finalize checks.', 'success');
+            })
+            .catch(function (e) { setCompError_(e.message || 'Revise failed'); });
+        });
+      });
     }
 
     function loadCompEditor_(employeeId, notice) {
+      employeeId = String(employeeId || '').trim();
       compState.employeeId = employeeId;
       var editor = $('comp-editor');
       if (!editor) return;
+      if (!employeeId) {
+        editor.innerHTML = '<div class="empty-state"><p>Select an employee to view or edit salary structure.</p></div>';
+        return;
+      }
       editor.innerHTML = '<div class="card">' + spinner('Loading structure…') + '</div>';
       var seq = App.getState().navSeq;
-      Promise.all([
-        callServer('apiGetCurrentSalaryStructure', employeeId),
-        callServer('apiListSalaryStructures', employeeId)
-      ]).then(function (parts) {
-        if (!stillOn(seq, 'compensation')) return;
-        editor = $('comp-editor');
-        if (!editor) return;
-        var bundle = parts[0];
-        var history = parts[1] || [];
-        var comps = bundle && bundle.components && bundle.components.length ? bundle.components : defaultComponents();
-        var fromVal = '';
-        if (bundle && bundle.structure && bundle.structure.effective_from) {
-          fromVal = String(bundle.structure.effective_from).substring(0, 10);
-        }
-        var ctc = bundle && bundle.structure ? (bundle.structure.ctc_monthly || '') : '';
-        var canEdit = !bundle || bundle.can_edit_in_place !== false;
-        var html = '<div class="card"><h2>' + (bundle ? 'Current structure' : 'New structure') + '</h2>';
-        if (bundle && !canEdit) {
-          html += '<div class="alert alert-info">This structure was used in locked payroll. Do not overwrite it — create a revision with a new effective date and reason.</div>';
-        }
-        html += '<div class="form-row">' +
-          '<label class="form-label">Effective from <input class="form-input" id="comp-from" type="date" value="' + escapeHtml(fromVal) + '"></label>' +
-          '<label class="form-label">Monthly CTC <input class="form-input" id="comp-ctc" type="number" min="0" step="0.01" value="' + escapeHtml(ctc) + '"></label>' +
-          '<label class="form-label">Revision reason <input class="form-input" id="comp-reason" placeholder="Required when creating a revision"></label>' +
-          '</div>' +
-          '<p id="comp-inline-error" class="field-error"></p>' +
-          '<div id="comp-action-feedback" class="action-feedback hidden" role="status"></div>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Method</th><th>Amount</th><th>%</th></tr></thead><tbody id="comp-rows">';
-        comps.forEach(function (c, i) {
-          html += componentRow_(c, i);
-        });
-        html += '</tbody></table></div>' +
-          '<div class="primary-next" style="margin-top:12px">' +
-          '<button type="button" class="btn btn-secondary" id="btn-add-comp-row">Add component</button>';
-        if (!bundle) {
-          html += '<button type="button" class="btn btn-primary" id="btn-save-comp">Save structure</button>';
-        } else {
-          html += '<button type="button" class="btn btn-primary" id="btn-revise-comp">Create revision</button>';
-          if (canEdit) {
-            html += '<button type="button" class="btn btn-secondary" id="btn-save-comp">Update current (no history)</button>';
-          }
-        }
-        html += '</div>' +
-          '<p class="hint">A BASIC earning line is required. Percent of basic is calculated from BASIC. TDS is not a structure line — enter it on the payroll run.</p></div>';
-
-        html += '<div class="card"><h2>History</h2>';
-        if (!history.length) {
-          html += '<div class="empty-state"><h2>No history yet</h2><p>Revisions appear here with superseded dates.</p></div>';
-        } else {
-          html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Status</th><th>From</th><th>To</th><th>Reason</th></tr></thead><tbody>' +
-            history.map(function (h) {
-              var hs = String(h.status || '').toUpperCase();
-              return '<tr><td class="mono">' + escapeHtml(h.salary_structure_id) + '</td><td>' +
-                '<span class="badge ' + (hs === 'CURRENT' ? 'badge-approved' : 'badge-draft') + '">' + escapeHtml(hs) + '</span></td><td>' +
-                escapeHtml(String(h.effective_from || '').substring(0, 10)) + '</td><td>' +
-                escapeHtml(String(h.effective_to || '').substring(0, 10) || '—') +
-                '</td><td>' + escapeHtml(h.revision_reason || '') + '</td></tr>';
-            }).join('') + '</tbody></table></div>';
-        }
-        html += '</div>';
-        editor.innerHTML = html;
-        if (notice && setActionFeedback) setActionFeedback($('comp-action-feedback'), notice, 'success');
-
-        if ($('btn-add-comp-row')) $('btn-add-comp-row').addEventListener('click', function () {
-          var tbody = $('comp-rows');
-          if (!tbody) return;
-          tbody.insertAdjacentHTML('beforeend', componentRow_({
-            component_code: '', component_name: '', component_kind: 'EARNING',
-            calc_method: 'FIXED', amount: 0, percent: '', sort_order: tbody.children.length + 1
-          }, tbody.children.length));
-        });
-        if ($('btn-save-comp')) $('btn-save-comp').addEventListener('click', function () {
-          var payload = collectStructurePayload_();
-          var err = validateStructureClient_(payload, false);
-          if (err) { setCompError_(err); return; }
-          var btn = $('btn-save-comp');
-          var go = bundle
-            ? confirmModal({
-              title: 'Update current structure?',
-              body: 'This overwrites the current package without keeping a superseded row. Use Create revision if payroll has already used this structure.',
-              okLabel: 'Update current'
-            })
-            : Promise.resolve(true);
-          go.then(function (ok) {
-            if (!ok) return;
-            if (!setButtonLoading(btn, 'Saving...')) return;
-            rpc('apiSaveSalaryStructure', [payload], btn, 'Saving...')
-              .then(function () {
-                invalidateCompensation_();
-                setCompError_('');
-                loadCompEditor_(employeeId, 'Structure saved.');
-              })
-              .catch(function (e) { setCompError_(e.message || 'Save failed'); });
-          });
-        });
-        if ($('btn-revise-comp')) $('btn-revise-comp').addEventListener('click', function () {
-          var payload = collectStructurePayload_();
-          var err = validateStructureClient_(payload, true);
-          if (err) { setCompError_(err); return; }
-          var btn = $('btn-revise-comp');
-          confirmModal({
-            title: 'Create a salary revision?',
-            body: 'The current structure becomes superseded the day before the new effective date. Locked payroll that used the old structure will not change.',
-            okLabel: 'Create revision'
-          }).then(function (ok) {
-            if (!ok) return;
-            if (!setButtonLoading(btn, 'Saving...')) return;
-            rpc('apiReviseSalaryStructure', [payload], btn, 'Saving...')
-              .then(function () {
-                invalidateCompensation_();
-                setCompError_('');
-                loadCompEditor_(employeeId, 'Revision created.');
-              })
-              .catch(function (e) { setCompError_(e.message || 'Revise failed'); });
-          });
-        });
+      callServer('apiGetCompensationEditorBundle', employeeId).then(function (bundle) {
+        if (!stillOnPayrollModule_(seq)) return;
+        renderCompEditor_(employeeId, bundle, notice);
       }).catch(function (err) {
-        var el = $('comp-editor');
-        if (!el) return;
-        paintErr(el, err.message || 'Failed', function () { loadCompEditor_(employeeId); });
+        if (!stillOnPayrollModule_(seq)) return;
+        callServer('apiGetCurrentSalaryStructure', employeeId).then(function (current) {
+          if (!stillOnPayrollModule_(seq)) return;
+          renderCompEditor_(employeeId, {
+            employee_id: employeeId,
+            current: current,
+            history: [],
+            loadWarning: (err && err.message) || 'Could not load full salary history.'
+          }, notice);
+        }).catch(function () {
+          renderCompEditor_(employeeId, {
+            employee_id: employeeId,
+            current: null,
+            history: [],
+            loadWarning: (err && err.message) || 'Could not load saved salary structure from server.'
+          }, notice);
+        });
       });
     }
 
@@ -1544,7 +1875,7 @@
 
     function paintMyPayslips_(page, slips, own) {
         var html = '<div class="payroll-page"><div class="page-header"><h2>My payslips</h2>' +
-          '<p class="page-lede">Only your locked payslips. Amounts come from the payroll snapshot, not live salary.</p></div>';
+          '<p class="page-lede">Your generated payslips. Amounts come from the payroll snapshot, not live salary.</p></div>';
         if (own && own.components) {
           html += '<div class="card"><h2>Current structure (read-only)</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Component</th><th>Kind</th><th class="num">Amount / %</th></tr></thead><tbody>' +
             own.components.map(function (c) {
@@ -1554,13 +1885,15 @@
             }).join('') + '</tbody></table></div></div>';
         }
         if (!slips.length) {
-          html += '<div class="card empty-state"><h2>No payslips yet</h2><p>Payslips appear after HR locks a payroll run for a month you were paid.</p></div>';
+          html += '<div class="card empty-state"><h2>No payslips available yet.</h2></div>';
         } else {
-          html += '<div class="card"><h2>Downloads</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Run</th><th>Date</th><th></th></tr></thead><tbody>' +
+          html += '<div class="card"><h2>Payslips</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Net pay</th><th></th></tr></thead><tbody>' +
             slips.map(function (d) {
-              return '<tr><td>' + escapeHtml(d.title) + '</td><td class="mono">' + escapeHtml(d.payroll_run_id || '') +
-                '</td><td>' + escapeHtml(fmtWhen(d.uploaded_at)) +
-                '</td><td><button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">Download</button></td></tr>';
+              var period = d.period_label || d.title || 'Payslip';
+              var net = d.net_pay != null && d.net_pay !== '' ? fmtMoneyInr(d.net_pay) : '—';
+              return '<tr><td>' + escapeHtml(period) + '</td><td class="num">' + escapeHtml(net) + '</td><td>' +
+                '<button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">View payslip</button> ' +
+                '<button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">Download PDF</button></td></tr>';
             }).join('') + '</tbody></table></div></div>';
         }
         html += '</div>';

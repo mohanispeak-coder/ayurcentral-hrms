@@ -126,7 +126,7 @@
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
     { id: 'performance', label: 'Performance', routes: ['pms', 'pms-team', 'pms-cycles', 'pms-appraisal'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -137,7 +137,9 @@
   var ROUTE_ALIASES = {
     'pms-self': 'pms-my-review',
     'ats-applications': 'ats-candidates',
-    'ats-interviews': 'ats-candidates'
+    'ats-interviews': 'ats-candidates',
+    'payroll-run': 'payroll',
+    compensation: 'payroll'
   };
 
   var moduleLoaded_ = {};
@@ -654,7 +656,15 @@
                 return;
               }
               if (result && result.error) {
-                reject(result.error);
+                reject({
+                  message: result.error.message || 'Request failed',
+                  code: result.error.code || ''
+                });
+                return;
+              }
+              if (result && typeof result === 'object' && result.employee_id &&
+                  (result.hasOwnProperty('current') || result.hasOwnProperty('history'))) {
+                resolve(result);
                 return;
               }
               if (result && typeof result === 'object') {
@@ -1328,6 +1338,10 @@
 
   function navigate(route, params) {
     if (!state.session || !state.session.authorized) return;
+    params = params || {};
+    if (route === 'compensation') {
+      params.openSalaryStructure = true;
+    }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
     if (route === 'pms-review' && params && !params.employeeId) {
       route = 'pms-team';
