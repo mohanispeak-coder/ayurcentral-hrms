@@ -48,7 +48,7 @@
       delete empViewCache.lists.employees;
       delete empViewCache.lists['my-team'];
       empViewCache.picker = null;
-      shellInv_(['employees', 'my-team', 'employee-create']);
+      shellInv_(['employees', 'my-team', 'employee-create', 'employee-bulk-upload']);
     }
 
     function invalidateEmpProfileLists_(employeeId, isSelf) {
@@ -77,6 +77,7 @@
     App.registerRoute('my-team', { title: 'My Team', render: function () { renderList(true); } });
     App.registerRoute('my-profile', { title: 'My Profile', render: renderMyProfile });
     App.registerRoute('employee-create', { title: 'Add employee', render: renderCreate });
+    App.registerRoute('employee-bulk-upload', { title: 'Bulk upload', render: renderBulkUpload });
     App.registerRoute('employee-profile', { title: 'Employee', render: function (params) { renderProfile(params && params.employeeId); } });
 
     function pageEl() {
@@ -217,10 +218,12 @@
       var refreshHtml = App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '';
       var addHtml = '';
       if (!team && (session.role === 'HR' || session.role === 'ADMIN')) {
-        addHtml = '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
+        addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-bulk">Bulk upload</button> ' +
+          '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
       }
       if (actions) actions.innerHTML = refreshHtml + addHtml;
       if ($('btn-emp-add')) $('btn-emp-add').addEventListener('click', function () { navigate('employee-create'); });
+      if ($('btn-emp-bulk')) $('btn-emp-bulk').addEventListener('click', function () { navigate('employee-bulk-upload'); });
       ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc'].forEach(function (id) {
         var el = $(id);
         if (!el) return;
@@ -392,7 +395,10 @@
       ];
       var readId = mode !== 'create';
       var html = '<form id="emp-form" class="form-grid emp-form-grid">';
-      if (readId) {
+      if (mode === 'create') {
+        html += fieldGroup('employee_id', 'Employee code', input('employee_id', 'text', emp.employee_id, true) +
+          '<p class="form-hint">Format: SAPL-0001, AOPL-0001, or AOMS-0001</p>');
+      } else if (readId) {
         html += fieldGroup('employee_id', 'Employee ID', '<input class="form-input mono" id="employee_id" value="' +
           escapeHtml(emp.employee_id || '') + '" disabled>');
       }
@@ -422,7 +428,10 @@
       }
       html += '</form>';
       if (mode === 'create') {
-        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create login for this work email (role EMPLOYEE)</label>';
+        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create login (role EMPLOYEE)</label>';
+        html += fieldGroup('google_login_email', 'Google login email',
+          input('google_login_email', 'email', emp.google_login_email) +
+          '<p class="form-hint">Required when login is enabled. Can match work email.</p>');
       }
       return html;
     }
@@ -465,10 +474,10 @@
 
     function collectEmployeePayload() {
       var ids = [
-        'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
+        'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
         'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
         'employment_type', 'location', 'pan', 'bank_account_name', 'bank_account_number',
-        'bank_ifsc', 'bank_name', 'notes'
+        'bank_ifsc', 'bank_name', 'notes', 'google_login_email'
       ];
       var payload = formValues(ids);
       if ($('create_user')) payload.create_user = $('create_user').checked;
@@ -481,7 +490,7 @@
       var createKey = 'employee-create';
       page.innerHTML = '<div class="page-header"><div class="page-header-text">' +
         '<h2 class="page-heading" aria-hidden="true">Add employee</h2>' +
-        '<p class="page-lede">Employee ID is assigned on save. Payroll identifiers are optional.</p></div>' +
+        '<p class="page-lede">Enter the employee code (e.g. SAPL-0001). Payroll identifiers are optional.</p></div>' +
         '<div class="page-header-actions">' + (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') + '</div></div>' +
         '<div class="card">' +
         employeeFormHtml({}, 'create') +
@@ -965,6 +974,141 @@
       a.download = file.fileName || file.title || 'download';
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    var bulkState = { uploadId: null, preview: null };
+
+    function renderBulkUpload() {
+      var page = pageEl();
+      if (!page) return;
+      bulkState.uploadId = null;
+      bulkState.preview = null;
+      page.innerHTML =
+        '<div class="page-header"><div class="page-header-text">' +
+        '<h2 class="page-heading">Bulk upload employees</h2>' +
+        '<p class="page-lede">Download the Excel template, fill employee codes and details, then upload for validation before import.</p></div>' +
+        '<div class="page-header-actions">' +
+        (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-back">Back to directory</button></div></div>' +
+        '<div class="card">' +
+        '<div class="form-actions" style="margin-bottom:16px">' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">Download template</button>' +
+        '<label class="btn btn-primary" for="bulk-file-input" id="btn-bulk-choose-label">Choose Excel/CSV file</label>' +
+        '<input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" style="display:none">' +
+        '<button type="button" class="btn btn-primary" id="btn-bulk-validate" disabled>Validate upload</button>' +
+        '</div>' +
+        '<p id="bulk-file-name" class="form-hint">No file selected.</p>' +
+        '<div id="bulk-feedback" class="action-feedback hidden" role="status"></div>' +
+        '<div id="bulk-preview"></div></div>';
+      markView_('employee-bulk-upload');
+      $('btn-bulk-back').addEventListener('click', function () { navigate('employees'); });
+      $('btn-bulk-template').addEventListener('click', function () {
+        var btn = $('btn-bulk-template');
+        callServer('apiDownloadBulkEmployeeTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) { showToast(err.message || 'Template download failed', 'error'); });
+      });
+      var selectedFile = null;
+      $('bulk-file-input').addEventListener('change', function () {
+        selectedFile = this.files && this.files[0] ? this.files[0] : null;
+        $('btn-bulk-validate').disabled = !selectedFile;
+        $('bulk-file-name').textContent = selectedFile ? selectedFile.name : 'No file selected.';
+        bulkState.uploadId = null;
+        bulkState.preview = null;
+        $('bulk-preview').innerHTML = '';
+      });
+      $('btn-bulk-validate').addEventListener('click', function () {
+        if (!selectedFile) return;
+        var btn = $('btn-bulk-validate');
+        var feedback = $('bulk-feedback');
+        readFileBase64(selectedFile).then(function (meta) {
+          return callServer('apiValidateBulkEmployeeUpload', meta, {
+            button: btn,
+            loadingText: 'Validating...',
+            feedback: feedback
+          });
+        }).then(function (preview) {
+          bulkState.uploadId = preview.uploadId;
+          bulkState.preview = preview;
+          paintBulkPreview(preview);
+        }).catch(function (err) {
+          if (setActionFeedback) setActionFeedback(feedback, err.message || 'Validation failed', 'error');
+        });
+      });
+    }
+
+    function readFileBase64(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read file.')); };
+        reader.onload = function () {
+          var result = reader.result || '';
+          resolve({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(result).split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function paintBulkPreview(preview) {
+      var el = $('bulk-preview');
+      if (!el) return;
+      var html = '<div class="alert alert-info">Validated ' + preview.totalRows + ' row(s): ' +
+        preview.validCount + ' ready, ' + preview.errorCount + ' with errors.</div>';
+      if (preview.validCount) {
+        html += '<h3 class="section-title">Ready to import (' + preview.validCount + ')</h3>';
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Row</th><th>Employee code</th><th>Name</th><th>Email</th><th>Department</th><th>Login</th>' +
+          '</tr></thead><tbody>';
+        preview.valid.forEach(function (row) {
+          html += '<tr><td>' + escapeHtml(String(row.rowNumber || '')) + '</td><td class="mono">' +
+            escapeHtml(row.employee_id) + '</td><td>' + escapeHtml(row.display_name) + '</td><td>' +
+            escapeHtml(row.work_email) + '</td><td>' + escapeHtml(row.department) + '</td><td>' +
+            escapeHtml(row.create_login) + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        html += '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-bulk-confirm">Confirm import (' +
+          preview.validCount + ')</button></div>';
+      }
+      if (preview.errorCount) {
+        html += '<h3 class="section-title">Errors (' + preview.errorCount + ')</h3>';
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Row</th><th>Employee code</th><th>Field</th><th>Message</th></tr></thead><tbody>';
+        preview.errors.forEach(function (err) {
+          (err.messages || []).forEach(function (m) {
+            html += '<tr><td>' + escapeHtml(String(err.rowNumber)) + '</td><td class="mono">' +
+              escapeHtml(err.employee_id || '') + '</td><td>' + escapeHtml(m.field || '') + '</td><td>' +
+              escapeHtml(m.message || '') + '</td></tr>';
+          });
+        });
+        html += '</tbody></table></div>';
+      }
+      el.innerHTML = html;
+      var confirmBtn = $('btn-bulk-confirm');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+          if (!bulkState.uploadId) return;
+          var btn = confirmBtn;
+          var feedback = $('bulk-feedback');
+          callServer('apiConfirmBulkEmployeeUpload', bulkState.uploadId, {
+            button: btn,
+            loadingText: 'Importing...',
+            feedback: feedback
+          }).then(function (result) {
+            invalidateEmpLists_();
+            var msg = 'Created ' + result.createdCount + ' employee(s).';
+            if (result.failedCount) msg += ' ' + result.failedCount + ' failed.';
+            if (setFlash) setFlash(msg, result.failedCount ? 'warning' : 'success', 'employees');
+            if (result.errorCsv) downloadBlob(result.errorCsv);
+            navigate('employees');
+          }).catch(function (err) {
+            if (setActionFeedback) setActionFeedback(feedback, err.message || 'Import failed', 'error');
+          });
+        });
+      }
     }
 
     function uploadDoc(emp) {

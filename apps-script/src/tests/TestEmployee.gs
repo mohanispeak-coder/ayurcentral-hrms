@@ -87,6 +87,7 @@ function testEmployee_All() {
       first_name: 'Test',
       last_name: 'Employee',
       display_name: 'Test Employee ' + stamp,
+      employee_id: 'SAPL-' + stamp.slice(-4),
       work_email: email1,
       department: 'QA',
       designation: 'Tester',
@@ -117,6 +118,7 @@ function testEmployee_All() {
     EmployeeService.createEmployee(session, {
       first_name: 'Dup',
       last_name: 'Mail',
+      employee_id: 'SAPL-' + String(Number(stamp.slice(-4)) + 1).slice(-4).replace(/^(\d)$/, '00$1'),
       work_email: email1,
       department: 'QA',
       designation: 'Tester',
