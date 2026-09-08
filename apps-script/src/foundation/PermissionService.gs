@@ -76,6 +76,17 @@ var PermissionService = (function () {
       return true;
     }
 
+    if (typeof UserAccessService !== 'undefined' && !isHrOrAdmin(session)) {
+      if (action === HRMS.ACTIONS.LEAVE_APPLY &&
+          !UserAccessService.hasSelfServiceAccess(session, 'leave')) {
+        return false;
+      }
+      if (action === HRMS.ACTIONS.VIEW_OWN_PAYSLIP &&
+          !UserAccessService.hasSelfServiceAccess(session, 'payslips')) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -110,6 +121,18 @@ var PermissionService = (function () {
     });
   }
 
+  function getNavForSession(session) {
+    var items = getNavForRole(session && session.role);
+    if (!session || !session.authorized) return items;
+    if (isHrOrAdmin(session)) return items;
+    if (typeof UserAccessService === 'undefined') return items;
+    return items.filter(function (item) {
+      if (item.id === 'my-leave') return UserAccessService.hasSelfServiceAccess(session, 'leave');
+      if (item.id === 'my-payslips') return UserAccessService.hasSelfServiceAccess(session, 'payslips');
+      return true;
+    });
+  }
+
   function isAdmin(session) {
     return session && session.role === HRMS.ROLES.ADMIN;
   }
@@ -122,6 +145,7 @@ var PermissionService = (function () {
     can: can,
     require: require,
     getNavForRole: getNavForRole,
+    getNavForSession: getNavForSession,
     isAdmin: isAdmin,
     isHrOrAdmin: isHrOrAdmin
   };

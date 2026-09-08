@@ -148,6 +148,7 @@ var EmployeeService = (function () {
       work.can_view_payroll_ids = false;
       work.can_view_salary_summary = false;
       work.can_view_payslips = false;
+      work.can_view_leave = false;
       return work;
     }
 
@@ -173,14 +174,29 @@ var EmployeeService = (function () {
 
     var isSelf = session.employee_id === row.employee_id;
     var hr = PermissionService.isHrOrAdmin(session);
+    var selfFlags = (typeof UserAccessService !== 'undefined')
+      ? UserAccessService.getFlagsForSession(session)
+      : { access_documents: true, access_payslips: true, access_leave: true };
     out.view_mode = hr ? 'HR' : (isSelf ? 'SELF' : 'OTHER');
     out.can_edit = hr;
     out.can_edit_contact = hr || isSelf;
     out.can_change_status = hr;
     out.can_upload_documents = hr;
-    out.can_view_documents = hr || isSelf;
-    if (!out.hasOwnProperty('can_view_payslips')) {
-      out.can_view_payslips = hr || isSelf;
+    out.can_manage_app_access = hr && !isSelf;
+    if (hr) {
+      out.can_view_documents = true;
+      out.can_view_leave = true;
+      if (!out.hasOwnProperty('can_view_payslips')) {
+        out.can_view_payslips = true;
+      }
+    } else if (isSelf) {
+      out.can_view_documents = !!selfFlags.access_documents;
+      out.can_view_payslips = !!selfFlags.access_payslips;
+      out.can_view_leave = !!selfFlags.access_leave;
+    } else {
+      out.can_view_documents = false;
+      out.can_view_payslips = false;
+      out.can_view_leave = false;
     }
     return out;
   }
@@ -506,14 +522,17 @@ var EmployeeService = (function () {
       }
 
       if (createUser) {
-        EmployeeRepository.insertUser({
+        var accessDefaults = (typeof UserAccessService !== 'undefined' && UserAccessService.newUserAccessDefaults)
+          ? UserAccessService.newUserAccessDefaults()
+          : {};
+        EmployeeRepository.insertUser(Object.assign({
           google_email: loginEmail,
           employee_id: employeeId,
           role: HRMS.ROLES.EMPLOYEE,
           status: HRMS.USER_STATUS.ACTIVE,
           created_at: now,
           updated_at: now
-        });
+        }, accessDefaults));
       }
 
       var drive = maybeCreateDriveFolder_(employeeId);
@@ -816,6 +835,10 @@ var EmployeeService = (function () {
     var emp = EmployeeRepository.findById(trim_(employeeId));
     if (!emp) throw notFoundError_('Employee not found.');
     if (!canAccessEmployee_(session, emp)) throw authorizationError_();
+    var view = sanitizeForViewer(emp, session);
+    if (!view.can_view_leave) {
+      throw authorizationError_('You do not have access to leave information.');
+    }
     var types = [];
     try {
       types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);

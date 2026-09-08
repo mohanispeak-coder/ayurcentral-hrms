@@ -583,9 +583,10 @@
       $('page-title').textContent = title;
       var tabs = ['personal', 'employment'];
       if (emp.can_view_payroll_ids) tabs.push('payroll');
-      if (emp.view_mode !== 'TEAM_WORK') tabs.push('leave');
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) tabs.push('leave');
       if (emp.can_view_documents) tabs.push('documents');
       if (emp.can_view_payslips) tabs.push('payslips');
+      if (emp.can_manage_app_access) tabs.push('app-access');
 
       var headerActions = '';
       if (emp.can_change_status) {
@@ -611,7 +612,10 @@
       var extras = empViewCache.extras[extrasKey] || {};
       var savedTab = extras.tab && tabs.indexOf(extras.tab) >= 0 ? extras.tab : tabs[0];
       var tabBtns = tabs.map(function (t) {
-        var labels = { personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary', documents: 'Documents', payslips: 'Payslips' };
+        var labels = {
+          personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary',
+          documents: 'Documents', payslips: 'Payslips', 'app-access': 'App access'
+        };
         return '<button type="button" class="emp-tab' + (t === savedTab ? ' active' : '') + '" data-tab="' + t + '">' + labels[t] + '</button>';
       }).join('');
 
@@ -621,13 +625,17 @@
       html += '<div class="tab-panel' + (savedTab === 'personal' ? ' active' : '') + '" data-panel="personal">' + personalPanel(emp) + '</div>';
       html += '<div class="tab-panel' + (savedTab === 'employment' ? ' active' : '') + '" data-panel="employment">' + employmentPanel(emp) + '</div>';
       if (emp.can_view_payroll_ids) html += '<div class="tab-panel' + (savedTab === 'payroll' ? ' active' : '') + '" data-panel="payroll">' + payrollPanel(emp) + '</div>';
-      if (emp.view_mode !== 'TEAM_WORK') {
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
         html += '<div class="tab-panel" data-panel="leave"><div id="leave-summary">' +
           '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
           '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
       }
       if (emp.can_view_documents) html += '<div class="tab-panel" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
       if (emp.can_view_payslips) html += '<div class="tab-panel" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
+      if (emp.can_manage_app_access) {
+        html += '<div class="tab-panel" data-panel="app-access"><div id="app-access-panel">' +
+          loadingHtml('Loading app access…') + '</div></div>';
+      }
       page.innerHTML = html;
 
       var tabEls = page.querySelectorAll('.emp-tab');
@@ -649,9 +657,10 @@
 
       bindProfileSaves(emp);
       var restoring = !!(opts && opts.restore);
-      if (emp.view_mode !== 'TEAM_WORK') loadLeave(emp.employee_id, restoring);
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) loadLeave(emp.employee_id, restoring);
       if (emp.can_view_documents) loadDocs(emp, null, restoring);
       if (emp.can_view_payslips) loadPayslips(emp.employee_id, restoring);
+      if (emp.can_manage_app_access) loadAppAccess(emp, restoring);
     }
 
     function dl(items) {
@@ -895,11 +904,13 @@
           empViewCache.extras[emp.employee_id].docs = rows;
           var html = '';
           if (emp.can_upload_documents) {
-            html += '<div class="form-row"><div class="form-group"><label class="form-label" for="doc-title">Title</label>' +
-              '<input class="form-input" id="doc-title" placeholder="Offer letter"></div>' +
-              '<div class="form-group"><label class="form-label" for="doc-file">File</label><input class="form-input" type="file" id="doc-file"></div></div>' +
-              '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-upload-doc">Upload</button></div>' +
-              '<div id="emp-upload-feedback" class="action-feedback hidden" role="status"></div>';
+            html += '<div id="doc-upload-form" class="doc-upload-form">' +
+              '<div id="doc-upload-rows"></div>' +
+              '<div class="form-actions doc-upload-actions">' +
+              '<button type="button" class="btn btn-secondary" id="btn-add-doc-row">+ Add document</button>' +
+              '<button type="button" class="btn btn-primary" id="btn-upload-doc">Upload all</button>' +
+              '</div>' +
+              '<div id="emp-upload-feedback" class="action-feedback hidden" role="status"></div></div>';
           }
           if (!rows.length) html += '<div class="empty-state empty-state-inline"><p class="empty-state-title">No employee files yet</p><p class="empty-state-text">Upload a document to keep it with this record.</p></div>';
           else {
@@ -911,7 +922,11 @@
             html += '</tbody></table></div>';
           }
           el.innerHTML = html;
-          if ($('btn-upload-doc')) $('btn-upload-doc').addEventListener('click', function () { uploadDoc(emp); });
+          if (emp.can_upload_documents) {
+            initDocUploadRows();
+            if ($('btn-add-doc-row')) $('btn-add-doc-row').addEventListener('click', function () { addDocUploadRow(); });
+          }
+          if ($('btn-upload-doc')) $('btn-upload-doc').addEventListener('click', function () { uploadDocs(emp); });
           bindDownloads(el);
           if (notice && setActionFeedback) setActionFeedback($('emp-upload-feedback') || el, notice, 'success');
         })
@@ -1111,41 +1126,183 @@
       }
     }
 
-    function uploadDoc(emp) {
-      var fileInput = $('doc-file');
-      var title = $('doc-title') ? $('doc-title').value : '';
+    function docUploadRowHtml(index) {
+      return '<div class="doc-upload-row form-row" data-row="' + index + '">' +
+        '<div class="form-group"><label class="form-label">Title</label>' +
+        '<input class="form-input js-doc-title" placeholder="Offer letter"></div>' +
+        '<div class="form-group"><label class="form-label">File</label>' +
+        '<input class="form-input js-doc-file" type="file"></div>' +
+        '<div class="form-group doc-upload-remove-wrap">' +
+        '<label class="form-label">&nbsp;</label>' +
+        '<button type="button" class="btn btn-secondary btn-sm js-remove-doc-row" title="Remove row">Remove</button>' +
+        '</div></div>';
+    }
+
+    function initDocUploadRows() {
+      var wrap = $('doc-upload-rows');
+      if (!wrap) return;
+      wrap.innerHTML = docUploadRowHtml(0);
+      bindDocUploadRows(wrap);
+    }
+
+    function addDocUploadRow() {
+      var wrap = $('doc-upload-rows');
+      if (!wrap) return;
+      var index = wrap.querySelectorAll('.doc-upload-row').length;
+      wrap.insertAdjacentHTML('beforeend', docUploadRowHtml(index));
+      bindDocUploadRows(wrap);
+    }
+
+    function bindDocUploadRows(wrap) {
+      var rows = wrap.querySelectorAll('.js-remove-doc-row');
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].onclick = function () {
+          var row = this.closest('.doc-upload-row');
+          if (!row || !wrap) return;
+          if (wrap.querySelectorAll('.doc-upload-row').length <= 1) {
+            row.querySelector('.js-doc-title').value = '';
+            var fileInput = row.querySelector('.js-doc-file');
+            if (fileInput) fileInput.value = '';
+            return;
+          }
+          row.parentNode.removeChild(row);
+        };
+      }
+    }
+
+    function loadAppAccess(emp, restore) {
+      var seq = App.getState().navSeq;
+      var extra = empViewCache.extras[emp.employee_id];
+      var req = (restore && extra && extra.appAccess)
+        ? Promise.resolve(extra.appAccess)
+        : callServer('apiGetEmployeeAppAccess', emp.employee_id);
+      req.then(function (data) {
+        var el = $('app-access-panel');
+        if (!el || seq !== App.getState().navSeq) return;
+        empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
+        empViewCache.extras[emp.employee_id].appAccess = data;
+        if (!data.has_login) {
+          el.innerHTML = '<div class="empty-state empty-state-inline">' +
+            '<p class="empty-state-title">No login yet</p>' +
+            '<p class="empty-state-text">Create a Google login for this employee before setting self-service access.</p></div>';
+          return;
+        }
+        var access = data.access || {};
+        el.innerHTML =
+          '<p class="hint">Control what this employee can access in the app. HR and Admin always have full access.</p>' +
+          '<div class="form-grid emp-form-grid">' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-documents"' +
+          (access.access_documents ? ' checked' : '') + '> Download documents</label>' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-payslips"' +
+          (access.access_payslips ? ' checked' : '') + '> Download payslips</label>' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-leave"' +
+          (access.access_leave ? ' checked' : '') + '> Leave apply and history</label>' +
+          '</div>' +
+          '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + ' · Role: ' + escapeHtml(data.role || '') + '</p>' +
+          '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-app-access">Save access</button></div>' +
+          '<div id="emp-app-access-feedback" class="action-feedback hidden" role="status"></div>';
+        if ($('btn-save-app-access')) {
+          $('btn-save-app-access').addEventListener('click', function () {
+            saveAppAccess(emp);
+          });
+        }
+      }).catch(function (err) {
+        var el = $('app-access-panel');
+        paintErr(el, err.message || 'App access unavailable', function () { loadAppAccess(emp); });
+      });
+    }
+
+    function saveAppAccess(emp) {
+      var feedback = $('emp-app-access-feedback');
+      var payload = {
+        access_documents: $('acc-documents') && $('acc-documents').checked,
+        access_payslips: $('acc-payslips') && $('acc-payslips').checked,
+        access_leave: $('acc-leave') && $('acc-leave').checked
+      };
+      callServer('apiSaveEmployeeAppAccess', emp.employee_id, payload, {
+        button: $('btn-save-app-access'),
+        loadingText: 'Saving…',
+        feedback: feedback
+      }).then(function (data) {
+        if (empViewCache.extras[emp.employee_id]) {
+          empViewCache.extras[emp.employee_id].appAccess = data;
+        }
+        if (setActionFeedback) setActionFeedback(feedback, 'App access saved.', 'success');
+      });
+    }
+
+    function readFileAsUpload(file, title) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read ' + (file.name || 'file'))); };
+        reader.onload = function () {
+          var result = reader.result || '';
+          resolve({
+            title: title || file.name,
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(result).split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function uploadDocs(emp) {
+      var wrap = $('doc-upload-rows');
       var btn = $('btn-upload-doc');
       var feedback = $('emp-upload-feedback');
-      if (!fileInput || !fileInput.files || !fileInput.files[0]) {
-        if (setActionFeedback) setActionFeedback(feedback, 'Choose a file to upload', 'error');
-        else showToast('Choose a file to upload', 'error');
+      if (!wrap) return;
+      var rows = wrap.querySelectorAll('.doc-upload-row');
+      var items = [];
+      for (var i = 0; i < rows.length; i++) {
+        var titleEl = rows[i].querySelector('.js-doc-title');
+        var fileEl = rows[i].querySelector('.js-doc-file');
+        var file = fileEl && fileEl.files && fileEl.files[0];
+        if (!file) continue;
+        items.push({
+          title: titleEl ? titleEl.value : '',
+          file: file
+        });
+      }
+      if (!items.length) {
+        if (setActionFeedback) setActionFeedback(feedback, 'Choose at least one file to upload', 'error');
+        else showToast('Choose at least one file to upload', 'error');
         return;
       }
       if (App.isButtonLoading && App.isButtonLoading(btn)) return;
-      if (App.setButtonLoading) App.setButtonLoading(btn, 'Uploading...');
-      var file = fileInput.files[0];
-      var reader = new FileReader();
-      reader.onerror = function () {
-        if (App.restoreButton) App.restoreButton(btn);
-        if (setActionFeedback) setActionFeedback(feedback, 'Could not read that file', 'error');
-      };
-      reader.onload = function () {
-        var result = reader.result || '';
-        var base64 = String(result).split(',')[1] || '';
-        callServer('apiUploadEmployeeDocument', emp.employee_id, {
-          title: title || file.name,
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          base64: base64
-        }, { button: btn, loadingText: 'Uploading...', feedback: feedback }).then(function () {
-          if (empViewCache.extras[emp.employee_id]) delete empViewCache.extras[emp.employee_id].docs;
-          shellInv_(emp.employee_id === (App.getState().session || {}).employee_id
-            ? 'my-profile'
-            : ('employee-profile:' + emp.employee_id));
-          loadDocs(emp, 'File uploaded.');
+      if (App.setButtonLoading) App.setButtonLoading(btn, 'Uploading…');
+      var chain = Promise.resolve();
+      var uploaded = 0;
+      items.forEach(function (item) {
+        chain = chain.then(function () {
+          return readFileAsUpload(item.file, item.title).then(function (meta) {
+            if (!meta.base64) throw new Error('Could not read ' + (item.file.name || 'file'));
+            return callServer('apiUploadEmployeeDocument', emp.employee_id, meta);
+          }).then(function () {
+            uploaded++;
+          });
         });
-      };
-      reader.readAsDataURL(file);
+      });
+      chain.then(function () {
+        if (empViewCache.extras[emp.employee_id]) delete empViewCache.extras[emp.employee_id].docs;
+        shellInv_(emp.employee_id === (App.getState().session || {}).employee_id
+          ? 'my-profile'
+          : ('employee-profile:' + emp.employee_id));
+        if (App.restoreButton) App.restoreButton(btn);
+        loadDocs(emp, uploaded === 1 ? 'File uploaded.' : (uploaded + ' files uploaded.'));
+      }).catch(function (err) {
+        if (App.restoreButton) App.restoreButton(btn);
+        if (setActionFeedback) {
+          setActionFeedback(feedback, err.message || 'Upload failed', 'error');
+        } else {
+          showToast(err.message || 'Upload failed', 'error');
+        }
+      });
+    }
+
+    function uploadDoc(emp) {
+      uploadDocs(emp);
     }
   });
 })();
