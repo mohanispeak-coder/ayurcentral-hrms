@@ -620,10 +620,12 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
 .form-grid .form-input, .form-grid .form-select, .form-textarea { max-width: none; }
 .form-textarea, textarea.form-input { min-height: 72px; resize: vertical; }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-.doc-upload-form { margin-bottom: 20px; }
+.doc-upload-form { margin-bottom: 20px; padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+.doc-upload-form .section-title { margin-top: 0; }
 .doc-upload-row { align-items: end; margin-bottom: 8px; }
-.doc-upload-actions { gap: 10px; flex-wrap: wrap; }
+.doc-upload-actions { gap: 10px; flex-wrap: wrap; align-items: center; }
 .doc-upload-remove-wrap .btn { width: 100%; }
+.btn-add-doc-row { font-weight: 600; }
 .form-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-md); margin-right: 12px; }
 .form-span-2 { grid-column: 1 / -1; }
 .field-error { color: var(--color-danger); font-size: var(--text-xs); margin-top: 4px; min-height: 0; line-height: 1.35; }

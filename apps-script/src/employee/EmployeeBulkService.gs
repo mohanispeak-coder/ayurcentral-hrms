@@ -195,21 +195,35 @@ var EmployeeBulkService = (function () {
     return blob;
   }
 
+  function downloadCsvTemplate(session) {
+    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
+    var blob = buildTemplateCsv_();
+    return {
+      fileName: 'HRMS_Bulk_Employee_Upload_Template.csv',
+      mimeType: 'text/csv',
+      base64: Utilities.base64Encode(blob.getBytes()),
+      templateVersion: TEMPLATE_VERSION_
+    };
+  }
+
   function downloadTemplate(session) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     var refs = listReferenceValues_(session);
     var blob;
     var fileName;
+    var mimeType;
     try {
       blob = buildTemplateSpreadsheet_(refs);
       fileName = 'HRMS_Bulk_Employee_Upload_Template.xlsx';
+      mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     } catch (e) {
       blob = buildTemplateCsv_();
       fileName = 'HRMS_Bulk_Employee_Upload_Template.csv';
+      mimeType = 'text/csv';
     }
     return {
       fileName: fileName,
-      mimeType: blob.getContentType() || 'application/octet-stream',
+      mimeType: mimeType,
       base64: Utilities.base64Encode(blob.getBytes()),
       templateVersion: TEMPLATE_VERSION_
     };
@@ -540,6 +554,7 @@ var EmployeeBulkService = (function () {
 
   return {
     downloadTemplate: downloadTemplate,
+    downloadCsvTemplate: downloadCsvTemplate,
     validateUpload: validateUpload,
     commitUpload: commitUpload,
     HEADERS: HEADERS_,

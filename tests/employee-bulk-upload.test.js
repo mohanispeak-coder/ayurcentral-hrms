@@ -29,7 +29,6 @@ function loadBulkService() {
       findUserByEmail: function () { return null; }
     },
     PermissionService: { require: function () {} },
-    SpreadsheetApp: {},
     DriveApp: {},
     Drive: { Files: { export: function () {}, create: function () {} } },
     MimeType: { GOOGLE_SHEETS: 'application/vnd.google-apps.spreadsheet' },
@@ -39,8 +38,13 @@ function loadBulkService() {
           return line.split(',');
         });
       },
-      base64Encode: function () { return ''; },
-      newBlob: function () { return { getBytes: function () { return []; } }; },
+      base64Encode: function (bytes) { return Buffer.from(bytes).toString('base64'); },
+      newBlob: function (content, mime, name) {
+        return {
+          getBytes: function () { return Buffer.from(content, 'utf8'); },
+          getContentType: function () { return mime; }
+        };
+      },
       getUuid: function () { return 'uuid-1'; }
     },
     CacheService: {
@@ -83,6 +87,9 @@ check('validate one valid row', result.validCount === 1 && result.errorCount ===
 var badRows = [{ rowNumber: 2, employee_id: 'BAD', first_name: '', last_name: 'X', work_email: 'bad', department: '', designation: '', location: '', employment_type: '', joining_date: '', create_login: '' }];
 var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
+
+var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
+check('csv template has base64', csvTpl.fileName.indexOf('.csv') >= 0 && csvTpl.base64.length > 10);
 
 if (fails) {
   console.error(fails + ' test(s) failed');

@@ -9,6 +9,13 @@ function apiDownloadBulkEmployeeTemplate(sessionToken) {
   }, sessionToken);
 }
 
+function apiDownloadBulkEmployeeCsvTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeBulkService.downloadCsvTemplate(session);
+  }, sessionToken);
+}
+
 function apiValidateBulkEmployeeUpload(meta, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

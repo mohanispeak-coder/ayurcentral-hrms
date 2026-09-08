@@ -905,9 +905,11 @@
           var html = '';
           if (emp.can_upload_documents) {
             html += '<div id="doc-upload-form" class="doc-upload-form">' +
+              '<h3 class="section-title">Upload documents</h3>' +
+              '<p class="hint">Use <strong>+ Add document</strong> to attach multiple files (offer letter, ID proof, etc.), then click <strong>Upload all</strong>.</p>' +
               '<div id="doc-upload-rows"></div>' +
               '<div class="form-actions doc-upload-actions">' +
-              '<button type="button" class="btn btn-secondary" id="btn-add-doc-row">+ Add document</button>' +
+              '<button type="button" class="btn btn-secondary btn-add-doc-row" id="btn-add-doc-row">+ Add document</button>' +
               '<button type="button" class="btn btn-primary" id="btn-upload-doc">Upload all</button>' +
               '</div>' +
               '<div id="emp-upload-feedback" class="action-feedback hidden" role="status"></div></div>';
@@ -1006,8 +1008,9 @@
         (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-back">Back to directory</button></div></div>' +
         '<div class="card">' +
-        '<div class="form-actions" style="margin-bottom:16px">' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">Download template</button>' +
+        '<div class="form-actions" style="margin-bottom:16px;flex-wrap:wrap">' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">Download Excel template</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">Download CSV template</button>' +
         '<label class="btn btn-primary" for="bulk-file-input" id="btn-bulk-choose-label">Choose Excel/CSV file</label>' +
         '<input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" style="display:none">' +
         '<button type="button" class="btn btn-primary" id="btn-bulk-validate" disabled>Validate upload</button>' +
@@ -1022,7 +1025,15 @@
         callServer('apiDownloadBulkEmployeeTemplate', { button: btn, loadingText: 'Preparing...' })
           .then(downloadBlob)
           .catch(function (err) {
-            showToast((err && err.message) || 'Template download failed', 'error');
+            showToast((err && err.message) || 'Excel template download failed. Try CSV template.', 'error');
+          });
+      });
+      $('btn-bulk-template-csv').addEventListener('click', function () {
+        var btn = $('btn-bulk-template-csv');
+        callServer('apiDownloadBulkEmployeeCsvTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'CSV template download failed', 'error');
           });
       });
       var selectedFile = null;
@@ -1276,32 +1287,27 @@
       }
       if (App.isButtonLoading && App.isButtonLoading(btn)) return;
       if (App.setButtonLoading) App.setButtonLoading(btn, 'Uploading…');
-      var chain = Promise.resolve();
-      var uploaded = 0;
-      items.forEach(function (item) {
-        chain = chain.then(function () {
-          return readFileAsUpload(item.file, item.title).then(function (meta) {
-            if (!meta.base64) throw new Error('Could not read ' + (item.file.name || 'file'));
-            return callServer('apiUploadEmployeeDocument', emp.employee_id, meta);
-          }).then(function () {
-            uploaded++;
-          });
+      Promise.all(items.map(function (item) {
+        return readFileAsUpload(item.file, item.title);
+      })).then(function (metas) {
+        return callServer('apiUploadEmployeeDocuments', emp.employee_id, metas, {
+          button: btn,
+          loadingText: 'Uploading…',
+          feedback: feedback
         });
-      });
-      chain.then(function () {
+      }).then(function (result) {
+        var count = (result && result.uploadedCount) || items.length;
         if (empViewCache.extras[emp.employee_id]) delete empViewCache.extras[emp.employee_id].docs;
         shellInv_(emp.employee_id === (App.getState().session || {}).employee_id
           ? 'my-profile'
           : ('employee-profile:' + emp.employee_id));
         if (App.restoreButton) App.restoreButton(btn);
-        loadDocs(emp, uploaded === 1 ? 'File uploaded.' : (uploaded + ' files uploaded.'));
+        loadDocs(emp, count === 1 ? 'File uploaded.' : (count + ' files uploaded.'));
       }).catch(function (err) {
         if (App.restoreButton) App.restoreButton(btn);
-        if (setActionFeedback) {
-          setActionFeedback(feedback, err.message || 'Upload failed', 'error');
-        } else {
-          showToast(err.message || 'Upload failed', 'error');
-        }
+        var msg = (err && err.message) || 'Upload failed';
+        if (setActionFeedback) setActionFeedback(feedback, msg, 'error');
+        else showToast(msg, 'error');
       });
     }
 

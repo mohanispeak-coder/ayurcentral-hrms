@@ -761,10 +761,30 @@ var EmployeeService = (function () {
     });
   }
 
-  function uploadDocument(session, employeeId, meta) {
+  function uploadDocuments(session, employeeId, files) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
     if (!PermissionService.isHrOrAdmin(session)) {
       throw authorizationError_('Only HR or Admin can upload employee files.');
+    }
+    files = files || [];
+    if (!files.length) throw validationError_('At least one file is required.');
+    if (files.length > 20) {
+      throw validationError_('Maximum 20 files per upload. Remove some files and try again.');
+    }
+    var uploaded = [];
+    files.forEach(function (meta) {
+      uploaded.push(uploadDocument(session, employeeId, meta, { skipPermissionCheck: true }));
+    });
+    return { uploadedCount: uploaded.length, files: uploaded };
+  }
+
+  function uploadDocument(session, employeeId, meta, options) {
+    options = options || {};
+    if (!options.skipPermissionCheck) {
+      PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
+      if (!PermissionService.isHrOrAdmin(session)) {
+        throw authorizationError_('Only HR or Admin can upload employee files.');
+      }
     }
     meta = meta || {};
     var emp = EmployeeRepository.findById(trim_(employeeId));
@@ -775,7 +795,14 @@ var EmployeeService = (function () {
     var base64 = trim_(meta.base64);
     if (!base64) throw validationError_('File data is required.');
 
-    var folder = DriveService.getEmployeeDocumentsFolder(emp.employee_id);
+    var folder;
+    try {
+      folder = DriveService.getEmployeeDocumentsFolder(emp.employee_id);
+    } catch (e) {
+      throw configurationError_(
+        (e && e.message) || 'Could not access employee document folder. Ensure the script owner can create folders in Google Drive.'
+      );
+    }
     var bytes = Utilities.base64Decode(base64);
     var blob = Utilities.newBlob(bytes, mimeType, fileName);
     var file = folder.createFile(blob);
@@ -912,6 +939,7 @@ var EmployeeService = (function () {
     listDocuments: listDocuments,
     listPayslips: listPayslips,
     uploadDocument: uploadDocument,
+    uploadDocuments: uploadDocuments,
     downloadDocument: downloadDocument,
     getLeaveSummary: getLeaveSummary,
     isActive: isActive,
