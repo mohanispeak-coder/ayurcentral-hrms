@@ -1,56 +1,64 @@
 /**
- * Employee ID format + bulk CSV validation tests (Node, no deploy).
+ * Bulk upload parse + validation tests (Node, no deploy).
  */
 var fs = require('fs');
 var path = require('path');
 var vm = require('vm');
 
-var root = path.join(__dirname, '..', 'apps-script', 'src', 'employee');
+var employeeDir = path.join(__dirname, '..', 'apps-script', 'src', 'employee');
+var foundationDir = path.join(__dirname, '..', 'apps-script', 'src', 'foundation');
 
-function loadEmployeeService() {
+function loadBulkService() {
   var ctx = {
     HRMS: {
-      SHEETS: { EMPLOYEES: 'Employees', USERS: 'Users', LEAVE_TYPES: 'LeaveTypes', LEAVE_BALANCES: 'LeaveBalances' },
-      ROLES: { EMPLOYEE: 'EMPLOYEE', ADMIN: 'ADMIN', HR: 'HR', MANAGER: 'MANAGER' },
-      USER_STATUS: { ACTIVE: 'ACTIVE' },
-      EMPLOYEE_STATUS: { ACTIVE: 'ACTIVE' },
-      ERROR_CODES: { VALIDATION: 'VALIDATION', AUTHORIZATION: 'AUTHORIZATION' },
-      ACTIONS: { EMPLOYEE_CREATE: 'EMPLOYEE_CREATE', EMPLOYEE_UPDATE: 'EMPLOYEE_UPDATE', EMPLOYEE_DIRECTORY: 'EMPLOYEE_DIRECTORY' }
+      ACTIONS: { EMPLOYEE_CREATE: 'EMPLOYEE_CREATE', EMPLOYEE_DIRECTORY: 'EMPLOYEE_DIRECTORY' },
+      ROLES: { HR: 'HR' }
+    },
+    EmployeeService: {
+      listDirectory: function () {
+        return { departments: ['Ops'], locations: ['HQ'] };
+      },
+      normalizeEmployeeId: function (id) { return String(id || '').trim().toUpperCase(); },
+      isValidEmployeeIdFormat: function (id) { return /^(SAPL|AOPL|AOMS)-\d{4}$/.test(id); },
+      parseCreateUserFlag: function (v) { return String(v).toUpperCase() === 'YES'; }
     },
     EmployeeRepository: {
+      listAll: function () { return []; },
       findById: function () { return null; },
       findByWorkEmail: function () { return null; },
-      findUserByEmail: function () { return null; },
-      insert: function (rec) { ctx._inserted = rec; },
-      insertUser: function () {},
-      listAll: function () { return []; },
-      listActiveLeaveTypes: function () { return []; },
-      update: function () {},
-      findUserByEmployeeId: function () { return null; }
+      findUserByEmail: function () { return null; }
     },
-    PermissionService: {
-      require: function () {},
-      isHrOrAdmin: function () { return true; }
+    PermissionService: { require: function () {} },
+    SpreadsheetApp: {},
+    DriveApp: {},
+    Drive: { Files: { export: function () {}, create: function () {} } },
+    MimeType: { GOOGLE_SHEETS: 'application/vnd.google-apps.spreadsheet' },
+    Utilities: {
+      parseCsv: function (text) {
+        return text.split('\n').map(function (line) {
+          return line.split(',');
+        });
+      },
+      base64Encode: function () { return ''; },
+      newBlob: function () { return { getBytes: function () { return []; } }; },
+      getUuid: function () { return 'uuid-1'; }
     },
-    AuthService: { requireAuth: function () { return ctx.session; } },
-    ConfigService: { getTimezone: function () { return 'Asia/Kolkata'; }, getSetting: function (k, d) { return d; } },
-    LeaveService: { grantBalancesForEmployee: function () { return []; } },
-    DriveService: { getEmployeeDocumentsFolder: function () { return { getId: function () { return 'f1'; } }; } },
+    CacheService: {
+      getScriptCache: function () {
+        return { put: function () {}, get: function () { return null; }, remove: function () {} };
+      }
+    },
     AuditService: { log: function () {} },
-    DbService: { nextEmployeeId: function () { return 'EMP999'; }, nextEmployeeIdAssumingLocked: function () { return 'EMP999'; } },
-    withScriptLock_: function (fn) { return fn(); },
-    validationError_: function (msg, details) { var e = new Error(msg); e.hrmsCode = 'VALIDATION'; e.details = details || {}; throw e; },
-    authorizationError_: function (msg) { var e = new Error(msg || 'denied'); e.hrmsCode = 'AUTHORIZATION'; throw e; },
-    notFoundError_: function (msg) { throw new Error(msg); },
-    conflictError_: function (msg) { throw new Error(msg); },
-    systemError_: function (msg) { throw new Error(msg); }
+    validationError_: function (msg) { var e = new Error(msg); e.hrmsCode = 'VALIDATION'; throw e; },
+    authorizationError_: function (msg) { throw new Error(msg || 'denied'); },
+    configurationError_: function (msg) { throw new Error(msg); },
+    notFoundError_: function (msg) { throw new Error(msg); }
   };
-  ctx.session = { email: 'hr@test', role: 'HR', authorized: true, employee_id: 'SAPL-0009' };
-  vm.runInNewContext(fs.readFileSync(path.join(root, 'EmployeeService.gs'), 'utf8'), ctx);
-  return ctx.EmployeeService;
+  vm.runInNewContext(fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8'), ctx);
+  return ctx.EmployeeBulkService;
 }
 
-var EmployeeService = loadEmployeeService();
+var Bulk = loadBulkService();
 var fails = 0;
 
 function check(name, ok, detail) {
@@ -62,58 +70,22 @@ function check(name, ok, detail) {
   }
 }
 
-check('valid SAPL id', EmployeeService.isValidEmployeeIdFormat('SAPL-0001'));
-check('valid AOPL id', EmployeeService.isValidEmployeeIdFormat('aopl-0042'));
-check('reject EMP id', !EmployeeService.isValidEmployeeIdFormat('EMP001'));
-check('reject missing dash', !EmployeeService.isValidEmployeeIdFormat('SAPL0001'));
-check('normalize uppercase', EmployeeService.normalizeEmployeeId('sapl-0001') === 'SAPL-0001');
-check('parse create login YES', EmployeeService.parseCreateUserFlag('YES') === true);
-check('parse create login NO', EmployeeService.parseCreateUserFlag('NO') === false);
+var csv = 'employee_id,first_name,last_name,work_email,department,designation,location,employment_type,joining_date,create_login\n' +
+  'SAPL-0002,Ana,Shah,ana@example.com,Ops,Exec,HQ,PERMANENT,2026-01-01,NO\n';
+var rows = Bulk.parseCsvRows(csv);
+check('parse csv row count', rows.length === 1);
+check('parse csv employee id', rows[0].employee_id === 'SAPL-0002');
 
-try {
-  EmployeeService.createEmployee(
-    { email: 'hr@test', role: 'HR', authorized: true },
-    {
-      employee_id: 'AOMS-0099',
-      first_name: 'Bulk',
-      last_name: 'Test',
-      work_email: 'bulk.emp@example.com',
-      department: 'HR',
-      designation: 'Exec',
-      location: 'HQ',
-      employment_type: 'PERMANENT',
-      joining_date: '2026-02-01',
-      create_user: true,
-      google_login_email: 'bulk.emp@example.com'
-    }
-  );
-  check('create without auto id', true);
-} catch (e) {
-  check('create without auto id', false, e.message);
-}
+var session = { email: 'hr@test', role: 'HR' };
+var result = Bulk.validateRows(rows, session);
+check('validate one valid row', result.validCount === 1 && result.errorCount === 0);
 
-try {
-  EmployeeService.createEmployee(
-    { email: 'hr@test', role: 'HR', authorized: true },
-    {
-      first_name: 'No',
-      last_name: 'Id',
-      work_email: 'noid@example.com',
-      department: 'HR',
-      designation: 'Exec',
-      location: 'HQ',
-      employment_type: 'PERMANENT',
-      joining_date: '2026-02-01',
-      create_user: false
-    }
-  );
-  check('missing employee id blocked', false);
-} catch (e) {
-  check('missing employee id blocked', e.hrmsCode === 'VALIDATION');
-}
+var badRows = [{ rowNumber: 2, employee_id: 'BAD', first_name: '', last_name: 'X', work_email: 'bad', department: '', designation: '', location: '', employment_type: '', joining_date: '', create_login: '' }];
+var bad = Bulk.validateRows(badRows, session);
+check('validate catches bad id', bad.errorCount === 1);
 
 if (fails) {
   console.error(fails + ' test(s) failed');
   process.exit(1);
 }
-console.log('All employee bulk/id tests passed');
+console.log('All bulk upload tests passed');

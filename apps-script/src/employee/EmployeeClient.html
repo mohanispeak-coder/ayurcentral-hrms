@@ -1021,7 +1021,9 @@
         var btn = $('btn-bulk-template');
         callServer('apiDownloadBulkEmployeeTemplate', { button: btn, loadingText: 'Preparing...' })
           .then(downloadBlob)
-          .catch(function (err) { showToast(err.message || 'Template download failed', 'error'); });
+          .catch(function (err) {
+            showToast((err && err.message) || 'Template download failed', 'error');
+          });
       });
       var selectedFile = null;
       $('bulk-file-input').addEventListener('change', function () {
@@ -1047,7 +1049,9 @@
           bulkState.preview = preview;
           paintBulkPreview(preview);
         }).catch(function (err) {
-          if (setActionFeedback) setActionFeedback(feedback, err.message || 'Validation failed', 'error');
+          var msg = (err && err.message) || 'Validation failed';
+          if (setActionFeedback) setActionFeedback(feedback, msg, 'error');
+          else showToast(msg, 'error');
         });
       });
     }

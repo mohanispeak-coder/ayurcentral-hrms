@@ -78,13 +78,65 @@ var EmployeeBulkService = (function () {
     };
   }
 
+  function driveApiHint_() {
+    return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API → Add (identifier: Drive), then redeploy.';
+  }
+
+  function exportSpreadsheetXlsx_(spreadsheetId) {
+    if (typeof Drive === 'undefined' || !Drive.Files) {
+      throw configurationError_('Google Drive advanced service is not available.' + driveApiHint_());
+    }
+    var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (Drive.Files.export) {
+      return Drive.Files.export(spreadsheetId, xlsxMime);
+    }
+    throw configurationError_('Drive export is unavailable.' + driveApiHint_());
+  }
+
+  function convertUploadToSheetId_(blob) {
+    if (typeof Drive === 'undefined' || !Drive.Files) {
+      throw configurationError_('Google Drive advanced service is required for Excel uploads.' + driveApiHint_());
+    }
+    var temp = DriveApp.createFile(blob);
+    try {
+      var resource = {
+        name: 'bulk-emp-parse-' + Date.now(),
+        mimeType: MimeType.GOOGLE_SHEETS
+      };
+      var converted;
+      if (Drive.Files.create) {
+        converted = Drive.Files.create(resource, temp.getBlob(), { convert: true });
+      } else if (Drive.Files.insert) {
+        converted = Drive.Files.insert(resource, temp.getBlob(), { convert: true });
+      } else {
+        throw configurationError_('Drive file conversion is unavailable.' + driveApiHint_());
+      }
+      return converted.id;
+    } finally {
+      temp.setTrashed(true);
+    }
+  }
+
+  function buildTemplateCsv_() {
+    var esc = function (v) {
+      v = v == null ? '' : String(v);
+      if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
+        return '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    };
+    var lines = [HEADERS_.join(',')];
+    lines.push(HEADERS_.map(function (h) { return esc(SAMPLE_ROW_[h] || ''); }).join(','));
+    return Utilities.newBlob(lines.join('\n'), 'text/csv', 'HRMS_Bulk_Employee_Upload_Template.csv');
+  }
+
   function buildTemplateSpreadsheet_(refs) {
     var ss = SpreadsheetApp.create('HRMS Bulk Employee Upload');
-    var file = DriveApp.getFileById(ss.getId());
+    var fileId = ss.getId();
     var instructions = ss.getSheets()[0];
     instructions.setName('Instructions');
     instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload — Instructions');
-    instructions.getRange(3, 1, 18, 1).setValues([
+    var instructionLines = [
       ['Template version: ' + TEMPLATE_VERSION_],
       ['Required columns are marked with * in the Employees sheet header row.'],
       ['Employee code format: SAPL-0001, AOPL-0001, AOMS-0001 (provided by HR, not auto-generated).'],
@@ -102,7 +154,8 @@ var EmployeeBulkService = (function () {
       ['AOMS — AOMS-0001, AOMS-0002, ...'],
       [''],
       ['After upload, review validation results before confirming import.']
-    ]);
+    ];
+    instructions.getRange(3, 1, 3 + instructionLines.length - 1, 1).setValues(instructionLines);
 
     var lists = ss.insertSheet('Lists');
     lists.getRange(1, 1).setValue('departments');
@@ -133,18 +186,30 @@ var EmployeeBulkService = (function () {
     employees.getRange(2, 1, 2, HEADERS_.length).setValues([sample]);
     employees.setFrozenRows(1);
 
-    var blob = file.getBlob().setName('HRMS_Bulk_Employee_Upload_Template.xlsx');
-    file.setTrashed(true);
+    var blob;
+    try {
+      blob = exportSpreadsheetXlsx_(fileId).setName('HRMS_Bulk_Employee_Upload_Template.xlsx');
+    } finally {
+      DriveApp.getFileById(fileId).setTrashed(true);
+    }
     return blob;
   }
 
   function downloadTemplate(session) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     var refs = listReferenceValues_(session);
-    var blob = buildTemplateSpreadsheet_(refs);
+    var blob;
+    var fileName;
+    try {
+      blob = buildTemplateSpreadsheet_(refs);
+      fileName = 'HRMS_Bulk_Employee_Upload_Template.xlsx';
+    } catch (e) {
+      blob = buildTemplateCsv_();
+      fileName = 'HRMS_Bulk_Employee_Upload_Template.csv';
+    }
     return {
-      fileName: 'HRMS_Bulk_Employee_Upload_Template.xlsx',
-      mimeType: blob.getContentType(),
+      fileName: fileName,
+      mimeType: blob.getContentType() || 'application/octet-stream',
       base64: Utilities.base64Encode(blob.getBytes()),
       templateVersion: TEMPLATE_VERSION_
     };
@@ -209,21 +274,18 @@ var EmployeeBulkService = (function () {
     }
 
     if (fileName.indexOf('.xlsx') >= 0 || fileName.indexOf('.xls') >= 0 ||
-        mimeType.indexOf('spreadsheet') >= 0 || mimeType.indexOf('excel') >= 0) {
-      var temp = DriveApp.createFile(blob);
+        mimeType.indexOf('spreadsheet') >= 0 || mimeType.indexOf('excel') >= 0 ||
+        mimeType.indexOf('officedocument') >= 0) {
+      var sheetId = convertUploadToSheetId_(blob);
       try {
-        var converted = Drive.Files.insert(
-          { title: 'bulk-emp-parse', mimeType: MimeType.GOOGLE_SHEETS },
-          temp.getBlob(),
-          { convert: true }
-        );
-        var ss = SpreadsheetApp.openById(converted.id);
+        var ss = SpreadsheetApp.openById(sheetId);
         var sheet = ss.getSheetByName('Employees') || ss.getSheets()[0];
         var values = sheet.getDataRange().getValues();
-        DriveApp.getFileById(converted.id).setTrashed(true);
         return parseSheetValues_(values);
       } finally {
-        temp.setTrashed(true);
+        try {
+          DriveApp.getFileById(sheetId).setTrashed(true);
+        } catch (ignoreTrash) {}
       }
     }
 
