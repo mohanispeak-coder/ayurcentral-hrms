@@ -76,6 +76,11 @@ check('bulk-template-all-employees', /templateDataRows_/.test(bulk));
 check('comp-editor-bundle-api', /apiGetCompensationEditorBundle/.test(api) && /getEditorBundle/.test(read('payroll/CompensationService.gs')));
 check('finalize-blockers-detail', /finalizeBlockers/.test(payroll) && /buildFinalizeBlockers_/.test(payroll));
 check('fix-structure-actions', /js-fix-structure/.test(client) && /openSalaryStructureForEmployee_/.test(client));
+check('fix-pan-actions', /js-fix-pan/.test(client) && /tab:\s*'personal'/.test(client));
+check('per-employee-payslip', /js-gen-payslip/.test(client) && /apiRegeneratePayslipForEmployee/.test(api) &&
+  /regeneratePayslipForEmployee/.test(payroll));
+check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
+  /enrichExceptionMessage_/.test(payroll));
 check('comp-editor-fallback', /renderCompEditor_/.test(client) && /loadWarning/.test(client));
 check('comp-serialize-bundle', /serializeEditorBundle_/.test(read('payroll/CompensationService.gs')));
 

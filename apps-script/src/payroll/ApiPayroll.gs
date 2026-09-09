@@ -75,6 +75,12 @@ function apiRegeneratePayslips(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiRegeneratePayslipForEmployee(runId, employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.regeneratePayslipForEmployee(runId, employeeId);
+  }, sessionToken);
+}
+
 function apiFinalizePayroll(runId, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.finalizePayroll(runId);

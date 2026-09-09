@@ -163,12 +163,60 @@ var CompensationService = (function () {
       return toDate_(b.effective_from) - toDate_(a.effective_from);
     });
     if (!matches.length) return null;
+    var components = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, {
+      salary_structure_id: matches[0].salary_structure_id
+    });
+    if (!components.length) return null;
     return {
       structure: matches[0],
-      components: DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, {
-        salary_structure_id: matches[0].salary_structure_id
-      })
+      components: components
     };
+  }
+
+  /**
+   * Human hint when payroll cannot find a structure for the month (saved but wrong dates, etc.).
+   */
+  function explainStructureGap(employeeId, periodEndDate) {
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) return '';
+    var end = toDate_(periodEndDate);
+    if (!end) return '';
+    if (getStructureInForce(employeeId, periodEndDate)) return '';
+
+    var rows = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
+    if (!rows.length) {
+      return 'No salary structure saved yet. Use Set up salary and include a BASIC earning line.';
+    }
+
+    var current = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, {
+      employee_id: employeeId,
+      status: HRMS.STRUCTURE_STATUS.CURRENT
+    });
+    if (current) {
+      var comps = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, {
+        salary_structure_id: current.salary_structure_id
+      });
+      if (!comps.length) {
+        return 'A structure exists but has no salary components. Add BASIC and save again.';
+      }
+      var from = toDate_(current.effective_from);
+      if (from && from > end) {
+        return 'Structure effective from ' + dateKey_(from) +
+          ' is after this payroll month (ends ' + dateKey_(end) + '). Set an earlier effective date.';
+      }
+    }
+
+    var latest = rows.slice().sort(function (a, b) {
+      return String(b.effective_from).localeCompare(String(a.effective_from));
+    })[0];
+    if (latest) {
+      var latestFrom = toDate_(latest.effective_from);
+      if (latestFrom && latestFrom > end) {
+        return 'Latest structure starts ' + dateKey_(latestFrom) +
+          ', after this payroll month (ends ' + dateKey_(end) + ').';
+      }
+    }
+    return 'No structure covers this payroll month. Check effective dates and click Recalculate payroll.';
   }
 
   function saveStructure(payload) {
@@ -460,6 +508,7 @@ var CompensationService = (function () {
     getEditorBundle: getEditorBundle,
     getOwnCurrentStructure: getOwnCurrentStructure,
     getStructureInForce: getStructureInForce,
+    explainStructureGap: explainStructureGap,
     saveStructure: saveStructure,
     reviseStructure: reviseStructure,
     getEmployee: getEmployee_

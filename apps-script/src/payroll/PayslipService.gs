@@ -14,6 +14,11 @@ var PayslipService = (function () {
     return created;
   }
 
+  function generateForEmployee(run, record, employee, session) {
+    if (!record) throw validationError_('Payroll record is required.');
+    return createPayslip_(run, record, employee || {}, session);
+  }
+
   function findReusableDocument(docs, rec) {
     docs = docs || [];
     var wantId = rec && rec.payslip_document_id ? String(rec.payslip_document_id) : '';
@@ -355,6 +360,7 @@ var PayslipService = (function () {
 
   return {
     generateForRun: generateForRun,
+    generateForEmployee: generateForEmployee,
     getPayslipForDownload: getPayslipForDownload,
     listOwnPayslips: listOwnPayslips,
     findReusableDocument: findReusableDocument,

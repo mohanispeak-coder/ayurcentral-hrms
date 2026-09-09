@@ -125,7 +125,28 @@ var PayrollService = (function () {
     return 'Prepare';
   }
 
-  function collectExceptionsHuman_(records, employees) {
+  function enrichExceptionMessage_(flag, employeeId, employees, periodEnd) {
+    var emp = employees[employeeId] || {};
+    var base = humanizeExceptionFlag_(flag);
+    if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE && typeof CompensationService !== 'undefined' &&
+        CompensationService.explainStructureGap) {
+      var hint = CompensationService.explainStructureGap(employeeId, periodEnd);
+      return hint ? base + ' ' + hint : base;
+    }
+    if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_BANK) {
+      var acc = String(emp.bank_account_number || '').trim();
+      var ifsc = String(emp.bank_ifsc || '').trim();
+      if (!acc && !ifsc) return base + ' Add bank account number and IFSC on the employee profile.';
+      if (!acc) return base + ' Bank account number is missing.';
+      if (!ifsc) return base + ' IFSC is missing.';
+    }
+    if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_PAN) {
+      return base + ' Add PAN on the employee profile (Personal or Payroll tab).';
+    }
+    return base;
+  }
+
+  function collectExceptionsHuman_(records, employees, periodEnd) {
     var list = [];
     (records || []).forEach(function (r) {
       if (!r.exception_flags) return;
@@ -135,7 +156,9 @@ var PayrollService = (function () {
         employee_id: r.employee_id,
         display_name: emp.display_name || r.employee_id,
         flags: flags,
-        messages: flags.map(humanizeExceptionFlag_)
+        messages: flags.map(function (flag) {
+          return enrichExceptionMessage_(flag, r.employee_id, employees, periodEnd);
+        })
       });
     });
     return list;
@@ -247,7 +270,7 @@ var PayrollService = (function () {
       run: serializeRun_(run),
       rows: rows,
       summary: buildSummary_(rows),
-      exceptions: collectExceptionsHuman_(records, employees),
+      exceptions: collectExceptionsHuman_(records, employees, periodEnd_(run.period_year, run.period_month)),
       exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
       lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
@@ -694,6 +717,43 @@ var PayrollService = (function () {
     return getRunDetail(runId);
   }
 
+  /**
+   * Generate or replace one employee payslip for a LOCKED run.
+   */
+  function regeneratePayslipForEmployee(runId, employeeId) {
+    var session = requireHr_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    var snapshot = withScriptLock_(function () {
+      var run = getRun_(runId);
+      if (String(run.status).toUpperCase() !== HRMS.PAYROLL_STATUS.LOCKED) {
+        throw conflictError_('Payslips can only be generated after payroll is LOCKED.');
+      }
+      var rec = DbService.findOne(HRMS.SHEETS.PAYROLL_RECORDS, {
+        payroll_run_id: runId,
+        employee_id: employeeId
+      });
+      if (!rec) throw notFoundError_('No payroll record for ' + employeeId + ' in this run.');
+      return {
+        run: run,
+        record: rec,
+        employees: indexEmployees_()
+      };
+    });
+    try {
+      PayslipService.generateForEmployee(
+        snapshot.run,
+        snapshot.record,
+        snapshot.employees[snapshot.record.employee_id] || {},
+        session
+      );
+    } catch (e) {
+      Logger.log('PAYROLL_REGENERATE_ONE payslip failed for ' + runId + '/' + employeeId + ': ' + (e.message || e));
+      throw systemError_('Payslip generation failed for ' + employeeId + '. Amounts are unchanged.');
+    }
+    return getRunDetail(runId);
+  }
+
   function findOpenRun_(year, month) {
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS);
     for (var i = 0; i < runs.length; i++) {
@@ -916,16 +976,19 @@ var PayrollService = (function () {
     var allowNeg = ConfigService.getSetting('allow_lock_negative_net', false);
     var missingS = 0;
     var missingB = 0;
+    var missingP = 0;
     var neg = 0;
     records.forEach(function (r) {
       var flags = String(r.exception_flags || '');
       if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE)) missingS++;
       if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.MISSING_BANK)) missingB++;
+      if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.MISSING_PAN)) missingP++;
       if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET)) neg++;
     });
     if (forApproveOrLock) {
       if (blockStructure && missingS) blocks.push('MISSING_STRUCTURE (' + missingS + ')');
       if (blockBank && missingB) blocks.push('MISSING_BANK (' + missingB + ')');
+      if (missingP) blocks.push('MISSING_PAN (' + missingP + ')');
       if (!allowNeg && neg) blocks.push('NEGATIVE_NET (' + neg + ')');
     }
     return blocks;
@@ -1037,6 +1100,7 @@ var PayrollService = (function () {
     lock: lock,
     finalizePayroll: finalizePayroll,
     regeneratePayslips: regeneratePayslips,
+    regeneratePayslipForEmployee: regeneratePayslipForEmployee,
     evaluateLockBlocks: evaluateLockBlocks_,
     humanizeExceptionFlag: humanizeExceptionFlag_
   };

@@ -432,6 +432,7 @@
     }
 
     function hasApproveLockBlocks(detail) {
+      if (detail && detail.finalizeBlockers && detail.finalizeBlockers.length) return true;
       var blocks = (detail && detail.lockBlocks) || [];
       if (!blocks.length) return false;
       var st = detail.run ? statusKey(detail.run.status) : '';
@@ -686,6 +687,9 @@
                 } else if (block.code === 'MISSING_BANK') {
                   html += ' <button type="button" class="btn btn-secondary btn-sm js-fix-bank" data-id="' +
                     escapeHtml(emp.employee_id) + '">Add bank details</button>';
+                } else if (block.code === 'MISSING_PAN') {
+                  html += ' <button type="button" class="btn btn-secondary btn-sm js-fix-pan" data-id="' +
+                    escapeHtml(emp.employee_id) + '">Add PAN</button>';
                 }
                 html += '</div>';
               });
@@ -694,7 +698,8 @@
           } else {
             html += '<li>' + escapeHtml(blocks.join('; ')) + '</li>';
           }
-          html += '</ul><p class="hint">After fixing salary structure or bank details, click Recalculate payroll.</p></div>';
+          html += '</ul><p class="hint">After fixing employee data or salary structure, click <strong>Recalculate payroll</strong>. ' +
+            'Salary structure <em>effective from</em> must be on or before the payroll month end.</p></div>';
         }
       }
       html += '</div>';
@@ -808,7 +813,13 @@
       page.querySelectorAll('.js-fix-bank').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var employeeId = this.getAttribute('data-id');
-          if (App.navigate) App.navigate('employee-profile', { employeeId: employeeId });
+          if (App.navigate) App.navigate('employee-profile', { employeeId: employeeId, tab: 'payroll' });
+        });
+      });
+      page.querySelectorAll('.js-fix-pan').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var employeeId = this.getAttribute('data-id');
+          if (App.navigate) App.navigate('employee-profile', { employeeId: employeeId, tab: 'personal' });
         });
       });
     }
@@ -1262,16 +1273,30 @@
         });
       });
 
-      var dls = page.querySelectorAll('.js-pay-dl');
-      for (var i = 0; i < dls.length; i++) {
-        dls[i].addEventListener('click', function () {
-          var btn = this;
+      page.querySelectorAll('.js-pay-dl').forEach(function (btn) {
+        btn.addEventListener('click', function () {
           if (!setButtonLoading(btn, 'Downloading...')) return;
           rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Downloading...')
             .then(function (file) { downloadBlob(file); })
             .catch(function (err) { showToast(err.message || 'Download denied', 'error'); });
         });
-      }
+      });
+
+      page.querySelectorAll('.js-gen-payslip').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var employeeId = btn.getAttribute('data-emp');
+          var targetRunId = btn.getAttribute('data-run') || runId;
+          if (!setButtonLoading(btn, 'Generating...')) return;
+          rpc('apiRegeneratePayslipForEmployee', [targetRunId, employeeId], btn, 'Generating...', $('pr-action-feedback'))
+            .then(function (next) {
+              invalidatePayslipViews_();
+              afterUpdate(next, 'Payslip generated for ' + employeeId + '.');
+            })
+            .catch(function (err) {
+              showToast(err.message || 'Generate failed', 'error');
+            });
+        });
+      });
     }
 
     function optFilter_(val, cur, label) {
@@ -1292,6 +1317,21 @@
       return { year: y, month: m };
     }
 
+    function payslipActionHtml_(row, runId) {
+      var rec = row.record;
+      if (!rec) return '<td>—</td>';
+      var ready = !!(rec.payslip_document_id);
+      var html = '<td>';
+      if (ready) {
+        html += '<button type="button" class="btn btn-secondary btn-sm js-pay-dl" data-id="' +
+          escapeHtml(rec.payslip_document_id) + '">Download</button> ';
+      }
+      html += '<button type="button" class="btn btn-secondary btn-sm js-gen-payslip" data-emp="' +
+        escapeHtml(row.employee.employee_id) + '" data-run="' + escapeHtml(runId) + '">' +
+        (ready ? 'Regenerate' : 'Generate payslip') + '</button></td>';
+      return html;
+    }
+
     function paintEmployeeTable_(detail, editable) {
       var rows = filterRows_(detail.rows || []);
       var total = rows.length;
@@ -1299,6 +1339,9 @@
       if (payrollState.tablePage > pages) payrollState.tablePage = pages;
       var start = (payrollState.tablePage - 1) * PAGE_SIZE;
       var pageRows = rows.slice(start, start + PAGE_SIZE);
+      var st = detail && detail.run ? statusKey(detail.run.status) : '';
+      var isLocked = st === 'LOCKED';
+      var runId = detail && detail.run ? detail.run.payroll_run_id : '';
 
       var html = '<div id="employee-payroll-section" style="margin-top:16px"><h3>Manual entry</h3>' +
         '<p class="page-lede">Basic, allowances, deductions, and net come from the last server calculation. Days and extras are this month only.</p>' +
@@ -1323,7 +1366,7 @@
       html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
         '<th>Employee</th><th class="num">Basic</th><th class="num">Allowances</th><th class="num">Deductions</th>' +
         '<th class="num">Working</th><th class="num">Paid</th><th class="num">LOP</th><th class="num">Leave LOP</th>' +
-        '<th class="num">Net pay</th><th>Flags</th></tr></thead><tbody>';
+        '<th class="num">Net pay</th><th>Flags</th>' + (isLocked ? '<th>Payslip</th>' : '') + '</tr></thead><tbody>';
       pageRows.forEach(function (row) {
         var inp = row.input;
         var rec = row.record;
@@ -1348,7 +1391,8 @@
           cell('lop_days', inputValue_(inp, 'lop_days'), '0.5') +
           '<td class="num">' + escapeHtml(inp.lop_from_leave || 0) + '</td>' +
           '<td class="num">' + (rec ? fmtMoney(rec.net_pay) : '—') + '</td>' +
-          '<td>' + escapeHtml(exceptionMessagesForRow_(detail, row)) + extrasHint_(inp) + '</td></tr>';
+          '<td>' + escapeHtml(exceptionMessagesForRow_(detail, row)) + extrasHint_(inp) + '</td>' +
+          (isLocked ? payslipActionHtml_(row, runId) : '') + '</tr>';
       });
       html += '</tbody></table></div>';
       html += extrasEditorNote_();
@@ -1471,7 +1515,8 @@
         html += '<div class="empty-state"><h2>No calculated employees</h2></div></div>';
         return html;
       }
-      html += '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Employee</th><th>Net pay</th><th>Status</th><th></th></tr></thead><tbody>';
+      var runId = detail.run.payroll_run_id;
+      html += '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Employee</th><th>Net pay</th><th>Status</th><th>Payslip</th></tr></thead><tbody>';
       rows.forEach(function (row) {
         var rec = row.record;
         var ready = !!(rec && rec.payslip_document_id);
@@ -1479,8 +1524,7 @@
           '<div class="hint">' + escapeHtml(row.employee.employee_id) + '</div></td>' +
           '<td class="num">' + fmtMoney(rec.net_pay) + '</td>' +
           '<td>' + (ready ? 'Ready to download' : 'Not generated yet') + '</td>' +
-          '<td>' + (ready ? '<button type="button" class="btn btn-secondary btn-sm js-pay-dl" data-id="' +
-            escapeHtml(rec.payslip_document_id) + '">Download</button>' : '—') + '</td></tr>';
+          payslipActionHtml_(row, runId) + '</tr>';
       });
       html += '</tbody></table></div></div>';
       return html;
@@ -1629,6 +1673,11 @@
       var fromVal = '';
       if (current && current.structure && current.structure.effective_from) {
         fromVal = String(current.structure.effective_from).substring(0, 10);
+      } else if (!current && payrollState.detail && payrollState.detail.run) {
+        var run = payrollState.detail.run;
+        var m = String(Number(run.period_month));
+        if (m.length < 2) m = '0' + m;
+        fromVal = run.period_year + '-' + m + '-01';
       }
       var ctc = current && current.structure ? (current.structure.ctc_monthly || '') : '';
       var canEdit = !current || current.can_edit_in_place !== false;

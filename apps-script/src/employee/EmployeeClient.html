@@ -78,7 +78,9 @@
     App.registerRoute('my-profile', { title: 'My Profile', render: renderMyProfile });
     App.registerRoute('employee-create', { title: 'Add employee', render: renderCreate });
     App.registerRoute('employee-bulk-upload', { title: 'Bulk upload', render: renderBulkUpload });
-    App.registerRoute('employee-profile', { title: 'Employee', render: function (params) { renderProfile(params && params.employeeId); } });
+    App.registerRoute('employee-profile', { title: 'Employee', render: function (params) {
+      renderProfile(params && params.employeeId, false, params && params.tab);
+    } });
 
     function pageEl() {
       var page = $('page-content');
@@ -530,9 +532,13 @@
       renderProfile(null, true);
     }
 
-    function renderProfile(employeeId, isSelf) {
+    function renderProfile(employeeId, isSelf, initialTab) {
       var page = pageEl();
       if (!page) return;
+      if (initialTab && employeeId) {
+        if (!empViewCache.extras[employeeId]) empViewCache.extras[employeeId] = {};
+        empViewCache.extras[employeeId].tab = initialTab;
+      }
       var key = profileCacheKey(employeeId, isSelf);
       var cached = empViewCache.profiles[key];
       if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(key) && cached && cached.emp) {
