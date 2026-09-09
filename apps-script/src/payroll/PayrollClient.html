@@ -1284,26 +1284,22 @@
 
       page.querySelectorAll('.js-gen-payslip').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          var employeeId = btn.getAttribute('data-emp');
-          var empName = btn.getAttribute('data-name') || employeeId;
-          var targetRunId = btn.getAttribute('data-run') || runId;
-          confirmModal({
-            title: 'Generate payslip for ' + empName + '?',
-            body: 'Creates or replaces the payslip file for this employee only and sends them the payslip email notification.',
-            okLabel: 'Generate & notify'
-          }).then(function (ok) {
-            if (!ok) return;
-            if (!setButtonLoading(btn, 'Generating...')) return;
-            rpc('apiRegeneratePayslipForEmployee', [targetRunId, employeeId], btn, 'Generating...', $('pr-action-feedback'))
-              .then(function (next) {
-                invalidatePayslipViews_();
-                afterUpdate(next, 'Payslip generated and notification sent for ' + employeeId + '.');
-              })
-              .catch(function (err) {
-                showToast(err.message || 'Generate failed', 'error');
-              });
-          });
+          runSinglePayslipGenerate_(
+            btn.getAttribute('data-run') || runId,
+            btn.getAttribute('data-emp'),
+            btn.getAttribute('data-name'),
+            btn,
+            afterUpdate
+          );
         });
+      });
+
+      var genOne = $('btn-gen-one-payslip');
+      if (genOne) genOne.addEventListener('click', function () {
+        var sel = $('pr-payslip-one-emp');
+        var employeeId = sel ? sel.value : '';
+        var empName = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : employeeId;
+        runSinglePayslipGenerate_(runId, employeeId, empName, genOne, afterUpdate);
       });
     }
 
@@ -1325,16 +1321,65 @@
       return { year: y, month: m };
     }
 
+    function payslipRows_(detail) {
+      return (detail.rows || []).filter(function (r) { return r.record; });
+    }
+
+    function runSinglePayslipGenerate_(runId, employeeId, empName, btn, afterUpdate) {
+      employeeId = String(employeeId || '').trim();
+      if (!employeeId) {
+        showToast('Select an employee.', 'error');
+        return;
+      }
+      empName = empName || employeeId;
+      confirmModal({
+        title: 'Generate payslip for ' + empName + '?',
+        body: 'Creates or replaces the payslip file for this employee only and sends them the payslip email notification.',
+        okLabel: 'Generate & notify'
+      }).then(function (ok) {
+        if (!ok) return;
+        if (btn && !setButtonLoading(btn, 'Generating...')) return;
+        rpc('apiRegeneratePayslipForEmployee', [runId, employeeId], btn, 'Generating...', $('pr-action-feedback'))
+          .then(function (next) {
+            invalidatePayslipViews_();
+            afterUpdate(next, 'Payslip generated and notification sent for ' + employeeId + '.');
+          })
+          .catch(function (err) {
+            if (btn) restoreButton(btn);
+            showToast(err.message || 'Generate failed', 'error');
+          });
+      });
+    }
+
+    function paintPayslipOneEmployeeBox_(rows, runId) {
+      if (!rows.length) return '';
+      var html = '<div class="card" id="payslip-one-card" style="margin-top:12px;border-color:var(--primary,#2563eb)">' +
+        '<h3>Generate for one employee</h3>' +
+        '<p class="page-lede">Pick an employee to create their payslip and send the email notification to them only.</p>' +
+        '<div class="primary-next" style="flex-wrap:wrap;gap:8px;align-items:flex-end">' +
+        '<label class="form-label" style="margin:0">Employee<br>' +
+        '<select class="form-select" id="pr-payslip-one-emp" style="min-width:260px;margin-top:4px">';
+      rows.forEach(function (row, idx) {
+        var emp = row.employee || {};
+        html += '<option value="' + escapeHtml(emp.employee_id) + '"' + (idx === 0 ? ' selected' : '') + '>' +
+          escapeHtml(emp.display_name || emp.employee_id) + ' (' + escapeHtml(emp.employee_id) + ')</option>';
+      });
+      html += '</select></label>' +
+        '<button type="button" class="btn btn-primary" id="btn-gen-one-payslip">Generate &amp; notify</button>' +
+        '</div></div>';
+      return html;
+    }
+
     function payslipActionHtml_(row, runId) {
       var rec = row.record;
       if (!rec) return '<td>—</td>';
       var ready = !!(rec.payslip_document_id);
-      var html = '<td>';
+      var html = '<td class="payslip-actions">';
       if (ready) {
         html += '<button type="button" class="btn btn-secondary btn-sm js-pay-dl" data-id="' +
           escapeHtml(rec.payslip_document_id) + '">Download</button> ';
       }
-      html += '<button type="button" class="btn btn-secondary btn-sm js-gen-payslip" data-emp="' +
+      html += '<button type="button" class="btn btn-primary btn-sm js-gen-payslip" data-emp="' +
         escapeHtml(row.employee.employee_id) + '" data-run="' + escapeHtml(runId) + '" data-name="' +
         escapeHtml(row.employee.display_name || row.employee.employee_id) + '">' +
         (ready ? 'Regenerate & notify' : 'Generate & notify') + '</button></td>';
@@ -1511,20 +1556,21 @@
           '<p>Finalize payroll first, then generate payslip files for all employees.</p></div></div>';
         return html;
       }
-      html += '<p class="page-lede">Generate payslips one employee at a time to email only that person, or use Generate all to notify everyone. Files are stored on Drive; employees can also download from My Payslips.</p>' +
-        '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-regen-payslips">Generate all payslips</button></div>';
+      html += '<p class="page-lede">Use <strong>Generate for one employee</strong> below to email only that person, or <strong>Generate all payslips</strong> to notify everyone.</p>';
+      var rows = payslipRows_(detail);
+      var runId = detail.run.payroll_run_id;
+      if (!rows.length) {
+        html += '<div class="empty-state"><h2>No calculated employees</h2></div></div>';
+        return html;
+      }
+      html += paintPayslipOneEmployeeBox_(rows, runId);
+      html += '<div class="primary-next" style="margin-top:12px"><button type="button" class="btn btn-secondary" id="btn-regen-payslips">Generate all payslips</button></div>';
       if (ps.complete) {
         html += '<div class="alert alert-success" style="margin-top:12px">Payslips generated for ' + ps.generated + ' of ' + ps.expected + ' employees.</div>';
       } else if (ps.expected) {
         html += '<div class="alert alert-warning" style="margin-top:12px">Payslips ready for ' + (ps.generated || 0) + ' of ' + (ps.expected || 0) +
           ' employees. Use Generate all payslips if files are missing.</div>';
       }
-      var rows = (detail.rows || []).filter(function (r) { return r.record; });
-      if (!rows.length) {
-        html += '<div class="empty-state"><h2>No calculated employees</h2></div></div>';
-        return html;
-      }
-      var runId = detail.run.payroll_run_id;
       html += '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Employee</th><th>Net pay</th><th>Status</th><th>Payslip</th></tr></thead><tbody>';
       rows.forEach(function (row) {
         var rec = row.record;

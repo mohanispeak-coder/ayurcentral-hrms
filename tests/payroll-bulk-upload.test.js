@@ -81,6 +81,8 @@ check('per-employee-payslip', /js-gen-payslip/.test(client) && /apiRegeneratePay
   /regeneratePayslipForEmployee/.test(payroll));
 check('per-employee-payslip-notify', /notifyPayslipsAvailable[\s\S]*\[snapshot\.record\]/.test(payroll) &&
   /Generate & notify/.test(client));
+check('payslip-one-employee-box', /btn-gen-one-payslip/.test(client) && /pr-payslip-one-emp/.test(client) &&
+  /paintPayslipOneEmployeeBox_/.test(client));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
   /enrichExceptionMessage_/.test(payroll));
 check('comp-editor-fallback', /renderCompEditor_/.test(client) && /loadWarning/.test(client));
