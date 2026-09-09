@@ -751,6 +751,13 @@ var PayrollService = (function () {
       Logger.log('PAYROLL_REGENERATE_ONE payslip failed for ' + runId + '/' + employeeId + ': ' + (e.message || e));
       throw systemError_('Payslip generation failed for ' + employeeId + '. Amounts are unchanged.');
     }
+    firePayrollNotify_(function () {
+      NotificationPayrollAdapter.notifyPayslipsAvailable(
+        snapshot.run,
+        [snapshot.record],
+        snapshot.employees
+      );
+    });
     return getRunDetail(runId);
   }
 

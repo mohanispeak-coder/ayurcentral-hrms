@@ -79,6 +79,8 @@ check('fix-structure-actions', /js-fix-structure/.test(client) && /openSalaryStr
 check('fix-pan-actions', /js-fix-pan/.test(client) && /tab:\s*'personal'/.test(client));
 check('per-employee-payslip', /js-gen-payslip/.test(client) && /apiRegeneratePayslipForEmployee/.test(api) &&
   /regeneratePayslipForEmployee/.test(payroll));
+check('per-employee-payslip-notify', /notifyPayslipsAvailable[\s\S]*\[snapshot\.record\]/.test(payroll) &&
+  /Generate & notify/.test(client));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
   /enrichExceptionMessage_/.test(payroll));
 check('comp-editor-fallback', /renderCompEditor_/.test(client) && /loadWarning/.test(client));

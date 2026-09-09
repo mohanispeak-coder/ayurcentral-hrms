@@ -1257,7 +1257,7 @@
       if (regen) regen.addEventListener('click', function () {
         confirmModal({
           title: 'Generate all payslips?',
-          body: 'Creates or replaces payslip files for all employees in this payroll. Amounts stay unchanged.',
+          body: 'Creates or replaces payslip files for all employees and sends payslip email notifications to everyone in this payroll. Amounts stay unchanged.',
           okLabel: 'Generate all payslips'
         }).then(function (ok) {
           if (!ok) return;
@@ -1285,16 +1285,24 @@
       page.querySelectorAll('.js-gen-payslip').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var employeeId = btn.getAttribute('data-emp');
+          var empName = btn.getAttribute('data-name') || employeeId;
           var targetRunId = btn.getAttribute('data-run') || runId;
-          if (!setButtonLoading(btn, 'Generating...')) return;
-          rpc('apiRegeneratePayslipForEmployee', [targetRunId, employeeId], btn, 'Generating...', $('pr-action-feedback'))
-            .then(function (next) {
-              invalidatePayslipViews_();
-              afterUpdate(next, 'Payslip generated for ' + employeeId + '.');
-            })
-            .catch(function (err) {
-              showToast(err.message || 'Generate failed', 'error');
-            });
+          confirmModal({
+            title: 'Generate payslip for ' + empName + '?',
+            body: 'Creates or replaces the payslip file for this employee only and sends them the payslip email notification.',
+            okLabel: 'Generate & notify'
+          }).then(function (ok) {
+            if (!ok) return;
+            if (!setButtonLoading(btn, 'Generating...')) return;
+            rpc('apiRegeneratePayslipForEmployee', [targetRunId, employeeId], btn, 'Generating...', $('pr-action-feedback'))
+              .then(function (next) {
+                invalidatePayslipViews_();
+                afterUpdate(next, 'Payslip generated and notification sent for ' + employeeId + '.');
+              })
+              .catch(function (err) {
+                showToast(err.message || 'Generate failed', 'error');
+              });
+          });
         });
       });
     }
@@ -1327,8 +1335,9 @@
           escapeHtml(rec.payslip_document_id) + '">Download</button> ';
       }
       html += '<button type="button" class="btn btn-secondary btn-sm js-gen-payslip" data-emp="' +
-        escapeHtml(row.employee.employee_id) + '" data-run="' + escapeHtml(runId) + '">' +
-        (ready ? 'Regenerate' : 'Generate payslip') + '</button></td>';
+        escapeHtml(row.employee.employee_id) + '" data-run="' + escapeHtml(runId) + '" data-name="' +
+        escapeHtml(row.employee.display_name || row.employee.employee_id) + '">' +
+        (ready ? 'Regenerate & notify' : 'Generate & notify') + '</button></td>';
       return html;
     }
 
@@ -1502,7 +1511,7 @@
           '<p>Finalize payroll first, then generate payslip files for all employees.</p></div></div>';
         return html;
       }
-      html += '<p class="page-lede">Generate HTML payslips stored on Drive. Employees download their own from My Payslips.</p>' +
+      html += '<p class="page-lede">Generate payslips one employee at a time to email only that person, or use Generate all to notify everyone. Files are stored on Drive; employees can also download from My Payslips.</p>' +
         '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-regen-payslips">Generate all payslips</button></div>';
       if (ps.complete) {
         html += '<div class="alert alert-success" style="margin-top:12px">Payslips generated for ' + ps.generated + ' of ' + ps.expected + ' employees.</div>';
