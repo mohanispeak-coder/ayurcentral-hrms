@@ -56,6 +56,11 @@ check('api-bulk-commit', /apiCommitPayrollUpload/.test(api));
 check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
 check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client));
+check('attendance-first-workflow', /paintPayrollWorkflowCard_/.test(client) && /attendanceStats_/.test(client) &&
+  /Complete attendance for all employees first/.test(client));
+check('attendance-zero-default', /working_days: 0,\s*\n\s*paid_days: 0,\s*\n\s*lop_days: 0/.test(payroll));
+check('attendance-gate-calculate', /assertAttendanceComplete_/.test(payroll) &&
+  /hasCompleteAttendance_/.test(payroll));
 check('comp-bulk-ui', /apiValidateCompensationBulkUpload/.test(client) && /comp-bulk-card/.test(client) &&
   /Validate upload/.test(client));
 check('comp-bulk-api', /apiDownloadCompensationBulkTemplate/.test(api) && /apiCommitCompensationBulkUpload/.test(api));

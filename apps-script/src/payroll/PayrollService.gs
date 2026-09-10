@@ -44,6 +44,26 @@ var PayrollService = (function () {
     return isFinite(n) ? n : 0;
   }
 
+  function hasCompleteAttendance_(inp) {
+    if (!inp) return false;
+    var w = num_(inp.working_days);
+    var p = num_(inp.paid_days);
+    var l = num_(inp.lop_days);
+    return w > 0 && p >= 0 && l >= 0 && Math.abs(p + l - w) < 0.001;
+  }
+
+  function assertAttendanceComplete_(inputs) {
+    inputs = inputs || [];
+    if (!inputs.length) {
+      throw validationError_('No employees in this payroll run. Sync eligible employees first.');
+    }
+    var incomplete = inputs.filter(function (inp) { return !hasCompleteAttendance_(inp); });
+    if (incomplete.length) {
+      throw validationError_('Attendance is incomplete for ' + incomplete.length +
+        ' of ' + inputs.length + ' employees. Upload or save working days, paid days, and LOP before calculating.');
+    }
+  }
+
   function parseRequiredNumber_(value, field, employeeId) {
     var n = Number(value);
     if (value === '' || value == null || !isFinite(n)) {
@@ -456,6 +476,7 @@ var PayrollService = (function () {
         throw conflictError_('Calculate is only allowed from DRAFT or CALCULATED.');
       }
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
+      assertAttendanceComplete_(inputs);
       var employees = indexEmployees_();
       var settings = {
         payroll_round: ConfigService.getSetting('payroll_round', 'NEAREST_RUPEE')
@@ -788,16 +809,13 @@ var PayrollService = (function () {
   function buildInputRowForEmployee_(run, emp) {
     var lopLeave = PayrollLeaveBridge.getApprovedLopForPayroll(
       emp.employee_id, run.period_year, run.period_month);
-    var working = num_(run.working_days_default);
-    var lopDays = lopLeave;
-    var paid = Math.max(0, working - lopDays);
     return {
       payroll_input_id: DbService.generateId('PI'),
       payroll_run_id: run.payroll_run_id,
       employee_id: emp.employee_id,
-      working_days: working,
-      paid_days: paid,
-      lop_days: lopDays,
+      working_days: 0,
+      paid_days: 0,
+      lop_days: 0,
       bonus: 0,
       incentive: 0,
       other_earnings: 0,

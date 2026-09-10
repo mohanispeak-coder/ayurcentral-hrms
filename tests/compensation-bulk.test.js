@@ -41,7 +41,7 @@ check('bulk-duplicate-reject', /Duplicate employee row/.test(bulk));
 check('bulk-api-template', /apiDownloadCompensationBulkTemplate/.test(api));
 check('bulk-api-validate', /apiValidateCompensationBulkUpload/.test(api));
 check('bulk-api-commit', /apiCommitCompensationBulkUpload/.test(api));
-check('ui-comp-bulk', /comp-bulk-details/.test(client) && /apiValidateCompensationBulkUpload/.test(client));
+check('ui-comp-bulk', /comp-bulk-card/.test(client) && /apiValidateCompensationBulkUpload/.test(client));
 
 function loadBulkService() {
   var ctx = {

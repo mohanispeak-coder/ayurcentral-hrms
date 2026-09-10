@@ -34,6 +34,11 @@
 .payroll-page .bulk-upload-card { margin-top: 12px; margin-bottom: 16px; border: 1px solid var(--color-primary); background: var(--color-bg-elevated); }
 .payroll-page .bulk-upload-card h2 { margin-top: 0; }
 .payroll-page .bulk-steps { margin: 8px 0 12px 20px; color: var(--color-text-muted); font-size: 0.875rem; }
+.payroll-page .workflow-steps { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; }
+.payroll-page .workflow-step { flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); font-size: 0.875rem; }
+.payroll-page .workflow-step strong { display: block; margin-bottom: 4px; }
+.payroll-page .workflow-step.done { border-color: var(--color-success-border); background: var(--color-success-bg); }
+.payroll-page .workflow-step.current { border-color: var(--color-primary); background: var(--color-primary-muted); }
 </style>
 <script>
 (function () {
@@ -548,7 +553,7 @@
       if (flashBannerHtml && homeFlash) html += flashBannerHtml(homeFlash);
       html += '<div class="page-header"><h2>Payroll — ' + escapeHtml(fmtPeriod(year, month)) +
         (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
-        '<p class="page-lede">Enter days and amounts, calculate on the server, review exceptions, then finalize and generate payslips.</p></div>';
+        '<p class="page-lede">Upload or enter attendance first, then calculate payroll, review exceptions, and finalize.</p></div>';
 
       if (detail) html += hrPhaseStepper(detail);
 
@@ -569,20 +574,20 @@
         '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
         '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
 
-      html += paintCompensationBulkCard_();
-
       if (!currentRun) {
-        html += paintAttendanceBulkSection_(null, false, false);
         html += '<div class="card"><h2>Get started</h2>' +
-          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet.</p>' +
+          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start the month, then upload attendance before calculating.</p>' +
           '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
           escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
+        html += paintCompensationBulkCard_();
       } else if (detail) {
+        html += paintPayrollWorkflowCard_(detail, st);
         html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true);
         html += paintPayrollDataSection_(detail, editable);
         html += paintCalculateSection_(detail, editable, st);
         html += paintPayrollCheck_(detail);
         html += paintSalaryStructureCollapsible_();
+        html += paintCompensationBulkCard_();
         html += paintReviewSection_(detail, st);
         html += paintFinalizeSection_(detail, st);
         html += paintPayslipsCard_(detail);
@@ -602,10 +607,44 @@
       else prefetchCompEmployees_(seq);
     }
 
+    function attendanceStats_(detail) {
+      var rows = (detail && detail.rows) || [];
+      var total = rows.length;
+      var ready = 0;
+      rows.forEach(function (row) {
+        var inp = row.input || {};
+        var w = Number(inp.working_days);
+        var p = Number(inp.paid_days);
+        var l = Number(inp.lop_days);
+        if (isFinite(w) && w > 0 && isFinite(p) && p >= 0 && isFinite(l) && l >= 0 &&
+            Math.abs(p + l - w) < 0.001) ready += 1;
+      });
+      return { total: total, ready: ready };
+    }
+
+    function paintPayrollWorkflowCard_(detail, st) {
+      var att = attendanceStats_(detail);
+      var calculated = st === 'CALCULATED' || st === 'UNDER_REVIEW' || st === 'APPROVED' || st === 'LOCKED';
+      var finalized = st === 'LOCKED';
+      var step1 = att.total > 0 && att.ready === att.total ? 'done' : 'current';
+      var step2 = calculated ? 'done' : (step1 === 'done' ? 'current' : '');
+      var step3 = finalized ? 'done' : (calculated ? 'current' : '');
+      return '<div class="card" id="payroll-workflow-card"><h2>Monthly payroll steps</h2>' +
+        '<p class="page-lede">Attendance must be entered or imported before you calculate payroll for this month.</p>' +
+        '<div class="workflow-steps">' +
+        '<div class="workflow-step ' + step1 + '"><strong>Step 1 — Attendance</strong>' +
+        escapeHtml(att.ready + ' of ' + att.total + ' employees ready') + '</div>' +
+        '<div class="workflow-step ' + step2 + '"><strong>Step 2 — Calculate</strong>' +
+        (calculated ? 'Payroll calculated' : 'Run after attendance is complete') + '</div>' +
+        '<div class="workflow-step ' + step3 + '"><strong>Step 3 — Finalize</strong>' +
+        (finalized ? 'Payroll finalized' : 'Lock amounts after review') + '</div>' +
+        '</div></div>';
+    }
+
     function paintCompensationBulkCard_() {
       var previewHtml = compBulkState.preview ? paintCompBulkPreview_(compBulkState.preview) : '';
-      return '<div class="card bulk-upload-card" id="comp-bulk-card"><h2>Bulk upload salary structures</h2>' +
-        '<p class="page-lede">Set up or update salary structures in bulk. All component columns are required; empty numeric cells use 0.</p>' +
+      return '<details class="card section-details" id="comp-bulk-card"><summary>Bulk upload salary structures (one-time setup)</summary>' +
+        '<p class="page-lede">Set up or update salary structures in bulk — do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
         '<ol class="bulk-steps"><li>Download Excel or CSV template</li><li>Choose file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
         '<div class="primary-next" style="flex-wrap:wrap">' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-template">Download Excel template</button>' +
@@ -616,12 +655,12 @@
         '</div>' +
         '<p id="comp-bulk-file-name" class="hint">No file selected.</p>' +
         '<div id="comp-bulk-preview">' + previewHtml + '</div>' +
-        '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></div>';
+        '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></details>';
     }
 
     function paintAttendanceBulkSection_(runId, editable, hasRun) {
-      var html = '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Attendance bulk upload</h2>' +
-        '<p class="page-lede">Upload working days plus days_present, days_absent, and leave_days. Payroll calculates paid_days and lop_days automatically.</p>' +
+      var html = '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Step 1 — Attendance bulk upload</h2>' +
+        '<p class="page-lede">Enter attendance before calculating payroll. Upload working days plus days_present, days_absent, and leave_days — payroll derives paid_days and lop_days.</p>' +
         '<ol class="bulk-steps"><li>Download template (all active employees with ID, name, email — re-download after adding staff)</li><li>Choose Excel/CSV file</li><li>Review validation results</li><li>Confirm import</li></ol>';
       html += '<div class="primary-next" style="flex-wrap:wrap">';
       if (hasRun && runId) {
@@ -645,8 +684,8 @@
     }
 
     function paintPayrollDataSection_(detail, editable) {
-      return '<div class="card" id="payroll-data-card"><h2>Payroll data — manual entry</h2>' +
-        '<p class="page-lede">Or edit working days, paid days, and LOP directly in the table below.</p>' +
+      return '<div class="card" id="payroll-data-card"><h2>Step 1 — Attendance manual entry</h2>' +
+        '<p class="page-lede">Alternatively, enter working days, paid days, and LOP in the table below. Save before calculating.</p>' +
         paintEmployeeTable_(detail, editable) + '</div>';
     }
 
@@ -675,11 +714,19 @@
 
     function paintCalculateSection_(detail, editable, st) {
       if (!detail) return '';
-      var html = '<div class="card" id="calculate-card"><h2>Calculate payroll</h2>' +
-        '<p class="page-lede">Server calculates basic, allowances, deductions, and net pay from salary structures and days entered.</p>' +
-        '<div class="primary-next">';
+      var att = attendanceStats_(detail);
+      var attendanceComplete = att.total > 0 && att.ready === att.total;
+      var html = '<div class="card" id="calculate-card"><h2>Step 2 — Calculate payroll</h2>' +
+        '<p class="page-lede">After attendance is entered for every employee, calculate basic, allowances, deductions, and net pay on the server.</p>';
+      if (!attendanceComplete) {
+        html += '<div class="alert alert-warning" style="margin-top:12px">Attendance incomplete: ' +
+          escapeHtml(att.ready + ' of ' + att.total + ' employees have valid working/paid/LOP days. ' +
+          'Upload or save attendance before calculating.') + '</div>';
+      }
+      html += '<div class="primary-next">';
       if (st === 'DRAFT' || st === 'CALCULATED') {
-        html += '<button type="button" class="btn btn-primary" id="btn-calc">' +
+        html += '<button type="button" class="btn btn-primary" id="btn-calc"' +
+          (attendanceComplete ? '' : ' disabled title="Complete attendance for all employees first"') + '>' +
           (st === 'CALCULATED' ? 'Recalculate payroll' : 'Calculate payroll') + '</button>';
       }
       if (editable) {
@@ -1279,6 +1326,11 @@
 
       var calc = $('btn-calc');
       if (calc) calc.addEventListener('click', function () {
+        var att = attendanceStats_(detail);
+        if (att.total > 0 && att.ready < att.total) {
+          showToast('Enter attendance for all employees before calculating (' + att.ready + ' of ' + att.total + ' ready).', 'error');
+          return;
+        }
         if (!setButtonLoading(calc, 'Calculating payroll...')) return;
         saveIfNeeded()
           .then(function () {
