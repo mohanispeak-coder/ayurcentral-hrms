@@ -4,19 +4,82 @@
  */
 var PayslipService = (function () {
   function generateForRun(run, records, employeesById, session) {
+    records = records || [];
+    if (!records.length) return [];
+    var folder = DriveService.getPayslipMonthFolder(run.period_year, run.period_month);
+    var allDocs = DbService.findRecords(HRMS.SHEETS.DOCUMENTS, {
+      category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
+      payroll_run_id: run.payroll_run_id
+    });
+    var docsByEmp = {};
+    allDocs.forEach(function (d) {
+      var eid = String(d.employee_id);
+      if (!docsByEmp[eid]) docsByEmp[eid] = [];
+      docsByEmp[eid].push(d);
+    });
+    var now = new Date();
+    var periodLabel = monthLabel_(run.period_month) + ' ' + run.period_year;
+    var inserts = [];
+    var docUpdates = [];
+    var recUpdates = [];
     var created = [];
     for (var i = 0; i < records.length; i++) {
       var rec = records[i];
       var emp = employeesById[rec.employee_id] || {};
-      var doc = createPayslip_(run, rec, emp, session);
-      created.push(doc);
+      var file = writePayslipFile_(folder, run, rec, emp);
+      var existingDocs = docsByEmp[String(rec.employee_id)] || [];
+      var reuse = findReusableDocument(existingDocs, rec);
+      var documentId;
+      if (reuse && reuse.document_id) {
+        documentId = reuse.document_id;
+        docUpdates.push({
+          pk: documentId,
+          updates: {
+            title: 'Payslip — ' + periodLabel,
+            drive_file_id: file.getId(),
+            drive_folder_id: folder.getId(),
+            uploaded_at: now,
+            uploaded_by_email: session.email
+          }
+        });
+      } else {
+        documentId = DbService.generateId('DOC');
+        inserts.push({
+          document_id: documentId,
+          employee_id: rec.employee_id,
+          category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
+          title: 'Payslip — ' + periodLabel,
+          drive_file_id: file.getId(),
+          drive_folder_id: folder.getId(),
+          payroll_run_id: run.payroll_run_id,
+          uploaded_at: now,
+          uploaded_by_email: session.email
+        });
+      }
+      recUpdates.push({
+        pk: rec.payroll_record_id,
+        updates: { payslip_document_id: documentId }
+      });
+      rec.payslip_document_id = documentId;
+      created.push({
+        document_id: documentId,
+        employee_id: rec.employee_id,
+        drive_file_id: file.getId(),
+        reused: !!reuse
+      });
     }
+    if (inserts.length) DbService.insertRecords(HRMS.SHEETS.DOCUMENTS, inserts);
+    if (docUpdates.length) DbService.updateRecords(HRMS.SHEETS.DOCUMENTS, 'document_id', docUpdates);
+    if (recUpdates.length) DbService.updateRecords(HRMS.SHEETS.PAYROLL_RECORDS, 'payroll_record_id', recUpdates);
     return created;
   }
 
   function generateForEmployee(run, record, employee, session) {
     if (!record) throw validationError_('Payroll record is required.');
-    return createPayslip_(run, record, employee || {}, session);
+    var byId = {};
+    byId[record.employee_id] = employee || {};
+    var created = generateForRun(run, [record], byId, session);
+    return created[0];
   }
 
   function findReusableDocument(docs, rec) {
@@ -48,53 +111,15 @@ var PayslipService = (function () {
     });
   }
 
-  function createPayslip_(run, rec, emp, session) {
+  function writePayslipFile_(folder, run, rec, emp) {
     var html = buildHtml_(run, rec, emp);
-    var folder = DriveService.getPayslipMonthFolder(run.period_year, run.period_month);
     var fileName = rec.employee_id + '-' + run.payroll_run_id + '-payslip.html';
     var existing = folder.getFilesByName(fileName);
     while (existing.hasNext()) {
       existing.next().setTrashed(true);
     }
     var blob = Utilities.newBlob(html, 'text/html', fileName);
-    var file = folder.createFile(blob);
-    var now = new Date();
-    var existingDocs = DbService.findRecords(HRMS.SHEETS.DOCUMENTS, {
-      employee_id: rec.employee_id,
-      category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
-      payroll_run_id: run.payroll_run_id
-    });
-    var reuse = findReusableDocument(existingDocs, rec);
-    var documentId;
-    var periodLabel = monthLabel_(run.period_month) + ' ' + run.period_year;
-    if (reuse && reuse.document_id) {
-      documentId = reuse.document_id;
-      DbService.updateRecord(HRMS.SHEETS.DOCUMENTS, 'document_id', documentId, {
-        title: 'Payslip — ' + periodLabel,
-        drive_file_id: file.getId(),
-        drive_folder_id: folder.getId(),
-        uploaded_at: now,
-        uploaded_by_email: session.email
-      });
-    } else {
-      documentId = DbService.generateId('DOC');
-      DbService.insertRecord(HRMS.SHEETS.DOCUMENTS, {
-        document_id: documentId,
-        employee_id: rec.employee_id,
-        category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
-        title: 'Payslip — ' + periodLabel,
-        drive_file_id: file.getId(),
-        drive_folder_id: folder.getId(),
-        payroll_run_id: run.payroll_run_id,
-        uploaded_at: now,
-        uploaded_by_email: session.email
-      });
-    }
-    DbService.updateRecord(HRMS.SHEETS.PAYROLL_RECORDS, 'payroll_record_id', rec.payroll_record_id, {
-      payslip_document_id: documentId
-    });
-    rec.payslip_document_id = documentId;
-    return { document_id: documentId, employee_id: rec.employee_id, drive_file_id: file.getId(), reused: !!reuse };
+    return folder.createFile(blob);
   }
 
   function enrichPayslipDoc_(doc, employeeId) {

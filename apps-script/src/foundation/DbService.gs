@@ -387,30 +387,112 @@ var DbService = (function () {
   }
 
   /**
-   * Delete rows matching filter. Used to rewrite DRAFT/CALCULATED payroll rows.
+   * Rewrite a sheet from an in-memory header + data rows. One setValues plus
+   * one clear of leftover rows — never a per-row row-shift delete loop.
+   * @param {string} sheetName
+   * @param {Array.<*>} headers
+   * @param {Array.<Array.<*>>} dataRows
+   */
+  function rewriteSheetData_(sheetName, headers, dataRows) {
+    var sheet = getSheet_(sheetName);
+    var width = headers.length;
+    if (!width) {
+      throw configurationError_('Sheet has no headers: ' + sheetName);
+    }
+    stats_.getLastRow++;
+    if (typeof HrmsPerf !== 'undefined' && HrmsPerf.count) {
+      HrmsPerf.count('getLastRow', sheetName);
+    }
+    var oldLast = Math.max(sheet.getLastRow(), 1);
+    var oldCol = Math.max(sheet.getLastColumn(), width);
+    var values = [headers.slice()];
+    (dataRows || []).forEach(function (row) {
+      var slice = (row || []).slice(0, width);
+      while (slice.length < width) slice.push('');
+      values.push(slice);
+    });
+    var tWrite = Date.now();
+    sheet.getRange(1, 1, values.length, width).setValues(values);
+    stats_.setValues++;
+    if (typeof HrmsPerf !== 'undefined') {
+      HrmsPerf.addStage('write', Date.now() - tWrite);
+      HrmsPerf.count('setValues', sheetName);
+    }
+    var newLast = values.length;
+    if (oldLast > newLast) {
+      sheet.getRange(newLast + 1, 1, oldLast - newLast, oldCol).clearContent();
+    }
+    invalidateSheetData_(sheetName);
+  }
+
+  /**
+   * Keep rows that do not match filter. Matching rows are dropped.
+   * Empty (no primary key) rows are omitted from the rewrite.
+   * @param {string} sheetName
+   * @param {Object} filter
+   * @return {{headers: Array.<string>, kept: Array.<Array.<*>>, deleted: number}}
+   */
+  function partitionSheetRows_(sheetName, filter) {
+    filter = filter || {};
+    var data = getSheetValues_(sheetName);
+    if (!data || !data.length) {
+      return { headers: [], kept: [], deleted: 0 };
+    }
+    var headers = data[0].map(String);
+    var kept = [];
+    var deleted = 0;
+    for (var i = 1; i < data.length; i++) {
+      if (isEmptyRow_(headers, data[i])) continue;
+      var record = rowToObject_(headers, data[i]);
+      if (recordMatchesFilter_(record, filter)) {
+        deleted++;
+      } else {
+        kept.push(data[i].slice(0, headers.length));
+      }
+    }
+    return { headers: headers, kept: kept, deleted: deleted };
+  }
+
+  /**
+   * Delete rows matching filter without per-row row-shift deletes.
+   * Used to rewrite DRAFT/CALCULATED payroll rows and replace salary components.
    * @param {string} sheetName
    * @param {Object} filter
    * @return {number} Deleted count.
    */
   function deleteRecords(sheetName, filter) {
-    filter = filter || {};
-    var sheet = getSheet_(sheetName);
-    var data = getSheetValues_(sheetName);
-    if (!data || data.length < 2) return 0;
-    var headers = data[0].map(String);
-    var deleted = 0;
-    for (var i = data.length - 1; i >= 1; i--) {
-      if (isEmptyRow_(headers, data[i])) continue;
-      var record = rowToObject_(headers, data[i]);
-      if (recordMatchesFilter_(record, filter)) {
-        sheet.deleteRow(i + 1);
-        deleted++;
-      }
+    var part = partitionSheetRows_(sheetName, filter);
+    if (!part.deleted) return 0;
+    rewriteSheetData_(sheetName, part.headers, part.kept);
+    return part.deleted;
+  }
+
+  /**
+   * Atomically drop rows matching filter and append new records. One rewrite.
+   * @param {string} sheetName
+   * @param {Object} filter
+   * @param {Array.<Object>} newRecords
+   * @return {{deleted: number, inserted: number}}
+   */
+  function replaceRecords(sheetName, filter, newRecords) {
+    newRecords = newRecords || [];
+    var part = partitionSheetRows_(sheetName, filter);
+    var headers = part.headers;
+    if (!headers.length) {
+      var sheet = getSheet_(sheetName);
+      headers = getHeaders_(sheet);
     }
-    if (deleted) {
-      invalidateSheetData_(sheetName);
+    if (!headers.length) {
+      throw configurationError_('Sheet has no headers: ' + sheetName);
     }
-    return deleted;
+    var appended = newRecords.map(function (record) {
+      return headers.map(function (h) {
+        return record && record.hasOwnProperty(h) ? record[h] : '';
+      });
+    });
+    if (!part.deleted && !appended.length) return { deleted: 0, inserted: 0 };
+    rewriteSheetData_(sheetName, headers, part.kept.concat(appended));
+    return { deleted: part.deleted, inserted: appended.length };
   }
 
   /**
@@ -609,6 +691,7 @@ var DbService = (function () {
     insertRecord: insertRecord,
     insertRecords: insertRecords,
     deleteRecords: deleteRecords,
+    replaceRecords: replaceRecords,
     updateRecord: updateRecord,
     updateRecords: updateRecords,
     nextSequence: nextSequence,

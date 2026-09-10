@@ -556,8 +556,20 @@ var CompensationService = (function () {
   }
 
   function replaceComponents_(structureId, components) {
-    DbService.deleteRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: structureId });
-    insertComponents_(structureId, components);
+    var rows = (components || []).map(function (c) {
+      return {
+        salary_component_id: DbService.generateId('SC'),
+        salary_structure_id: structureId,
+        component_code: c.component_code,
+        component_name: c.component_name,
+        component_kind: c.component_kind,
+        calc_method: c.calc_method,
+        amount: c.amount,
+        percent: c.percent,
+        sort_order: c.sort_order
+      };
+    });
+    DbService.replaceRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: structureId }, rows);
   }
 
   function isReferencedInLockedPayroll_(structureId) {

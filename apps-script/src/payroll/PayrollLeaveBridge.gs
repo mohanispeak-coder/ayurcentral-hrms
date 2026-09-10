@@ -24,6 +24,17 @@ var PayrollLeaveBridge = (function () {
     return readLopFromSchema_(employeeId, periodYear, periodMonth);
   }
 
+  /**
+   * Employee id → approved LOP days for one calendar month. One LeaveRequests read.
+   */
+  function getApprovedLopMapForPayroll(periodYear, periodMonth) {
+    if (typeof LeaveLopService !== 'undefined' && LeaveLopService &&
+        typeof LeaveLopService.computeLopMapForPeriod === 'function') {
+      return LeaveLopService.computeLopMapForPeriod(periodYear, periodMonth) || {};
+    }
+    return {};
+  }
+
   function readLopFromSchema_(employeeId, periodYear, periodMonth) {
     var year = Number(periodYear);
     var month = Number(periodMonth);
@@ -98,6 +109,7 @@ var PayrollLeaveBridge = (function () {
   }
 
   return {
-    getApprovedLopForPayroll: getApprovedLopForPayroll
+    getApprovedLopForPayroll: getApprovedLopForPayroll,
+    getApprovedLopMapForPayroll: getApprovedLopMapForPayroll
   };
 })();

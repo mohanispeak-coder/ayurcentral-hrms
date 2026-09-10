@@ -236,6 +236,7 @@ function testPayroll_PermissionSuite_(record) {
 
 function testPayroll_LeaveBridgeSuite_(record) {
   record('LOP-bridge-exists', typeof PayrollLeaveBridge.getApprovedLopForPayroll === 'function');
+  record('LOP-map-exists', typeof PayrollLeaveBridge.getApprovedLopMapForPayroll === 'function');
   var zero = PayrollLeaveBridge.getApprovedLopForPayroll('', 2026, 4);
   record('LOP-empty-employee', zero === 0, String(zero));
 }
