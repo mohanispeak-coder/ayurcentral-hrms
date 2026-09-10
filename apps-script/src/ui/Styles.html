@@ -344,6 +344,20 @@ button, input, select, textarea { font-family: inherit; }
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
   }
+  .app-shell.is-authed .sidebar,
+  .app-shell.is-authed .app-sidebar {
+    transition: width 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  }
+  .app-shell.is-authed .sidebar:not(.open),
+  .app-shell.is-authed .app-sidebar:not(.open) {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    border-right-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-8px);
+  }
 }
 
 .app-shell:not(.is-authed) .sidebar,
