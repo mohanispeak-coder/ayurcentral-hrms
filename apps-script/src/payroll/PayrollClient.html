@@ -74,7 +74,7 @@
     };
     var homeState = { runs: [], year: 0, month: 0, overview: null, salaryStructureOpen: false, prevPayrollsOpen: false };
     var compState = { employeeId: '', bundle: null, employees: [], _loaded: false, _editorLoadedFor: '' };
-    var bulkState = { preview: null };
+    var bulkState = { preview: null, selectedFile: null };
     var compBulkState = { preview: null, selectedFile: null };
 
     function shellInv_(keys) {
@@ -658,7 +658,8 @@
     }
 
     function paintAttendanceBulkSection_(runId, editable, hasRun) {
-      var html = '<details class="card collapsible-section bulk-upload-card" id="attendance-bulk-card">' +
+      var openAttr = bulkState.preview ? ' open' : '';
+      var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
         '<p class="page-lede">Enter attendance before calculating payroll. Upload working days plus days_present, days_absent, and leave_days — payroll derives paid_days and lop_days.</p>' +
@@ -668,8 +669,9 @@
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
       }
       if (editable && hasRun && runId) {
-        html += '<label class="btn btn-primary" for="pr-bulk-file">Choose file &amp; validate</label>' +
-          '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">';
+        html += '<label class="btn btn-secondary" for="pr-bulk-file">Choose Excel/CSV file</label>' +
+          '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">' +
+          '<button type="button" class="btn btn-primary" id="btn-pr-bulk-validate" disabled>Validate upload</button>';
       } else if (!hasRun || !runId) {
         html += '<span class="hint">Start payroll for this month to enable attendance upload.</span>';
       } else {
@@ -1098,19 +1100,28 @@
       }
 
       var fileInput = $('pr-bulk-file');
+      var validateBtn = $('btn-pr-bulk-validate');
+      var nameEl = $('pr-bulk-file-name');
       if (fileInput) fileInput.addEventListener('change', function () {
-        var file = fileInput.files && fileInput.files[0];
-        fileInput.value = '';
+        bulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        bulkState.preview = null;
+        if (validateBtn) validateBtn.disabled = !bulkState.selectedFile;
+        if (nameEl) nameEl.textContent = bulkState.selectedFile ? bulkState.selectedFile.name : 'No file selected.';
+        var mount = $('pr-upload-preview');
+        if (mount) mount.innerHTML = '';
+      });
+      if (validateBtn) validateBtn.addEventListener('click', function () {
+        var file = bulkState.selectedFile;
         if (!file) return;
-        var name = (file.name || '').toLowerCase();
-        if (name.indexOf('.xlsx') < 0 && name.indexOf('.xls') < 0 && name.indexOf('.csv') < 0) {
+        var lower = (file.name || '').toLowerCase();
+        if (lower.indexOf('.xlsx') < 0 && lower.indexOf('.xls') < 0 && lower.indexOf('.csv') < 0) {
           showToast('Upload an Excel (.xlsx) or CSV file.', 'error');
           return;
         }
-        var nameEl = $('pr-bulk-file-name');
+        if (!setButtonLoading(validateBtn, 'Validating...')) return;
         if (nameEl) nameEl.textContent = 'Validating ' + file.name + '…';
         readFileBase64_(file).then(function (meta) {
-          return rpc('apiValidatePayrollUpload', [runId, meta], null, '', $('pr-upload-feedback'));
+          return rpc('apiValidatePayrollUpload', [runId, meta], validateBtn, 'Validating...', $('pr-upload-feedback'));
         }).then(function (preview) {
           bulkState.preview = preview;
           if (nameEl) nameEl.textContent = file.name + ' — ' + preview.readyCount + ' ready, ' + preview.errorCount + ' errors';
@@ -1123,6 +1134,7 @@
             bindBulkPreviewActions_(runId, page);
           });
         }).catch(function (err) {
+          restoreButton(validateBtn);
           if (nameEl) nameEl.textContent = file.name + ' — validation failed';
           showToast((err && err.message) || 'Validation failed', 'error');
         });
