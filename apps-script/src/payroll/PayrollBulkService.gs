@@ -1,27 +1,29 @@
 /**
- * Payroll Excel bulk upload — .xlsx only. Validate → preview → commit.
- * Server remains authoritative; preview never writes payroll data.
+ * Payroll bulk upload — .xlsx or .csv. Validate → preview → commit.
+ * Attendance columns (days_present, days_absent, leave_days) are segregated;
+ * paid_days and lop_days are derived for payroll calculation.
  */
 var HRMS = HRMS || {};
 
 var PayrollBulkService = (function () {
-  var TEMPLATE_VERSION_ = '1';
+  var TEMPLATE_VERSION_ = '2';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_payroll_upload_';
 
   var HEADERS_ = [
-    'employee_id', 'working_days', 'paid_days', 'lop_days',
+    'employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days',
     'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount', 'remarks'
   ];
 
-  var REQUIRED_HEADERS_ = ['employee_id', 'working_days', 'paid_days', 'lop_days'];
+  var REQUIRED_HEADERS_ = ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days'];
 
   var SAMPLE_ROW_ = {
     employee_id: 'SAPL-0001',
     working_days: '26',
-    paid_days: '26',
-    lop_days: '0',
+    days_present: '24',
+    days_absent: '1',
+    leave_days: '1',
     bonus: '0',
     incentive: '0',
     other_earnings: '0',
@@ -191,11 +193,12 @@ var PayrollBulkService = (function () {
       instructions.getRange(1, 1).setValue('HRMS Payroll Upload — Instructions');
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
-        ['Upload .xlsx only. Do not change header names on the PayrollInputs sheet.'],
+        ['Upload .xlsx or .csv. Do not change header names on the PayrollInputs sheet.'],
         ['employee_id must match an active employee eligible for this payroll month.'],
         ['New employees are added to the payroll run automatically when you open payroll or upload.'],
         ['Employees are never created from Excel. Duplicate employee rows are rejected.'],
-        ['working_days must be greater than 0. paid_days and lop_days cannot be negative.'],
+        ['working_days must be greater than 0. days_present, days_absent, and leave_days default to 0 if empty.'],
+        ['paid_days = days_present + leave_days. lop_days = working_days - paid_days (calculated by payroll).'],
         ['Optional amounts (bonus, incentive, etc.) must be valid numbers >= 0.'],
         ['After upload, review validation results before confirming import.'],
         ['Maximum ' + MAX_ROWS_ + ' rows per upload.']
@@ -277,6 +280,29 @@ var PayrollBulkService = (function () {
     return out;
   }
 
+  function parseCsvRows_(text) {
+    var rows = Utilities.parseCsv(text);
+    if (!rows || rows.length < 2) return [];
+    var headers = rows[0].map(function (h) { return normalizeHeader_(h).replace(/\*$/, ''); });
+    var out = [];
+    for (var r = 1; r < rows.length; r++) {
+      var line = rows[r];
+      if (!line || !line.length) continue;
+      var allBlank = true;
+      for (var c = 0; c < line.length; c++) {
+        if (trim_(line[c])) allBlank = false;
+      }
+      if (allBlank) continue;
+      var row = { rowNumber: r + 1 };
+      for (var i = 0; i < headers.length; i++) {
+        if (!headers[i]) continue;
+        row[headers[i]] = trim_(line[i]);
+      }
+      out.push(row);
+    }
+    return out;
+  }
+
   function parseUpload_(meta) {
     meta = meta || {};
     var base64 = trim_(meta.base64);
@@ -284,24 +310,73 @@ var PayrollBulkService = (function () {
     var mimeType = trim_(meta.mimeType).toLowerCase();
     if (!base64) throw validationError_('Upload file is required.');
 
-    if (fileName.indexOf('.csv') >= 0 || mimeType.indexOf('csv') >= 0) {
-      throw validationError_('CSV is not supported. Upload an .xlsx file.');
-    }
-    if (fileName.indexOf('.xlsx') < 0 && mimeType.indexOf('spreadsheetml') < 0 &&
-        mimeType.indexOf('officedocument') < 0) {
-      throw validationError_('Only .xlsx files are supported.');
+    var bytes = Utilities.base64Decode(base64);
+    var blob = Utilities.newBlob(bytes, mimeType || 'application/octet-stream', fileName || 'upload');
+
+    if (fileName.indexOf('.csv') >= 0 || mimeType.indexOf('csv') >= 0 || mimeType.indexOf('text/plain') >= 0) {
+      return parseCsvRows_(blob.getDataAsString('UTF-8'));
     }
 
-    var bytes = Utilities.base64Decode(base64);
-    var blob = Utilities.newBlob(bytes, mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileName || 'upload.xlsx');
-    var sheetId = convertUploadToSheetId_(blob);
-    try {
-      var ss = SpreadsheetApp.openById(sheetId);
-      var sheet = ss.getSheetByName('PayrollInputs') || ss.getSheets()[0];
-      return parseSheetValues_(sheet.getDataRange().getValues());
-    } finally {
-      try { DriveApp.getFileById(sheetId).setTrashed(true); } catch (ignore) {}
+    if (fileName.indexOf('.xlsx') >= 0 || fileName.indexOf('.xls') >= 0 ||
+        mimeType.indexOf('spreadsheet') >= 0 || mimeType.indexOf('excel') >= 0 ||
+        mimeType.indexOf('spreadsheetml') >= 0 || mimeType.indexOf('officedocument') >= 0) {
+      var sheetId = convertUploadToSheetId_(blob);
+      try {
+        var ss = SpreadsheetApp.openById(sheetId);
+        var sheet = ss.getSheetByName('PayrollInputs') || ss.getSheets()[0];
+        return parseSheetValues_(sheet.getDataRange().getValues());
+      } finally {
+        try { DriveApp.getFileById(sheetId).setTrashed(true); } catch (ignore) {}
+      }
     }
+
+    throw validationError_('Upload a .csv or .xlsx file.');
+  }
+
+  function rowUsesLegacyDays_(row) {
+    return (row.paid_days !== '' && row.paid_days != null) ||
+      (row.lop_days !== '' && row.lop_days != null);
+  }
+
+  function deriveAttendanceDays_(row, workingDays) {
+    if (rowUsesLegacyDays_(row)) {
+      var paid = parseNumberField_(row.paid_days, 'paid_days', true, true);
+      var lop = parseNumberField_(row.lop_days, 'lop_days', true, true);
+      if (paid.error) return { error: paid.error };
+      if (lop.error) return { error: lop.error };
+      if (paid.value + lop.value !== workingDays) {
+        return { error: 'paid_days + lop_days must equal working_days (' + workingDays + ').' };
+      }
+      return {
+        days_present: paid.value,
+        days_absent: lop.value,
+        leave_days: 0,
+        paid_days: paid.value,
+        lop_days: lop.value,
+        mode: 'legacy'
+      };
+    }
+
+    var present = parseNumberField_(row.days_present, 'days_present', false, true);
+    var absent = parseNumberField_(row.days_absent, 'days_absent', false, true);
+    var leave = parseNumberField_(row.leave_days, 'leave_days', false, true);
+    if (present.error) return { error: present.error };
+    if (absent.error) return { error: absent.error };
+    if (leave.error) return { error: leave.error };
+
+    var paidDays = present.value + leave.value;
+    var lopDays = workingDays - paidDays;
+    if (lopDays < 0) {
+      return { error: 'days_present + leave_days cannot exceed working_days (' + workingDays + ').' };
+    }
+    return {
+      days_present: present.value,
+      days_absent: absent.value,
+      leave_days: leave.value,
+      paid_days: paidDays,
+      lop_days: lopDays,
+      mode: 'attendance'
+    };
   }
 
   function parseNumberField_(value, field, required, allowZero) {
@@ -355,17 +430,23 @@ var PayrollBulkService = (function () {
       }
 
       var working = parseNumberField_(row.working_days, 'working_days', true, false);
-      var paid = parseNumberField_(row.paid_days, 'paid_days', true, true);
-      var lop = parseNumberField_(row.lop_days, 'lop_days', true, true);
       var bonus = parseNumberField_(row.bonus, 'bonus', false, true);
       var incentive = parseNumberField_(row.incentive, 'incentive', false, true);
       var otherEarn = parseNumberField_(row.other_earnings, 'other_earnings', false, true);
       var otherDed = parseNumberField_(row.other_deductions, 'other_deductions', false, true);
       var tds = parseNumberField_(row.tds_amount, 'tds_amount', false, true);
 
-      [working, paid, lop, bonus, incentive, otherEarn, otherDed, tds].forEach(function (parsed) {
+      [working, bonus, incentive, otherEarn, otherDed, tds].forEach(function (parsed) {
         if (parsed.error) rowErrors.push({ field: 'amounts', message: parsed.error });
       });
+
+      var attendance = null;
+      if (!rowErrors.length && working.value != null) {
+        attendance = deriveAttendanceDays_(row, working.value);
+        if (attendance.error) {
+          rowErrors.push({ field: 'attendance', message: attendance.error });
+        }
+      }
 
       if (rowErrors.length) {
         errors.push({
@@ -392,8 +473,8 @@ var PayrollBulkService = (function () {
         var payload = {
           payroll_input_id: inp.payroll_input_id,
           working_days: working.value,
-          paid_days: paid.value,
-          lop_days: lop.value,
+          paid_days: attendance.paid_days,
+          lop_days: attendance.lop_days,
           bonus: bonus.value,
           incentive: incentive.value,
           other_earnings: otherEarn.value,
@@ -409,8 +490,11 @@ var PayrollBulkService = (function () {
             employee_id: empId,
             display_name: employees[empId].display_name || empId,
             working_days: working.value,
-            paid_days: paid.value,
-            lop_days: lop.value
+            days_present: attendance.days_present,
+            days_absent: attendance.days_absent,
+            leave_days: attendance.leave_days,
+            paid_days: attendance.paid_days,
+            lop_days: attendance.lop_days
           }
         });
       }
@@ -498,6 +582,10 @@ var PayrollBulkService = (function () {
   return {
     downloadTemplate: downloadTemplate,
     validateUpload: validateUpload,
-    commitUpload: commitUpload
+    commitUpload: commitUpload,
+    HEADERS: HEADERS_,
+    deriveAttendanceDays: deriveAttendanceDays_,
+    parseCsvRows: parseCsvRows_,
+    parseNumberField: parseNumberField_
   };
 })();

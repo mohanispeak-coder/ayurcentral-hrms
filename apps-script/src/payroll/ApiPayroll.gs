@@ -170,3 +170,27 @@ function apiGetPayslipDownload(documentId, sessionToken) {
     return PayslipService.getPayslipForDownload(documentId);
   }, sessionToken);
 }
+
+function apiDownloadCompensationBulkTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadTemplate();
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkCsvTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadCsvTemplate();
+  }, sessionToken);
+}
+
+function apiValidateCompensationBulkUpload(meta, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.validateUpload(meta || {});
+  }, sessionToken);
+}
+
+function apiCommitCompensationBulkUpload(uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.commitUpload(uploadId);
+  }, sessionToken);
+}

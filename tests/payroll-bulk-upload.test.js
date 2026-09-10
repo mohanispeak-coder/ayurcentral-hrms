@@ -33,7 +33,8 @@ var employee = read('employee/EmployeeClient.html');
 var payslip = read('payroll/PayslipService.gs');
 
 check('bulk-service-exists', /var PayrollBulkService/.test(bulk));
-check('bulk-xlsx-only', /CSV is not supported/.test(bulk) && /Only \.xlsx files are supported/.test(bulk));
+check('bulk-csv-xlsx', /Upload a \.csv or \.xlsx file/.test(bulk));
+check('bulk-attendance-v2', /TEMPLATE_VERSION_ = '2'/.test(bulk) && /days_present/.test(bulk) && /deriveAttendanceDays_/.test(bulk));
 check('bulk-no-auto-create', /cannot be created from Excel/.test(bulk));
 check('bulk-duplicate-reject', /Duplicate employee row/.test(bulk));
 check('bulk-stage-cache', /STAGE_PREFIX_/.test(bulk) && /validateUpload/.test(bulk) && /commitUpload/.test(bulk));
@@ -53,7 +54,9 @@ check('api-bulk-commit', /apiCommitPayrollUpload/.test(api));
 
 check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
-check('excel-upload-ui', /apiValidatePayrollUpload/.test(client) && /Download Excel Template/.test(client));
+check('excel-upload-ui', /apiValidatePayrollUpload/.test(client) && /Upload Excel\/CSV/.test(client));
+check('comp-bulk-ui', /apiValidateCompensationBulkUpload/.test(client) && /comp-bulk-details/.test(client));
+check('comp-bulk-api', /apiDownloadCompensationBulkTemplate/.test(api) && /apiCommitCompensationBulkUpload/.test(api));
 check('generate-all-payslips', /Generate all payslips/i.test(client));
 check('no-run-id-in-previous-payrolls', !/paintPreviousPayrolls_[\s\S]{0,600}payroll_run_id/.test(client));
 check('compensation-delegates', /renderCompensation[\s\S]*openSalaryStructure: true/.test(client));

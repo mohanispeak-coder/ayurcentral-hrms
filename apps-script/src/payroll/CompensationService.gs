@@ -2,6 +2,17 @@
  * Salary structures and components (compensation history on SalaryStructures).
  */
 var CompensationService = (function () {
+  /** Default salary lines — all required on save/bulk; empty numeric cells become 0. */
+  var REQUIRED_COMPONENT_SPECS_ = [
+    { component_code: 'BASIC', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'FIXED', sort_order: 1 },
+    { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', sort_order: 2 },
+    { component_code: 'SA', component_name: 'Special allowance', component_kind: 'EARNING', calc_method: 'FIXED', sort_order: 3 },
+    { component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION', calc_method: 'PERCENT_OF_BASIC', sort_order: 4 },
+    { component_code: 'ESI', component_name: 'ESI', component_kind: 'DEDUCTION', calc_method: 'FIXED', sort_order: 5 },
+    { component_code: 'PT', component_name: 'Professional tax', component_kind: 'DEDUCTION', calc_method: 'FIXED', sort_order: 6 },
+    { component_code: 'EMPLOYER_PF', component_name: 'Employer PF', component_kind: 'EMPLOYER', calc_method: 'PERCENT_OF_BASIC', sort_order: 7 }
+  ];
+
   function requirePayrollAdmin_() {
     return PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
   }
@@ -233,9 +244,12 @@ var CompensationService = (function () {
         status: HRMS.STRUCTURE_STATUS.CURRENT
       });
 
+      if (!toDate_(payload.effective_from)) {
+        throw validationError_('effective_from is required.');
+      }
       var components = normalizeComponents_(payload.components);
-      var effectiveFrom = toDate_(payload.effective_from) || new Date();
-      var ctc = parseCtc_(payload.ctc_monthly);
+      var effectiveFrom = toDate_(payload.effective_from);
+      var ctc = parseCtc_(payload.ctc_monthly, true);
       var now = new Date();
 
       if (current) {
@@ -303,7 +317,7 @@ var CompensationService = (function () {
       }
 
       var components = normalizeComponents_(payload.components);
-      var ctc = parseCtc_(payload.ctc_monthly);
+      var ctc = parseCtc_(payload.ctc_monthly, true);
       var now = new Date();
       var newId = DbService.generateId('SS');
       var oldTo = addDays_(newFrom, -1);
@@ -424,20 +438,80 @@ var CompensationService = (function () {
     };
   }
 
-  function parseCtc_(value) {
-    if (value === '' || value == null) return '';
+  function parseCtc_(value, required) {
+    if (value === '' || value == null) {
+      if (required) return 0;
+      return '';
+    }
     var n = Number(value);
     if (!isFinite(n)) throw validationError_('ctc_monthly must be a number.');
     if (n < 0) throw validationError_('ctc_monthly cannot be negative.');
     return n;
   }
 
+  function parseNumericOrZero_(value, field) {
+    if (value === '' || value == null) return 0;
+    var n = Number(value);
+    if (!isFinite(n)) throw validationError_(field + ' must be a valid number.');
+    if (n < 0) throw validationError_(field + ' cannot be negative.');
+    return n;
+  }
+
+  function buildComponentsFromBulkRow_(row) {
+    row = row || {};
+    return REQUIRED_COMPONENT_SPECS_.map(function (spec) {
+      var code = spec.component_code;
+      var bulkKey = {
+        BASIC: 'basic',
+        HRA: 'hra_percent',
+        SA: 'sa',
+        PF: 'pf_percent',
+        ESI: 'esi',
+        PT: 'pt',
+        EMPLOYER_PF: 'employer_pf_percent'
+      }[code];
+      var out = {
+        component_code: code,
+        component_name: spec.component_name,
+        component_kind: spec.component_kind,
+        calc_method: spec.calc_method,
+        sort_order: spec.sort_order
+      };
+      if (spec.calc_method === HRMS.CALC_METHOD.FIXED) {
+        out.amount = parseNumericOrZero_(row[bulkKey], bulkKey);
+        out.percent = '';
+      } else {
+        out.amount = '';
+        out.percent = parseNumericOrZero_(row[bulkKey], bulkKey);
+      }
+      return out;
+    });
+  }
+
+  function ensureRequiredComponents_(list) {
+    var byCode = {};
+    (list || []).forEach(function (c) {
+      var code = String(c.component_code || '').trim().toUpperCase();
+      if (code) byCode[code] = c;
+    });
+    return REQUIRED_COMPONENT_SPECS_.map(function (spec) {
+      var existing = byCode[spec.component_code];
+      if (existing) return existing;
+      return {
+        component_code: spec.component_code,
+        component_name: spec.component_name,
+        component_kind: spec.component_kind,
+        calc_method: spec.calc_method,
+        amount: spec.calc_method === HRMS.CALC_METHOD.FIXED ? 0 : '',
+        percent: spec.calc_method === HRMS.CALC_METHOD.PERCENT_OF_BASIC ? 0 : '',
+        sort_order: spec.sort_order
+      };
+    });
+  }
+
   function normalizeComponents_(list) {
-    if (!list || !list.length) {
-      throw validationError_('At least one salary component is required.');
-    }
+    list = ensureRequiredComponents_(list);
     var out = [];
-    var hasBasic = false;
     for (var i = 0; i < list.length; i++) {
       var c = list[i];
       var code = String(c.component_code || '').trim().toUpperCase();
@@ -451,19 +525,15 @@ var CompensationService = (function () {
       if (method !== HRMS.CALC_METHOD.FIXED && method !== HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
         throw validationError_('calc_method must be FIXED or PERCENT_OF_BASIC.');
       }
-      if (code === 'BASIC') hasBasic = true;
       out.push({
         component_code: code,
         component_name: name,
         component_kind: kind,
         calc_method: method,
-        amount: method === HRMS.CALC_METHOD.FIXED ? Number(c.amount) || 0 : '',
-        percent: method === HRMS.CALC_METHOD.PERCENT_OF_BASIC ? Number(c.percent) || 0 : '',
+        amount: method === HRMS.CALC_METHOD.FIXED ? parseNumericOrZero_(c.amount, code + ' amount') : '',
+        percent: method === HRMS.CALC_METHOD.PERCENT_OF_BASIC ? parseNumericOrZero_(c.percent, code + ' percent') : '',
         sort_order: Number(c.sort_order != null ? c.sort_order : i + 1)
       });
-    }
-    if (!hasBasic) {
-      throw validationError_('A BASIC earning component is required.');
     }
     return out;
   }
@@ -511,6 +581,10 @@ var CompensationService = (function () {
     explainStructureGap: explainStructureGap,
     saveStructure: saveStructure,
     reviseStructure: reviseStructure,
-    getEmployee: getEmployee_
+    getEmployee: getEmployee_,
+    REQUIRED_COMPONENT_SPECS: REQUIRED_COMPONENT_SPECS_,
+    buildComponentsFromBulkRow: buildComponentsFromBulkRow_,
+    ensureRequiredComponents: ensureRequiredComponents_,
+    parseNumericOrZero: parseNumericOrZero_
   };
 })();

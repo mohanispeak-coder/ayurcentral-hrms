@@ -69,6 +69,7 @@
     var homeState = { runs: [], year: 0, month: 0, overview: null, salaryStructureOpen: false, prevPayrollsOpen: false };
     var compState = { employeeId: '', bundle: null, employees: [], _loaded: false, _editorLoadedFor: '' };
     var bulkState = { preview: null };
+    var compBulkState = { preview: null, selectedFile: null };
 
     function shellInv_(keys) {
       if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(keys);
@@ -593,12 +594,12 @@
 
     function paintPayrollDataSection_(detail, editable) {
       var html = '<div class="card" id="payroll-data-card"><h2>Payroll data</h2>' +
-        '<p class="page-lede">Download the Excel template, upload filled data, or enter days manually in the table below.</p>';
+        '<p class="page-lede">Download the template, upload attendance (present / absent / leave), or enter days manually. Paid and LOP days are calculated by payroll.</p>';
       if (editable) {
         html += '<div class="primary-next">' +
-          '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download Excel Template</button>' +
-          '<button type="button" class="btn btn-secondary" id="btn-upload-excel">Upload Excel</button>' +
-          '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">' +
+          '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download template</button>' +
+          '<button type="button" class="btn btn-secondary" id="btn-upload-excel">Upload Excel/CSV</button>' +
+          '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">' +
           '</div>';
         html += '<div id="pr-upload-preview">' + paintBulkPreview_(bulkState.preview) + '</div>';
         html += '<div id="pr-upload-feedback" class="action-feedback hidden" role="status"></div>';
@@ -882,7 +883,19 @@
         return '<option value="' + escapeHtml(e.employee_id) + '"' + (e.employee_id === selected ? ' selected' : '') + '>' +
           escapeHtml(e.employee_id + ' — ' + e.display_name) + escapeHtml(miss) + '</option>';
       }).join('');
-      mount.innerHTML = '<div class="page-toolbar"><div class="filters">' +
+      mount.innerHTML = '<details class="card section-details" id="comp-bulk-details" style="margin-bottom:12px"><summary>Bulk upload salary structures</summary>' +
+        '<p class="page-lede">All component columns are required; empty numeric cells use 0. Excel or CSV.</p>' +
+        '<div class="primary-next" style="flex-wrap:wrap">' +
+        '<button type="button" class="btn btn-secondary" id="btn-comp-dl-template">Download template</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-comp-dl-csv">Download CSV</button>' +
+        '<label class="btn btn-secondary" for="comp-bulk-file">Choose file</label>' +
+        '<input type="file" id="comp-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv">' +
+        '<button type="button" class="btn btn-primary" id="btn-comp-validate" disabled>Validate upload</button>' +
+        '</div>' +
+        '<p id="comp-bulk-file-name" class="hint">No file selected.</p>' +
+        '<div id="comp-bulk-preview"></div>' +
+        '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></details>' +
+        '<div class="page-toolbar"><div class="filters">' +
         '<label class="form-label" style="margin:0">Search <input class="form-input search-input" id="comp-search" placeholder="Name or ID" value="' + escapeHtml(compState.empQuery || '') + '"></label>' +
         '<label class="form-check"><input type="checkbox" id="comp-active"' + (onlyActive ? ' checked' : '') + '> Active only</label>' +
         '<label class="form-check"><input type="checkbox" id="comp-missing"' + (onlyMissing ? ' checked' : '') + '> Missing structure</label>' +
@@ -909,6 +922,7 @@
         compState._editorLoadedFor = '';
         loadCompEditor_(this.value);
       });
+      bindCompBulkUpload_(page);
       if (selected && selected !== compState._editorLoadedFor) {
         compState._editorLoadedFor = selected;
         loadCompEditor_(selected);
@@ -1007,8 +1021,8 @@
           fileInput.value = '';
           if (!file) return;
           var name = (file.name || '').toLowerCase();
-          if (name.indexOf('.xlsx') < 0) {
-            showToast('Only .xlsx files are supported.', 'error');
+          if (name.indexOf('.xlsx') < 0 && name.indexOf('.xls') < 0 && name.indexOf('.csv') < 0) {
+            showToast('Upload an Excel (.xlsx) or CSV file.', 'error');
             return;
           }
           if (!setButtonLoading(uploadBtn, 'Validating...')) return;
@@ -1043,6 +1057,93 @@
       bindBulkPreviewActions_(runId, page);
     }
 
+    function readFileBase64_(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read file.')); };
+        reader.onload = function () {
+          resolve({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(reader.result || '').split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function paintCompBulkPreview_(preview) {
+      var el = $('comp-bulk-preview');
+      if (!el || !preview) return;
+      var html = '<div class="upload-preview"><p><strong>' + preview.validCount + '</strong> ready · ' +
+        '<strong>' + preview.errorCount + '</strong> need attention</p>';
+      if (preview.errors && preview.errors.length) {
+        html += '<ul class="problem-list">';
+        preview.errors.forEach(function (err) {
+          var msgs = (err.messages || []).map(function (m) { return m.message || m; }).join('; ');
+          html += '<li>Row ' + escapeHtml(String(err.rowNumber)) + ' (' + escapeHtml(err.employee_id || '') + '): ' +
+            escapeHtml(msgs) + '</li>';
+        });
+        html += '</ul>';
+      }
+      if (preview.validCount > 0) {
+        html += '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-comp-commit">Confirm import (' +
+          preview.validCount + ')</button></div>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+      var commitBtn = $('btn-comp-commit');
+      if (commitBtn) commitBtn.addEventListener('click', function () {
+        if (!compBulkState.preview || !compBulkState.preview.uploadId) return;
+        if (!setButtonLoading(commitBtn, 'Importing...')) return;
+        rpc('apiCommitCompensationBulkUpload', [compBulkState.preview.uploadId], commitBtn, 'Importing...', $('comp-bulk-feedback'))
+          .then(function (result) {
+            compBulkState.preview = null;
+            compBulkState.selectedFile = null;
+            invalidateCompensation_();
+            compState._loaded = false;
+            showToast('Imported ' + (result.savedCount || 0) + ' salary structure(s).', 'success');
+            ensureCompEmployeesLoaded_(document.querySelector('.payroll-page'), App.getState().navSeq);
+          })
+          .catch(function () { restoreButton(commitBtn); });
+      });
+    }
+
+    function bindCompBulkUpload_(page) {
+      compBulkState.selectedFile = null;
+      var fileInput = $('comp-bulk-file');
+      var validateBtn = $('btn-comp-validate');
+      if (fileInput) fileInput.addEventListener('change', function () {
+        compBulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if (validateBtn) validateBtn.disabled = !compBulkState.selectedFile;
+        var nameEl = $('comp-bulk-file-name');
+        if (nameEl) nameEl.textContent = compBulkState.selectedFile ? compBulkState.selectedFile.name : 'No file selected.';
+        compBulkState.preview = null;
+        var prev = $('comp-bulk-preview');
+        if (prev) prev.innerHTML = '';
+      });
+      var dlBtn = $('btn-comp-dl-template');
+      if (dlBtn) dlBtn.addEventListener('click', function () {
+        rpc('apiDownloadCompensationBulkTemplate', [], dlBtn, 'Downloading...', $('comp-bulk-feedback'))
+          .then(downloadBlob).catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
+      });
+      var dlCsv = $('btn-comp-dl-csv');
+      if (dlCsv) dlCsv.addEventListener('click', function () {
+        rpc('apiDownloadCompensationBulkCsvTemplate', [], dlCsv, 'Downloading...', $('comp-bulk-feedback'))
+          .then(downloadBlob).catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
+      });
+      if (validateBtn) validateBtn.addEventListener('click', function () {
+        if (!compBulkState.selectedFile) return;
+        if (!setButtonLoading(validateBtn, 'Validating...')) return;
+        readFileBase64_(compBulkState.selectedFile).then(function (meta) {
+          return rpc('apiValidateCompensationBulkUpload', [meta], validateBtn, 'Validating...', $('comp-bulk-feedback'));
+        }).then(function (preview) {
+          compBulkState.preview = preview;
+          paintCompBulkPreview_(preview);
+        }).catch(function () { restoreButton(validateBtn); });
+      });
+    }
+
     function bindBulkPreviewActions_(runId, page) {
       var commitBtn = $('btn-commit-upload');
       if (commitBtn) commitBtn.addEventListener('click', function () {
@@ -1058,7 +1159,7 @@
             payrollState.detail = nextDetail;
             homeState.overview = nextDetail;
             paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
-            showToast('Imported payroll data from Excel.', 'success');
+            showToast('Imported payroll data.', 'success');
           })
           .catch(function (err) {
             restoreButton(commitBtn);
@@ -1768,7 +1869,7 @@
         }
       }
       html += '</div>' +
-        '<p class="hint">A BASIC earning line is required. Percent of basic is calculated from BASIC. TDS is not a structure line — enter it on the payroll run. After saving, recalculate payroll to clear finalize blockers.</p></div>';
+        '<p class="hint">All standard components (Basic, HRA, SA, PF, ESI, PT, Employer PF) are required — use 0 where not applicable. TDS is entered on the payroll run. After saving, recalculate payroll to clear finalize blockers.</p></div>';
 
       html += '<div class="card"><h2>History</h2>';
       if (!history.length) {

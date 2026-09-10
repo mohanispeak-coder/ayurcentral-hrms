@@ -173,6 +173,119 @@
       return callServer.apply(null, [fn].concat(args || []).concat([opts]));
     }
 
+    var atsBulkState = { jobs: { file: null, preview: null }, candidates: { file: null, preview: null } };
+
+    function readAtsFileBase64_(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read file.')); };
+        reader.onload = function () {
+          resolve({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(reader.result || '').split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function downloadAtsBlob_(file) {
+      if (!file || !file.base64) throw new Error('File was empty.');
+      var bytes = atob(file.base64);
+      var arr = new Uint8Array(bytes.length);
+      for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      var blob = new Blob([arr], { type: file.mimeType || 'application/octet-stream' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = file.fileName || 'download';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function paintAtsBulkPreview_(kind, preview) {
+      var el = $(kind === 'jobs' ? 'ats-jobs-bulk-preview' : 'ats-candidates-bulk-preview');
+      if (!el || !preview) return;
+      var html = '<div class="upload-preview"><p><strong>' + preview.validCount + '</strong> ready · ' +
+        '<strong>' + preview.errorCount + '</strong> need attention</p>';
+      if (preview.errors && preview.errors.length) {
+        html += '<ul class="problem-list">';
+        preview.errors.forEach(function (err) {
+          var msgs = (err.messages || []).map(function (m) { return m.message || m; }).join('; ');
+          html += '<li>Row ' + escapeHtml(String(err.rowNumber)) + ': ' + escapeHtml(msgs) + '</li>';
+        });
+        html += '</ul>';
+      }
+      if (preview.validCount > 0) {
+        html += '<button type="button" class="btn btn-primary" id="ats-bulk-commit-' + kind + '">Confirm import (' +
+          preview.validCount + ')</button>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+      var commitBtn = $('ats-bulk-commit-' + kind);
+      if (!commitBtn) return;
+      commitBtn.addEventListener('click', function () {
+        var state = atsBulkState[kind];
+        if (!state.preview || !state.preview.uploadId) return;
+        var api = kind === 'jobs' ? 'apiAtsCommitJobsBulkUpload' : 'apiAtsCommitCandidatesBulkUpload';
+        rpc(api, [state.preview.uploadId], commitBtn, 'Importing…').then(function (result) {
+          state.preview = null;
+          state.file = null;
+          invalidateAtsPipeline_();
+          showToast('Imported ' + (result.createdCount || 0) + ' row(s).', 'success');
+          if (state.onCommitted) state.onCommitted();
+        });
+      });
+    }
+
+    function bindAtsBulkPanel_(kind, opts) {
+      opts = opts || {};
+      var state = atsBulkState[kind];
+      state.onCommitted = opts.onCommitted || null;
+      var fileInput = $(kind === 'jobs' ? 'ats-jobs-bulk-file' : 'ats-candidates-bulk-file');
+      var validateBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-validate' : 'ats-candidates-bulk-validate');
+      if (fileInput) fileInput.addEventListener('change', function () {
+        state.file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if (validateBtn) validateBtn.disabled = !state.file;
+        var nameEl = $(kind === 'jobs' ? 'ats-jobs-bulk-file-name' : 'ats-candidates-bulk-file-name');
+        if (nameEl) nameEl.textContent = state.file ? state.file.name : 'No file selected.';
+        state.preview = null;
+        var prev = $(kind === 'jobs' ? 'ats-jobs-bulk-preview' : 'ats-candidates-bulk-preview');
+        if (prev) prev.innerHTML = '';
+      });
+      var dlBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-template' : 'ats-candidates-bulk-template');
+      if (dlBtn) dlBtn.addEventListener('click', function () {
+        var api = kind === 'jobs' ? 'apiAtsDownloadJobsBulkTemplate' : 'apiAtsDownloadCandidatesBulkTemplate';
+        rpc(api, [], dlBtn, 'Downloading…').then(downloadAtsBlob_).catch(function (err) {
+          showToast((err && err.message) || 'Download failed', 'error');
+        });
+      });
+      if (validateBtn) validateBtn.addEventListener('click', function () {
+        if (!state.file) return;
+        var api = kind === 'jobs' ? 'apiAtsValidateJobsBulkUpload' : 'apiAtsValidateCandidatesBulkUpload';
+        readAtsFileBase64_(state.file).then(function (meta) {
+          return rpc(api, [meta], validateBtn, 'Validating…');
+        }).then(function (preview) {
+          state.preview = preview;
+          paintAtsBulkPreview_(kind, preview);
+        });
+      });
+    }
+
+    function atsBulkPanelHtml_(kind, title, hint) {
+      return '<details class="card section-details" style="margin-bottom:12px"><summary>' + escapeHtml(title) + '</summary>' +
+        '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
+        '<div class="primary-next" style="flex-wrap:wrap">' +
+        '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-template">Download template</button>' +
+        '<label class="btn btn-secondary" for="ats-' + kind + '-bulk-file">Choose Excel/CSV</label>' +
+        '<input type="file" id="ats-' + kind + '-bulk-file" accept=".xlsx,.xls,.csv" style="display:none">' +
+        '<button type="button" class="btn btn-primary" id="ats-' + kind + '-bulk-validate" disabled>Validate upload</button>' +
+        '</div>' +
+        '<p id="ats-' + kind + '-bulk-file-name" class="hint">No file selected.</p>' +
+        '<div id="ats-' + kind + '-bulk-preview"></div></details>';
+    }
+
     function ensureMeta(force) {
       if (atsMeta.loaded && !force) return Promise.resolve(atsMeta.boot);
       return rpc('apiAtsGetBootstrap', []).then(function (data) {
@@ -302,6 +415,7 @@
       var restoreJobs = App.consumeModuleViewRestore && App.consumeModuleViewRestore('ats-jobs') && atsView.jobs;
       var keepRefresh = !!(App.isModuleRefresh && App.isModuleRefresh('ats-jobs') && atsView.jobs);
       page.innerHTML = header('Jobs', 'Requisitions you can work. Publish a job to get a public application link.', actions) +
+        (canManage() ? atsBulkPanelHtml_('jobs', 'Bulk upload jobs', 'Duplicate job titles in one file are rejected. Set publish to YES to publish immediately.') : '') +
         '<div class="page-toolbar"><div class="filters">' +
           '<div class="form-group"><label class="form-label" for="ats-job-q">Search</label>' +
           '<input class="form-input search-input" id="ats-job-q" type="search" placeholder="Title, department, ID"></div>' +
@@ -314,6 +428,7 @@
           '<th>Job ID</th><th>Title</th><th>Department</th><th>Location</th><th>Status</th><th class="num">Apps</th><th>Manager</th>' +
         '</tr></thead><tbody id="ats-job-body"></tbody></table></div>';
       if ($('ats-new-job')) $('ats-new-job').addEventListener('click', function () { App.navigate('ats-job-new'); });
+      if (canManage()) bindAtsBulkPanel_('jobs', { onCommitted: function () { load(); } });
       if (atsView.jobQuery) {
         if ($('ats-job-q')) $('ats-job-q').value = atsView.jobQuery.q || '';
         if ($('ats-job-status')) $('ats-job-status').value = atsView.jobQuery.status || '';
@@ -673,6 +788,9 @@
       var restoreCands = App.consumeModuleViewRestore && App.consumeModuleViewRestore('ats-candidates') && atsView.candidates;
       var keepRefresh = !!(App.isModuleRefresh && App.isModuleRefresh('ats-candidates') && atsView.candidates);
       page.innerHTML = header('Candidates', 'Applicant records are separate from employees. Applying never creates an employee ID.', '') +
+        (canManage() ? atsBulkPanelHtml_('candidates', 'Bulk upload candidates',
+          'source is required (' + (atsMeta.sources.length ? atsMeta.sources.join(', ') : 'see template') +
+          '). Duplicate applications and existing applications are rejected.') : '') +
         '<div class="page-toolbar"><div class="filters"><div class="form-group">' +
           '<label class="form-label" for="ats-cand-q">Search</label>' +
           '<input class="form-input search-input" id="ats-cand-q" type="search" placeholder="Name, email, candidate ID">' +
@@ -681,6 +799,9 @@
           '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Location</th><th>Apps</th><th>Resume</th>' +
         '</tr></thead><tbody id="ats-cand-body"></tbody></table></div>';
       if (atsView.candQuery && $('ats-cand-q')) $('ats-cand-q').value = atsView.candQuery;
+      if (canManage()) {
+        ensureMeta().then(function () { bindAtsBulkPanel_('candidates', { onCommitted: function () { loadCands(); } }); });
+      }
       function paintCandRows(rows) {
         var body = $('ats-cand-body');
         var wrap = $('ats-cand-wrap');
@@ -706,7 +827,7 @@
           });
         });
       }
-      function load() {
+      var loadCands = function load() {
         atsView.candQuery = $('ats-cand-q') ? $('ats-cand-q').value : '';
         rpc('apiAtsListCandidates', [{ q: atsView.candQuery }]).then(function (rows) {
           if (!stillOn(seq, 'ats-candidates')) return;
