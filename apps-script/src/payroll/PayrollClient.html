@@ -17,8 +17,7 @@
 .payroll-page .kpi-hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px; }
 .payroll-page .period-selects { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .payroll-page th.num, .payroll-page td.num { text-align: right; }
-.payroll-page .section-details { margin-top: 12px; }
-.payroll-page .section-details > summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.payroll-page .section-details.collapsible-section > summary { padding: 8px 0; }
 .payroll-page .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 @media (max-width: 640px) { .payroll-page .check-grid { grid-template-columns: 1fr; } }
 .payroll-page .check-box { padding: 12px; border-radius: 8px; border: 1px solid var(--color-border); }
@@ -31,8 +30,7 @@
 .payroll-page .finalize-summary dt { font-weight: 600; margin-top: 8px; }
 .payroll-page .finalize-summary dd { margin: 2px 0 0; }
 .payroll-page .hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-.payroll-page .bulk-upload-card { margin-top: 12px; margin-bottom: 16px; border: 1px solid var(--color-primary); background: var(--color-bg-elevated); }
-.payroll-page .bulk-upload-card h2 { margin-top: 0; }
+.payroll-page .bulk-upload-card.collapsible-section { margin-top: 12px; }
 .payroll-page .bulk-steps { margin: 8px 0 12px 20px; color: var(--color-text-muted); font-size: 0.875rem; }
 .payroll-page .workflow-steps { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; }
 .payroll-page .workflow-step { flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); font-size: 0.875rem; }
@@ -643,8 +641,9 @@
 
     function paintCompensationBulkCard_() {
       var previewHtml = compBulkState.preview ? paintCompBulkPreview_(compBulkState.preview) : '';
-      return '<details class="card section-details" id="comp-bulk-card"><summary>Bulk upload salary structures (one-time setup)</summary>' +
-        '<p class="page-lede">Set up or update salary structures in bulk — do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
+      return '<details class="card section-details collapsible-section bulk-upload-card" id="comp-bulk-card">' +
+        '<summary>Bulk upload salary structures (one-time setup)</summary>' +
+        '<div class="collapsible-section-body"><p class="page-lede">Set up or update salary structures in bulk — do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
         '<ol class="bulk-steps"><li>Download Excel or CSV template</li><li>Choose file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
         '<div class="primary-next" style="flex-wrap:wrap">' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-template">Download Excel template</button>' +
@@ -655,11 +654,13 @@
         '</div>' +
         '<p id="comp-bulk-file-name" class="hint">No file selected.</p>' +
         '<div id="comp-bulk-preview">' + previewHtml + '</div>' +
-        '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></details>';
+        '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></div></details>';
     }
 
     function paintAttendanceBulkSection_(runId, editable, hasRun) {
-      var html = '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Step 1 — Attendance bulk upload</h2>' +
+      var html = '<details class="card collapsible-section bulk-upload-card" id="attendance-bulk-card">' +
+        '<summary>Step 1 — Attendance bulk upload</summary>' +
+        '<div class="collapsible-section-body">' +
         '<p class="page-lede">Enter attendance before calculating payroll. Upload working days plus days_present, days_absent, and leave_days — payroll derives paid_days and lop_days.</p>' +
         '<ol class="bulk-steps"><li>Download template (all active employees with ID, name, email — re-download after adding staff)</li><li>Choose Excel/CSV file</li><li>Review validation results</li><li>Confirm import</li></ol>';
       html += '<div class="primary-next" style="flex-wrap:wrap">';
@@ -679,7 +680,7 @@
         html += '<p id="pr-bulk-file-name" class="hint">No file selected.</p>';
       }
       html += '<div id="pr-upload-preview">' + paintBulkPreview_(bulkState.preview) + '</div>' +
-        '<div id="pr-upload-feedback" class="action-feedback hidden" role="status"></div></div>';
+        '<div id="pr-upload-feedback" class="action-feedback hidden" role="status"></div></div></details>';
       return html;
     }
 
@@ -798,7 +799,7 @@
     function paintSalaryStructureCollapsible_() {
       var open = homeState.salaryStructureOpen ? ' open' : '';
       var mountInner = open ? spinner('Loading employees…') : '';
-      return '<details class="card section-details" id="salary-structure-details"' + open + '>' +
+      return '<details class="card section-details collapsible-section" id="salary-structure-details"' + open + '>' +
         '<summary>Salary structure</summary>' +
         '<p class="page-lede">Search an employee to view or edit their salary structure. Revisions create history.</p>' +
         '<div id="salary-structure-mount">' + mountInner + '</div></details>';
@@ -847,7 +848,7 @@
           (Number(r.period_year) !== Number(currentYear) || Number(r.period_month) !== Number(currentMonth));
       });
       var openAttr = homeState.prevPayrollsOpen ? ' open' : '';
-      var html = '<details class="card section-details" id="prev-payrolls"' + openAttr + '><summary>Previous payrolls</summary>';
+      var html = '<details class="card section-details collapsible-section" id="prev-payrolls"' + openAttr + '><summary>Previous payrolls</summary>';
       if (!others.length) {
         html += '<div class="empty-state"><p>No other finalized payrolls yet.</p></div>';
       } else {
@@ -865,7 +866,7 @@
     }
 
     function paintAdvancedSection_(detail, editable, st) {
-      return '<details class="card section-details" id="payroll-advanced-details">' +
+      return '<details class="card section-details collapsible-section" id="payroll-advanced-details">' +
         '<summary>More actions</summary>' +
         '<div class="advanced-actions" id="payroll-advanced">' +
         (editable ? '<button type="button" class="btn btn-secondary" id="btn-refresh-lop">Refresh leave LOP</button> ' +

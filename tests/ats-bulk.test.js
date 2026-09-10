@@ -42,6 +42,10 @@ check('ui-jobs-bulk', /ats-jobs-bulk-template/.test(client));
 check('ui-cands-bulk', /ats-candidates-bulk-template/.test(client) && /ats-candidates-bulk-validate/.test(client));
 check('candidates-source-column', /formatSource_/.test(client) && /<th>Source<\/th>/.test(client));
 check('bulk-upload-card', /bulk-upload-card/.test(client));
+check('collapsible-bulk-panels', /collapsible-section/.test(client) &&
+  /atsBulkPanelHtml_[\s\S]*<details class="card collapsible-section bulk-upload-card"/.test(client) &&
+  /atsBulkPanelHtml_[\s\S]*<summary>/.test(client) &&
+  /collapsible-section-body/.test(client));
 
 function loadBulk() {
   var ctx = {

@@ -1205,11 +1205,47 @@ body:has(> .careers-shell) {
 }
 .skeleton-card[aria-busy="true"] { pointer-events: none; }
 
+/* Collapsible sections — click summary to expand (chevron points right when closed, down when open) */
+.collapsible-section { margin-top: 12px; }
+.collapsible-section > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.35;
+  padding: 4px 0 8px;
+  user-select: none;
+}
+.collapsible-section > summary::-webkit-details-marker { display: none; }
+.collapsible-section > summary::marker { content: ''; }
+.collapsible-section > summary::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid currentColor;
+  opacity: 0.65;
+  transition: transform 180ms ease;
+}
+.collapsible-section[open] > summary::before { transform: rotate(90deg); }
+.collapsible-section.bulk-upload-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-bg-elevated);
+}
+.collapsible-section .collapsible-section-body { padding-top: 2px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .collapsible-section > summary::before { transition: none !important; }
 }
 </style>

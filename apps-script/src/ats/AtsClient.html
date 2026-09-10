@@ -17,8 +17,7 @@
 .ats-page .activity-meta { color: var(--color-text-muted); font-size: var(--text-xs); margin-top: 4px; }
 .ats-page .prose { white-space: pre-wrap; color: var(--color-text); line-height: 1.5; }
 .ats-page .muted { color: var(--color-text-muted); }
-.ats-page .bulk-upload-card { margin-bottom: 20px; }
-.ats-page .bulk-upload-card h2 { margin-top: 0; }
+.ats-page .bulk-upload-card.collapsible-section { margin-bottom: 20px; }
 .ats-page .bulk-steps { margin: 8px 0 12px 20px; color: var(--color-text-muted); font-size: 0.875rem; }
 .ats-page .candidates-table-section { margin-top: 4px; }
 .ats-page .candidates-table-section .section-title { font-size: 1rem; font-weight: 600; }
@@ -285,7 +284,9 @@
     }
 
     function atsBulkPanelHtml_(kind, title, hint) {
-      return '<div class="card bulk-upload-card" id="ats-' + kind + '-bulk-card"><h2>' + escapeHtml(title) + '</h2>' +
+      return '<details class="card collapsible-section bulk-upload-card" id="ats-' + kind + '-bulk-card">' +
+        '<summary>' + escapeHtml(title) + '</summary>' +
+        '<div class="collapsible-section-body">' +
         '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
         '<ol class="bulk-steps"><li>Download template</li><li>Choose Excel/CSV file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
         '<div class="primary-next" style="flex-wrap:wrap">' +
@@ -295,7 +296,7 @@
         '<button type="button" class="btn btn-primary" id="ats-' + kind + '-bulk-validate" disabled>Validate upload</button>' +
         '</div>' +
         '<p id="ats-' + kind + '-bulk-file-name" class="hint">No file selected.</p>' +
-        '<div id="ats-' + kind + '-bulk-preview"></div></div>';
+        '<div id="ats-' + kind + '-bulk-preview"></div></div></details>';
     }
 
     function ensureMeta(force) {
