@@ -39,8 +39,11 @@ var Bulk = loadPayrollBulk();
 var bulkSrc = fs.readFileSync(path.join(payrollDir, 'PayrollBulkService.gs'), 'utf8');
 var client = fs.readFileSync(path.join(payrollDir, 'PayrollClient.html'), 'utf8');
 
-check('template-v2', /TEMPLATE_VERSION_ = '2'/.test(bulkSrc));
+check('template-v3', /TEMPLATE_VERSION_ = '3'/.test(bulkSrc));
 check('attendance-headers', /days_present/.test(bulkSrc) && /days_absent/.test(bulkSrc) && /leave_days/.test(bulkSrc));
+check('employee-info-columns', /display_name/.test(bulkSrc) && /work_email/.test(bulkSrc) && /listTemplateEmployees_/.test(bulkSrc));
+check('download-not-blocked-locked', /assertRunExists_/.test(bulkSrc) && /buildTemplateSpreadsheet_[\s\S]*assertRunExists_/.test(bulkSrc));
+check('bind-download-always', /bindBulkUpload_[\s\S]*btn-dl-template[\s\S]*if \(!editable\)/.test(client));
 check('derive-attendance', /deriveAttendanceDays_/.test(bulkSrc));
 check('csv-supported', /Upload a \.csv or \.xlsx file/.test(bulkSrc));
 check('no-csv-reject', !/CSV is not supported/.test(bulkSrc));

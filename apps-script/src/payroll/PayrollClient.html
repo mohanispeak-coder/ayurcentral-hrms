@@ -622,7 +622,7 @@
     function paintAttendanceBulkSection_(runId, editable, hasRun) {
       var html = '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Attendance bulk upload</h2>' +
         '<p class="page-lede">Upload working days plus days_present, days_absent, and leave_days. Payroll calculates paid_days and lop_days automatically.</p>' +
-        '<ol class="bulk-steps"><li>Download template (includes employees in this payroll run)</li><li>Choose Excel/CSV file</li><li>Review validation results</li><li>Confirm import</li></ol>';
+        '<ol class="bulk-steps"><li>Download template (all active employees with ID, name, email — re-download after adding staff)</li><li>Choose Excel/CSV file</li><li>Review validation results</li><li>Confirm import</li></ol>';
       html += '<div class="primary-next" style="flex-wrap:wrap">';
       if (hasRun && runId) {
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
@@ -1027,7 +1027,6 @@
     }
 
     function bindBulkUpload_(runId, page, detail, editable) {
-      if (!editable) return;
       var dlBtn = $('btn-dl-template');
       if (dlBtn) dlBtn.addEventListener('click', function () {
         if (!setButtonLoading(dlBtn, 'Downloading...')) return;
@@ -1037,12 +1036,18 @@
               throw { message: 'Template file was empty. Check Apps Script Drive permissions.' };
             }
             downloadBlob(file);
-            showToast('Attendance template downloaded.', 'success');
+            showToast('Attendance template downloaded (' + (file.fileName || 'file') + ').', 'success');
           })
           .catch(function (err) {
             showToast((err && err.message) || 'Download failed', 'error');
-          });
+          })
+          .then(function () { restoreButton(dlBtn); });
       });
+
+      if (!editable) {
+        bindBulkPreviewActions_(runId, page);
+        return;
+      }
 
       var fileInput = $('pr-bulk-file');
       if (fileInput) fileInput.addEventListener('change', function () {

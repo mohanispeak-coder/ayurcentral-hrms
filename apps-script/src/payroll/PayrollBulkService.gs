@@ -6,13 +6,13 @@
 var HRMS = HRMS || {};
 
 var PayrollBulkService = (function () {
-  var TEMPLATE_VERSION_ = '2';
+  var TEMPLATE_VERSION_ = '3';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_payroll_upload_';
 
   var HEADERS_ = [
-    'employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days',
+    'employee_id', 'display_name', 'work_email', 'working_days', 'days_present', 'days_absent', 'leave_days',
     'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount', 'remarks'
   ];
 
@@ -20,6 +20,8 @@ var PayrollBulkService = (function () {
 
   var SAMPLE_ROW_ = {
     employee_id: 'SAPL-0001',
+    display_name: 'Ravi Kumar',
+    work_email: 'ravi.kumar@example.com',
     working_days: '26',
     days_present: '24',
     days_absent: '1',
@@ -45,18 +47,45 @@ var PayrollBulkService = (function () {
     return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API → Add (identifier: Drive), then redeploy.';
   }
 
+  function employeeDisplayName_(emp) {
+    if (!emp) return '';
+    var name = trim_(emp.display_name);
+    if (name) return name;
+    name = trim_((emp.first_name || '') + ' ' + (emp.last_name || ''));
+    return name || trim_(emp.employee_id);
+  }
+
+  /** All active employees in HRMS — refreshed on every template download. */
+  function listTemplateEmployees_() {
+    var rows = typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll
+      ? EmployeeRepository.listAll()
+      : DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
+    return (rows || []).filter(function (e) {
+      return String(e.status || '').toUpperCase() !== 'INACTIVE';
+    }).sort(function (a, b) {
+      return String(a.employee_id).localeCompare(String(b.employee_id));
+    });
+  }
+
   function templateDataRows_(runId) {
     PayrollService.syncEligibleEmployees(runId);
     var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-    inputs.sort(function (a, b) {
-      return String(a.employee_id).localeCompare(String(b.employee_id));
+    var inputMap = {};
+    inputs.forEach(function (inp) {
+      inputMap[inp.employee_id] = inp;
     });
-    if (!inputs.length) {
+
+    var employees = listTemplateEmployees_();
+    if (!employees.length) {
       return [HEADERS_.map(function (h) { return SAMPLE_ROW_[h] || ''; })];
     }
-    return inputs.map(function (inp) {
+
+    return employees.map(function (emp) {
+      var inp = inputMap[emp.employee_id] || {};
       return HEADERS_.map(function (h) {
-        if (h === 'employee_id') return inp.employee_id;
+        if (h === 'employee_id') return emp.employee_id;
+        if (h === 'display_name') return employeeDisplayName_(emp);
+        if (h === 'work_email') return trim_(emp.work_email);
         if (h === 'remarks') return inp.remarks || '';
         if (inp[h] != null && inp[h] !== '') return String(inp[h]);
         return SAMPLE_ROW_[h] || '';
@@ -159,9 +188,14 @@ var PayrollBulkService = (function () {
     }
   }
 
-  function assertRunEditable_(runId) {
+  function assertRunExists_(runId) {
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
     if (!run) throw notFoundError_('Payroll run not found.');
+    return run;
+  }
+
+  function assertRunEditable_(runId) {
+    var run = assertRunExists_(runId);
     var st = String(run.status).toUpperCase();
     if (st === HRMS.PAYROLL_STATUS.LOCKED) {
       throw conflictError_('Payroll is finalized. Create a correction run to import new data.');
@@ -182,7 +216,7 @@ var PayrollBulkService = (function () {
   }
 
   function buildTemplateSpreadsheet_(runId) {
-    assertRunEditable_(runId);
+    assertRunExists_(runId);
     var ss;
     var fileId;
     try {
@@ -194,8 +228,10 @@ var PayrollBulkService = (function () {
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Upload .xlsx or .csv. Do not change header names on the PayrollInputs sheet.'],
+        ['Template lists all ACTIVE employees (ID, name, email). Re-download after adding employees.'],
+        ['display_name and work_email are for reference only — do not edit employee_id.'],
         ['employee_id must match an active employee eligible for this payroll month.'],
-        ['New employees are added to the payroll run automatically when you open payroll or upload.'],
+        ['New employees are synced into the payroll run when you download the template or upload.'],
         ['Employees are never created from Excel. Duplicate employee rows are rejected.'],
         ['working_days must be greater than 0. days_present, days_absent, and leave_days default to 0 if empty.'],
         ['paid_days = days_present + leave_days. lop_days = working_days - paid_days (calculated by payroll).'],
@@ -235,6 +271,7 @@ var PayrollBulkService = (function () {
     PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
     runId = trim_(runId);
     if (!runId) throw validationError_('runId is required.');
+    assertRunExists_(runId);
     var blob;
     var fileName = 'HRMS_Payroll_Upload_Template.xlsx';
     var mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -584,6 +621,7 @@ var PayrollBulkService = (function () {
     validateUpload: validateUpload,
     commitUpload: commitUpload,
     HEADERS: HEADERS_,
+    listTemplateEmployees: listTemplateEmployees_,
     deriveAttendanceDays: deriveAttendanceDays_,
     parseCsvRows: parseCsvRows_,
     parseNumberField: parseNumberField_
