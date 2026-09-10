@@ -77,6 +77,15 @@ check('pms-dashboard-accepts-session', /function getDashboard\(optSession\)/.tes
 check('ats-bootstrap-includes-dashboard', /dashboard:\s*dashboard/.test(ats));
 check('ats-client-reuses-bootstrap-dash', /boot && boot\.dashboard/.test(atsClient));
 
+const empClient = read('employee/EmployeeClient.html');
+check('emp-search-debounce', /scheduleDirectoryLoad_\(300\)/.test(empClient));
+check('emp-search-inflight', /listLoadBusy_/.test(empClient) && /listLoadAgain_/.test(empClient));
+check('emp-search-stale', /listLoadGen_/.test(empClient) && /gen !== listLoadGen_/.test(empClient));
+check('emp-profile-lazy-extras', /function ensureProfileExtras_/.test(empClient));
+check('emp-profile-no-eager-leave', !/bindProfileSaves\(emp\);\s*var restoring/.test(empClient) &&
+  /ensureProfileExtras_\(emp, savedTab\)/.test(empClient));
+check('emp-profile-tab-loads-extras', /ensureProfileExtras_\(emp, id\)/.test(empClient));
+
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
   process.exit(1);

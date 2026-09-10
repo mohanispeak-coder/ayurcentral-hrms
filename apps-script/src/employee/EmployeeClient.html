@@ -21,6 +21,10 @@
     var flashBannerHtml = App.flashBannerHtml;
 
     var listState = { page: 1, team: false };
+    var listSearchTimer_ = null;
+    var listLoadGen_ = 0;
+    var listLoadBusy_ = false;
+    var listLoadAgain_ = false;
     var empViewCache = {
       lists: {},
       profiles: {},
@@ -232,9 +236,18 @@
         el.addEventListener(id === 'emp-search' ? 'input' : 'change', function () {
           if (listState.ignoreFilter) return;
           listState.page = 1;
-          loadList();
+          if (id === 'emp-search') scheduleDirectoryLoad_(300);
+          else loadList();
         });
       });
+    }
+
+    function scheduleDirectoryLoad_(delayMs) {
+      if (listSearchTimer_) clearTimeout(listSearchTimer_);
+      listSearchTimer_ = setTimeout(function () {
+        listSearchTimer_ = null;
+        loadList();
+      }, delayMs);
     }
 
     function applyListQuery_(query) {
@@ -286,6 +299,12 @@
     }
 
     function loadList() {
+      if (listLoadBusy_) {
+        listLoadAgain_ = true;
+        return;
+      }
+      listLoadBusy_ = true;
+      var gen = ++listLoadGen_;
       var seq = App.getState().navSeq;
       var route = listRoute();
       var key = listCacheKey(listState.team);
@@ -302,9 +321,16 @@
         pageSize: 25
       };
       var fn = listState.team ? 'apiGetMyTeam' : 'apiGetEmployeeDirectory';
+      function finishLoad_() {
+        listLoadBusy_ = false;
+        if (listLoadAgain_) {
+          listLoadAgain_ = false;
+          loadList();
+        }
+      }
       callServer(fn, query)
         .then(function (data) {
-          if (!stillOn(seq, route) || !$('emp-table-body')) return;
+          if (gen !== listLoadGen_ || !stillOn(seq, route) || !$('emp-table-body')) return;
           empViewCache.lists[key] = { data: data, query: query };
           fillSelectOptions('emp-filter-dept', data.departments || [], query.department);
           fillSelectOptions('emp-filter-loc', data.locations || [], query.location);
@@ -312,7 +338,7 @@
           markView_(key);
         })
         .catch(function (err) {
-          if (!stillOn(seq, route)) return;
+          if (gen !== listLoadGen_ || !stillOn(seq, route)) return;
           failRefresh_();
           var body = $('emp-table-body');
           if (body) {
@@ -322,7 +348,8 @@
               paintErr(cell, err.message || 'Failed to load directory', function () { loadList(); });
             }
           }
-        });
+        })
+        .then(finishLoad_, finishLoad_);
     }
 
     function fillSelectOptions(id, values, selected) {
@@ -632,14 +659,14 @@
       html += '<div class="tab-panel' + (savedTab === 'employment' ? ' active' : '') + '" data-panel="employment">' + employmentPanel(emp) + '</div>';
       if (emp.can_view_payroll_ids) html += '<div class="tab-panel' + (savedTab === 'payroll' ? ' active' : '') + '" data-panel="payroll">' + payrollPanel(emp) + '</div>';
       if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
-        html += '<div class="tab-panel" data-panel="leave"><div id="leave-summary">' +
+        html += '<div class="tab-panel' + (savedTab === 'leave' ? ' active' : '') + '" data-panel="leave"><div id="leave-summary">' +
           '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
           '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
       }
-      if (emp.can_view_documents) html += '<div class="tab-panel" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
-      if (emp.can_view_payslips) html += '<div class="tab-panel" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
+      if (emp.can_view_documents) html += '<div class="tab-panel' + (savedTab === 'documents' ? ' active' : '') + '" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
+      if (emp.can_view_payslips) html += '<div class="tab-panel' + (savedTab === 'payslips' ? ' active' : '') + '" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
       if (emp.can_manage_app_access) {
-        html += '<div class="tab-panel" data-panel="app-access"><div id="app-access-panel">' +
+        html += '<div class="tab-panel' + (savedTab === 'app-access' ? ' active' : '') + '" data-panel="app-access"><div id="app-access-panel">' +
           loadingHtml('Loading app access…') + '</div></div>';
       }
       page.innerHTML = html;
@@ -654,6 +681,7 @@
           var ps = page.querySelectorAll('.tab-panel');
           for (var a = 0; a < ts.length; a++) ts[a].classList.toggle('active', ts[a].getAttribute('data-tab') === id);
           for (var b = 0; b < ps.length; b++) ps[b].classList.toggle('active', ps[b].getAttribute('data-panel') === id);
+          ensureProfileExtras_(emp, id);
         });
       }
 
@@ -662,11 +690,20 @@
       if ($('btn-activate')) $('btn-activate').addEventListener('click', function () { setStatus(emp.employee_id, 'ACTIVE'); });
 
       bindProfileSaves(emp);
-      var restoring = !!(opts && opts.restore);
-      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) loadLeave(emp.employee_id, restoring);
-      if (emp.can_view_documents) loadDocs(emp, null, restoring);
-      if (emp.can_view_payslips) loadPayslips(emp.employee_id, restoring);
-      if (emp.can_manage_app_access) loadAppAccess(emp, restoring);
+      ensureProfileExtras_(emp, savedTab);
+    }
+
+    function ensureProfileExtras_(emp, tab) {
+      if (!emp || !tab) return;
+      if (tab === 'leave' && emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+        loadLeave(emp.employee_id);
+      } else if (tab === 'documents' && emp.can_view_documents) {
+        loadDocs(emp, null);
+      } else if (tab === 'payslips' && emp.can_view_payslips) {
+        loadPayslips(emp.employee_id);
+      } else if (tab === 'app-access' && emp.can_manage_app_access) {
+        loadAppAccess(emp);
+      }
     }
 
     function dl(items) {
@@ -877,21 +914,24 @@
 
     function loadLeave(employeeId, restore) {
       var el = $('leave-summary');
-      var extras = empViewCache.extras[employeeId];
-      if (restore && extras && extras.leave && el) {
+      var extras = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+      if (extras.leave && el) {
         paintLeaveSummary_(el, extras.leave);
         return;
       }
+      if (extras.leaveLoading) return;
+      extras.leaveLoading = true;
       var seq = App.getState().navSeq;
       callServer('apiGetEmployeeLeaveSummary', employeeId)
         .then(function (rows) {
+          extras.leaveLoading = false;
           var panel = $('leave-summary');
           if (!panel || seq !== App.getState().navSeq) return;
-          empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
-          empViewCache.extras[employeeId].leave = rows;
+          extras.leave = rows;
           paintLeaveSummary_(panel, rows);
         })
         .catch(function (err) {
+          extras.leaveLoading = false;
           var panel = $('leave-summary');
           paintErr(panel, err.message || 'Leave summary unavailable', function () { loadLeave(employeeId); });
         });
@@ -899,15 +939,17 @@
 
     function loadDocs(emp, notice, restore) {
       var seq = App.getState().navSeq;
-      var extra = empViewCache.extras[emp.employee_id];
-      var req = (restore && extra && extra.docs)
+      var extra = empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
+      if (extra.docsLoading && !notice) return;
+      extra.docsLoading = true;
+      var req = (extra.docs && !notice)
         ? Promise.resolve(extra.docs)
         : callServer('apiGetEmployeeDocuments', emp.employee_id);
       req.then(function (rows) {
+          extra.docsLoading = false;
           var el = $('docs-panel');
           if (!el || seq !== App.getState().navSeq) return;
-          empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
-          empViewCache.extras[emp.employee_id].docs = rows;
+          extra.docs = rows;
           var html = '';
           if (emp.can_upload_documents) {
             html += '<div id="doc-upload-form" class="doc-upload-form">' +
@@ -939,6 +981,7 @@
           if (notice && setActionFeedback) setActionFeedback($('emp-upload-feedback') || el, notice, 'success');
         })
         .catch(function (err) {
+          extra.docsLoading = false;
           var el = $('docs-panel');
           paintErr(el, err.message || 'Documents unavailable', function () { loadDocs(emp); });
         });
@@ -946,15 +989,17 @@
 
     function loadPayslips(employeeId, restore) {
       var seq = App.getState().navSeq;
-      var extra = empViewCache.extras[employeeId];
-      var req = (restore && extra && extra.payslips)
+      var extra = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+      if (extra.payslipsLoading) return;
+      extra.payslipsLoading = true;
+      var req = extra.payslips
         ? Promise.resolve(extra.payslips)
         : callServer('apiGetEmployeePayslips', employeeId);
       req.then(function (rows) {
+          extra.payslipsLoading = false;
           var el = $('payslip-panel');
           if (!el || seq !== App.getState().navSeq) return;
-          empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
-          empViewCache.extras[employeeId].payslips = rows;
+          extra.payslips = rows;
           if (!rows.length) {
             el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No payslips available yet.</p></div>';
             return;
@@ -971,6 +1016,7 @@
           bindDownloads(el);
         })
         .catch(function (err) {
+          extra.payslipsLoading = false;
           var el = $('payslip-panel');
           paintErr(el, err.message || 'Payslips unavailable', function () { loadPayslips(employeeId); });
         });
@@ -1196,15 +1242,17 @@
 
     function loadAppAccess(emp, restore) {
       var seq = App.getState().navSeq;
-      var extra = empViewCache.extras[emp.employee_id];
-      var req = (restore && extra && extra.appAccess)
+      var extra = empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
+      if (extra.appAccessLoading) return;
+      extra.appAccessLoading = true;
+      var req = extra.appAccess
         ? Promise.resolve(extra.appAccess)
         : callServer('apiGetEmployeeAppAccess', emp.employee_id);
       req.then(function (data) {
+        extra.appAccessLoading = false;
         var el = $('app-access-panel');
         if (!el || seq !== App.getState().navSeq) return;
-        empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
-        empViewCache.extras[emp.employee_id].appAccess = data;
+        extra.appAccess = data;
         if (!data.has_login) {
           el.innerHTML = '<div class="empty-state empty-state-inline">' +
             '<p class="empty-state-title">No login yet</p>' +
@@ -1231,6 +1279,7 @@
           });
         }
       }).catch(function (err) {
+        extra.appAccessLoading = false;
         var el = $('app-access-panel');
         paintErr(el, err.message || 'App access unavailable', function () { loadAppAccess(emp); });
       });
