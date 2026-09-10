@@ -52,7 +52,9 @@ check('csv-supported', /Upload a \.csv or \.xlsx file/.test(bulkSrc));
 check('no-csv-reject', !/CSV is not supported/.test(bulkSrc));
 check('ui-csv-accept', /accept="\.xlsx,\.xls,\.csv/.test(client));
 check('ui-validate-button', /btn-pr-bulk-validate/.test(client) && /Validate upload/.test(client));
-check('ui-return-draft-attendance', /btn-attendance-return-draft/.test(client) && /canReturnPayrollToDraft_/.test(client));
+check('ui-return-draft-attendance', /btn-attendance-gate-draft/.test(client) && /canReturnPayrollToDraft_/.test(client));
+check('ui-attendance-gate-banner', /paintAttendanceGateBanner_/.test(client) && /PAYROLL_CLIENT_BUILD_/.test(client));
+check('ui-can-upload-attendance', /canUploadAttendance_/.test(client));
 
 var derived = Bulk.deriveAttendanceDays({ days_present: '24', days_absent: '1', leave_days: '1' }, 26);
 check('paid-days-formula', derived.paid_days === 25 && derived.lop_days === 1);

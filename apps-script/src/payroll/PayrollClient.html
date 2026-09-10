@@ -37,10 +37,14 @@
 .payroll-page .workflow-step strong { display: block; margin-bottom: 4px; }
 .payroll-page .workflow-step.done { border-color: var(--color-success-border); background: var(--color-success-bg); }
 .payroll-page .workflow-step.current { border-color: var(--color-primary); background: var(--color-primary-muted); }
+.payroll-page .payroll-attendance-gate { margin-bottom: 12px; }
+.payroll-page .payroll-ui-build { font-size: 0.7rem; color: var(--color-text-muted); text-align: right; margin-top: 16px; }
 </style>
 <script>
 (function () {
   'use strict';
+
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.10-attendance-v2';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -281,8 +285,36 @@
       return s || '—';
     }
 
+    function canUploadAttendance_(st) {
+      st = statusKey(st);
+      return st === 'DRAFT' || st === 'CALCULATED';
+    }
+
     function canReturnPayrollToDraft_(st) {
+      st = statusKey(st);
       return st === 'UNDER_REVIEW' || st === 'CALCULATED' || (st === 'APPROVED' && isAdmin());
+    }
+
+    function paintAttendanceGateBanner_(st) {
+      st = statusKey(st);
+      if (canUploadAttendance_(st)) {
+        return '<div class="card payroll-attendance-gate alert-success" style="padding:12px 16px">' +
+          '<strong>Attendance upload is ready.</strong> Expand <em>Step 1 — Attendance bulk upload</em> below: ' +
+          'download template → fill working days &amp; attendance → choose file → validate → confirm import → calculate payroll.</div>';
+      }
+      var html = '<div class="card payroll-attendance-gate" style="padding:14px 16px;border:2px solid var(--color-warning-border);background:var(--color-warning-bg)">' +
+        '<p style="margin:0 0 10px"><strong>Attendance upload is locked.</strong> This payroll is <strong>' +
+        escapeHtml(statusLabel(st)) + '</strong>. Click below to unlock, then upload attendance and calculate.</p>' +
+        '<div class="primary-next" style="margin:0">';
+      if (canReturnPayrollToDraft_(st)) {
+        html += '<button type="button" class="btn btn-primary" id="btn-attendance-gate-draft">Return to Draft &amp; enable upload</button>';
+      } else if (st === 'LOCKED') {
+        html += '<button type="button" class="btn btn-primary" id="btn-attendance-gate-correction">Create correction run</button>';
+      } else {
+        html += '<span class="hint">Ask an admin to return this payroll to Draft.</span>';
+      }
+      html += '</div></div>';
+      return html;
     }
 
     function badgePayroll(status) {
@@ -583,8 +615,9 @@
           escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
         html += paintCompensationBulkCard_();
       } else if (detail) {
+        html += paintAttendanceGateBanner_(st);
         html += paintPayrollWorkflowCard_(detail, st);
-        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true, st);
+        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st);
         html += paintPayrollDataSection_(detail, editable);
         html += paintCalculateSection_(detail, editable, st);
         html += paintPayrollCheck_(detail);
@@ -594,10 +627,12 @@
         html += paintFinalizeSection_(detail, st);
         html += paintPayslipsCard_(detail);
       } else {
-        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true, st);
+        html += paintAttendanceGateBanner_(st);
+        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st);
         html += '<div class="card"><p class="page-lede">Loading payroll data…</p></div>';
       }
 
+      html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p>';
       html += paintPreviousPayrolls_(runs, year, month);
       if (detail && currentRun) html += paintAdvancedSection_(detail, editable, st);
       html += '</div>';
@@ -661,9 +696,9 @@
         '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></div></details>';
     }
 
-    function paintAttendanceBulkSection_(runId, editable, hasRun, st) {
+    function paintAttendanceBulkSection_(runId, uploadAllowed, hasRun, st) {
       st = statusKey(st);
-      var openAttr = (bulkState.preview || !editable) ? ' open' : '';
+      var openAttr = (bulkState.preview || !uploadAllowed) ? ' open' : '';
       var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
@@ -673,26 +708,17 @@
       if (hasRun && runId) {
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
       }
-      if (editable && hasRun && runId) {
+      if (uploadAllowed && hasRun && runId) {
         html += '<label class="btn btn-secondary" for="pr-bulk-file">Choose Excel/CSV file</label>' +
           '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">' +
           '<button type="button" class="btn btn-primary" id="btn-pr-bulk-validate" disabled>Validate upload</button>';
       } else if (!hasRun || !runId) {
         html += '<span class="hint">Start payroll for this month to enable attendance upload.</span>';
       } else {
-        html += '</div><div class="alert alert-warning" style="margin-top:12px">Upload is disabled because this payroll is <strong>' +
-          escapeHtml(statusLabel(st)) + '</strong>. You need <strong>Draft</strong> status to upload attendance and calculate.</div>';
-        html += '<div class="primary-next" style="flex-wrap:wrap">';
-        if (canReturnPayrollToDraft_(st)) {
-          html += '<button type="button" class="btn btn-primary" id="btn-attendance-return-draft">Return to Draft</button>';
-        } else if (st === 'LOCKED') {
-          html += '<button type="button" class="btn btn-primary" id="btn-attendance-correction">Create correction run</button>';
-        } else {
-          html += '<span class="hint">Ask an admin to return this payroll to Draft.</span>';
-        }
+        html += '<span class="hint">Use the yellow banner above — <strong>Return to Draft</strong> — to unlock upload.</span>';
       }
       html += '</div>';
-      if (editable && hasRun) {
+      if (uploadAllowed && hasRun) {
         html += '<p id="pr-bulk-file-name" class="hint">No file selected.</p>';
       }
       html += '<div id="pr-upload-preview">' + paintBulkPreview_(bulkState.preview) + '</div>' +
@@ -1414,6 +1440,7 @@
       }
       bindReturnToDraft_($('btn-draft'));
       bindReturnToDraft_($('btn-attendance-return-draft'));
+      bindReturnToDraft_($('btn-attendance-gate-draft'));
 
       function bindCorrectionRun_(btn) {
         if (!btn) return;
@@ -1439,6 +1466,7 @@
         });
       }
       bindCorrectionRun_($('btn-attendance-correction'));
+      bindCorrectionRun_($('btn-attendance-gate-correction'));
 
       var lop = $('btn-refresh-lop');
       if (lop) lop.addEventListener('click', function () {
