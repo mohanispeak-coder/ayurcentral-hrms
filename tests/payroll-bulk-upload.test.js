@@ -54,8 +54,9 @@ check('api-bulk-commit', /apiCommitPayrollUpload/.test(api));
 
 check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
-check('excel-upload-ui', /apiValidatePayrollUpload/.test(client) && /Upload Excel\/CSV/.test(client));
-check('comp-bulk-ui', /apiValidateCompensationBulkUpload/.test(client) && /comp-bulk-details/.test(client));
+check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client));
+check('comp-bulk-ui', /apiValidateCompensationBulkUpload/.test(client) && /comp-bulk-card/.test(client) &&
+  /Validate upload/.test(client));
 check('comp-bulk-api', /apiDownloadCompensationBulkTemplate/.test(api) && /apiCommitCompensationBulkUpload/.test(api));
 check('generate-all-payslips', /Generate all payslips/i.test(client));
 check('no-run-id-in-previous-payrolls', !/paintPreviousPayrolls_[\s\S]{0,600}payroll_run_id/.test(client));

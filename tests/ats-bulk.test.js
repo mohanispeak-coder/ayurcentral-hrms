@@ -40,6 +40,8 @@ check('api-jobs', /apiAtsValidateJobsBulkUpload/.test(api));
 check('api-candidates', /apiAtsValidateCandidatesBulkUpload/.test(api));
 check('ui-jobs-bulk', /ats-jobs-bulk-template/.test(client));
 check('ui-cands-bulk', /ats-candidates-bulk-template/.test(client) && /ats-candidates-bulk-validate/.test(client));
+check('candidates-source-column', /formatSource_/.test(client) && /<th>Source<\/th>/.test(client));
+check('bulk-upload-card', /bulk-upload-card/.test(client));
 
 function loadBulk() {
   var ctx = {

@@ -17,6 +17,11 @@
 .ats-page .activity-meta { color: var(--color-text-muted); font-size: var(--text-xs); margin-top: 4px; }
 .ats-page .prose { white-space: pre-wrap; color: var(--color-text); line-height: 1.5; }
 .ats-page .muted { color: var(--color-text-muted); }
+.ats-page .bulk-upload-card { margin-bottom: 20px; }
+.ats-page .bulk-upload-card h2 { margin-top: 0; }
+.ats-page .bulk-steps { margin: 8px 0 12px 20px; color: var(--color-text-muted); font-size: 0.875rem; }
+.ats-page .candidates-table-section { margin-top: 4px; }
+.ats-page .candidates-table-section .section-title { font-size: 1rem; font-weight: 600; }
 </style>
 <script>
 (function () {
@@ -273,17 +278,24 @@
       });
     }
 
+    function formatSource_(value) {
+      var s = String(value || '').trim();
+      if (!s) return '—';
+      return s.replace(/_/g, ' ');
+    }
+
     function atsBulkPanelHtml_(kind, title, hint) {
-      return '<details class="card section-details" style="margin-bottom:12px"><summary>' + escapeHtml(title) + '</summary>' +
+      return '<div class="card bulk-upload-card" id="ats-' + kind + '-bulk-card"><h2>' + escapeHtml(title) + '</h2>' +
         '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
+        '<ol class="bulk-steps"><li>Download template</li><li>Choose Excel/CSV file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
         '<div class="primary-next" style="flex-wrap:wrap">' +
         '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-template">Download template</button>' +
-        '<label class="btn btn-secondary" for="ats-' + kind + '-bulk-file">Choose Excel/CSV</label>' +
+        '<label class="btn btn-secondary" for="ats-' + kind + '-bulk-file">Choose Excel/CSV file</label>' +
         '<input type="file" id="ats-' + kind + '-bulk-file" accept=".xlsx,.xls,.csv" style="display:none">' +
         '<button type="button" class="btn btn-primary" id="ats-' + kind + '-bulk-validate" disabled>Validate upload</button>' +
         '</div>' +
         '<p id="ats-' + kind + '-bulk-file-name" class="hint">No file selected.</p>' +
-        '<div id="ats-' + kind + '-bulk-preview"></div></details>';
+        '<div id="ats-' + kind + '-bulk-preview"></div></div>';
     }
 
     function ensureMeta(force) {
@@ -795,9 +807,10 @@
           '<label class="form-label" for="ats-cand-q">Search</label>' +
           '<input class="form-input search-input" id="ats-cand-q" type="search" placeholder="Name, email, candidate ID">' +
         '</div></div></div>' +
+        '<div class="candidates-table-section"><h2 class="section-title" style="margin:0 0 12px">All candidates</h2>' +
         '<div class="table-wrap" id="ats-cand-wrap"><table class="data-table"><thead><tr>' +
-          '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Location</th><th>Apps</th><th>Resume</th>' +
-        '</tr></thead><tbody id="ats-cand-body"></tbody></table></div>';
+          '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Source</th><th>Location</th><th>Apps</th><th>Resume</th>' +
+        '</tr></thead><tbody id="ats-cand-body"></tbody></table></div></div>';
       if (atsView.candQuery && $('ats-cand-q')) $('ats-cand-q').value = atsView.candQuery;
       if (canManage()) {
         ensureMeta().then(function () { bindAtsBulkPanel_('candidates', { onCommitted: function () { loadCands(); } }); });
@@ -808,7 +821,7 @@
         if (!body) return;
         if (wrap) wrap.removeAttribute('aria-busy');
         if (!rows || !rows.length) {
-          body.innerHTML = '<tr class="table-empty-row"><td colspan="7">No candidates yet.</td></tr>';
+          body.innerHTML = '<tr class="table-empty-row"><td colspan="8">No candidates yet.</td></tr>';
           return;
         }
         body.innerHTML = rows.map(function (c) {
@@ -817,6 +830,7 @@
             '<td>' + escapeHtml(c.full_name) + '</td>' +
             '<td>' + escapeHtml(c.email) + '</td>' +
             '<td>' + escapeHtml(c.phone || '—') + '</td>' +
+            '<td>' + escapeHtml(formatSource_(c.source)) + '</td>' +
             '<td>' + escapeHtml(c.location || '—') + '</td>' +
             '<td>' + escapeHtml(String(c.application_count || 0)) + '</td>' +
             '<td>' + (c.has_resume ? 'Yes' : '—') + '</td></tr>';
@@ -849,7 +863,7 @@
         var body = $('ats-cand-body');
         var wrap = $('ats-cand-wrap');
         if (wrap) wrap.setAttribute('aria-busy', 'true');
-        if (body) body.innerHTML = skRows(7, 7);
+        if (body) body.innerHTML = skRows(8, 8);
         load();
       }
     }
