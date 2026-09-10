@@ -76,6 +76,16 @@ env.setRootId('stale-root');
 check('recreates stale root', env.DriveService.getRootFolder().getId() === 'new-root');
 check('setup created root', env.wasCreated());
 
+var manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'appsscript.json'), 'utf8'));
+var driveSvc = (manifest.dependencies && manifest.dependencies.enabledAdvancedServices || [])
+  .find(function (s) { return s.serviceId === 'drive' && s.userSymbol === 'Drive'; });
+if (!driveSvc || driveSvc.version !== 'v3') {
+  fails++;
+  console.error('FAIL appsscript drive api manifest');
+} else {
+  console.log('PASS appsscript drive api manifest');
+}
+
 if (fails) {
   console.error(fails + ' test(s) failed');
   process.exit(1);
