@@ -39,7 +39,10 @@ var Bulk = loadPayrollBulk();
 var bulkSrc = fs.readFileSync(path.join(payrollDir, 'PayrollBulkService.gs'), 'utf8');
 var client = fs.readFileSync(path.join(payrollDir, 'PayrollClient.html'), 'utf8');
 
-check('template-v3', /TEMPLATE_VERSION_ = '3'/.test(bulkSrc));
+check('template-v4', /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
+check('template-blank-attendance', /blankTemplateRow_/.test(bulkSrc) &&
+  /return '';\s*\n\s*\}\);\s*\n\s*\}\);/.test(bulkSrc) &&
+  !/working_days: '26'/.test(bulkSrc));
 check('attendance-headers', /days_present/.test(bulkSrc) && /days_absent/.test(bulkSrc) && /leave_days/.test(bulkSrc));
 check('employee-info-columns', /display_name/.test(bulkSrc) && /work_email/.test(bulkSrc) && /listTemplateEmployees_/.test(bulkSrc));
 check('download-not-blocked-locked', /assertRunExists_/.test(bulkSrc) && /buildTemplateSpreadsheet_[\s\S]*assertRunExists_/.test(bulkSrc));
@@ -49,6 +52,7 @@ check('csv-supported', /Upload a \.csv or \.xlsx file/.test(bulkSrc));
 check('no-csv-reject', !/CSV is not supported/.test(bulkSrc));
 check('ui-csv-accept', /accept="\.xlsx,\.xls,\.csv/.test(client));
 check('ui-validate-button', /btn-pr-bulk-validate/.test(client) && /Validate upload/.test(client));
+check('ui-return-draft-attendance', /btn-attendance-return-draft/.test(client) && /canReturnPayrollToDraft_/.test(client));
 
 var derived = Bulk.deriveAttendanceDays({ days_present: '24', days_absent: '1', leave_days: '1' }, 26);
 check('paid-days-formula', derived.paid_days === 25 && derived.lop_days === 1);

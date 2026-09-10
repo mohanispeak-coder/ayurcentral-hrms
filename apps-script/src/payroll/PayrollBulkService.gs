@@ -6,7 +6,7 @@
 var HRMS = HRMS || {};
 
 var PayrollBulkService = (function () {
-  var TEMPLATE_VERSION_ = '3';
+  var TEMPLATE_VERSION_ = '4';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_payroll_upload_';
@@ -17,22 +17,6 @@ var PayrollBulkService = (function () {
   ];
 
   var REQUIRED_HEADERS_ = ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days'];
-
-  var SAMPLE_ROW_ = {
-    employee_id: 'SAPL-0001',
-    display_name: 'Ravi Kumar',
-    work_email: 'ravi.kumar@example.com',
-    working_days: '26',
-    days_present: '24',
-    days_absent: '1',
-    leave_days: '1',
-    bonus: '0',
-    incentive: '0',
-    other_earnings: '0',
-    other_deductions: '0',
-    tds_amount: '0',
-    remarks: ''
-  };
 
   function trim_(v) {
     if (v === null || v === undefined) return '';
@@ -67,28 +51,24 @@ var PayrollBulkService = (function () {
     });
   }
 
+  function blankTemplateRow_() {
+    return HEADERS_.map(function () { return ''; });
+  }
+
+  /** Pre-fill only employee_id, display_name, work_email — attendance and amounts stay blank. */
   function templateDataRows_(runId) {
     PayrollService.syncEligibleEmployees(runId);
-    var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-    var inputMap = {};
-    inputs.forEach(function (inp) {
-      inputMap[inp.employee_id] = inp;
-    });
-
     var employees = listTemplateEmployees_();
     if (!employees.length) {
-      return [HEADERS_.map(function (h) { return SAMPLE_ROW_[h] || ''; })];
+      return [blankTemplateRow_()];
     }
 
     return employees.map(function (emp) {
-      var inp = inputMap[emp.employee_id] || {};
       return HEADERS_.map(function (h) {
         if (h === 'employee_id') return emp.employee_id;
         if (h === 'display_name') return employeeDisplayName_(emp);
         if (h === 'work_email') return trim_(emp.work_email);
-        if (h === 'remarks') return inp.remarks || '';
-        if (inp[h] != null && inp[h] !== '') return String(inp[h]);
-        return SAMPLE_ROW_[h] || '';
+        return '';
       });
     });
   }
@@ -104,7 +84,7 @@ var PayrollBulkService = (function () {
     var headerLabels = HEADERS_.map(function (h) {
       return REQUIRED_HEADERS_.indexOf(h) >= 0 ? h + '*' : h;
     });
-    var dataRows = runId ? templateDataRows_(runId) : [HEADERS_.map(function (h) { return SAMPLE_ROW_[h] || ''; })];
+    var dataRows = runId ? templateDataRows_(runId) : [blankTemplateRow_()];
     var lines = [headerLabels.map(esc).join(',')];
     dataRows.forEach(function (row) {
       lines.push(row.map(esc).join(','));
@@ -228,8 +208,9 @@ var PayrollBulkService = (function () {
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Upload .xlsx or .csv. Do not change header names on the PayrollInputs sheet.'],
-        ['Template lists all ACTIVE employees (ID, name, email). Re-download after adding employees.'],
+        ['Template lists all ACTIVE employees with ID, name, and email only. Attendance columns are blank.'],
         ['display_name and work_email are for reference only — do not edit employee_id.'],
+        ['Fill working_days, days_present, days_absent, and leave_days before upload.'],
         ['employee_id must match an active employee eligible for this payroll month.'],
         ['New employees are synced into the payroll run when you download the template or upload.'],
         ['Employees are never created from Excel. Duplicate employee rows are rejected.'],

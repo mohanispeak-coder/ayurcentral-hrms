@@ -281,6 +281,10 @@
       return s || '—';
     }
 
+    function canReturnPayrollToDraft_(st) {
+      return st === 'UNDER_REVIEW' || st === 'CALCULATED' || (st === 'APPROVED' && isAdmin());
+    }
+
     function badgePayroll(status) {
       var s = statusKey(status);
       var cls = 'badge status-badge badge-' + s.toLowerCase();
@@ -580,7 +584,7 @@
         html += paintCompensationBulkCard_();
       } else if (detail) {
         html += paintPayrollWorkflowCard_(detail, st);
-        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true);
+        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true, st);
         html += paintPayrollDataSection_(detail, editable);
         html += paintCalculateSection_(detail, editable, st);
         html += paintPayrollCheck_(detail);
@@ -590,7 +594,7 @@
         html += paintFinalizeSection_(detail, st);
         html += paintPayslipsCard_(detail);
       } else {
-        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true);
+        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, editable, true, st);
         html += '<div class="card"><p class="page-lede">Loading payroll data…</p></div>';
       }
 
@@ -657,13 +661,14 @@
         '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></div></details>';
     }
 
-    function paintAttendanceBulkSection_(runId, editable, hasRun) {
-      var openAttr = bulkState.preview ? ' open' : '';
+    function paintAttendanceBulkSection_(runId, editable, hasRun, st) {
+      st = statusKey(st);
+      var openAttr = (bulkState.preview || !editable) ? ' open' : '';
       var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
-        '<p class="page-lede">Enter attendance before calculating payroll. Upload working days plus days_present, days_absent, and leave_days — payroll derives paid_days and lop_days.</p>' +
-        '<ol class="bulk-steps"><li>Download template (all active employees with ID, name, email — re-download after adding staff)</li><li>Choose Excel/CSV file</li><li>Review validation results</li><li>Confirm import</li></ol>';
+        '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only — you fill working days and attendance columns, then upload.</p>' +
+        '<ol class="bulk-steps"><li>Download template (ID, name, email pre-filled — attendance columns blank)</li><li>Fill working_days, days_present, days_absent, leave_days</li><li>Choose Excel/CSV file and validate</li><li>Confirm import</li></ol>';
       html += '<div class="primary-next" style="flex-wrap:wrap">';
       if (hasRun && runId) {
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
@@ -675,7 +680,16 @@
       } else if (!hasRun || !runId) {
         html += '<span class="hint">Start payroll for this month to enable attendance upload.</span>';
       } else {
-        html += '<span class="hint">Attendance upload is available while payroll is Draft or Calculated. Return to draft if needed.</span>';
+        html += '</div><div class="alert alert-warning" style="margin-top:12px">Upload is disabled because this payroll is <strong>' +
+          escapeHtml(statusLabel(st)) + '</strong>. You need <strong>Draft</strong> status to upload attendance and calculate.</div>';
+        html += '<div class="primary-next" style="flex-wrap:wrap">';
+        if (canReturnPayrollToDraft_(st)) {
+          html += '<button type="button" class="btn btn-primary" id="btn-attendance-return-draft">Return to Draft</button>';
+        } else if (st === 'LOCKED') {
+          html += '<button type="button" class="btn btn-primary" id="btn-attendance-correction">Create correction run</button>';
+        } else {
+          html += '<span class="hint">Ask an admin to return this payroll to Draft.</span>';
+        }
       }
       html += '</div>';
       if (editable && hasRun) {
@@ -873,7 +887,7 @@
         '<div class="advanced-actions" id="payroll-advanced">' +
         (editable ? '<button type="button" class="btn btn-secondary" id="btn-refresh-lop">Refresh leave LOP</button> ' +
           '<button type="button" class="btn btn-secondary" id="btn-apply-lop">Apply leave LOP to days</button> ' : '') +
-        ((st === 'UNDER_REVIEW' || st === 'CALCULATED' || (st === 'APPROVED' && isAdmin())) ?
+        (canReturnPayrollToDraft_(st) ?
           '<button type="button" class="btn btn-secondary" id="btn-draft">Return to draft</button> ' : '') +
         (st === 'LOCKED' ? '<button type="button" class="btn btn-secondary" id="btn-correct">Create correction run</button> ' : '') +
         '<p class="hint" style="margin-top:8px">Advanced tools for admins. Leave LOP is a suggestion from approved leave.</p>' +
@@ -1385,17 +1399,46 @@
         });
       });
 
-      var draft = $('btn-draft');
-      if (draft) draft.addEventListener('click', function () {
-        confirmModal({
-          title: 'Return to draft?',
-          body: 'This unfreezes days and extras so you can edit and calculate again.',
-          okLabel: 'Return to draft'
-        }).then(function (ok) {
-          if (!ok) return;
-          runAction(draft, 'apiReturnPayrollDraft', undefined, 'Returned to draft', 'Updating...');
+      function bindReturnToDraft_(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          confirmModal({
+            title: 'Return to draft?',
+            body: 'This unfreezes days and extras so you can upload attendance, edit, and calculate again.',
+            okLabel: 'Return to draft'
+          }).then(function (ok) {
+            if (!ok) return;
+            runAction(btn, 'apiReturnPayrollDraft', undefined, 'Returned to draft', 'Updating...');
+          });
         });
-      });
+      }
+      bindReturnToDraft_($('btn-draft'));
+      bindReturnToDraft_($('btn-attendance-return-draft'));
+
+      function bindCorrectionRun_(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          confirmModal({
+            title: 'Create a correction run?',
+            body: 'The finalized payroll stays unchanged. A new draft is created for the same month.',
+            okLabel: 'Create correction'
+          }).then(function (ok) {
+            if (!ok) return;
+            if (!setButtonLoading(btn, 'Creating...')) return;
+            rpc('apiCreatePayrollCorrection', [runId, ''], btn, 'Creating...', $('pr-action-feedback'))
+              .then(function (next) {
+                invalidatePayrollHome_();
+                payrollState.detail = next;
+                if (setFlash) setFlash('Correction draft created.', 'success', 'payroll');
+                renderPayrollHome({ runId: next.run.payroll_run_id });
+              })
+              .catch(function (err) {
+                showToast(err.message || 'Correction failed', 'error');
+              });
+          });
+        });
+      }
+      bindCorrectionRun_($('btn-attendance-correction'));
 
       var lop = $('btn-refresh-lop');
       if (lop) lop.addEventListener('click', function () {

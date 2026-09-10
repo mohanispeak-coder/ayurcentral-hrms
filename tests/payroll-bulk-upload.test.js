@@ -34,7 +34,7 @@ var payslip = read('payroll/PayslipService.gs');
 
 check('bulk-service-exists', /var PayrollBulkService/.test(bulk));
 check('bulk-csv-xlsx', /Upload a \.csv or \.xlsx file/.test(bulk));
-check('bulk-attendance-v3', /TEMPLATE_VERSION_ = '3'/.test(bulk) && /days_present/.test(bulk) &&
+check('bulk-attendance-v4', /TEMPLATE_VERSION_ = '4'/.test(bulk) && /days_present/.test(bulk) &&
   /display_name/.test(bulk) && /deriveAttendanceDays_/.test(bulk));
 check('bulk-no-auto-create', /cannot be created from Excel/.test(bulk));
 check('bulk-duplicate-reject', /Duplicate employee row/.test(bulk));
