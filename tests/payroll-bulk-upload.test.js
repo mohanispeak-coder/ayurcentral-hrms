@@ -58,6 +58,9 @@ check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/
 check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client) &&
   /<details[^>]*attendance-bulk-card[\s\S]*<summary>/.test(client));
 check('collapsible-template-sections', /collapsible-section/.test(client) && /collapsible-section-body/.test(client));
+const styles = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ui', 'Styles.html'), 'utf8');
+check('payroll-single-scroll-css', /overflow:\s*visible/.test(styles) &&
+  /max-height:\s*none/.test(styles) && /html:has\(\.app-shell\.is-authed\)/.test(styles));
 check('attendance-first-workflow', /paintPayrollWorkflowCard_/.test(client) && /attendanceStats_/.test(client) &&
   /Complete attendance for all employees first/.test(client));
 check('attendance-zero-default', /working_days: 0,\s*\n\s*paid_days: 0,\s*\n\s*lop_days: 0/.test(payroll));

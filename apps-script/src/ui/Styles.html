@@ -97,6 +97,11 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* Single scroll region: main .content only (avoids nested bars when panels expand). */
+html:has(.app-shell.is-authed),
+html:has(.app-shell.is-authed) body {
+  overflow: hidden;
+}
 button, input, select, textarea { font-family: inherit; }
 
 .hidden { display: none !important; }
@@ -1241,6 +1246,14 @@ body:has(> .careers-shell) {
   background: var(--color-bg-elevated);
 }
 .collapsible-section .collapsible-section-body { padding-top: 2px; }
+.collapsible-section,
+.collapsible-section.bulk-upload-card,
+.collapsible-section.bulk-upload-card[open],
+.collapsible-section .collapsible-section-body,
+details.card.collapsible-section {
+  overflow: visible;
+  max-height: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

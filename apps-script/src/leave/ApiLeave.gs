@@ -43,6 +43,13 @@ function apiLeaveCancel(leaveRequestId, sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveRevokeRejection(leaveRequestId, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.revokeRejection(session, leaveRequestId, comment || '');
+  }, sessionToken);
+}
+
 function apiLeaveGetApprovals(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

@@ -22,6 +22,7 @@ HRMS.LEAVE_AUDIT = {
   APPROVE: 'LEAVE_APPROVE',
   REJECT: 'LEAVE_REJECT',
   CANCEL: 'LEAVE_CANCEL',
+  REVOKE: 'LEAVE_REVOKE',
   TYPE_SAVE: 'LEAVE_TYPE_SAVE',
   YEAR_START: 'LEAVE_YEAR_START',
   GRANT: 'LEAVE_GRANT'
@@ -232,8 +233,13 @@ var LeaveEngine = (function () {
     return Math.floor(ms / (24 * 60 * 60 * 1000));
   }
 
+  function isLeaveAuthority_(role) {
+    role = String(role || '').toUpperCase();
+    return role === HRMS.ROLES.OWNER || role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR;
+  }
+
   /**
-   * Self-approve is always denied. HR/ADMIN may decide others. MANAGER: direct reports only.
+   * Self-approve is always denied. HR/ADMIN/OWNER may decide others. Managers apply only.
    */
   function canApproveRequest(session, targetEmployeeId, managerEmployeeId) {
     if (!session || !session.authorized) return false;
@@ -241,11 +247,7 @@ var LeaveEngine = (function () {
     var selfId = String(session.employee_id || '');
     var target = String(targetEmployeeId || '');
     if (selfId && target && selfId === target) return false;
-    if (role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR) return true;
-    if (role === HRMS.ROLES.MANAGER) {
-      return String(managerEmployeeId || '') === selfId;
-    }
-    return false;
+    return isLeaveAuthority_(role);
   }
 
   function canViewEmployeeLeave(session, targetEmployeeId, managerEmployeeId) {
@@ -254,7 +256,7 @@ var LeaveEngine = (function () {
     var selfId = String(session.employee_id || '');
     var target = String(targetEmployeeId || '');
     if (selfId === target) return true;
-    if (role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR) return true;
+    if (isLeaveAuthority_(role)) return true;
     if (role === HRMS.ROLES.MANAGER) {
       return String(managerEmployeeId || '') === selfId;
     }
@@ -266,14 +268,24 @@ var LeaveEngine = (function () {
     var status = String(request.status || '').toUpperCase();
     var role = String(session.role || '').toUpperCase();
     var own = String(session.employee_id || '') === String(request.employee_id || '');
-    var hr = role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR;
+    var authority = isLeaveAuthority_(role);
     if (status === HRMS.LEAVE_STATUS.DRAFT || status === HRMS.LEAVE_STATUS.SUBMITTED) {
-      return own || hr;
+      return own || authority;
     }
     if (status === HRMS.LEAVE_STATUS.APPROVED) {
-      return hr;
+      return authority;
     }
     return false;
+  }
+
+  /** Undo an authority decision (approved, rejected, or pending submission). */
+  function canRevokeDecision(session, request) {
+    if (!session || !session.authorized || !request) return false;
+    if (!isLeaveAuthority_(session.role)) return false;
+    var status = String(request.status || '').toUpperCase();
+    return status === HRMS.LEAVE_STATUS.SUBMITTED ||
+      status === HRMS.LEAVE_STATUS.APPROVED ||
+      status === HRMS.LEAVE_STATUS.REJECTED;
   }
 
   function canApplyFor(session, targetEmployeeId) {
@@ -281,7 +293,7 @@ var LeaveEngine = (function () {
     var role = String(session.role || '').toUpperCase();
     var target = String(targetEmployeeId || session.employee_id || '');
     if (!target) return false;
-    if (role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR) return true;
+    if (isLeaveAuthority_(role)) return true;
     return target === String(session.employee_id || '');
   }
 
@@ -310,6 +322,7 @@ var LeaveEngine = (function () {
     canApproveRequest: canApproveRequest,
     canViewEmployeeLeave: canViewEmployeeLeave,
     canCancel: canCancel,
+    canRevokeDecision: canRevokeDecision,
     canApplyFor: canApplyFor,
     normalizeSession: normalizeSession
   };

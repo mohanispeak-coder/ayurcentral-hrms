@@ -200,7 +200,8 @@ var ConfigService = (function () {
   }
 
   function isValidRole_(role) {
-    return role === HRMS.ROLES.ADMIN ||
+    return role === HRMS.ROLES.OWNER ||
+      role === HRMS.ROLES.ADMIN ||
       role === HRMS.ROLES.HR ||
       role === HRMS.ROLES.MANAGER ||
       role === HRMS.ROLES.EMPLOYEE;

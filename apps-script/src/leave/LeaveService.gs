@@ -708,6 +708,39 @@ var LeaveService = (function () {
     return packed.serialized;
   }
 
+  function revokeRejection(session, leaveRequestId, comment) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_ADMIN, {}, session);
+    return withScriptLock_(function () {
+      var balanceIndex = loadBalanceIndex_();
+      var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
+      if (!row) throw notFoundError_('Leave request not found.');
+      if (!LeaveEngine.canRevokeDecision(session, row)) {
+        throw authorizationError_('You cannot revoke this leave decision.');
+      }
+      if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.REJECTED) {
+        throw conflictError_('Only rejected leave can be restored to pending.');
+      }
+      var type = coerceType_(getType_(row.leave_type_id));
+      var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
+      var days = LeaveEngine.toNumber(row.total_days);
+      applyPendingDeltaLocked_(row.employee_id, type, year, days, 0, balanceIndex);
+      var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, {
+        status: HRMS.LEAVE_STATUS.SUBMITTED,
+        approver_employee_id: '',
+        decision_at: '',
+        decision_comment: comment || ''
+      });
+      AuditService.log(
+        HRMS.LEAVE_AUDIT.REVOKE,
+        'LeaveRequest',
+        leaveRequestId,
+        'Revoked rejection — restored to submitted',
+        row.employee_id
+      );
+      return serializeRequest_(updated, typeMap_(), empMap_());
+    });
+  }
+
   function getMyLeave(session, employeeId) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     var target = employeeId || session.employee_id;
@@ -1005,6 +1038,7 @@ var LeaveService = (function () {
     approve: approve,
     reject: reject,
     cancel: cancel,
+    revokeRejection: revokeRejection,
     getMyLeave: getMyLeave,
     getApprovals: getApprovals,
     getAdminList: getAdminList,

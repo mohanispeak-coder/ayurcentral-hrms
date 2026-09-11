@@ -116,6 +116,32 @@
     return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
   }
 
+  function adminLeaveActionsHtml_(r) {
+    var c = ctx();
+    var id = c.escapeHtml(r.leave_request_id);
+    var html = '';
+    if (r.status === 'SUBMITTED') {
+      html += '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
+        '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
+    } else if (r.status === 'APPROVED') {
+      html += '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + id + '" data-revoke-kind="approved">Revoke</button>';
+    } else if (r.status === 'REJECTED') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="rejected">Revoke</button>';
+    } else if (r.status === 'DRAFT') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + id + '">Cancel</button>';
+    }
+    return html;
+  }
+
+  function adminLeaveRowHtml_(r) {
+    var c = ctx();
+    return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+      '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
+      '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
+      c.escapeHtml(r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
+  }
+
   function payloadFromForm(form) {
     return {
       leave_request_id: form.leave_request_id || '',
@@ -552,17 +578,7 @@
           '<td>' + (t.is_active ? 'Active' : 'Inactive') + '</td>' +
           '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit-type="' + c.escapeHtml(t.leave_type_id) + '">Edit</button></td></tr>';
       }).join('');
-      var reqRows = (data.requests || []).slice(0, 25).map(function (r) {
-        return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
-          '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
-          '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-          c.escapeHtml(r.status) + '</span></td><td class="col-actions">' +
-          (r.status === 'SUBMITTED' ? '<button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
-            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button> ' : '') +
-          ((r.status === 'DRAFT' || r.status === 'SUBMITTED' || r.status === 'APPROVED')
-            ? '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
-          '</td></tr>';
-      }).join('');
+      var reqRows = (data.requests || []).slice(0, 25).map(adminLeaveRowHtml_).join('');
       var empFilter = employees.map(function (e) {
         return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
       }).join('');
@@ -654,6 +670,24 @@
               });
           });
         });
+        page.querySelectorAll('[data-revoke]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var kind = btn.getAttribute('data-revoke-kind') || 'approved';
+            var title = kind === 'rejected' ? 'Revoke rejection' :
+              (kind === 'submitted' ? 'Revoke pending leave' : 'Revoke approved leave');
+            openDecisionModal(helpers, title, true, function (comment) {
+              var id = btn.getAttribute('data-revoke');
+              var call = kind === 'rejected'
+                ? c.callServer('apiLeaveRevokeRejection', id, comment, actionOpts(btn, 'Revoking...', adminFeedback()))
+                : c.callServer('apiLeaveCancel', id, actionOpts(btn, 'Revoking...', adminFeedback()));
+              call.then(function () {
+                invalidateLeaveAfterRequestMutation_();
+                setFlash('Leave decision revoked.', 'success', 'leave-admin');
+                renderAdmin(page, helpers);
+              });
+            });
+          });
+        });
       }
       bindAdminActions();
 
@@ -678,14 +712,12 @@
           employee_id: document.getElementById('flt-emp').value,
           status: document.getElementById('flt-status').value
         }, actionOpts(fltBtn, 'Filtering...', feedback)).then(function (next) {
-          var html = (next.requests || []).slice(0, 25).map(function (r) {
-            return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
-              '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
-              '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-              c.escapeHtml(r.status) + '</span></td><td></td></tr>';
-          }).join('');
+          var html = (next.requests || []).slice(0, 25).map(adminLeaveRowHtml_).join('');
           var tbody = document.getElementById('admin-req-body');
-          if (tbody) tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+          if (tbody) {
+            tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+            bindAdminActions();
+          }
         });
       });
 

@@ -70,6 +70,13 @@ check('submit-uses-balance-index', /function submit[\s\S]{0,2200}loadBalanceInde
 check('approve-uses-balance-index', /function approve[\s\S]{0,1200}loadBalanceIndex_/.test(leave));
 check('db-insert-records', /function insertRecords/.test(db));
 
+check('admin-revoke-button', /data-revoke/.test(ui) && /Revoke/.test(ui));
+check('admin-revoke-rejection-api', /apiLeaveRevokeRejection/.test(api));
+check('admin-filter-keeps-actions', /adminLeaveRowHtml_/.test(ui) &&
+  /bindAdminActions\(\)/.test(ui));
+check('leave-approve-no-manager', !/LEAVE_APPROVE.*MANAGER/.test(read('foundation/PermissionService.gs')));
+check('owner-role-constant', /OWNER:\s*'OWNER'/.test(read('foundation/Constants.gs')));
+
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
   process.exit(1);

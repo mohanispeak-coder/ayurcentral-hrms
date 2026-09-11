@@ -67,8 +67,11 @@ function testLeave_Engine() {
   var mgr = { authorized: true, role: 'MANAGER', employee_id: 'EMP002' };
   check('LV-08-manager-other-team',
     LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099') === false);
-  check('LV-08-manager-own-team',
-    LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002') === true);
+  check('LV-08-manager-cannot-approve',
+    LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002') === false);
+  var owner = { authorized: true, role: 'OWNER', employee_id: 'EMP000' };
+  check('owner-can-approve-other',
+    LeaveEngine.canApproveRequest(owner, 'EMP003', 'EMP002') === true);
   check('LV-09-self-approve',
     LeaveEngine.canApproveRequest({ authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' }, 'EMP003', 'EMP002') === false);
   check('LV-09-hr-self-approve',

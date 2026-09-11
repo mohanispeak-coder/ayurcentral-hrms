@@ -108,7 +108,7 @@ var SchemaService = (function () {
     var lastRow = Math.max(sheet.getMaxRows(), 1000);
     if (roleCol > 0) {
       var roleRule = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'], true)
+        .requireValueInList(['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'], true)
         .setAllowInvalid(false)
         .build();
       sheet.getRange(2, roleCol, lastRow, roleCol).setDataValidation(roleRule);
