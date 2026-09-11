@@ -20,7 +20,7 @@
     Object.keys(titles).forEach(function (route) {
       App.registerRoute(route, {
         title: titles[route],
-        render: function () {
+        render: function (params) {
           window.HRMSLeaveUi.render(route, {
             callServer: App.callServer,
             escapeHtml: App.escapeHtml,
@@ -30,7 +30,7 @@
             setActionFeedback: App.setActionFeedback,
             navigate: App.navigate,
             $: App.$
-          });
+          }, params);
         }
       });
     });

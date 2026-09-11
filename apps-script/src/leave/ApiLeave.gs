@@ -112,6 +112,13 @@ function apiLeaveListEmployees(sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveGetApplyBundle(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.getApplyBootstrap(session);
+  }, sessionToken);
+}
+
 /**
  * Payroll-facing reader (also callable from the client for diagnostics).
  * Returns { employee_id, period_year, period_month, lop_from_leave }.

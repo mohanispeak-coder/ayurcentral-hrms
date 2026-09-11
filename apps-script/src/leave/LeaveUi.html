@@ -41,6 +41,10 @@
   }
 
   var leaveViewCache = {};
+  var previewTimer_ = null;
+  var previewGen_ = 0;
+  var previewBusy_ = false;
+  var previewAgain_ = false;
 
   function markLeaveView_(key) {
     if (window.HrmsApp && window.HrmsApp.markModuleViewLoaded) window.HrmsApp.markModuleViewLoaded(key);
@@ -156,15 +160,11 @@
         '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
     }
 
-    Promise.all([
-      c.callServer('apiLeaveGetTypes', false),
-      c.callServer('apiLeaveListEmployees'),
-      c.callServer('apiLeaveGetMyLeave', '')
-    ]).then(function (parts) {
+    c.callServer('apiLeaveGetApplyBundle').then(function (bundle) {
       if (!onRoute('leave-apply')) return;
-      var types = parts[0] || [];
-      var employees = parts[1] || [];
-      var mine = parts[2] || {};
+      var types = bundle.types || [];
+      var employees = bundle.employees || [];
+      var mine = { can_proxy: !!bundle.can_proxy };
       leaveViewCache['leave-apply'] = { types: types, employees: employees, mine: mine, prefill: prefill || {} };
       markLeaveView_('leave-apply');
       paintApplyForm_(page, helpers, types, employees, mine, prefill || {});
@@ -241,15 +241,46 @@
         });
       }
 
-      function refreshPreview() {
+      function runPreview_() {
         var p = readForm();
         if (!p.start_date || !p.end_date) return;
+        if (previewBusy_) {
+          previewAgain_ = true;
+          return;
+        }
+        previewBusy_ = true;
+        var gen = ++previewGen_;
         c.callServer('apiLeavePreviewDays', p).then(function (d) {
-          document.getElementById('leave-preview').textContent =
-            'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+          if (gen !== previewGen_) return;
+          var el = document.getElementById('leave-preview');
+          if (el) {
+            el.textContent = 'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+          }
         }).catch(function (err) {
-          document.getElementById('leave-preview').textContent = err.message || 'Could not preview days';
+          if (gen !== previewGen_) return;
+          var el = document.getElementById('leave-preview');
+          if (el) el.textContent = err.message || 'Could not preview days';
+        }).then(function () {
+          previewBusy_ = false;
+          if (previewAgain_) {
+            previewAgain_ = false;
+            runPreview_();
+          }
+        }, function () {
+          previewBusy_ = false;
+          if (previewAgain_) {
+            previewAgain_ = false;
+            runPreview_();
+          }
         });
+      }
+
+      function refreshPreview() {
+        if (previewTimer_) clearTimeout(previewTimer_);
+        previewTimer_ = setTimeout(function () {
+          previewTimer_ = null;
+          runPreview_();
+        }, 300);
       }
 
       ['leave-start', 'leave-end', 'leave-half', 'leave-session'].forEach(function (id) {
@@ -292,7 +323,7 @@
           helpers.navigate('my-leave');
         });
       });
-      refreshPreview();
+      if (prefill.start_date && prefill.end_date) runPreview_();
   }
 
   function renderMyLeave(page, helpers) {
@@ -382,8 +413,7 @@
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-edit');
           var row = (data.requests || []).filter(function (r) { return r.leave_request_id === id; })[0];
-          helpers.navigate('leave-apply');
-          setTimeout(function () { renderApply(page, helpers, row); }, 0);
+          helpers.navigate('leave-apply', { prefill: row });
         });
       });
   }
@@ -805,12 +835,15 @@
   }
 
   window.HRMSLeaveUi = {
-    render: function (route, helpers) {
+    render: function (route, helpers, params) {
       var page = helpers.$('page-content');
       if (!page) return;
       page.classList.remove('hidden');
       if (route === 'my-leave') return renderMyLeave(page, helpers);
-      if (route === 'leave-apply') return renderApply(page, helpers, null);
+      if (route === 'leave-apply') {
+        var prefill = (params && params.prefill) || null;
+        return renderApply(page, helpers, prefill);
+      }
       if (route === 'leave-approvals') return renderApprovals(page, helpers);
       if (route === 'leave-admin') return renderAdmin(page, helpers);
       if (route === 'leave-calendar') return renderCalendar(page, helpers);
