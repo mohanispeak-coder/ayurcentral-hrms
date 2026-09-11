@@ -89,7 +89,7 @@
       homeState.runs = [];
       homeState.overview = null;
       shellInv_('payroll');
-      if (App.invalidateDashboardView) App.invalidateDashboardView();
+      if (App.invalidateDashboardView) App.invalidateDashboardView({ secondaryOnly: true });
     }
 
     function invalidatePayrollRunPeers_(runId) {
@@ -110,7 +110,7 @@
       shellInv_('my-payslips');
       if (App.invalidateModuleViewCachePrefix) App.invalidateModuleViewCachePrefix('employee-profile:');
       shellInv_('my-profile');
-      if (App.invalidateDashboardView) App.invalidateDashboardView();
+      if (App.invalidateDashboardView) App.invalidateDashboardView({ secondaryOnly: true });
     }
 
     if (App.registerModuleDataCacheClear) {

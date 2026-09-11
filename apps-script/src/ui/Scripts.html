@@ -161,7 +161,7 @@
   var refreshForceKey_ = '';
   var refreshBusy_ = false;
   var refreshWatchdog_ = null;
-  var dashViewCache_ = { payload: null, actions: '', complete: false };
+  var dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
 
   function sessionCacheKey_() {
     var s = state.session || {};
@@ -385,7 +385,7 @@
 
   function clearModuleViewCache() {
     moduleViewCache_ = {};
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
@@ -412,10 +412,29 @@
     if (keys.length) logClientPerf_({ kind: 'module-view-invalidate-prefix', prefix: prefix, keys: keys });
   }
 
-  function invalidateDashboardView() {
+  function invalidateDashboardView(opts) {
+    opts = opts || {};
+    if (opts.secondaryOnly) {
+      dashViewCache_.secondaryStale = true;
+      dashViewCache_.complete = false;
+      delete moduleViewCache_.dashboard;
+      if (dashViewCache_.payload) {
+        delete dashViewCache_.payload.payroll;
+        delete dashViewCache_.payload.pms;
+        delete dashViewCache_.payload.pms_actions;
+        delete dashViewCache_.payload.ats;
+        delete dashViewCache_.payload.ats_actions;
+      }
+      logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard-secondary'] });
+      return;
+    }
     delete moduleViewCache_.dashboard;
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard'] });
+  }
+
+  function getDashboardViewCache() {
+    return dashViewCache_;
   }
 
   function registerModuleRoutes(extra) {
@@ -1500,25 +1519,36 @@
     }
 
     var primary = keepPainted ? (dashViewCache_.payload || null) : null;
+    var skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
     callServer('apiGetHomeDashboard')
       .then(function (data) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return null;
         primary = data || {};
         dashViewCache_.actions = actions;
-        dashViewCache_.payload = primary;
-        dashViewCache_.complete = false;
-        paintHomeDashboard(primary, actions, { secondaryPending: true });
+        if (keepPainted && dashViewCache_.payload) {
+          dashViewCache_.payload = mergeDashboardPayload_(primary, dashViewCache_.payload);
+        } else {
+          dashViewCache_.payload = primary;
+        }
+        skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
         if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
           window.HrmsNotificationBell.applyUnreadCount(primary.unread_count);
         }
-        return callServer('apiGetHomeDashboardMore');
+        if (skipSecondary) {
+          paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
+          markModuleViewLoaded(dashKey);
+          return null;
+        }
+        dashViewCache_.complete = false;
+        paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: true });
+        return callServer('apiGetHomeDashboardMore', { background: true });
       })
       .then(function (more) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
-        if (more) {
-          dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
-          dashViewCache_.complete = true;
-        }
+        if (more == null) return;
+        dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
+        dashViewCache_.complete = true;
+        dashViewCache_.secondaryStale = false;
         if (dashViewCache_.payload) {
           paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
         }
@@ -2677,6 +2707,7 @@
     invalidateModuleViewCache: invalidateModuleViewCache,
     invalidateModuleViewCachePrefix: invalidateModuleViewCachePrefix,
     invalidateDashboardView: invalidateDashboardView,
+    getDashboardViewCache: getDashboardViewCache,
     setButtonLoading: setButtonLoading,
     restoreButton: restoreButton,
     isButtonLoading: isButtonLoading,

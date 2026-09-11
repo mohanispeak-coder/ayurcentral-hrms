@@ -51,7 +51,7 @@
       atsView.jobs = null;
       atsView.candidates = null;
       if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(['ats', 'ats-jobs', 'ats-candidates']);
-      if (App.invalidateDashboardView) App.invalidateDashboardView();
+      if (App.invalidateDashboardView) App.invalidateDashboardView({ secondaryOnly: true });
     }
 
     function invalidateAtsJob_(jobId) {

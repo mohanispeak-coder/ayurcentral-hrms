@@ -472,7 +472,11 @@
   };
 
   function boot() {
-    if (slotEl()) mount(slotEl());
+    if (!slotEl()) return;
+    var sess = app() && app().getState && app().getState().session;
+    if (sess && sess.authorized) {
+      mount(slotEl(), { skipInitialFetch: true });
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

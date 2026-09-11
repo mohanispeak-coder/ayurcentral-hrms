@@ -62,7 +62,7 @@
       pmsState.team = null;
       pmsState.appraisals = null;
       if (!keepReviewState) pmsState.review = null;
-      if (App.invalidateDashboardView) App.invalidateDashboardView();
+      if (App.invalidateDashboardView) App.invalidateDashboardView({ secondaryOnly: true });
     }
 
     function invalidatePmsAll_() {
@@ -334,11 +334,27 @@
 
     /* ---------- Home / dashboard ---------- */
 
+    function seedPmsFromDashboard_() {
+      if (pmsState.dashboard) return true;
+      if (!App.getDashboardViewCache) return false;
+      var dash = App.getDashboardViewCache();
+      if (dash && dash.complete && dash.payload && dash.payload.pms) {
+        pmsState.dashboard = dash.payload.pms;
+        return true;
+      }
+      return false;
+    }
+
     function renderPmsHome() {
       var page = pageEl();
       if (!page) return;
       var seq = App.getState().navSeq;
       if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('pms') && pmsState.dashboard) {
+        paintHome_(page, seq);
+        return;
+      }
+      if (seedPmsFromDashboard_()) {
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded('pms');
         paintHome_(page, seq);
         return;
       }

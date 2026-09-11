@@ -69,6 +69,54 @@ var NotificationService = (function () {
     'notification_id', 'recipient_employee_id', 'recipient_email', 'status', 'read_at'
   ];
 
+  var INBOX_LIST_COLS_ = [
+    'notification_id', 'recipient_employee_id', 'recipient_email', 'type', 'title', 'message',
+    'source_module', 'source_record_id', 'created_at', 'read_at', 'priority',
+    'action_route', 'action_params', 'status'
+  ];
+
+  function projectedInboxStore_(cols) {
+    var name = NotificationSchema.INBOX;
+    var rows;
+    try {
+      rows = DbService.getProjectedRecords(name, cols);
+    } catch (e) {
+      rows = DbService.getAllRecords(name);
+    }
+    return {
+      list: function () {
+        return rows;
+      },
+      find: function (id) {
+        var tid = trim_(id);
+        for (var i = 0; i < rows.length; i++) {
+          if (trim_(rows[i].notification_id) === tid) return rows[i];
+        }
+        return null;
+      },
+      update: function (id, fields) {
+        DbService.updateRecord(name, 'notification_id', id, fields);
+        var row = this.find(id);
+        if (row) {
+          Object.keys(fields).forEach(function (k) { row[k] = fields[k]; });
+        }
+        return row;
+      },
+      updateMany: function (ids, fields) {
+        var items = (ids || []).map(function (nid) {
+          return { pk: nid, updates: fields };
+        });
+        DbService.updateRecords(name, 'notification_id', items);
+        (ids || []).forEach(function (nid) {
+          var row = this.find(nid);
+          if (row) {
+            Object.keys(fields).forEach(function (k) { row[k] = fields[k]; });
+          }
+        }.bind(this));
+      }
+    };
+  }
+
   function sheetStore_() {
     var name = NotificationSchema.INBOX;
     return {
@@ -413,7 +461,7 @@ var NotificationService = (function () {
 
   function getNotifications(session, query) {
     session = session || requireAccess_();
-    return NotificationEngine.inbox.list(sheetStore_(), session, query || {});
+    return NotificationEngine.inbox.list(projectedInboxStore_(INBOX_LIST_COLS_), session, query || {});
   }
 
   function getUnreadCount(session) {
@@ -432,7 +480,12 @@ var NotificationService = (function () {
   function markNotificationRead(session, notificationId) {
     var t0 = Date.now();
     session = session || requireAccess_();
-    var result = NotificationEngine.inbox.markRead(sheetStore_(), notificationId, session, now_());
+    var result = NotificationEngine.inbox.markRead(
+      projectedInboxStore_(INBOX_UNREAD_COLS_),
+      notificationId,
+      session,
+      now_()
+    );
     if (typeof HrmsPerf !== 'undefined') {
       HrmsPerf.addStage('business', Date.now() - t0);
       HrmsPerf.mark('ntf.markReadDone');
@@ -449,7 +502,11 @@ var NotificationService = (function () {
   function markAllNotificationsRead(session) {
     var t0 = Date.now();
     session = session || requireAccess_();
-    var result = NotificationEngine.inbox.markAllRead(sheetStore_(), session, now_());
+    var result = NotificationEngine.inbox.markAllRead(
+      projectedInboxStore_(INBOX_UNREAD_COLS_),
+      session,
+      now_()
+    );
     if (typeof HrmsPerf !== 'undefined') {
       HrmsPerf.addStage('business', Date.now() - t0);
       HrmsPerf.mark('ntf.markAllReadDone');

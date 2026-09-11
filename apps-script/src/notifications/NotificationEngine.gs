@@ -665,12 +665,12 @@ var NotificationEngine = (function () {
   function markReadInStore_(store, notificationId, session, now) {
     var id = trim_(notificationId);
     if (!id) return { ok: false, error: 'notification_id is required.' };
-    var rows = null;
+    var rows = store.list ? (store.list() || []) : null;
     var row = null;
     if (store.find) {
       row = store.find(id);
-    } else {
-      rows = store.list() || [];
+    }
+    if (!row && rows) {
       for (var i = 0; i < rows.length; i++) {
         if (trim_(rows[i].notification_id) === id) {
           row = rows[i];
