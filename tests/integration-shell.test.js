@@ -55,7 +55,7 @@ check('leave-inbox-reject', /NotificationLeaveAdapter\.notifyRejected/.test(leav
 check('leave-inbox-cancel', /NotificationLeaveAdapter\.notifyCancelled/.test(leave));
 check('leave-email-retained', /MailApp\.sendEmail/.test(leave));
 check('payroll-locked-notify', /NotificationPayrollAdapter\.notifyLocked/.test(payroll));
-check('payroll-payslip-notify-disabled', !/regeneratePayslipForEmployee[\s\S]{0,500}notifyPayslipsAvailable/.test(payroll));
+check('payroll-payslip-notify', /notifyPayslipsAvailable/.test(payroll));
 check('payroll-finalize-api', /apiFinalizePayroll/.test(payrollApi));
 check('payroll-bulk-api', /apiValidatePayrollUpload/.test(payrollApi) && /PayrollBulkService/.test(payrollBulk));
 check('pms-cycle-open-notify', /NotificationPmsAdapter\.notifyCycleOpen/.test(pms));

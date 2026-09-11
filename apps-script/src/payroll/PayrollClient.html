@@ -1605,7 +1605,7 @@
       confirmModal({
         title: 'Generate payslip for ' + empName + '?',
         body: 'Creates or replaces the payslip file for this employee only and sends them the payslip email notification.',
-        okLabel: 'Generate payslip'
+        okLabel: 'Generate & notify'
       }).then(function (ok) {
         if (!ok) return;
         if (btn && !setButtonLoading(btn, 'Generating...')) return;
@@ -1635,7 +1635,7 @@
           escapeHtml(emp.display_name || emp.employee_id) + ' (' + escapeHtml(emp.employee_id) + ')</option>';
       });
       html += '</select></label>' +
-        '<button type="button" class="btn btn-primary" id="btn-gen-one-payslip">Generate payslip</button>' +
+        '<button type="button" class="btn btn-primary" id="btn-gen-one-payslip">Generate &amp; notify</button>' +
         '</div></div>';
       return html;
     }
@@ -1652,7 +1652,7 @@
       html += '<button type="button" class="btn btn-primary btn-sm js-gen-payslip" data-emp="' +
         escapeHtml(row.employee.employee_id) + '" data-run="' + escapeHtml(runId) + '" data-name="' +
         escapeHtml(row.employee.display_name || row.employee.employee_id) + '">' +
-        (ready ? 'Regenerate payslip' : 'Generate payslip') + '</button></td>';
+        (ready ? 'Regenerate & notify' : 'Generate & notify') + '</button></td>';
       return html;
     }
 
@@ -1826,7 +1826,7 @@
           '<p>Finalize payroll first, then generate payslip files for all employees.</p></div></div>';
         return html;
       }
-      html += '<p class="page-lede">Use <strong>Generate for one employee</strong> or <strong>Generate all payslips</strong> to create PDF payslip files in Drive. Employees download from My Payslips — no email is sent automatically.</p>';
+      html += '<p class="page-lede">Use <strong>Generate for one employee</strong> below to email only that person, or <strong>Generate all payslips</strong> to notify everyone.</p>';
       var rows = payslipRows_(detail);
       var runId = detail.run.payroll_run_id;
       if (!rows.length) {

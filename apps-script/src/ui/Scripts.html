@@ -120,9 +120,6 @@
     users: 'Role assignment will be available in a later phase.'
   };
 
-  /** Set false to hide Performance / PMS from sidebar and dashboard (routes still work if needed later). */
-  var SHOW_PERFORMANCE_NAV_ = false;
-
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'pms-my-review', 'my-payslips'], collapsible: true },
@@ -133,19 +130,6 @@
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
-
-  function getNavGroups_() {
-    if (SHOW_PERFORMANCE_NAV_) return NAV_GROUPS;
-    return NAV_GROUPS.filter(function (g) { return g.id !== 'performance'; }).map(function (g) {
-      if (g.id !== 'my-work') return g;
-      return {
-        id: g.id,
-        label: g.label,
-        routes: g.routes.filter(function (r) { return r.indexOf('pms') !== 0; }),
-        collapsible: g.collapsible
-      };
-    });
-  }
 
   /** Session-only sidebar section expand/collapse (never localStorage). */
   var navSectionExpanded_ = {};
@@ -921,7 +905,7 @@
     var items = state.navigation || [];
     var used = {};
     var groups = [];
-    getNavGroups_().forEach(function (g) {
+    NAV_GROUPS.forEach(function (g) {
       var members = [];
       g.routes.forEach(function (route) {
         items.forEach(function (item) {
@@ -1581,7 +1565,7 @@
     if (data.leave_approvals_count != null) {
       kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
     }
-    if (SHOW_PERFORMANCE_NAV_ && data.pms && data.pms.kpis) {
+    if (data.pms && data.pms.kpis) {
       var pk = data.pms.kpis;
       if (pk.pending_self_assessment != null) {
         kpis += dashCard('Self-assessments due', pk.pending_self_assessment);
@@ -1614,7 +1598,7 @@
       sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
         '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
     }
-    if (SHOW_PERFORMANCE_NAV_ && data.pms_actions && data.pms_actions.length) {
+    if (data.pms_actions && data.pms_actions.length) {
       sections += '<div class="card dash-section"><h2>Performance</h2>' +
         dashActionList(data.pms_actions, 'No performance actions right now.') + '</div>';
     }
