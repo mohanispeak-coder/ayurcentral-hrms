@@ -75,6 +75,36 @@ function apiRegeneratePayslips(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiRegeneratePayslipForEmployee(runId, employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.regeneratePayslipForEmployee(runId, employeeId);
+  }, sessionToken);
+}
+
+function apiFinalizePayroll(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.finalizePayroll(runId);
+  }, sessionToken);
+}
+
+function apiDownloadPayrollTemplate(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.downloadTemplate(runId);
+  }, sessionToken);
+}
+
+function apiValidatePayrollUpload(runId, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.validateUpload(runId, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitPayrollUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
 function apiApplyPayrollLeaveLop(runId, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.applyLeaveLopToDays(runId);
@@ -96,6 +126,12 @@ function apiListSalaryStructures(employeeId, sessionToken) {
 function apiGetSalaryStructure(structureId, sessionToken) {
   return hrmsRun_(function () {
     return CompensationService.getStructure(structureId);
+  }, sessionToken);
+}
+
+function apiGetCompensationEditorBundle(employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationService.getEditorBundle(employeeId);
   }, sessionToken);
 }
 
@@ -132,5 +168,29 @@ function apiListOwnPayslips(sessionToken) {
 function apiGetPayslipDownload(documentId, sessionToken) {
   return hrmsRun_(function () {
     return PayslipService.getPayslipForDownload(documentId);
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadTemplate();
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkCsvTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadCsvTemplate();
+  }, sessionToken);
+}
+
+function apiValidateCompensationBulkUpload(meta, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.validateUpload(meta || {});
+  }, sessionToken);
+}
+
+function apiCommitCompensationBulkUpload(uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.commitUpload(uploadId);
   }, sessionToken);
 }

@@ -41,6 +41,10 @@
   }
 
   var leaveViewCache = {};
+  var previewTimer_ = null;
+  var previewGen_ = 0;
+  var previewBusy_ = false;
+  var previewAgain_ = false;
 
   function markLeaveView_(key) {
     if (window.HrmsApp && window.HrmsApp.markModuleViewLoaded) window.HrmsApp.markModuleViewLoaded(key);
@@ -112,6 +116,32 @@
     return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
   }
 
+  function adminLeaveActionsHtml_(r) {
+    var c = ctx();
+    var id = c.escapeHtml(r.leave_request_id);
+    var html = '';
+    if (r.status === 'SUBMITTED') {
+      html += '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
+        '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
+    } else if (r.status === 'APPROVED') {
+      html += '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + id + '" data-revoke-kind="approved">Revoke</button>';
+    } else if (r.status === 'REJECTED') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="rejected">Revoke</button>';
+    } else if (r.status === 'DRAFT') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + id + '">Cancel</button>';
+    }
+    return html;
+  }
+
+  function adminLeaveRowHtml_(r) {
+    var c = ctx();
+    return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+      '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
+      '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
+      c.escapeHtml(r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
+  }
+
   function payloadFromForm(form) {
     return {
       leave_request_id: form.leave_request_id || '',
@@ -156,15 +186,11 @@
         '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
     }
 
-    Promise.all([
-      c.callServer('apiLeaveGetTypes', false),
-      c.callServer('apiLeaveListEmployees'),
-      c.callServer('apiLeaveGetMyLeave', '')
-    ]).then(function (parts) {
+    c.callServer('apiLeaveGetApplyBundle').then(function (bundle) {
       if (!onRoute('leave-apply')) return;
-      var types = parts[0] || [];
-      var employees = parts[1] || [];
-      var mine = parts[2] || {};
+      var types = bundle.types || [];
+      var employees = bundle.employees || [];
+      var mine = { can_proxy: !!bundle.can_proxy };
       leaveViewCache['leave-apply'] = { types: types, employees: employees, mine: mine, prefill: prefill || {} };
       markLeaveView_('leave-apply');
       paintApplyForm_(page, helpers, types, employees, mine, prefill || {});
@@ -241,15 +267,46 @@
         });
       }
 
-      function refreshPreview() {
+      function runPreview_() {
         var p = readForm();
         if (!p.start_date || !p.end_date) return;
+        if (previewBusy_) {
+          previewAgain_ = true;
+          return;
+        }
+        previewBusy_ = true;
+        var gen = ++previewGen_;
         c.callServer('apiLeavePreviewDays', p).then(function (d) {
-          document.getElementById('leave-preview').textContent =
-            'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+          if (gen !== previewGen_) return;
+          var el = document.getElementById('leave-preview');
+          if (el) {
+            el.textContent = 'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+          }
         }).catch(function (err) {
-          document.getElementById('leave-preview').textContent = err.message || 'Could not preview days';
+          if (gen !== previewGen_) return;
+          var el = document.getElementById('leave-preview');
+          if (el) el.textContent = err.message || 'Could not preview days';
+        }).then(function () {
+          previewBusy_ = false;
+          if (previewAgain_) {
+            previewAgain_ = false;
+            runPreview_();
+          }
+        }, function () {
+          previewBusy_ = false;
+          if (previewAgain_) {
+            previewAgain_ = false;
+            runPreview_();
+          }
         });
+      }
+
+      function refreshPreview() {
+        if (previewTimer_) clearTimeout(previewTimer_);
+        previewTimer_ = setTimeout(function () {
+          previewTimer_ = null;
+          runPreview_();
+        }, 300);
       }
 
       ['leave-start', 'leave-end', 'leave-half', 'leave-session'].forEach(function (id) {
@@ -292,7 +349,7 @@
           helpers.navigate('my-leave');
         });
       });
-      refreshPreview();
+      if (prefill.start_date && prefill.end_date) runPreview_();
   }
 
   function renderMyLeave(page, helpers) {
@@ -382,8 +439,7 @@
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-edit');
           var row = (data.requests || []).filter(function (r) { return r.leave_request_id === id; })[0];
-          helpers.navigate('leave-apply');
-          setTimeout(function () { renderApply(page, helpers, row); }, 0);
+          helpers.navigate('leave-apply', { prefill: row });
         });
       });
   }
@@ -522,17 +578,7 @@
           '<td>' + (t.is_active ? 'Active' : 'Inactive') + '</td>' +
           '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit-type="' + c.escapeHtml(t.leave_type_id) + '">Edit</button></td></tr>';
       }).join('');
-      var reqRows = (data.requests || []).slice(0, 25).map(function (r) {
-        return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
-          '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
-          '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-          c.escapeHtml(r.status) + '</span></td><td class="col-actions">' +
-          (r.status === 'SUBMITTED' ? '<button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
-            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button> ' : '') +
-          ((r.status === 'DRAFT' || r.status === 'SUBMITTED' || r.status === 'APPROVED')
-            ? '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
-          '</td></tr>';
-      }).join('');
+      var reqRows = (data.requests || []).slice(0, 25).map(adminLeaveRowHtml_).join('');
       var empFilter = employees.map(function (e) {
         return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
       }).join('');
@@ -624,6 +670,24 @@
               });
           });
         });
+        page.querySelectorAll('[data-revoke]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var kind = btn.getAttribute('data-revoke-kind') || 'approved';
+            var title = kind === 'rejected' ? 'Revoke rejection' :
+              (kind === 'submitted' ? 'Revoke pending leave' : 'Revoke approved leave');
+            openDecisionModal(helpers, title, true, function (comment) {
+              var id = btn.getAttribute('data-revoke');
+              var call = kind === 'rejected'
+                ? c.callServer('apiLeaveRevokeRejection', id, comment, actionOpts(btn, 'Revoking...', adminFeedback()))
+                : c.callServer('apiLeaveCancel', id, actionOpts(btn, 'Revoking...', adminFeedback()));
+              call.then(function () {
+                invalidateLeaveAfterRequestMutation_();
+                setFlash('Leave decision revoked.', 'success', 'leave-admin');
+                renderAdmin(page, helpers);
+              });
+            });
+          });
+        });
       }
       bindAdminActions();
 
@@ -648,14 +712,12 @@
           employee_id: document.getElementById('flt-emp').value,
           status: document.getElementById('flt-status').value
         }, actionOpts(fltBtn, 'Filtering...', feedback)).then(function (next) {
-          var html = (next.requests || []).slice(0, 25).map(function (r) {
-            return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
-              '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
-              '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-              c.escapeHtml(r.status) + '</span></td><td></td></tr>';
-          }).join('');
+          var html = (next.requests || []).slice(0, 25).map(adminLeaveRowHtml_).join('');
           var tbody = document.getElementById('admin-req-body');
-          if (tbody) tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+          if (tbody) {
+            tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+            bindAdminActions();
+          }
         });
       });
 
@@ -805,12 +867,15 @@
   }
 
   window.HRMSLeaveUi = {
-    render: function (route, helpers) {
+    render: function (route, helpers, params) {
       var page = helpers.$('page-content');
       if (!page) return;
       page.classList.remove('hidden');
       if (route === 'my-leave') return renderMyLeave(page, helpers);
-      if (route === 'leave-apply') return renderApply(page, helpers, null);
+      if (route === 'leave-apply') {
+        var prefill = (params && params.prefill) || null;
+        return renderApply(page, helpers, prefill);
+      }
       if (route === 'leave-approvals') return renderApprovals(page, helpers);
       if (route === 'leave-admin') return renderAdmin(page, helpers);
       if (route === 'leave-calendar') return renderCalendar(page, helpers);

@@ -127,7 +127,7 @@ function loadBell() {
       return Promise.resolve({
         unread_count: 2,
         items: [
-          { notification_id: 'N1', status: 'UNREAD', unread: true, title: 'Leave approved', type: 'LEAVE_APPROVED', action_route: 'leave' },
+          { notification_id: 'N1', status: 'UNREAD', unread: true, title: 'Leave approved', type: 'LEAVE_APPROVED', action_route: 'my-leave' },
           { notification_id: 'N2', status: 'READ', unread: false, title: 'Payslip', type: 'PAYSLIP' }
         ]
       });

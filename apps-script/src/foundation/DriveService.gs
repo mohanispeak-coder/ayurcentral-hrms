@@ -11,16 +11,21 @@ var DriveService = (function () {
     return fromSetting || '';
   }
 
+  /**
+   * Returns HRMS Drive root, auto-creating folder structure when missing or stale.
+   * Web app runs as script owner — no manual Drive setup required for HR uploads.
+   */
   function getRootFolder() {
     var id = getRootFolderId_();
-    if (!id) {
-      throw configurationError_('Drive root folder is not configured. Run Drive setup.');
+    if (id) {
+      try {
+        return DriveApp.getFolderById(id);
+      } catch (ignore) {
+        // Configured folder was deleted or is inaccessible — recreate below.
+      }
     }
-    try {
-      return DriveApp.getFolderById(id);
-    } catch (e) {
-      throw configurationError_('Drive root folder could not be accessed. Check folder ID and permissions.');
-    }
+    var result = setupRootStructure();
+    return DriveApp.getFolderById(result.rootFolderId);
   }
 
   function findChildFolder_(parent, name) {

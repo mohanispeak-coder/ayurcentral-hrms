@@ -16,9 +16,15 @@ var NotificationLeaveAdapter = (function () {
     };
   }
 
-  function notifySubmitted(leaveRequest, employee, manager) {
+  function notifySubmitted(leaveRequest, employee, recipient, options) {
     try {
-      var payload = NotificationEngine.payloads.leaveSubmitted(leaveRequest, employeeHint_(employee), employeeHint_(manager));
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveSubmitted(
+        leaveRequest,
+        employeeHint_(employee),
+        employeeHint_(recipient),
+        options
+      );
       payload.force_email = false;
       payload.force_in_app = true;
       return NotificationService.createNotification(payload);
@@ -28,9 +34,31 @@ var NotificationLeaveAdapter = (function () {
     }
   }
 
-  function notifyApproved(leaveRequest, employee) {
+  function notifyHrReviewRequired(leaveRequest, employee, hrRecipient) {
+    return notifySubmitted(leaveRequest, employee, hrRecipient, { audience: 'hr' });
+  }
+
+  function notifyManagerApprovalRequired(leaveRequest, employee, manager, options) {
+    options = options || {};
+    var name = (employee && (employee.display_name || employee.employee_id)) || 'An employee';
+    if (!options.title) {
+      options.title = 'Leave awaiting your approval';
+    }
+    if (!options.message) {
+      options.message = 'Leave request from ' + name + ' is awaiting your approval.';
+    }
+    options.audience = 'manager';
+    return notifySubmitted(leaveRequest, employee, manager, options);
+  }
+
+  function notifyApproved(leaveRequest, employee, options) {
     try {
-      var payload = NotificationEngine.payloads.leaveApproved(leaveRequest, employeeHint_(employee));
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveApproved(
+        leaveRequest,
+        employeeHint_(employee),
+        options
+      );
       payload.force_email = false;
       payload.force_in_app = true;
       return NotificationService.createNotification(payload);
@@ -40,9 +68,14 @@ var NotificationLeaveAdapter = (function () {
     }
   }
 
-  function notifyRejected(leaveRequest, employee) {
+  function notifyRejected(leaveRequest, employee, options) {
     try {
-      var payload = NotificationEngine.payloads.leaveRejected(leaveRequest, employeeHint_(employee));
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveRejected(
+        leaveRequest,
+        employeeHint_(employee),
+        options
+      );
       payload.force_email = false;
       payload.force_in_app = true;
       return NotificationService.createNotification(payload);
@@ -66,7 +99,7 @@ var NotificationLeaveAdapter = (function () {
         end_date: leaveRequest.end_date
       };
       results.push(NotificationService.createNotification(
-        NotificationEngine.payloads.leaveCancelled(empReq, employeeHint_(employee), actorName)
+        NotificationEngine.payloads.leaveCancelled(empReq, employeeHint_(employee), actorName, { audience: 'employee' })
       ));
     } catch (e) {
       Logger.log('NotificationLeaveAdapter.notifyCancelled employee: ' + (e.message || e));
@@ -81,7 +114,7 @@ var NotificationLeaveAdapter = (function () {
           display_name: employee && employee.display_name,
           start_date: leaveRequest.start_date,
           end_date: leaveRequest.end_date
-        }, employeeHint_(manager), actorName);
+        }, employeeHint_(manager), actorName, { audience: 'manager' });
         results.push(NotificationService.createNotification(mgrPayload));
       } catch (e2) {
         Logger.log('NotificationLeaveAdapter.notifyCancelled manager: ' + (e2.message || e2));
@@ -92,6 +125,8 @@ var NotificationLeaveAdapter = (function () {
 
   return {
     notifySubmitted: notifySubmitted,
+    notifyHrReviewRequired: notifyHrReviewRequired,
+    notifyManagerApprovalRequired: notifyManagerApprovalRequired,
     notifyApproved: notifyApproved,
     notifyRejected: notifyRejected,
     notifyCancelled: notifyCancelled

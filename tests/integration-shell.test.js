@@ -31,6 +31,8 @@ const permSrc = read('foundation/PermissionService.gs');
 const schema = read('foundation/SchemaService.gs');
 const leave = read('leave/LeaveService.gs');
 const payroll = read('payroll/PayrollService.gs');
+const payrollApi = read('payroll/ApiPayroll.gs');
+const payrollBulk = read('payroll/PayrollBulkService.gs');
 const pms = read('pms/PmsService.gs');
 const ats = read('ats/AtsService.gs');
 const atsWeb = read('ats/AtsWeb.gs');
@@ -46,12 +48,16 @@ check('route-ntf', /notifications:\s*'notifications'/.test(scripts));
 check('nav-recruit', /id:\s*'recruitment'/.test(scripts));
 check('schema-module-hook', /ensureModuleSheets_/.test(schema));
 check('leave-inbox-submit', /NotificationLeaveAdapter\.notifySubmitted/.test(leave));
+check('leave-inbox-hr-notify', /notifyHrReviewRequired/.test(read('notifications/NotificationAdapters.gs')));
+check('leave-inbox-mgr-notify', /notifyManagerApprovalRequired/.test(read('notifications/NotificationAdapters.gs')));
 check('leave-inbox-approve', /NotificationLeaveAdapter\.notifyApproved/.test(leave));
 check('leave-inbox-reject', /NotificationLeaveAdapter\.notifyRejected/.test(leave));
 check('leave-inbox-cancel', /NotificationLeaveAdapter\.notifyCancelled/.test(leave));
 check('leave-email-retained', /MailApp\.sendEmail/.test(leave));
 check('payroll-locked-notify', /NotificationPayrollAdapter\.notifyLocked/.test(payroll));
 check('payroll-payslip-notify', /notifyPayslipsAvailable/.test(payroll));
+check('payroll-finalize-api', /apiFinalizePayroll/.test(payrollApi));
+check('payroll-bulk-api', /apiValidatePayrollUpload/.test(payrollApi) && /PayrollBulkService/.test(payrollBulk));
 check('pms-cycle-open-notify', /NotificationPmsAdapter\.notifyCycleOpen/.test(pms));
 check('pms-manager-notify', /notifyManagerReviewPending/.test(pms));
 check('pms-final-notify', /notifyFinalized/.test(pms));
@@ -110,6 +116,7 @@ const created = E.inbox.create(store, payload, {
 });
 check('ntf-create', created.ok && created.created);
 check('ntf-unread', E.inbox.unreadCount(store, { authorized: true, employee_id: 'EMP001', email: 'a@x.com', role: 'EMPLOYEE' }) === 1);
+check('ntf-approved-route', payload.action_route === 'my-leave', payload.action_route);
 const dup = E.inbox.create(store, payload, {
   now: new Date(),
   idFactory: function () { n += 1; return 'INB-' + n; },

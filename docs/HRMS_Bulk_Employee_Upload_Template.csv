@@ -1,0 +1,4 @@
+employee_id*,first_name*,last_name*,display_name,work_email*,department*,designation*,location*,employment_type*,joining_date*,manager_employee_id,phone,address,date_of_birth,gender,pan,bank_account_name,bank_account_number,bank_ifsc,bank_name,notes,create_login*,google_login_email
+SAPL-0001,Ravi,Kumar,Ravi Kumar,ravi.kumar@example.com,Operations,Executive,Bangalore,PERMANENT,2026-01-15,,9876543210,Sample address,,,,,,,,,YES,ravi.kumar@example.com
+AOPL-0001,Priya,Shah,Priya Shah,priya.shah@example.com,Finance,Analyst,Mumbai,PERMANENT,2026-02-01,SAPL-0001,9876501234,,,,,,,,,YES,priya.shah@example.com
+AOMS-0001,Arun,Nair,Arun Nair,arun.nair@example.com,HR,Coordinator,Chennai,CONTRACT,2026-03-01,,,,,,,,,,,NO,

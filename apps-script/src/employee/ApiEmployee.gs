@@ -79,6 +79,13 @@ function apiUploadEmployeeDocument(employeeId, meta, sessionToken) {
   }, sessionToken);
 }
 
+function apiUploadEmployeeDocuments(employeeId, files, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.uploadDocuments(session, employeeId, files || []);
+  }, sessionToken);
+}
+
 function apiDownloadEmployeeDocument(documentId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

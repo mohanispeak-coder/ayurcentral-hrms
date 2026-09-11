@@ -62,7 +62,7 @@
       pmsState.team = null;
       pmsState.appraisals = null;
       if (!keepReviewState) pmsState.review = null;
-      if (App.invalidateDashboardView) App.invalidateDashboardView();
+      if (App.invalidateDashboardView) App.invalidateDashboardView({ secondaryOnly: true });
     }
 
     function invalidatePmsAll_() {
@@ -334,11 +334,27 @@
 
     /* ---------- Home / dashboard ---------- */
 
+    function seedPmsFromDashboard_() {
+      if (pmsState.dashboard) return true;
+      if (!App.getDashboardViewCache) return false;
+      var dash = App.getDashboardViewCache();
+      if (dash && dash.complete && dash.payload && dash.payload.pms) {
+        pmsState.dashboard = dash.payload.pms;
+        return true;
+      }
+      return false;
+    }
+
     function renderPmsHome() {
       var page = pageEl();
       if (!page) return;
       var seq = App.getState().navSeq;
       if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('pms') && pmsState.dashboard) {
+        paintHome_(page, seq);
+        return;
+      }
+      if (seedPmsFromDashboard_()) {
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded('pms');
         paintHome_(page, seq);
         return;
       }
@@ -601,15 +617,12 @@
         page.innerHTML = '<div class="pms-page">' + header('Review cycle', '', '') +
           '<div class="card">' + spinner('Loading cycle…') + '</div></div>';
       }
-      Promise.all([
-        rpc('apiPmsGetCycle', [cycleId]),
-        rpc('apiPmsListAssignableEmployees', [cycleId]).catch(function () { return []; }),
-        rpc('apiPmsListRatingScale', []).catch(function () { return { ratingScale: [] }; })
-      ]).then(function (parts) {
+      rpc('apiPmsGetCycleBundle', [cycleId]).then(function (bundle) {
         if (!stillOn(seq, 'pms-cycle')) return;
-        pmsState.cycleDetail = parts[0] || {};
-        pmsState.employees = parts[1] || [];
-        pmsState.scale = (parts[2] && parts[2].ratingScale) || (parts[0] && parts[0].ratingScale) || [];
+        bundle = bundle || {};
+        pmsState.cycleDetail = bundle;
+        pmsState.employees = bundle.assignableEmployees || [];
+        pmsState.scale = bundle.ratingScale || [];
         if (App.markModuleViewLoaded) App.markModuleViewLoaded(cycleKey);
         paintCycleDetail_(page, seq);
       }).catch(function (err) {

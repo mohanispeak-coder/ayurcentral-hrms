@@ -97,6 +97,11 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* Single scroll region: main .content only (avoids nested bars when panels expand). */
+html:has(.app-shell.is-authed),
+html:has(.app-shell.is-authed) body {
+  overflow: hidden;
+}
 button, input, select, textarea { font-family: inherit; }
 
 .hidden { display: none !important; }
@@ -343,6 +348,20 @@ button, input, select, textarea { font-family: inherit; }
   .app-shell.is-authed:has(#page-content .page-header) .header .page-title {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+  .app-shell.is-authed .sidebar,
+  .app-shell.is-authed .app-sidebar {
+    transition: width 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  }
+  .app-shell.is-authed .sidebar:not(.open),
+  .app-shell.is-authed .app-sidebar:not(.open) {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    border-right-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-8px);
   }
 }
 
@@ -598,6 +617,9 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
 .form-label.is-required::after {
   content: " *"; color: var(--color-danger); font-weight: 700;
 }
+.form-hint {
+  margin: 4px 0 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4;
+}
 .form-input,
 .form-select {
   width: 100%; max-width: 400px; padding: 9px 11px;
@@ -617,6 +639,12 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
 .form-grid .form-input, .form-grid .form-select, .form-textarea { max-width: none; }
 .form-textarea, textarea.form-input { min-height: 72px; resize: vertical; }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.doc-upload-form { margin-bottom: 20px; padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+.doc-upload-form .section-title { margin-top: 0; }
+.doc-upload-row { align-items: end; margin-bottom: 8px; }
+.doc-upload-actions { gap: 10px; flex-wrap: wrap; align-items: center; }
+.doc-upload-remove-wrap .btn { width: 100%; }
+.btn-add-doc-row { font-weight: 600; }
 .form-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-md); margin-right: 12px; }
 .form-span-2 { grid-column: 1 / -1; }
 .field-error { color: var(--color-danger); font-size: var(--text-xs); margin-top: 4px; min-height: 0; line-height: 1.35; }
@@ -1181,6 +1209,51 @@ body:has(> .careers-shell) {
   color: var(--color-text-secondary);
 }
 .skeleton-card[aria-busy="true"] { pointer-events: none; }
+.hrms-global-busy { cursor: progress; }
+.hrms-global-busy button.btn-loading { cursor: wait; }
+
+/* Collapsible sections — click summary to expand (chevron points right when closed, down when open) */
+.collapsible-section { margin-top: 12px; }
+.collapsible-section > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.35;
+  padding: 4px 0 8px;
+  user-select: none;
+}
+.collapsible-section > summary::-webkit-details-marker { display: none; }
+.collapsible-section > summary::marker { content: ''; }
+.collapsible-section > summary::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid currentColor;
+  opacity: 0.65;
+  transition: transform 180ms ease;
+}
+.collapsible-section[open] > summary::before { transform: rotate(90deg); }
+.collapsible-section.bulk-upload-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-bg-elevated);
+}
+.collapsible-section .collapsible-section-body { padding-top: 2px; }
+.collapsible-section,
+.collapsible-section.bulk-upload-card,
+.collapsible-section.bulk-upload-card[open],
+.collapsible-section .collapsible-section-body,
+details.card.collapsible-section {
+  overflow: visible;
+  max-height: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1188,5 +1261,6 @@ body:has(> .careers-shell) {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .collapsible-section > summary::before { transition: none !important; }
 }
 </style>

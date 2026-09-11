@@ -305,12 +305,38 @@ var NotificationEngine = (function () {
     }
   }
 
+  var LEAVE_ROUTE_ = {
+    MY_LEAVE: 'my-leave',
+    APPROVALS: 'leave-approvals',
+    ADMIN: 'leave-admin'
+  };
+
+  /**
+   * Recipient-aware leave inbox destination.
+   * audience hint: employee | hr | admin | manager | approver
+   */
+  function leaveRouteForRecipient_(recipientEmployeeId, requestEmployeeId, audience) {
+    var recipient = trim_(recipientEmployeeId);
+    var owner = trim_(requestEmployeeId);
+    if (recipient && owner && recipient === owner) {
+      return LEAVE_ROUTE_.MY_LEAVE;
+    }
+    var aud = trim_(audience).toLowerCase();
+    if (aud === 'hr' || aud === 'admin') {
+      return LEAVE_ROUTE_.ADMIN;
+    }
+    if (aud === 'employee' || aud === 'owner') {
+      return LEAVE_ROUTE_.MY_LEAVE;
+    }
+    return LEAVE_ROUTE_.APPROVALS;
+  }
+
   function actionFor(type, sourceRecordId, extra) {
     extra = extra || {};
     var def = getTypeDef(type) || {};
     var route = extra.action_route || def.actionRoute || '';
     var params = extra.action_params ? parseActionParams(extra.action_params) : {};
-    if (route === 'leave-approvals' && sourceRecordId && !params.leaveRequestId) {
+    if ((route === 'leave-approvals' || route === 'my-leave') && sourceRecordId && !params.leaveRequestId) {
       params.leaveRequestId = sourceRecordId;
     }
     if (route === 'payroll-run' && sourceRecordId && !params.runId) {
@@ -639,12 +665,12 @@ var NotificationEngine = (function () {
   function markReadInStore_(store, notificationId, session, now) {
     var id = trim_(notificationId);
     if (!id) return { ok: false, error: 'notification_id is required.' };
-    var rows = null;
+    var rows = store.list ? (store.list() || []) : null;
     var row = null;
     if (store.find) {
       row = store.find(id);
-    } else {
-      rows = store.list() || [];
+    }
+    if (!row && rows) {
       for (var i = 0; i < rows.length; i++) {
         if (trim_(rows[i].notification_id) === id) {
           row = rows[i];
@@ -788,7 +814,8 @@ var NotificationEngine = (function () {
     };
   }
 
-  function buildLeaveSubmitted(rec, employee, manager) {
+  function buildLeaveSubmitted(rec, employee, recipient, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
@@ -796,46 +823,77 @@ var NotificationEngine = (function () {
       end_date: rec.end_date,
       total_days: rec.total_days
     };
-    return payloadBase_(TYPE.LEAVE_SUBMITTED, manager, rec.leave_request_id, vars, {
-      title: 'Leave submitted for ' + vars.display_name,
-      message: vars.display_name + ' (' + vars.employee_id + ') submitted leave from ' +
-        vars.start_date + ' to ' + vars.end_date + ' (' + vars.total_days + ' day(s)).',
-      email_body: interpolate(
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
+    var route = leaveRouteForRecipient_(
+      recipient && recipient.employee_id,
+      requestEmployeeId,
+      extra.audience || extra.audience_hint || 'approver'
+    );
+    return payloadBase_(TYPE.LEAVE_SUBMITTED, recipient, rec.leave_request_id, vars, {
+      title: extra.title || ('Leave submitted for ' + vars.display_name),
+      message: extra.message || (
+        vars.display_name + ' (' + vars.employee_id + ') submitted leave from ' +
+        vars.start_date + ' to ' + vars.end_date + ' (' + vars.total_days + ' day(s)).'
+      ),
+      email_body: extra.email_body || interpolate(
         '{display_name} ({employee_id}) submitted leave from {start_date} to {end_date}.\nOpen HRMS to review this request.',
         vars
-      )
+      ),
+      action_route: extra.action_route || route,
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
-  function buildLeaveApproved(rec, employee) {
+  function buildLeaveApproved(rec, employee, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
       start_date: rec.start_date,
       end_date: rec.end_date
     };
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
     return payloadBase_(TYPE.LEAVE_APPROVED, employee, rec.leave_request_id, vars, {
-      title: 'Leave approved',
-      message: 'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was approved.',
-      email_subject: 'Leave approved'
+      title: extra.title || 'Leave approved',
+      message: extra.message || (
+        'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was approved.'
+      ),
+      email_subject: extra.email_subject || extra.title || 'Leave approved',
+      action_route: extra.action_route || leaveRouteForRecipient_(
+        employee && employee.employee_id,
+        requestEmployeeId,
+        'employee'
+      ),
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
-  function buildLeaveRejected(rec, employee) {
+  function buildLeaveRejected(rec, employee, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
       start_date: rec.start_date,
       end_date: rec.end_date
     };
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
     return payloadBase_(TYPE.LEAVE_REJECTED, employee, rec.leave_request_id, vars, {
-      title: 'Leave rejected',
-      message: 'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was not approved.',
-      email_subject: 'Leave rejected'
+      title: extra.title || 'Leave rejected',
+      message: extra.message || (
+        'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was not approved.'
+      ),
+      email_subject: extra.email_subject || extra.title || 'Leave rejected',
+      action_route: extra.action_route || leaveRouteForRecipient_(
+        employee && employee.employee_id,
+        requestEmployeeId,
+        'employee'
+      ),
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
-  function buildLeaveCancelled(rec, recipient, actorName) {
+  function buildLeaveCancelled(rec, recipient, actorName, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: rec.employee_id,
       display_name: rec.display_name || rec.employee_id,
@@ -843,10 +901,19 @@ var NotificationEngine = (function () {
       end_date: rec.end_date,
       actor: actorName || 'HR'
     };
+    var route = leaveRouteForRecipient_(
+      recipient && recipient.employee_id,
+      trim_(rec.employee_id),
+      extra.audience || extra.audience_hint || ''
+    );
     return payloadBase_(TYPE.LEAVE_CANCELLED, recipient, rec.leave_request_id, vars, {
-      title: 'Leave cancelled',
-      message: 'Leave for ' + vars.display_name + ' from ' + vars.start_date + ' to ' +
+      title: extra.title || 'Leave cancelled',
+      message: extra.message || (
+        'Leave for ' + vars.display_name + ' from ' + vars.start_date + ' to ' +
         vars.end_date + ' was cancelled' + (actorName ? ' by ' + actorName : '') + '.'
+      ),
+      action_route: extra.action_route || route,
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
@@ -1114,6 +1181,8 @@ var NotificationEngine = (function () {
     parseActionParams: parseActionParams,
     stringifyActionParams: stringifyActionParams,
     actionFor: actionFor,
+    leaveRouteForRecipient: leaveRouteForRecipient_,
+    LEAVE_ROUTE: LEAVE_ROUTE_,
     resolveChannels: resolveChannels,
     validateCreate: validateCreate,
     serializeRow: serializeRow,

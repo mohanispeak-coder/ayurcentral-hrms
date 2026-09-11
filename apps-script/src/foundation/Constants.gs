@@ -21,6 +21,7 @@ HRMS.SHEETS = {
 };
 
 HRMS.ROLES = {
+  OWNER: 'OWNER',
   ADMIN: 'ADMIN',
   HR: 'HR',
   MANAGER: 'MANAGER',

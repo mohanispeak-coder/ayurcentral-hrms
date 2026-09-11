@@ -72,7 +72,7 @@ function hrmsResolveAuthAccess_(input) {
       };
     }
 
-    return {
+    var session = {
       authorized: true,
       email: email,
       employee_id: user.employee_id,
@@ -83,6 +83,10 @@ function hrmsResolveAuthAccess_(input) {
       reason: '',
       message: ''
     };
+    if (typeof UserAccessService !== 'undefined' && UserAccessService.attachToSession) {
+      UserAccessService.attachToSession(session, user);
+    }
+    return session;
   }
 
   var appMode = String(input.appMode || HRMS.APP_MODE.PRODUCTION).trim().toUpperCase();

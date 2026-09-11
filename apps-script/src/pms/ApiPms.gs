@@ -57,6 +57,13 @@ function apiPmsGetCycle(cycleId, sessionToken) {
   }, sessionToken);
 }
 
+function apiPmsGetCycleBundle(cycleId, sessionToken) {
+  return hrmsRun_(function () {
+    pmsInstallAdapters_();
+    return PmsService.getCycleBundle(cycleId);
+  }, sessionToken);
+}
+
 function apiPmsCreateCycle(payload, sessionToken) {
   return hrmsRun_(function () {
     pmsInstallAdapters_();

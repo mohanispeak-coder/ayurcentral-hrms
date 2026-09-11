@@ -43,6 +43,13 @@ function apiLeaveCancel(leaveRequestId, sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveRevokeRejection(leaveRequestId, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.revokeRejection(session, leaveRequestId, comment || '');
+  }, sessionToken);
+}
+
 function apiLeaveGetApprovals(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
@@ -109,6 +116,13 @@ function apiLeaveListEmployees(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return LeaveService.listEmployeeOptions(session);
+  }, sessionToken);
+}
+
+function apiLeaveGetApplyBundle(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.getApplyBootstrap(session);
   }, sessionToken);
 }
 

@@ -57,7 +57,7 @@ check('emp-restore-profile', /consumeModuleViewRestore\(key\)/.test(emp) && /api
 check('leave-restore', /tryRestoreLeave_/.test(leaveUi) && /apiLeaveGetMyLeave/.test(leaveUi));
 check('leave-approve-still-rpc', /apiLeaveApprove/.test(leaveUi));
 check('payroll-restore-home', /consumeModuleViewRestore\('payroll'\)/.test(payroll));
-check('payroll-lock-still-rpc', /apiLockPayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));
+check('payroll-finalize-still-rpc', /apiFinalizePayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));
 check('pms-restore-home', /consumeModuleViewRestore\('pms'\)/.test(pms));
 check('ats-restore-home', /consumeModuleViewRestore\('ats'\)/.test(ats));
 check('ntf-restore-inbox', /consumeModuleViewRestore\(ntfKey\)/.test(ntf) && /apiGetNotifications/.test(ntf));

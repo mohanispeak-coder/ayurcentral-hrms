@@ -35,7 +35,7 @@ function apiGetAppBootstrap(sessionToken) {
     if (session.authorized) {
       // Reuse resolved session — do not call requireAuth()/resolveSession again.
       PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
-      nav = PermissionService.getNavForRole(session.role);
+      nav = PermissionService.getNavForSession(session);
     }
 
     // Active Google identity only (skip effective-user diagnostics on hot path).
@@ -66,7 +66,10 @@ function apiGetAppBootstrap(sessionToken) {
         reason: session.reason,
         message: session.message,
         demo: !!session.demo,
-        authRequired: !!session.authRequired
+        authRequired: !!session.authRequired,
+        access: session.access || (typeof UserAccessService !== 'undefined'
+          ? UserAccessService.getFlagsForSession(session)
+          : null)
       },
       auth: {
         path: activeEmail ? 'GOOGLE' : (session.authorized && session.email ? 'OTP' : 'NONE'),
@@ -150,9 +153,12 @@ function apiVerifyAuthOtp(email, code, sessionToken) {
         employee_id: session.employee_id,
         role: session.role,
         displayName: session.displayName,
-        demo: !!session.demo
+        demo: !!session.demo,
+        access: session.access || (typeof UserAccessService !== 'undefined'
+          ? UserAccessService.getFlagsForSession(session)
+          : null)
       },
-      navigation: PermissionService.getNavForRole(session.role)
+      navigation: PermissionService.getNavForSession(session)
     };
   }, sessionToken);
 }

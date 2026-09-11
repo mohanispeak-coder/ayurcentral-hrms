@@ -21,6 +21,7 @@ var EmployeeService = (function () {
   ].concat(SENSITIVE_FIELDS_);
   var SELF_EDIT_FIELDS_ = ['phone', 'address'];
   var EMPLOYMENT_TYPES_ = ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'];
+  var EMPLOYEE_ID_PATTERN_ = /^(SAPL|AOPL|AOMS)-\d{4}$/;
 
   function trim_(v) {
     if (v === null || v === undefined) return '';
@@ -147,6 +148,7 @@ var EmployeeService = (function () {
       work.can_view_payroll_ids = false;
       work.can_view_salary_summary = false;
       work.can_view_payslips = false;
+      work.can_view_leave = false;
       return work;
     }
 
@@ -172,22 +174,71 @@ var EmployeeService = (function () {
 
     var isSelf = session.employee_id === row.employee_id;
     var hr = PermissionService.isHrOrAdmin(session);
+    var selfFlags = (typeof UserAccessService !== 'undefined')
+      ? UserAccessService.getFlagsForSession(session)
+      : { access_documents: true, access_payslips: true, access_leave: true };
     out.view_mode = hr ? 'HR' : (isSelf ? 'SELF' : 'OTHER');
     out.can_edit = hr;
     out.can_edit_contact = hr || isSelf;
     out.can_change_status = hr;
     out.can_upload_documents = hr;
-    out.can_view_documents = hr || isSelf;
-    if (!out.hasOwnProperty('can_view_payslips')) {
-      out.can_view_payslips = hr || isSelf;
+    out.can_manage_app_access = hr && !isSelf;
+    if (hr) {
+      out.can_view_documents = true;
+      out.can_view_leave = true;
+      if (!out.hasOwnProperty('can_view_payslips')) {
+        out.can_view_payslips = true;
+      }
+    } else if (isSelf) {
+      out.can_view_documents = !!selfFlags.access_documents;
+      out.can_view_payslips = !!selfFlags.access_payslips;
+      out.can_view_leave = !!selfFlags.access_leave;
+    } else {
+      out.can_view_documents = false;
+      out.can_view_payslips = false;
+      out.can_view_leave = false;
     }
     return out;
+  }
+
+  function employeeDisplayName_(emp) {
+    if (!emp) return '';
+    var dn = trim_(emp.display_name);
+    if (dn) return dn;
+    return trim_((emp.first_name || '') + ' ' + (emp.last_name || ''));
+  }
+
+  function employeeSearchText_(emp) {
+    if (!emp) return '';
+    return [
+      emp.employee_id,
+      emp.display_name,
+      emp.first_name,
+      emp.last_name,
+      emp.work_email,
+      emp.department,
+      emp.designation,
+      emp.location
+    ].map(function (v) { return trim_(v); }).filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function matchesEmployeeSearch_(emp, q) {
+    q = trim_(q).toLowerCase();
+    if (!q) return true;
+    var hay = employeeSearchText_(emp);
+    if (hay.indexOf(q) >= 0) return true;
+    var terms = q.split(/\s+/).filter(Boolean);
+    if (terms.length <= 1) return false;
+    for (var i = 0; i < terms.length; i++) {
+      if (hay.indexOf(terms[i]) < 0) return false;
+    }
+    return true;
   }
 
   function directoryRow_(emp, nameMap) {
     return {
       employee_id: emp.employee_id,
-      display_name: emp.display_name || trim_(emp.first_name + ' ' + emp.last_name),
+      display_name: employeeDisplayName_(emp) || emp.employee_id,
       department: emp.department || '',
       designation: emp.designation || '',
       location: emp.location || '',
@@ -240,15 +291,7 @@ var EmployeeService = (function () {
       if (status && String(e.status || '').toUpperCase() !== status) return false;
       if (department && String(e.department || '') !== department) return false;
       if (location && String(e.location || '') !== location) return false;
-      if (q) {
-        var hay = (
-          String(e.employee_id || '') + ' ' +
-          String(e.display_name || '') + ' ' +
-          String(e.first_name || '') + ' ' +
-          String(e.last_name || '')
-        ).toLowerCase();
-        if (hay.indexOf(q) < 0) return false;
-      }
+      if (q && !matchesEmployeeSearch_(e, q)) return false;
       return true;
     });
     filtered.sort(function (a, b) {
@@ -302,9 +345,27 @@ var EmployeeService = (function () {
       .sort(function (a, b) { return a.employee_id.localeCompare(b.employee_id); });
   }
 
+  function normalizeEmployeeId_(value) {
+    return trim_(value).toUpperCase();
+  }
+
+  function isValidEmployeeIdFormat_(employeeId) {
+    return EMPLOYEE_ID_PATTERN_.test(normalizeEmployeeId_(employeeId));
+  }
+
   function validatePayload_(payload, employeeIdForSelfCheck, isCreate) {
     var errors = {};
     var warnings = [];
+    if (isCreate) {
+      var employeeId = normalizeEmployeeId_(payload.employee_id);
+      if (!employeeId) {
+        errors.employee_id = 'Employee code is required.';
+      } else if (!isValidEmployeeIdFormat_(employeeId)) {
+        errors.employee_id = 'Use format SAPL-0001, AOPL-0001, or AOMS-0001.';
+      } else if (EmployeeRepository.findById(employeeId)) {
+        errors.employee_id = 'Employee code already exists.';
+      }
+    }
     var first = trim_(payload.first_name);
     var last = trim_(payload.last_name);
     if (!first) errors.first_name = 'First name is required.';
@@ -404,28 +465,46 @@ var EmployeeService = (function () {
     }
   }
 
-  function createEmployee(session, payload) {
+  function parseCreateUserFlag_(value) {
+    if (value === false || value === 0) return false;
+    var normalized = trim_(value).toUpperCase();
+    if (normalized === 'NO' || normalized === 'N' || normalized === 'FALSE' || normalized === '0') return false;
+    return true;
+  }
+
+  function resolveGoogleLoginEmail_(payload, workEmail) {
+    var loginEmail = normalizeEmail_(payload.google_login_email);
+    if (loginEmail) return loginEmail;
+    return workEmail;
+  }
+
+  function createEmployee(session, payload, options) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     payload = payload || {};
+    options = options || {};
     var validated = validatePayload_(payload, '', true);
     var displayName = trim_(payload.display_name) || (trim_(payload.first_name) + ' ' + trim_(payload.last_name));
-    var createUser = payload.create_user !== false && payload.create_user !== 'false';
+    var createUser = parseCreateUserFlag_(payload.create_user);
+    var employeeId = normalizeEmployeeId_(payload.employee_id);
+    var loginEmail = resolveGoogleLoginEmail_(payload, validated.work_email);
     var now = new Date();
 
-    return withScriptLock_(function () {
+    var runCreate = function () {
       ensureUniqueEmail_(validated.work_email, null);
       if (createUser) {
-        var existingUser = EmployeeRepository.findUserByEmail(validated.work_email);
+        if (!loginEmail) {
+          throw validationError_('Google login email is required when creating a user login.', {
+            fields: { google_login_email: 'Enter the Google sign-in email.' }
+          });
+        }
+        var existingUser = EmployeeRepository.findUserByEmail(loginEmail);
         if (existingUser) {
           throw validationError_('A user login already exists for this email.', {
-            fields: { work_email: 'This email is already mapped to a user.' }
+            fields: { google_login_email: 'This email is already mapped to a user.' }
           });
         }
       }
 
-      var employeeId = DbService.nextEmployeeIdAssumingLocked
-        ? DbService.nextEmployeeIdAssumingLocked()
-        : DbService.nextEmployeeId();
       var record = {
         employee_id: employeeId,
         first_name: trim_(payload.first_name),
@@ -469,25 +548,24 @@ var EmployeeService = (function () {
       }
 
       if (createUser) {
-        EmployeeRepository.insertUser({
-          google_email: validated.work_email,
+        var accessDefaults = (typeof UserAccessService !== 'undefined' && UserAccessService.newUserAccessDefaults)
+          ? UserAccessService.newUserAccessDefaults()
+          : {};
+        EmployeeRepository.insertUser(Object.assign({
+          google_email: loginEmail,
           employee_id: employeeId,
           role: HRMS.ROLES.EMPLOYEE,
           status: HRMS.USER_STATUS.ACTIVE,
           created_at: now,
           updated_at: now
-        });
+        }, accessDefaults));
       }
 
       var drive = maybeCreateDriveFolder_(employeeId);
-      AuditService.log(
-        'EMPLOYEE_CREATE',
-        'Employees',
-        employeeId,
-        'Created ' + displayName + ' (' + record.department + ', ' + record.employment_type + ')' +
-          (createUser ? '; user login enabled' : ''),
-        employeeId
-      );
+      var auditNote = 'Created ' + displayName + ' (' + record.department + ', ' + record.employment_type + ')' +
+        (createUser ? '; user login enabled' : '');
+      if (options.source === 'bulk_upload') auditNote += '; source=bulk_upload';
+      AuditService.log('EMPLOYEE_CREATE', 'Employees', employeeId, auditNote, employeeId);
 
       return {
         employee: sanitizeForViewer(EmployeeRepository.findById(employeeId), session),
@@ -496,7 +574,10 @@ var EmployeeService = (function () {
         drive_folder_created: drive.created,
         user_created: createUser
       };
-    });
+    };
+
+    if (options.alreadyLocked) return runCreate();
+    return withScriptLock_(runCreate);
   }
 
   function getEmployee(session, employeeId) {
@@ -695,21 +776,46 @@ var EmployeeService = (function () {
       throw authorizationError_('You cannot view these payslips.');
     }
     return EmployeeRepository.listDocuments(emp.employee_id, HRMS.DOCUMENT_CATEGORY.PAYSLIP).map(function (d) {
+      var enriched = typeof PayslipService.enrichPayslipDoc === 'function'
+        ? PayslipService.enrichPayslipDoc(d, emp.employee_id)
+        : d;
       return {
-        document_id: d.document_id,
-        title: d.title,
+        document_id: enriched.document_id,
+        title: enriched.title,
+        period_label: enriched.period_label || enriched.title,
         category: d.category,
-        payroll_run_id: d.payroll_run_id || '',
-        uploaded_at: toIsoDateTime_(d.uploaded_at),
-        uploaded_by_email: d.uploaded_by_email
+        payroll_run_id: enriched.payroll_run_id || d.payroll_run_id || '',
+        net_pay: enriched.net_pay,
+        uploaded_at: toIsoDateTime_(enriched.uploaded_at || d.uploaded_at),
+        generated_at: enriched.generated_at || toIsoDateTime_(d.uploaded_at)
       };
     });
   }
 
-  function uploadDocument(session, employeeId, meta) {
+  function uploadDocuments(session, employeeId, files) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
     if (!PermissionService.isHrOrAdmin(session)) {
       throw authorizationError_('Only HR or Admin can upload employee files.');
+    }
+    files = files || [];
+    if (!files.length) throw validationError_('At least one file is required.');
+    if (files.length > 20) {
+      throw validationError_('Maximum 20 files per upload. Remove some files and try again.');
+    }
+    var uploaded = [];
+    files.forEach(function (meta) {
+      uploaded.push(uploadDocument(session, employeeId, meta, { skipPermissionCheck: true }));
+    });
+    return { uploadedCount: uploaded.length, files: uploaded };
+  }
+
+  function uploadDocument(session, employeeId, meta, options) {
+    options = options || {};
+    if (!options.skipPermissionCheck) {
+      PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
+      if (!PermissionService.isHrOrAdmin(session)) {
+        throw authorizationError_('Only HR or Admin can upload employee files.');
+      }
     }
     meta = meta || {};
     var emp = EmployeeRepository.findById(trim_(employeeId));
@@ -720,7 +826,14 @@ var EmployeeService = (function () {
     var base64 = trim_(meta.base64);
     if (!base64) throw validationError_('File data is required.');
 
-    var folder = DriveService.getEmployeeDocumentsFolder(emp.employee_id);
+    var folder;
+    try {
+      folder = DriveService.getEmployeeDocumentsFolder(emp.employee_id);
+    } catch (e) {
+      throw configurationError_(
+        (e && e.message) || 'Could not access employee document folder. Ensure the script owner can create folders in Google Drive.'
+      );
+    }
     var bytes = Utilities.base64Decode(base64);
     var blob = Utilities.newBlob(bytes, mimeType, fileName);
     var file = folder.createFile(blob);
@@ -780,6 +893,10 @@ var EmployeeService = (function () {
     var emp = EmployeeRepository.findById(trim_(employeeId));
     if (!emp) throw notFoundError_('Employee not found.');
     if (!canAccessEmployee_(session, emp)) throw authorizationError_();
+    var view = sanitizeForViewer(emp, session);
+    if (!view.can_view_leave) {
+      throw authorizationError_('You do not have access to leave information.');
+    }
     var types = [];
     try {
       types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);
@@ -853,6 +970,7 @@ var EmployeeService = (function () {
     listDocuments: listDocuments,
     listPayslips: listPayslips,
     uploadDocument: uploadDocument,
+    uploadDocuments: uploadDocuments,
     downloadDocument: downloadDocument,
     getLeaveSummary: getLeaveSummary,
     isActive: isActive,
@@ -860,6 +978,9 @@ var EmployeeService = (function () {
     getDirectReportIds: getDirectReportIds,
     listActiveEmployees: listActiveEmployees,
     sanitizeForViewer: sanitizeForViewer,
-    matchesDirectoryFilter: matchesDirectoryFilter
+    matchesDirectoryFilter: matchesDirectoryFilter,
+    normalizeEmployeeId: normalizeEmployeeId_,
+    isValidEmployeeIdFormat: isValidEmployeeIdFormat_,
+    parseCreateUserFlag: parseCreateUserFlag_
   };
 })();

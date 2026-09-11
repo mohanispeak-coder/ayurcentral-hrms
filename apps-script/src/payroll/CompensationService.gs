@@ -2,8 +2,19 @@
  * Salary structures and components (compensation history on SalaryStructures).
  */
 var CompensationService = (function () {
+  /** Default salary lines — all required on save/bulk; empty numeric cells become 0. */
+  var REQUIRED_COMPONENT_SPECS_ = [
+    { component_code: 'BASIC', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'FIXED', sort_order: 1 },
+    { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', sort_order: 2 },
+    { component_code: 'SA', component_name: 'Special allowance', component_kind: 'EARNING', calc_method: 'FIXED', sort_order: 3 },
+    { component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION', calc_method: 'PERCENT_OF_BASIC', sort_order: 4 },
+    { component_code: 'ESI', component_name: 'ESI', component_kind: 'DEDUCTION', calc_method: 'FIXED', sort_order: 5 },
+    { component_code: 'PT', component_name: 'Professional tax', component_kind: 'DEDUCTION', calc_method: 'FIXED', sort_order: 6 },
+    { component_code: 'EMPLOYER_PF', component_name: 'Employer PF', component_kind: 'EMPLOYER', calc_method: 'PERCENT_OF_BASIC', sort_order: 7 }
+  ];
+
   function requirePayrollAdmin_() {
-    return PermissionService.require(HRMS.ACTIONS.COMPENSATION_MANAGE);
+    return PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
   }
 
   function toDate_(v) {
@@ -34,21 +45,62 @@ var CompensationService = (function () {
   }
 
   function getEmployee_(employeeId) {
+    var emp = null;
     try {
       if (typeof EmployeeService !== 'undefined' && EmployeeService &&
           typeof EmployeeService.getMasterRecord === 'function') {
-        return EmployeeService.getMasterRecord(employeeId);
+        emp = EmployeeService.getMasterRecord(employeeId);
       }
     } catch (ignore) {}
+    if (emp) return emp;
     return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+  }
+
+  function serializeClientValue_(value) {
+    if (value == null || value === '') return value === 0 ? 0 : '';
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+      if (isNaN(value.getTime())) return '';
+      try {
+        return Utilities.formatDate(value, Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd');
+      } catch (ignore) {
+        return String(value);
+      }
+    }
+    if (typeof value === 'object') return String(value);
+    return value;
+  }
+
+  function serializeClientRow_(row) {
+    if (!row) return row;
+    var out = {};
+    Object.keys(row).forEach(function (key) {
+      out[key] = serializeClientValue_(row[key]);
+    });
+    return out;
+  }
+
+  function serializeEditorBundle_(bundle) {
+    var current = null;
+    if (bundle.current) {
+      current = {
+        can_edit_in_place: bundle.current.can_edit_in_place !== false,
+        structure: serializeClientRow_(bundle.current.structure),
+        components: (bundle.current.components || []).map(serializeClientRow_)
+      };
+    }
+    return {
+      employee_id: String(bundle.employee_id || ''),
+      employee: serializeClientRow_(bundle.employee),
+      current: current,
+      history: (bundle.history || []).map(serializeClientRow_)
+    };
   }
 
   function listStructures(employeeId) {
     requirePayrollAdmin_();
-    var filter = employeeId ? { employee_id: employeeId } : {};
-    var rows = employeeId
-      ? DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, filter)
-      : DbService.getAllRecords(HRMS.SHEETS.SALARY_STRUCTURES);
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    var rows = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
     rows.sort(function (a, b) {
       return String(b.effective_from).localeCompare(String(a.effective_from));
     });
@@ -62,10 +114,41 @@ var CompensationService = (function () {
 
   function getCurrentForEmployee(employeeId) {
     requirePayrollAdmin_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
     var bundle = getCurrentBundle_(employeeId, true);
     if (!bundle) return null;
     bundle.can_edit_in_place = !isReferencedInLockedPayroll_(bundle.structure.salary_structure_id);
     return bundle;
+  }
+
+  function getEditorBundle(employeeId) {
+    requirePayrollAdmin_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    try {
+      var emp = getEmployee_(employeeId);
+      if (!emp) throw notFoundError_('Employee not found: ' + employeeId);
+      var current = getCurrentBundle_(employeeId, false);
+      if (current) {
+        delete current.employee;
+        current.can_edit_in_place = !isReferencedInLockedPayroll_(current.structure.salary_structure_id);
+      }
+      var history = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
+      history.sort(function (a, b) {
+        return String(b.effective_from).localeCompare(String(a.effective_from));
+      });
+      return serializeEditorBundle_({
+        employee_id: employeeId,
+        current: current,
+        history: history,
+        employee: publicEmployee_(emp, false)
+      });
+    } catch (e) {
+      if (e.hrmsCode) throw e;
+      Logger.log('getEditorBundle failed for ' + employeeId + ': ' + (e.message || e) + '\n' + (e.stack || ''));
+      throw systemError_('Could not load salary structure. ' + (e.message || 'Please try again.'));
+    }
   }
 
   function getOwnCurrentStructure() {
@@ -91,12 +174,60 @@ var CompensationService = (function () {
       return toDate_(b.effective_from) - toDate_(a.effective_from);
     });
     if (!matches.length) return null;
+    var components = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, {
+      salary_structure_id: matches[0].salary_structure_id
+    });
+    if (!components.length) return null;
     return {
       structure: matches[0],
-      components: DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, {
-        salary_structure_id: matches[0].salary_structure_id
-      })
+      components: components
     };
+  }
+
+  /**
+   * Human hint when payroll cannot find a structure for the month (saved but wrong dates, etc.).
+   */
+  function explainStructureGap(employeeId, periodEndDate) {
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) return '';
+    var end = toDate_(periodEndDate);
+    if (!end) return '';
+    if (getStructureInForce(employeeId, periodEndDate)) return '';
+
+    var rows = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
+    if (!rows.length) {
+      return 'No salary structure saved yet. Use Set up salary and include a BASIC earning line.';
+    }
+
+    var current = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, {
+      employee_id: employeeId,
+      status: HRMS.STRUCTURE_STATUS.CURRENT
+    });
+    if (current) {
+      var comps = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, {
+        salary_structure_id: current.salary_structure_id
+      });
+      if (!comps.length) {
+        return 'A structure exists but has no salary components. Add BASIC and save again.';
+      }
+      var from = toDate_(current.effective_from);
+      if (from && from > end) {
+        return 'Structure effective from ' + dateKey_(from) +
+          ' is after this payroll month (ends ' + dateKey_(end) + '). Set an earlier effective date.';
+      }
+    }
+
+    var latest = rows.slice().sort(function (a, b) {
+      return String(b.effective_from).localeCompare(String(a.effective_from));
+    })[0];
+    if (latest) {
+      var latestFrom = toDate_(latest.effective_from);
+      if (latestFrom && latestFrom > end) {
+        return 'Latest structure starts ' + dateKey_(latestFrom) +
+          ', after this payroll month (ends ' + dateKey_(end) + ').';
+      }
+    }
+    return 'No structure covers this payroll month. Check effective dates and click Recalculate payroll.';
   }
 
   function saveStructure(payload) {
@@ -113,9 +244,12 @@ var CompensationService = (function () {
         status: HRMS.STRUCTURE_STATUS.CURRENT
       });
 
+      if (!toDate_(payload.effective_from)) {
+        throw validationError_('effective_from is required.');
+      }
       var components = normalizeComponents_(payload.components);
-      var effectiveFrom = toDate_(payload.effective_from) || new Date();
-      var ctc = parseCtc_(payload.ctc_monthly);
+      var effectiveFrom = toDate_(payload.effective_from);
+      var ctc = parseCtc_(payload.ctc_monthly, true);
       var now = new Date();
 
       if (current) {
@@ -183,7 +317,7 @@ var CompensationService = (function () {
       }
 
       var components = normalizeComponents_(payload.components);
-      var ctc = parseCtc_(payload.ctc_monthly);
+      var ctc = parseCtc_(payload.ctc_monthly, true);
       var now = new Date();
       var newId = DbService.generateId('SS');
       var oldTo = addDays_(newFrom, -1);
@@ -222,12 +356,18 @@ var CompensationService = (function () {
         currentByEmp[s.employee_id] = true;
       }
     });
-    var rows = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
+    var rows = typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll
+      ? EmployeeRepository.listAll()
+      : DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
     return (rows || []).map(function (e) {
       return {
         employee_id: e.employee_id,
         display_name: e.display_name || ((e.first_name || '') + ' ' + (e.last_name || '')).trim(),
+        first_name: e.first_name || '',
+        last_name: e.last_name || '',
+        work_email: e.work_email || '',
         department: e.department || '',
+        designation: e.designation || '',
         status: e.status || '',
         has_current_structure: !!currentByEmp[e.employee_id]
       };
@@ -298,20 +438,80 @@ var CompensationService = (function () {
     };
   }
 
-  function parseCtc_(value) {
-    if (value === '' || value == null) return '';
+  function parseCtc_(value, required) {
+    if (value === '' || value == null) {
+      if (required) return 0;
+      return '';
+    }
     var n = Number(value);
     if (!isFinite(n)) throw validationError_('ctc_monthly must be a number.');
     if (n < 0) throw validationError_('ctc_monthly cannot be negative.');
     return n;
   }
 
+  function parseNumericOrZero_(value, field) {
+    if (value === '' || value == null) return 0;
+    var n = Number(value);
+    if (!isFinite(n)) throw validationError_(field + ' must be a valid number.');
+    if (n < 0) throw validationError_(field + ' cannot be negative.');
+    return n;
+  }
+
+  function buildComponentsFromBulkRow_(row) {
+    row = row || {};
+    return REQUIRED_COMPONENT_SPECS_.map(function (spec) {
+      var code = spec.component_code;
+      var bulkKey = {
+        BASIC: 'basic',
+        HRA: 'hra_percent',
+        SA: 'sa',
+        PF: 'pf_percent',
+        ESI: 'esi',
+        PT: 'pt',
+        EMPLOYER_PF: 'employer_pf_percent'
+      }[code];
+      var out = {
+        component_code: code,
+        component_name: spec.component_name,
+        component_kind: spec.component_kind,
+        calc_method: spec.calc_method,
+        sort_order: spec.sort_order
+      };
+      if (spec.calc_method === HRMS.CALC_METHOD.FIXED) {
+        out.amount = parseNumericOrZero_(row[bulkKey], bulkKey);
+        out.percent = '';
+      } else {
+        out.amount = '';
+        out.percent = parseNumericOrZero_(row[bulkKey], bulkKey);
+      }
+      return out;
+    });
+  }
+
+  function ensureRequiredComponents_(list) {
+    var byCode = {};
+    (list || []).forEach(function (c) {
+      var code = String(c.component_code || '').trim().toUpperCase();
+      if (code) byCode[code] = c;
+    });
+    return REQUIRED_COMPONENT_SPECS_.map(function (spec) {
+      var existing = byCode[spec.component_code];
+      if (existing) return existing;
+      return {
+        component_code: spec.component_code,
+        component_name: spec.component_name,
+        component_kind: spec.component_kind,
+        calc_method: spec.calc_method,
+        amount: spec.calc_method === HRMS.CALC_METHOD.FIXED ? 0 : '',
+        percent: spec.calc_method === HRMS.CALC_METHOD.PERCENT_OF_BASIC ? 0 : '',
+        sort_order: spec.sort_order
+      };
+    });
+  }
+
   function normalizeComponents_(list) {
-    if (!list || !list.length) {
-      throw validationError_('At least one salary component is required.');
-    }
+    list = ensureRequiredComponents_(list);
     var out = [];
-    var hasBasic = false;
     for (var i = 0; i < list.length; i++) {
       var c = list[i];
       var code = String(c.component_code || '').trim().toUpperCase();
@@ -325,19 +525,15 @@ var CompensationService = (function () {
       if (method !== HRMS.CALC_METHOD.FIXED && method !== HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
         throw validationError_('calc_method must be FIXED or PERCENT_OF_BASIC.');
       }
-      if (code === 'BASIC') hasBasic = true;
       out.push({
         component_code: code,
         component_name: name,
         component_kind: kind,
         calc_method: method,
-        amount: method === HRMS.CALC_METHOD.FIXED ? Number(c.amount) || 0 : '',
-        percent: method === HRMS.CALC_METHOD.PERCENT_OF_BASIC ? Number(c.percent) || 0 : '',
+        amount: method === HRMS.CALC_METHOD.FIXED ? parseNumericOrZero_(c.amount, code + ' amount') : '',
+        percent: method === HRMS.CALC_METHOD.PERCENT_OF_BASIC ? parseNumericOrZero_(c.percent, code + ' percent') : '',
         sort_order: Number(c.sort_order != null ? c.sort_order : i + 1)
       });
-    }
-    if (!hasBasic) {
-      throw validationError_('A BASIC earning component is required.');
     }
     return out;
   }
@@ -360,8 +556,20 @@ var CompensationService = (function () {
   }
 
   function replaceComponents_(structureId, components) {
-    DbService.deleteRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: structureId });
-    insertComponents_(structureId, components);
+    var rows = (components || []).map(function (c) {
+      return {
+        salary_component_id: DbService.generateId('SC'),
+        salary_structure_id: structureId,
+        component_code: c.component_code,
+        component_name: c.component_name,
+        component_kind: c.component_kind,
+        calc_method: c.calc_method,
+        amount: c.amount,
+        percent: c.percent,
+        sort_order: c.sort_order
+      };
+    });
+    DbService.replaceRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: structureId }, rows);
   }
 
   function isReferencedInLockedPayroll_(structureId) {
@@ -379,10 +587,16 @@ var CompensationService = (function () {
     listEmployeeOptions: listEmployeeOptions,
     getStructure: getStructure,
     getCurrentForEmployee: getCurrentForEmployee,
+    getEditorBundle: getEditorBundle,
     getOwnCurrentStructure: getOwnCurrentStructure,
     getStructureInForce: getStructureInForce,
+    explainStructureGap: explainStructureGap,
     saveStructure: saveStructure,
     reviseStructure: reviseStructure,
-    getEmployee: getEmployee_
+    getEmployee: getEmployee_,
+    REQUIRED_COMPONENT_SPECS: REQUIRED_COMPONENT_SPECS_,
+    buildComponentsFromBulkRow: buildComponentsFromBulkRow_,
+    ensureRequiredComponents: ensureRequiredComponents_,
+    parseNumericOrZero: parseNumericOrZero_
   };
 })();

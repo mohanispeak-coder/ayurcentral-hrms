@@ -78,7 +78,7 @@
     });
 
     if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
-      window.HrmsNotificationBell.mount();
+      window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
     }
 
     function pageEl() {

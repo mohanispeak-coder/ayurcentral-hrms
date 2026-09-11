@@ -78,6 +78,45 @@ HRMS Root/
 | `HRMS_SPREADSHEET_ID` | Google Sheets database ID |
 | `HRMS_DRIVE_ROOT_FOLDER_ID` | Drive root folder ID |
 
+## 4.1 Google Drive API (required for bulk Excel uploads)
+
+Bulk upload for **employees**, **payroll attendance**, **salary structures**, and **ATS jobs/candidates** needs the **Google Drive API** advanced service (`Drive` symbol).
+
+### Automatic (recommended)
+
+The service is declared in `src/appsscript.json`. After you push code, it should appear under **Services** in the Apps Script editor:
+
+```bash
+cd apps-script
+npx clasp push
+npx clasp open
+```
+
+In the editor, confirm **Services** lists **Google Drive API** with identifier **`Drive`**.
+
+### Manual (if missing after push)
+
+1. Open the Apps Script project (`npx clasp open`).
+2. Click **Services** (+ icon on the left sidebar).
+3. Find **Google Drive API** → **Add**.
+4. Set identifier to **`Drive`** (must match `appsscript.json`).
+5. Click **Save**.
+
+### Verify
+
+Run in the Apps Script editor:
+
+```javascript
+function verifyDriveApi() {
+  if (typeof Drive === 'undefined' || !Drive.Files) {
+    throw new Error('Drive advanced service is not enabled. See SETUP.md §4.1');
+  }
+  Logger.log('Google Drive API is enabled.');
+}
+```
+
+**Redeploy** the web app after enabling (Deploy → Manage deployments → New version).
+
 ## 5. Foundation self-test
 
 Run from the Apps Script editor:

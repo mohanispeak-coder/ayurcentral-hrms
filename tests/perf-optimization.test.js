@@ -60,6 +60,8 @@ check('reads-skip-ensure', !/function getNotifications[\s\S]{0,80}ensure_\(\)/.t
 check('mark-read-skip-ensure', !/function markNotificationRead[\s\S]{0,80}ensure_\(\)/.test(ntfService));
 
 check('db-update-records', /function updateRecords/.test(db));
+check('db-replace-records', /function replaceRecords/.test(db));
+check('db-no-deleterow', !/\.deleteRow\(/.test(db));
 check('db-projected', /function getProjectedRecords/.test(db));
 check('db-find-row', /function findRowNumber/.test(db));
 check('db-write-row-setvalues', /function writeRowValues_/.test(db));
@@ -74,6 +76,15 @@ check('pms-dashboard-no-ensure', !/function getDashboard[\s\S]{0,80}ensure_\(\)/
 check('pms-dashboard-accepts-session', /function getDashboard\(optSession\)/.test(pms));
 check('ats-bootstrap-includes-dashboard', /dashboard:\s*dashboard/.test(ats));
 check('ats-client-reuses-bootstrap-dash', /boot && boot\.dashboard/.test(atsClient));
+
+const empClient = read('employee/EmployeeClient.html');
+check('emp-search-debounce', /scheduleDirectoryLoad_\(300\)/.test(empClient));
+check('emp-search-inflight', /listLoadBusy_/.test(empClient) && /listLoadAgain_/.test(empClient));
+check('emp-search-stale', /listLoadGen_/.test(empClient) && /gen !== listLoadGen_/.test(empClient));
+check('emp-profile-lazy-extras', /function ensureProfileExtras_/.test(empClient));
+check('emp-profile-no-eager-leave', !/bindProfileSaves\(emp\);\s*var restoring/.test(empClient) &&
+  /ensureProfileExtras_\(emp, savedTab\)/.test(empClient));
+check('emp-profile-tab-loads-extras', /ensureProfileExtras_\(emp, id\)/.test(empClient));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

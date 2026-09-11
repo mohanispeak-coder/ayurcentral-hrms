@@ -183,7 +183,32 @@ var LeaveService = (function () {
     return rows;
   }
 
-  function findBalance_(employeeId, leaveTypeId, leaveYear) {
+  function balanceKey_(employeeId, leaveTypeId, leaveYear) {
+    return String(employeeId) + '|' + String(leaveTypeId) + '|' + String(leaveYear);
+  }
+
+  function loadBalanceIndex_() {
+    var map = {};
+    DbService.getAllRecords(HRMS.SHEETS.LEAVE_BALANCES).forEach(function (r) {
+      map[balanceKey_(r.employee_id, r.leave_type_id, r.leave_year)] = r;
+    });
+    return map;
+  }
+
+  function findBalanceInIndex_(balanceIndex, employeeId, leaveTypeId, leaveYear) {
+    if (!balanceIndex) return null;
+    return balanceIndex[balanceKey_(employeeId, leaveTypeId, leaveYear)] || null;
+  }
+
+  function putBalanceInIndex_(balanceIndex, record) {
+    if (!balanceIndex || !record) return;
+    balanceIndex[balanceKey_(record.employee_id, record.leave_type_id, record.leave_year)] = record;
+  }
+
+  function findBalance_(employeeId, leaveTypeId, leaveYear, balanceIndex) {
+    if (balanceIndex) {
+      return findBalanceInIndex_(balanceIndex, employeeId, leaveTypeId, leaveYear);
+    }
     var rows = DbService.getAllRecords(HRMS.SHEETS.LEAVE_BALANCES);
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
@@ -196,10 +221,12 @@ var LeaveService = (function () {
     return null;
   }
 
-  function writeBalance_(record) {
+  function writeBalance_(record, balanceIndex) {
     record.available_days = LeaveEngine.availableDays(record);
     record.updated_at = now_();
-    var existing = DbService.findOne(HRMS.SHEETS.LEAVE_BALANCES, { leave_balance_id: record.leave_balance_id });
+    var existing = balanceIndex
+      ? findBalanceInIndex_(balanceIndex, record.employee_id, record.leave_type_id, record.leave_year)
+      : DbService.findOne(HRMS.SHEETS.LEAVE_BALANCES, { leave_balance_id: record.leave_balance_id });
     if (existing) {
       DbService.updateRecord(HRMS.SHEETS.LEAVE_BALANCES, 'leave_balance_id', record.leave_balance_id, {
         entitled_days: record.entitled_days,
@@ -212,14 +239,15 @@ var LeaveService = (function () {
     } else {
       DbService.insertRecord(HRMS.SHEETS.LEAVE_BALANCES, record);
     }
+    putBalanceInIndex_(balanceIndex, record);
     return record;
   }
 
-  function ensureBalanceLocked_(employeeId, type, leaveYear, createIfMissing) {
-    var existing = findBalance_(employeeId, type.leave_type_id, leaveYear);
+  function ensureBalanceLocked_(employeeId, type, leaveYear, createIfMissing, balanceIndex) {
+    var existing = findBalance_(employeeId, type.leave_type_id, leaveYear, balanceIndex);
     if (existing) return existing;
     if (!createIfMissing) return null;
-    var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear));
+    var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear), balanceIndex);
     var cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
     var record = {
       leave_balance_id: nextLeaveBalanceIdLocked_(),
@@ -233,7 +261,7 @@ var LeaveService = (function () {
       available_days: 0,
       updated_at: now_()
     };
-    return writeBalance_(record);
+    return writeBalance_(record, balanceIndex);
   }
 
   function parsePayloadDates_(payload) {
@@ -303,9 +331,9 @@ var LeaveService = (function () {
     }
   }
 
-  function applyPendingDeltaLocked_(employeeId, type, leaveYear, deltaPending, deltaUsed) {
+  function applyPendingDeltaLocked_(employeeId, type, leaveYear, deltaPending, deltaUsed, balanceIndex) {
     if (!type.requires_balance) return null;
-    var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true);
+    var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true, balanceIndex);
     var pending = LeaveEngine.toNumber(bal.pending_days) + deltaPending;
     var used = LeaveEngine.toNumber(bal.used_days) + deltaUsed;
     if (pending < -0.001 || used < -0.001) {
@@ -315,12 +343,12 @@ var LeaveService = (function () {
     if (used < 0) used = 0;
     bal.pending_days = pending;
     bal.used_days = used;
-    return writeBalance_(bal);
+    return writeBalance_(bal, balanceIndex);
   }
 
-  function assertSufficientLocked_(employeeId, type, leaveYear, totalDays) {
+  function assertSufficientLocked_(employeeId, type, leaveYear, totalDays, balanceIndex) {
     if (!type.requires_balance) return;
-    var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true);
+    var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true, balanceIndex);
     var available = LeaveEngine.availableDays(bal);
     if (available + 1e-9 < totalDays) {
       throw validationError_('Insufficient leave balance.');
@@ -486,6 +514,7 @@ var LeaveService = (function () {
     var proxy = String(targetId) !== String(session.employee_id);
 
     var result = withScriptLock_(function () {
+      var balanceIndex = loadBalanceIndex_();
       var existing = payload.leave_request_id
         ? DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: payload.leave_request_id })
         : null;
@@ -498,8 +527,8 @@ var LeaveService = (function () {
         }
       }
       assertNoOverlap_(targetId, dates, existing ? existing.leave_request_id : null);
-      assertSufficientLocked_(targetId, type, leaveYear, totalDays);
-      applyPendingDeltaLocked_(targetId, type, leaveYear, totalDays, 0);
+      assertSufficientLocked_(targetId, type, leaveYear, totalDays, balanceIndex);
+      applyPendingDeltaLocked_(targetId, type, leaveYear, totalDays, 0, balanceIndex);
       var submittedAt = now_();
       var record;
       if (existing) {
@@ -558,6 +587,7 @@ var LeaveService = (function () {
   function approve(session, leaveRequestId, comment) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
     var outcome = withScriptLock_(function () {
+      var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
       if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.SUBMITTED) {
@@ -570,7 +600,7 @@ var LeaveService = (function () {
       var type = coerceType_(getType_(row.leave_type_id));
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);
-      applyPendingDeltaLocked_(row.employee_id, type, year, -days, days);
+      applyPendingDeltaLocked_(row.employee_id, type, year, -days, days, balanceIndex);
       var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, {
         status: HRMS.LEAVE_STATUS.APPROVED,
         approver_employee_id: session.employee_id,
@@ -597,6 +627,7 @@ var LeaveService = (function () {
   function reject(session, leaveRequestId, comment) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
     var outcome = withScriptLock_(function () {
+      var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
       if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.SUBMITTED) {
@@ -609,7 +640,7 @@ var LeaveService = (function () {
       var type = coerceType_(getType_(row.leave_type_id));
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);
-      applyPendingDeltaLocked_(row.employee_id, type, year, -days, 0);
+      applyPendingDeltaLocked_(row.employee_id, type, year, -days, 0, balanceIndex);
       var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, {
         status: HRMS.LEAVE_STATUS.REJECTED,
         approver_employee_id: session.employee_id,
@@ -635,6 +666,7 @@ var LeaveService = (function () {
   function cancel(session, leaveRequestId) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     var packed = withScriptLock_(function () {
+      var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
       if (!LeaveEngine.canCancel(session, row)) {
@@ -645,9 +677,9 @@ var LeaveService = (function () {
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);
       if (status === HRMS.LEAVE_STATUS.SUBMITTED) {
-        applyPendingDeltaLocked_(row.employee_id, type, year, -days, 0);
+        applyPendingDeltaLocked_(row.employee_id, type, year, -days, 0, balanceIndex);
       } else if (status === HRMS.LEAVE_STATUS.APPROVED) {
-        applyPendingDeltaLocked_(row.employee_id, type, year, 0, -days);
+        applyPendingDeltaLocked_(row.employee_id, type, year, 0, -days, balanceIndex);
       } else if (status !== HRMS.LEAVE_STATUS.DRAFT) {
         throw conflictError_('This leave request cannot be cancelled.');
       }
@@ -676,6 +708,39 @@ var LeaveService = (function () {
     return packed.serialized;
   }
 
+  function revokeRejection(session, leaveRequestId, comment) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_ADMIN, {}, session);
+    return withScriptLock_(function () {
+      var balanceIndex = loadBalanceIndex_();
+      var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
+      if (!row) throw notFoundError_('Leave request not found.');
+      if (!LeaveEngine.canRevokeDecision(session, row)) {
+        throw authorizationError_('You cannot revoke this leave decision.');
+      }
+      if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.REJECTED) {
+        throw conflictError_('Only rejected leave can be restored to pending.');
+      }
+      var type = coerceType_(getType_(row.leave_type_id));
+      var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
+      var days = LeaveEngine.toNumber(row.total_days);
+      applyPendingDeltaLocked_(row.employee_id, type, year, days, 0, balanceIndex);
+      var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, {
+        status: HRMS.LEAVE_STATUS.SUBMITTED,
+        approver_employee_id: '',
+        decision_at: '',
+        decision_comment: comment || ''
+      });
+      AuditService.log(
+        HRMS.LEAVE_AUDIT.REVOKE,
+        'LeaveRequest',
+        leaveRequestId,
+        'Revoked rejection — restored to submitted',
+        row.employee_id
+      );
+      return serializeRequest_(updated, typeMap_(), empMap_());
+    });
+  }
+
   function getMyLeave(session, employeeId) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     var target = employeeId || session.employee_id;
@@ -685,8 +750,9 @@ var LeaveService = (function () {
     }
     var year = currentLeaveYear_();
     var types = listTypes_(false);
+    var balanceIndex = loadBalanceIndex_();
     var balances = types.map(function (t) {
-      var row = findBalance_(target, t.leave_type_id, year);
+      var row = findBalance_(target, t.leave_type_id, year, balanceIndex);
       if (!row) {
         return {
           leave_type_id: t.leave_type_id,
@@ -853,12 +919,12 @@ var LeaveService = (function () {
     options = options || {};
     var emp = requireEmployee_(employeeId);
     var year = leaveYear || currentLeaveYear_(emp.joining_date || now_());
-    function run_() {
+    function run_(balanceIndex) {
       var types = listTypes_(true);
       var granted = types.map(function (type) {
-        var existing = findBalance_(employeeId, type.leave_type_id, year);
+        var existing = findBalance_(employeeId, type.leave_type_id, year, balanceIndex);
         if (existing) return existing;
-        return ensureBalanceLocked_(employeeId, type, year, true);
+        return ensureBalanceLocked_(employeeId, type, year, true, balanceIndex);
       });
       AuditService.log(HRMS.LEAVE_AUDIT.GRANT, 'LeaveBalance', employeeId, 'Granted balances for ' + year, employeeId);
       return granted.map(function (b) {
@@ -871,26 +937,65 @@ var LeaveService = (function () {
       });
     }
     if (options.alreadyLocked) {
-      return run_();
+      return run_(options.balanceIndex || loadBalanceIndex_());
     }
-    return withScriptLock_(run_);
+    return withScriptLock_(function () { return run_(loadBalanceIndex_()); });
   }
 
   function startLeaveYear(session, leaveYear) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_ADMIN, {}, session);
     var year = String(leaveYear || currentLeaveYear_());
-    var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(function (e) {
-      return String(e.status).toUpperCase() === 'ACTIVE';
-    });
-    var results = [];
-    employees.forEach(function (emp) {
-      results.push({
-        employee_id: emp.employee_id,
-        balances: grantBalancesForEmployee(emp.employee_id, year)
+    return withScriptLock_(function () {
+      var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(function (e) {
+        return String(e.status).toUpperCase() === 'ACTIVE';
       });
+      var types = listTypes_(true);
+      var balanceIndex = loadBalanceIndex_();
+      var prevYear = LeaveEngine.previousLeaveYear(year);
+      var toInsert = [];
+      employees.forEach(function (emp) {
+        types.forEach(function (type) {
+          if (findBalanceInIndex_(balanceIndex, emp.employee_id, type.leave_type_id, year)) return;
+          var prev = findBalanceInIndex_(balanceIndex, emp.employee_id, type.leave_type_id, prevYear);
+          var cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
+          var record = {
+            leave_balance_id: nextLeaveBalanceIdLocked_(),
+            employee_id: emp.employee_id,
+            leave_type_id: type.leave_type_id,
+            leave_year: year,
+            entitled_days: LeaveEngine.toNumber(type.annual_entitlement_days),
+            used_days: 0,
+            pending_days: 0,
+            carried_forward_days: cf,
+            available_days: 0,
+            updated_at: now_()
+          };
+          record.available_days = LeaveEngine.availableDays(record);
+          toInsert.push(record);
+          putBalanceInIndex_(balanceIndex, record);
+        });
+      });
+      if (toInsert.length) {
+        DbService.insertRecords(HRMS.SHEETS.LEAVE_BALANCES, toInsert);
+      }
+      AuditService.log(
+        HRMS.LEAVE_AUDIT.YEAR_START,
+        'LeaveBalances',
+        year,
+        'Started leave year ' + year + ' for ' + employees.length + ' employees (' + toInsert.length + ' new balances)',
+        session.employee_id
+      );
+      return { leave_year: year, employees: employees.length, granted: toInsert.length };
     });
-    AuditService.log(HRMS.LEAVE_AUDIT.YEAR_START, 'LeaveBalances', year, 'Started leave year ' + year + ' for ' + employees.length + ' employees', session.employee_id);
-    return { leave_year: year, employees: results.length };
+  }
+
+  function getApplyBootstrap(session) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
+    return {
+      types: listTypes_(true),
+      employees: listEmployeeOptions(session),
+      can_proxy: PermissionService.isHrOrAdmin(session)
+    };
   }
 
   function previewDays(payload) {
@@ -933,6 +1038,7 @@ var LeaveService = (function () {
     approve: approve,
     reject: reject,
     cancel: cancel,
+    revokeRejection: revokeRejection,
     getMyLeave: getMyLeave,
     getApprovals: getApprovals,
     getAdminList: getAdminList,
@@ -941,6 +1047,7 @@ var LeaveService = (function () {
     getTypes: getTypes,
     grantBalancesForEmployee: grantBalancesForEmployee,
     startLeaveYear: startLeaveYear,
+    getApplyBootstrap: getApplyBootstrap,
     previewDays: previewDays,
     listEmployeeOptions: listEmployeeOptions,
     currentLeaveYear: currentLeaveYear_,

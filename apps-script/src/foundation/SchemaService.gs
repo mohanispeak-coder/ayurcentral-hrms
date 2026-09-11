@@ -13,7 +13,9 @@ var SchemaService = (function () {
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
-    'google_email', 'employee_id', 'role', 'status', 'created_at', 'updated_at'
+    'google_email', 'employee_id', 'role', 'status',
+    'access_documents', 'access_payslips', 'access_leave',
+    'created_at', 'updated_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_TYPES] = [
     'leave_type_id', 'code', 'name', 'is_paid', 'requires_balance', 'allow_half_day',
@@ -106,7 +108,7 @@ var SchemaService = (function () {
     var lastRow = Math.max(sheet.getMaxRows(), 1000);
     if (roleCol > 0) {
       var roleRule = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'], true)
+        .requireValueInList(['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'], true)
         .setAllowInvalid(false)
         .build();
       sheet.getRange(2, roleCol, lastRow, roleCol).setDataValidation(roleRule);

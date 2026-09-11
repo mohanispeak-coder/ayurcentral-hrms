@@ -126,7 +126,7 @@
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
     { id: 'performance', label: 'Performance', routes: ['pms', 'pms-team', 'pms-cycles', 'pms-appraisal'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -137,12 +137,15 @@
   var ROUTE_ALIASES = {
     'pms-self': 'pms-my-review',
     'ats-applications': 'ats-candidates',
-    'ats-interviews': 'ats-candidates'
+    'ats-interviews': 'ats-candidates',
+    'payroll-run': 'payroll',
+    compensation: 'payroll'
   };
 
   var moduleLoaded_ = {};
   var moduleLoading_ = {};
   var userRpcBusy_ = 0;
+  var globalLoadingButton_ = null;
   var preloadPaused_ = false;
   var preloadQueue_ = [];
   var preloadScheduled_ = false;
@@ -158,7 +161,7 @@
   var refreshForceKey_ = '';
   var refreshBusy_ = false;
   var refreshWatchdog_ = null;
-  var dashViewCache_ = { payload: null, actions: '', complete: false };
+  var dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
 
   function sessionCacheKey_() {
     var s = state.session || {};
@@ -382,7 +385,7 @@
 
   function clearModuleViewCache() {
     moduleViewCache_ = {};
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
@@ -409,10 +412,29 @@
     if (keys.length) logClientPerf_({ kind: 'module-view-invalidate-prefix', prefix: prefix, keys: keys });
   }
 
-  function invalidateDashboardView() {
+  function invalidateDashboardView(opts) {
+    opts = opts || {};
+    if (opts.secondaryOnly) {
+      dashViewCache_.secondaryStale = true;
+      dashViewCache_.complete = false;
+      delete moduleViewCache_.dashboard;
+      if (dashViewCache_.payload) {
+        delete dashViewCache_.payload.payroll;
+        delete dashViewCache_.payload.pms;
+        delete dashViewCache_.payload.pms_actions;
+        delete dashViewCache_.payload.ats;
+        delete dashViewCache_.payload.ats_actions;
+      }
+      logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard-secondary'] });
+      return;
+    }
     delete moduleViewCache_.dashboard;
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard'] });
+  }
+
+  function getDashboardViewCache() {
+    return dashViewCache_;
   }
 
   function registerModuleRoutes(extra) {
@@ -488,10 +510,37 @@
     return !!(button && button.getAttribute && button.getAttribute('data-hrms-loading') === '1');
   }
 
+  function isGlobalActionBusy() {
+    return !!globalLoadingButton_;
+  }
+
+  function setGlobalActionBusy_(busy, activeButton) {
+    var root = document.getElementById('app-root') || document.body;
+    if (!root || !root.querySelectorAll) return;
+    if (busy) {
+      root.classList.add('hrms-global-busy');
+      root.querySelectorAll('button').forEach(function (btn) {
+        if (btn === activeButton || btn.getAttribute('data-hrms-loading') === '1') return;
+        if (btn.disabled) return;
+        btn.setAttribute('data-hrms-busy-disabled', '1');
+        btn.disabled = true;
+      });
+    } else {
+      root.classList.remove('hrms-global-busy');
+      root.querySelectorAll('button[data-hrms-busy-disabled="1"]').forEach(function (btn) {
+        btn.removeAttribute('data-hrms-busy-disabled');
+        btn.disabled = false;
+      });
+    }
+  }
+
   function setButtonLoading(button, loadingText) {
     if (!button || button.nodeType !== 1) return false;
     if (isButtonLoading(button)) return false;
+    if (globalLoadingButton_ && globalLoadingButton_ !== button) return false;
     try {
+      globalLoadingButton_ = button;
+      setGlobalActionBusy_(true, button);
       button.setAttribute('data-hrms-loading', '1');
       button._hrmsBtnSnap = {
         html: button.innerHTML,
@@ -534,12 +583,20 @@
       }
       button._hrmsBtnSnap = null;
       button._hrmsInflight = null;
+      if (globalLoadingButton_ === button) {
+        globalLoadingButton_ = null;
+        setGlobalActionBusy_(false);
+      }
     } catch (e) {
       try {
         button.disabled = false;
         button.removeAttribute('data-hrms-loading');
         button.removeAttribute('aria-busy');
         if (button.classList) button.classList.remove('btn-loading');
+        if (globalLoadingButton_ === button) {
+          globalLoadingButton_ = null;
+          setGlobalActionBusy_(false);
+        }
       } catch (e2) {}
     }
   }
@@ -654,7 +711,15 @@
                 return;
               }
               if (result && result.error) {
-                reject(result.error);
+                reject({
+                  message: result.error.message || 'Request failed',
+                  code: result.error.code || ''
+                });
+                return;
+              }
+              if (result && typeof result === 'object' && result.employee_id &&
+                  (result.hasOwnProperty('current') || result.hasOwnProperty('history'))) {
+                resolve(result);
                 return;
               }
               if (result && typeof result === 'object') {
@@ -883,11 +948,29 @@
     return groups;
   }
 
+  function isMobileSidebar_() {
+    try {
+      return window.matchMedia('(max-width: 768px)').matches;
+    } catch (ignore) {
+      return false;
+    }
+  }
+
   function setSidebarOpen(open) {
     var sidebar = $('sidebar');
     var backdrop = $('sidebar-backdrop');
+    var toggle = $('sidebar-toggle');
     if (sidebar) sidebar.classList.toggle('open', !!open);
     if (backdrop) backdrop.classList.toggle('open', !!open);
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function closeSidebarIfMobile_() {
+    if (isMobileSidebar_()) setSidebarOpen(false);
+  }
+
+  function initSidebarState_() {
+    setSidebarOpen(!isMobileSidebar_());
   }
 
   function setAuthedChrome(authed) {
@@ -1328,6 +1411,10 @@
 
   function navigate(route, params) {
     if (!state.session || !state.session.authorized) return;
+    params = params || {};
+    if (route === 'compensation') {
+      params.openSalaryStructure = true;
+    }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
     if (route === 'pms-review' && params && !params.employeeId) {
       route = 'pms-team';
@@ -1344,7 +1431,7 @@
     }
     $('page-title').textContent = title;
     renderNav();
-    setSidebarOpen(false);
+    closeSidebarIfMobile_();
     if (def && def.render) {
       def.render(state.routeParams);
     } else {
@@ -1432,25 +1519,36 @@
     }
 
     var primary = keepPainted ? (dashViewCache_.payload || null) : null;
+    var skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
     callServer('apiGetHomeDashboard')
       .then(function (data) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return null;
         primary = data || {};
         dashViewCache_.actions = actions;
-        dashViewCache_.payload = primary;
-        dashViewCache_.complete = false;
-        paintHomeDashboard(primary, actions, { secondaryPending: true });
+        if (keepPainted && dashViewCache_.payload) {
+          dashViewCache_.payload = mergeDashboardPayload_(primary, dashViewCache_.payload);
+        } else {
+          dashViewCache_.payload = primary;
+        }
+        skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
         if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
           window.HrmsNotificationBell.applyUnreadCount(primary.unread_count);
         }
-        return callServer('apiGetHomeDashboardMore');
+        if (skipSecondary) {
+          paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
+          markModuleViewLoaded(dashKey);
+          return null;
+        }
+        dashViewCache_.complete = false;
+        paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: true });
+        return callServer('apiGetHomeDashboardMore', { background: true });
       })
       .then(function (more) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
-        if (more) {
-          dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
-          dashViewCache_.complete = true;
-        }
+        if (more == null) return;
+        dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
+        dashViewCache_.complete = true;
+        dashViewCache_.secondaryStale = false;
         if (dashViewCache_.payload) {
           paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
         }
@@ -1778,9 +1876,21 @@
     var toggle = $('sidebar-toggle');
     if (toggle && !toggle.getAttribute('data-bound')) {
       toggle.setAttribute('data-bound', '1');
+      toggle.setAttribute('aria-expanded', 'true');
       toggle.addEventListener('click', function () {
         var sidebar = $('sidebar');
         setSidebarOpen(!(sidebar && sidebar.classList.contains('open')));
+      });
+    }
+    initSidebarState_();
+    if (!window.__hrmsSidebarResizeBound) {
+      window.__hrmsSidebarResizeBound = true;
+      window.addEventListener('resize', function () {
+        if (isMobileSidebar_()) {
+          setSidebarOpen(false);
+        } else {
+          setSidebarOpen(true);
+        }
       });
     }
     var backdrop = $('sidebar-backdrop');
@@ -2597,9 +2707,11 @@
     invalidateModuleViewCache: invalidateModuleViewCache,
     invalidateModuleViewCachePrefix: invalidateModuleViewCachePrefix,
     invalidateDashboardView: invalidateDashboardView,
+    getDashboardViewCache: getDashboardViewCache,
     setButtonLoading: setButtonLoading,
     restoreButton: restoreButton,
     isButtonLoading: isButtonLoading,
+    isGlobalActionBusy: isGlobalActionBusy,
     setActionFeedback: setActionFeedback,
     clearActionFeedback: clearActionFeedback,
     setFlash: setFlash,
