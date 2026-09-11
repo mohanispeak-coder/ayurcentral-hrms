@@ -91,8 +91,9 @@ check('fix-structure-actions', /js-fix-structure/.test(client) && /openSalaryStr
 check('fix-pan-actions', /js-fix-pan/.test(client) && /tab:\s*'personal'/.test(client));
 check('per-employee-payslip', /js-gen-payslip/.test(client) && /apiRegeneratePayslipForEmployee/.test(api) &&
   /regeneratePayslipForEmployee/.test(payroll));
-check('per-employee-payslip-notify', /notifyPayslipsAvailable[\s\S]*\[snapshot\.record\]/.test(payroll) &&
-  /Generate & notify/.test(client));
+check('per-employee-payslip-no-email', !/regeneratePayslipForEmployee[\s\S]{0,400}notifyPayslipsAvailable/.test(payroll) &&
+  /Generate payslip/.test(client));
+check('payslip-pdf-export', /htmlToPdfBlob_/.test(payslip) && /baseName \+ '\.pdf'/.test(payslip));
 check('payslip-one-employee-box', /btn-gen-one-payslip/.test(client) && /pr-payslip-one-emp/.test(client) &&
   /paintPayslipOneEmployeeBox_/.test(client));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&

@@ -41,6 +41,8 @@ check('nav-my-work-section', /id:\s*'my-work'[\s\S]*my-profile[\s\S]*my-leave[\s
 check('nav-people-section', /id:\s*'people'[\s\S]*employees[\s\S]*my-team/.test(scripts));
 check('nav-time-off-section', /id:\s*'time-off'[\s\S]*leave-admin[\s\S]*leave-approvals/.test(scripts));
 check('nav-performance-section', /id:\s*'performance'[\s\S]*pms[\s\S]*pms-team[\s\S]*pms-cycles[\s\S]*pms-appraisal/.test(scripts));
+check('performance-nav-hidden', /SHOW_PERFORMANCE_NAV_\s*=\s*false/.test(scripts) && /getNavGroups_/.test(scripts));
+check('global-button-busy', /isGlobalActionBusy/.test(scripts) && /globalLoadingButton_/.test(scripts));
 check('nav-payroll-section', /id:\s*'payroll'[\s\S]*routes:\s*\['payroll'\]/.test(scripts));
 check('compensation-not-in-sidebar', !/routes:\s*\['payroll',\s*'compensation'\]/.test(scripts));
 check('nav-recruitment-section', /id:\s*'recruitment'[\s\S]*ats[\s\S]*ats-jobs[\s\S]*ats-candidates/.test(scripts));

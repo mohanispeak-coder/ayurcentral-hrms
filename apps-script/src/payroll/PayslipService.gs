@@ -111,15 +111,44 @@ var PayslipService = (function () {
     });
   }
 
+  function htmlToPdfBlob_(html, fileName) {
+    fileName = fileName || 'payslip.pdf';
+    if (typeof Drive === 'undefined' || !Drive.Files) {
+      throw configurationError_('Google Drive API is required for PDF payslips. Enable Drive advanced service.');
+    }
+    var htmlBlob = Utilities.newBlob(html, 'text/html', 'payslip-export.html');
+    var tempId = null;
+    try {
+      var resource = { title: 'HRMS Payslip Export', mimeType: 'application/vnd.google-apps.document' };
+      var docFile = Drive.Files.create
+        ? Drive.Files.create(resource, htmlBlob, { convert: true })
+        : Drive.Files.insert(resource, htmlBlob, { convert: true });
+      tempId = docFile.id;
+      var pdfBlob = Drive.Files.export(tempId, 'application/pdf');
+      return pdfBlob.setName(fileName);
+    } finally {
+      if (tempId) {
+        try { DriveApp.getFileById(tempId).setTrashed(true); } catch (ignore) {}
+      }
+    }
+  }
+
+  function trashPayslipFiles_(folder, baseName) {
+    ['.pdf', '.html'].forEach(function (ext) {
+      var existing = folder.getFilesByName(baseName + ext);
+      while (existing.hasNext()) {
+        existing.next().setTrashed(true);
+      }
+    });
+  }
+
   function writePayslipFile_(folder, run, rec, emp) {
     var html = buildHtml_(run, rec, emp);
-    var fileName = rec.employee_id + '-' + run.payroll_run_id + '-payslip.html';
-    var existing = folder.getFilesByName(fileName);
-    while (existing.hasNext()) {
-      existing.next().setTrashed(true);
-    }
-    var blob = Utilities.newBlob(html, 'text/html', fileName);
-    return folder.createFile(blob);
+    var baseName = rec.employee_id + '-' + run.payroll_run_id + '-payslip';
+    var fileName = baseName + '.pdf';
+    trashPayslipFiles_(folder, baseName);
+    var pdfBlob = htmlToPdfBlob_(html, fileName);
+    return folder.createFile(pdfBlob);
   }
 
   function enrichPayslipDoc_(doc, employeeId) {
@@ -169,12 +198,18 @@ var PayslipService = (function () {
     }
     var file = DriveApp.getFileById(doc.drive_file_id);
     var blob = file.getBlob();
+    var fileName = blob.getName() || doc.title || 'payslip.pdf';
+    if (fileName.indexOf('.') < 0) fileName += '.pdf';
+    var mimeType = blob.getContentType() || 'application/pdf';
+    if (mimeType.indexOf('html') >= 0 && fileName.slice(-4) !== '.pdf') {
+      fileName = fileName.replace(/\.html?$/i, '') + '.pdf';
+    }
     return {
       document_id: doc.document_id,
       employee_id: doc.employee_id,
       title: doc.title,
-      fileName: blob.getName() || doc.title,
-      mimeType: blob.getContentType() || 'text/html',
+      fileName: fileName,
+      mimeType: mimeType.indexOf('pdf') >= 0 ? 'application/pdf' : mimeType,
       base64: Utilities.base64Encode(blob.getBytes())
     };
   }

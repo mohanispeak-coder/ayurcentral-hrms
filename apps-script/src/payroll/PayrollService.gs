@@ -707,9 +707,6 @@ var PayrollService = (function () {
       if (!snapshot.alreadyLocked) {
         NotificationPayrollAdapter.notifyLocked(snapshot.run);
       }
-      if (generatePayslips) {
-        NotificationPayrollAdapter.notifyPayslipsAvailable(snapshot.run, snapshot.records, snapshot.employees);
-      }
     });
     return getRunDetail(runId, { skipSync: true });
   }
@@ -768,9 +765,6 @@ var PayrollService = (function () {
       Logger.log('PAYROLL_REGENERATE payslip generation failed for ' + runId + ': ' + (e.message || e));
       throw systemError_('Payslip generation failed. Amounts are unchanged. Retry generate payslips.');
     }
-    firePayrollNotify_(function () {
-      NotificationPayrollAdapter.notifyPayslipsAvailable(snapshot.run, snapshot.records, snapshot.employees);
-    });
     return getRunDetail(runId, { skipSync: true });
   }
 
@@ -808,13 +802,6 @@ var PayrollService = (function () {
       Logger.log('PAYROLL_REGENERATE_ONE payslip failed for ' + runId + '/' + employeeId + ': ' + (e.message || e));
       throw systemError_('Payslip generation failed for ' + employeeId + '. Amounts are unchanged.');
     }
-    firePayrollNotify_(function () {
-      NotificationPayrollAdapter.notifyPayslipsAvailable(
-        snapshot.run,
-        [snapshot.record],
-        snapshot.employees
-      );
-    });
     return getRunDetail(runId, { skipSync: true });
   }
 
