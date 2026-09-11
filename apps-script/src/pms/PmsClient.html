@@ -617,15 +617,12 @@
         page.innerHTML = '<div class="pms-page">' + header('Review cycle', '', '') +
           '<div class="card">' + spinner('Loading cycle…') + '</div></div>';
       }
-      Promise.all([
-        rpc('apiPmsGetCycle', [cycleId]),
-        rpc('apiPmsListAssignableEmployees', [cycleId]).catch(function () { return []; }),
-        rpc('apiPmsListRatingScale', []).catch(function () { return { ratingScale: [] }; })
-      ]).then(function (parts) {
+      rpc('apiPmsGetCycleBundle', [cycleId]).then(function (bundle) {
         if (!stillOn(seq, 'pms-cycle')) return;
-        pmsState.cycleDetail = parts[0] || {};
-        pmsState.employees = parts[1] || [];
-        pmsState.scale = (parts[2] && parts[2].ratingScale) || (parts[0] && parts[0].ratingScale) || [];
+        bundle = bundle || {};
+        pmsState.cycleDetail = bundle;
+        pmsState.employees = bundle.assignableEmployees || [];
+        pmsState.scale = bundle.ratingScale || [];
         if (App.markModuleViewLoaded) App.markModuleViewLoaded(cycleKey);
         paintCycleDetail_(page, seq);
       }).catch(function (err) {

@@ -634,6 +634,19 @@
       return html;
     }
 
+    function patchJobDetailAfterMove_(jobId, res, sel) {
+      var cached = atsView.jobDetail[jobId];
+      if (!cached || !res || !res.application) return false;
+      cached.pipeline = res.pipeline || cached.pipeline;
+      cached.applications = (cached.applications || []).map(function (app) {
+        return app.application_id === res.application.application_id ? res.application : app;
+      });
+      var seq = App.getState().navSeq;
+      paintJobDetailData_(cached, seq, true);
+      if (sel) sel.value = '';
+      return true;
+    }
+
     function renderJobDetail(jobId) {
       var page = pageEl();
       if (!page) return;
@@ -780,9 +793,11 @@
             var stage = sel.value;
             if (!stage) return;
             rpc('apiAtsMoveApplicationStage', [sel.getAttribute('data-move'), stage, ''], sel, 'Moving…')
-              .then(function () {
-                invalidateAtsJob_(job.job_id);
-                renderJobDetail(job.job_id);
+              .then(function (res) {
+                if (!patchJobDetailAfterMove_(job.job_id, res, sel)) {
+                  invalidateAtsJob_(job.job_id);
+                  renderJobDetail(job.job_id);
+                }
               })
               .catch(function (err) {
                 showToast((err && err.message) || 'Move failed', 'error');

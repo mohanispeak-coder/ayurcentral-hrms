@@ -144,13 +144,8 @@ var PmsService = (function () {
 
   function nameMap_() {
     var map = {};
-    listActiveEmployees_().forEach(function (e) {
-      map[e.employee_id] = e.display_name || PmsEngine.trim((e.first_name || '') + ' ' + (e.last_name || ''));
-    });
     DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).forEach(function (e) {
-      if (!map[e.employee_id]) {
-        map[e.employee_id] = e.display_name || PmsEngine.trim((e.first_name || '') + ' ' + (e.last_name || ''));
-      }
+      map[e.employee_id] = e.display_name || PmsEngine.trim((e.first_name || '') + ' ' + (e.last_name || ''));
     });
     return map;
   }
@@ -264,7 +259,6 @@ var PmsService = (function () {
   }
 
   function getCycle(cycleId) {
-    ensure_();
     var session = PmsPermissionService.requireAction(HRMS.PMS.ACTIONS.VIEW_DASHBOARD);
     var cycle = serializeCycle_(getCycle_(cycleId));
     var scale = loadScale_();
@@ -295,6 +289,16 @@ var PmsService = (function () {
       ratingScale: scale,
       capabilities: PmsPermissionService.capabilities(session)
     };
+  }
+
+  function getCycleBundle(cycleId) {
+    var detail = getCycle(cycleId);
+    try {
+      detail.assignableEmployees = listAssignableEmployees(cycleId);
+    } catch (ignore) {
+      detail.assignableEmployees = [];
+    }
+    return detail;
   }
 
   function createCycle(payload) {
@@ -401,7 +405,6 @@ var PmsService = (function () {
   }
 
   function listAssignableEmployees(cycleId) {
-    ensure_();
     var session = PmsPermissionService.requireApp();
     var list;
     if (PmsEngine.isHrOrAdmin(session)) {
@@ -582,7 +585,6 @@ var PmsService = (function () {
   }
 
   function getReviewBundle(cycleId, employeeId) {
-    ensure_();
     var session = PmsPermissionService.requireApp();
     var cycle = getCycle_(cycleId);
     var targetId = PmsEngine.trim(employeeId) || session.employee_id;
@@ -832,7 +834,6 @@ var PmsService = (function () {
   }
 
   function listTeamReviews(cycleId) {
-    ensure_();
     var session = PmsPermissionService.requireAction(HRMS.PMS.ACTIONS.VIEW_TEAM);
     var cycles = cycleId
       ? [getCycle_(cycleId)]
@@ -842,6 +843,8 @@ var PmsService = (function () {
         return PmsEngine.isActiveCycleStatus(c.status) || PmsEngine.upper(c.status) === HRMS.PMS.CYCLE_STATUS.FINALIZED;
       });
     }
+    var allGoals = DbService.getAllRecords(HRMS.SHEETS.PERFORMANCE_GOALS);
+    var allReviews = DbService.getAllRecords(HRMS.SHEETS.PERFORMANCE_REVIEWS);
     var scale = loadScale_();
     var names = nameMap_();
     var employees = listActiveEmployees_();
@@ -854,14 +857,16 @@ var PmsService = (function () {
     employees.forEach(function (e) { empIndex[e.employee_id] = e; });
     var rows = [];
     cycles.forEach(function (cycle) {
-      var assigned = PmsEngine.assignedEmployeeIds(DbService.getAllRecords(HRMS.SHEETS.PERFORMANCE_GOALS), cycle.cycle_id);
+      var assigned = PmsEngine.assignedEmployeeIds(allGoals, cycle.cycle_id);
       assigned.forEach(function (eid) {
         var emp = empIndex[eid] || EmployeeService.getMasterRecord(eid);
         if (!emp) return;
-        if (!PmsEngine.canViewEmployeePms(session, emp, findReview_(cycle.cycle_id, eid))) return;
+        var review = PmsEngine.findReview(allReviews, cycle.cycle_id, eid);
+        if (!PmsEngine.canViewEmployeePms(session, emp, review)) return;
         if (PmsEngine.isManager(session) && !PmsEngine.isHrOrAdmin(session) && !empIndex[eid]) return;
-        var review = findReview_(cycle.cycle_id, eid);
-        var goals = goalsFor_(cycle.cycle_id, eid);
+        var goals = allGoals.filter(function (g) {
+          return g.cycle_id === cycle.cycle_id && PmsEngine.sameEmployeeId(g.employee_id, eid);
+        });
         rows.push({
           cycle_id: cycle.cycle_id,
           cycle_name: cycle.name,
@@ -886,8 +891,7 @@ var PmsService = (function () {
   }
 
   function listAppraisals(cycleId) {
-    ensure_();
-    var session = PmsPermissionService.requireAction(HRMS.PMS.ACTIONS.FINALIZE);
+    PmsPermissionService.requireAction(HRMS.PMS.ACTIONS.FINALIZE);
     return listTeamReviews(cycleId);
   }
 
@@ -917,7 +921,7 @@ var PmsService = (function () {
         });
         if (mine.length) {
           myCycle = serializeCycle_(open[i]);
-          myReview = findReview_(open[i].cycle_id, session.employee_id);
+          myReview = PmsEngine.findReview(reviews, open[i].cycle_id, session.employee_id);
           break;
         }
       }
@@ -965,6 +969,7 @@ var PmsService = (function () {
     getDashboard: getDashboard,
     listCycles: listCycles,
     getCycle: getCycle,
+    getCycleBundle: getCycleBundle,
     createCycle: createCycle,
     updateCycle: updateCycle,
     transitionCycle: transitionCycle,
