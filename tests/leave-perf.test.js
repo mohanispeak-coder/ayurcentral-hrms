@@ -78,6 +78,10 @@ check('leave-approve-includes-manager', /LEAVE_APPROVE.*MANAGER/.test(read('foun
 check('leave-approvals-nav-includes-manager', /leave-approvals[\s\S]{0,120}MANAGER/.test(read('foundation/PermissionService.gs')));
 check('two-stage-pending-statuses', /PENDING_MANAGER/.test(read('leave/LeaveEngine.gs')) &&
   /statusAfterApproval/.test(read('leave/LeaveEngine.gs')));
+check('leave-approve-many-api', /apiLeaveApproveMany/.test(read('leave/ApiLeave.gs')) &&
+  /approveMany/.test(read('leave/LeaveService.gs')));
+check('leave-bulk-ui', /leaveBulkToolbarHtml_/.test(read('leave/LeaveUi.html')) &&
+  /apiLeaveApproveMany/.test(read('leave/LeaveUi.html')));
 check('owner-role-constant', /OWNER:\s*'OWNER'/.test(read('foundation/Constants.gs')));
 
 if (failures.length) {

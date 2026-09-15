@@ -667,6 +667,28 @@ var LeaveService = (function () {
     return outcome.serialized;
   }
 
+  function approveMany(session, leaveRequestIds, comment) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
+    var ids = Array.isArray(leaveRequestIds) ? leaveRequestIds : [];
+    var results = [];
+    ids.forEach(function (id) {
+      var key = String(id || '').trim();
+      if (!key) return;
+      try {
+        results.push({ leave_request_id: key, ok: true, result: approve(session, key, comment || '') });
+      } catch (e) {
+        results.push({ leave_request_id: key, ok: false, error: String(e.message || e) });
+      }
+    });
+    var succeeded = results.filter(function (r) { return r.ok; }).length;
+    return {
+      total: results.length,
+      succeeded: succeeded,
+      failed: results.length - succeeded,
+      results: results
+    };
+  }
+
   function reject(session, leaveRequestId, comment) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
     var outcome = withScriptLock_(function () {
@@ -705,6 +727,28 @@ var LeaveService = (function () {
       NotificationLeaveAdapter.notifyRejected(outcome.request || outcome.serialized, outcome.employee);
     });
     return outcome.serialized;
+  }
+
+  function rejectMany(session, leaveRequestIds, comment) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
+    var ids = Array.isArray(leaveRequestIds) ? leaveRequestIds : [];
+    var results = [];
+    ids.forEach(function (id) {
+      var key = String(id || '').trim();
+      if (!key) return;
+      try {
+        results.push({ leave_request_id: key, ok: true, result: reject(session, key, comment || '') });
+      } catch (e) {
+        results.push({ leave_request_id: key, ok: false, error: String(e.message || e) });
+      }
+    });
+    var succeeded = results.filter(function (r) { return r.ok; }).length;
+    return {
+      total: results.length,
+      succeeded: succeeded,
+      failed: results.length - succeeded,
+      results: results
+    };
   }
 
   function cancel(session, leaveRequestId) {
@@ -1085,7 +1129,9 @@ var LeaveService = (function () {
     saveDraft: saveDraft,
     submit: submit,
     approve: approve,
+    approveMany: approveMany,
     reject: reject,
+    rejectMany: rejectMany,
     cancel: cancel,
     revokeRejection: revokeRejection,
     getMyLeave: getMyLeave,

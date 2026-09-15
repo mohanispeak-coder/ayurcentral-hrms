@@ -71,6 +71,20 @@ function apiLeaveReject(leaveRequestId, comment, sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveApproveMany(leaveRequestIds, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.approveMany(session, leaveRequestIds || [], comment || '');
+  }, sessionToken);
+}
+
+function apiLeaveRejectMany(leaveRequestIds, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.rejectMany(session, leaveRequestIds || [], comment || '');
+  }, sessionToken);
+}
+
 function apiLeaveGetAdminList(filters, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

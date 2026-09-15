@@ -116,6 +116,147 @@
     return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
   }
 
+  function isLeavePendingActionable_(r) {
+    var st = String(r.status || '').toUpperCase();
+    return st === 'SUBMITTED' || st.indexOf('PENDING_') === 0;
+  }
+
+  function leaveBulkToolbarHtml_(barId) {
+    return '<div class="page-toolbar leave-bulk-bar" id="' + barId + '">' +
+      '<label class="form-check leave-bulk-select-all"><input type="checkbox" id="' + barId + '-all" aria-label="Select all"> Select all</label>' +
+      '<button type="button" class="btn btn-primary btn-sm" id="' + barId + '-approve" disabled>Approve selected</button>' +
+      '<button type="button" class="btn btn-danger btn-sm" id="' + barId + '-reject" disabled>Reject selected</button>' +
+      '<span class="leave-bulk-meta" id="' + barId + '-meta"></span></div>';
+  }
+
+  function leaveSelectCellHtml_(r) {
+    var c = ctx();
+    if (!isLeavePendingActionable_(r)) return '<td class="col-check"></td>';
+    return '<td class="col-check"><input type="checkbox" class="leave-row-select" data-leave-id="' +
+      c.escapeHtml(r.leave_request_id) + '" aria-label="Select request"></td>';
+  }
+
+  function bindLeaveApprovalBulk_(scopeEl, helpers, options) {
+    var c = ctx();
+    options = options || {};
+    var barId = options.barId || 'leave-appr-bulk';
+    var bar = scopeEl.querySelector('#' + barId);
+    if (!bar) return;
+    var selectAll = bar.querySelector('#' + barId + '-all');
+    var btnAp = bar.querySelector('#' + barId + '-approve');
+    var btnRe = bar.querySelector('#' + barId + '-reject');
+    var meta = bar.querySelector('#' + barId + '-meta');
+    var feedback = options.feedbackEl;
+    var flashKey = options.flashKey || 'leave-approvals';
+    var onDone = options.onDone || function () {};
+
+    function boxes() {
+      return scopeEl.querySelectorAll('.leave-row-select');
+    }
+    function selectedIds() {
+      var ids = [];
+      boxes().forEach(function (cb) {
+        if (cb.checked) ids.push(cb.getAttribute('data-leave-id'));
+      });
+      return ids;
+    }
+    function refreshBulkBar_() {
+      var n = selectedIds().length;
+      var total = boxes().length;
+      if (btnAp) btnAp.disabled = n === 0;
+      if (btnRe) btnRe.disabled = n === 0;
+      if (meta) {
+        meta.textContent = total
+          ? (n ? n + ' of ' + total + ' selected' : total + ' in queue — select rows or use Select all')
+          : '';
+      }
+      if (selectAll) selectAll.checked = total > 0 && n === total;
+    }
+    boxes().forEach(function (cb) {
+      cb.addEventListener('change', refreshBulkBar_);
+    });
+    if (selectAll) {
+      selectAll.addEventListener('change', function () {
+        boxes().forEach(function (cb) { cb.checked = selectAll.checked; });
+        refreshBulkBar_();
+      });
+    }
+    if (btnAp) {
+      btnAp.addEventListener('click', function () {
+        var ids = selectedIds();
+        if (!ids.length) return;
+        openDecisionModal(helpers, 'Approve ' + ids.length + ' request(s)', false, function (comment) {
+          c.callServer('apiLeaveApproveMany', ids, comment,
+            actionOpts(btnAp, 'Approving…', feedback))
+            .then(function (summary) {
+              invalidateLeaveAfterRequestMutation_();
+              var msg = summary.succeeded + ' approved';
+              if (summary.failed) msg += ', ' + summary.failed + ' could not be approved';
+              setFlash(msg, summary.failed ? 'warn' : 'success', flashKey);
+              onDone();
+            });
+        });
+      });
+    }
+    if (btnRe) {
+      btnRe.addEventListener('click', function () {
+        var ids = selectedIds();
+        if (!ids.length) return;
+        openDecisionModal(helpers, 'Reject ' + ids.length + ' request(s)', true, function (comment) {
+          c.callServer('apiLeaveRejectMany', ids, comment,
+            actionOpts(btnRe, 'Rejecting…', feedback))
+            .then(function (summary) {
+              invalidateLeaveAfterRequestMutation_();
+              var msg = summary.succeeded + ' rejected';
+              if (summary.failed) msg += ', ' + summary.failed + ' could not be rejected';
+              setFlash(msg, summary.failed ? 'warn' : 'success', flashKey);
+              onDone();
+            });
+        });
+      });
+    }
+    refreshBulkBar_();
+  }
+
+  function bindLeaveRowApproveReject_(scopeEl, helpers, options) {
+    var c = ctx();
+    options = options || {};
+    var feedback = options.feedbackEl;
+    var flashKey = options.flashKey || 'leave-approvals';
+    var onDone = options.onDone || function () {};
+    scopeEl.querySelectorAll('[data-approve]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openDecisionModal(helpers, 'Approve leave', false, function (comment) {
+          c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
+            actionOpts(btn, 'Approving…', feedback))
+            .then(function (res) {
+              invalidateLeaveAfterRequestMutation_();
+              var final = res && String(res.status || '').toUpperCase() === 'APPROVED';
+              setFlash(
+                final ? 'Leave fully approved.' : 'Stage approved — forwarded for the next approver.',
+                'success',
+                flashKey
+              );
+              onDone();
+            });
+        });
+      });
+    });
+    scopeEl.querySelectorAll('[data-reject]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openDecisionModal(helpers, 'Reject leave', true, function (comment) {
+          c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
+            actionOpts(btn, 'Rejecting…', feedback))
+            .then(function () {
+              invalidateLeaveAfterRequestMutation_();
+              setFlash('Leave rejected.', 'success', flashKey);
+              onDone();
+            });
+        });
+      });
+    });
+  }
+
   function adminLeaveActionsHtml_(r) {
     var c = ctx();
     var id = c.escapeHtml(r.leave_request_id);
@@ -136,7 +277,7 @@
 
   function adminLeaveRowHtml_(r) {
     var c = ctx();
-    return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+    return '<tr>' + leaveSelectCellHtml_(r) + '<td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
       '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
       '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
       c.escapeHtml(r.status_label || r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
@@ -488,7 +629,7 @@
   function paintApprovals_(page, helpers, rows) {
       var c = ctx();
       var body = (rows || []).map(function (r) {
-        return '<tr>' +
+        return '<tr>' + leaveSelectCellHtml_(r) +
           '<td class="num">' + c.escapeHtml(r.employee_id) + '</td>' +
           '<td>' + c.escapeHtml(r.employee_name) + '</td>' +
           '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
@@ -500,40 +641,22 @@
             '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button></td></tr>';
       }).join('');
       page.innerHTML = flashHtml('leave-approvals') +
-        pageHead('Leave approvals', 'Requests in your approval queue (manager, then HR/admin as applicable).') +
+        pageHead('Leave approvals', 'Select one or more requests, or use Select all. Your queue is filtered to what you can act on at this stage.') +
         '<div id="leave-appr-feedback" class="action-feedback hidden" role="status"></div>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No leave in your queue right now.</p></div></td></tr>') + '</tbody></table></div>';
-      page.querySelectorAll('[data-approve]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Approve leave', false, function (comment) {
-              c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
-                actionOpts(btn, 'Approving...', document.getElementById('leave-appr-feedback')))
-                .then(function (res) {
-                  invalidateLeaveAfterRequestMutation_();
-                  var final = res && String(res.status || '').toUpperCase() === 'APPROVED';
-                  setFlash(
-                    final ? 'Leave fully approved.' : 'Stage approved — forwarded for the next approver.',
-                    'success',
-                    'leave-approvals'
-                  );
-                  renderApprovals(page, helpers);
-                });
-            });
-        });
+        leaveBulkToolbarHtml_('leave-appr-bulk') +
+        '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="9"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No leave in your queue right now.</p></div></td></tr>') + '</tbody></table></div>';
+      var apprFeedback = document.getElementById('leave-appr-feedback');
+      bindLeaveApprovalBulk_(page, helpers, {
+        barId: 'leave-appr-bulk',
+        feedbackEl: apprFeedback,
+        flashKey: 'leave-approvals',
+        onDone: function () { renderApprovals(page, helpers); }
       });
-      page.querySelectorAll('[data-reject]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Reject leave', true, function (comment) {
-              c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
-                actionOpts(btn, 'Rejecting...', document.getElementById('leave-appr-feedback')))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave rejected.', 'success', 'leave-approvals');
-                  renderApprovals(page, helpers);
-                });
-            });
-        });
+      bindLeaveRowApproveReject_(page, helpers, {
+        feedbackEl: apprFeedback,
+        flashKey: 'leave-approvals',
+        onDone: function () { renderApprovals(page, helpers); }
       });
   }
 
@@ -605,8 +728,9 @@
             '<div class="form-group"><button type="button" class="btn btn-secondary" id="btn-flt">Apply filters</button></div>' +
           '</div></div>' +
           '<div id="leave-admin-filter-feedback" class="action-feedback hidden" role="status"></div>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
-          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div></div>' +
+          leaveBulkToolbarHtml_('leave-admin-bulk') +
+          '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div></div>' +
         '<div id="tab-types" class="hidden">' +
           '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements — not hard-coded company policy.</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Balance</th><th>LOP</th><th class="num">Entitlement</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
@@ -639,31 +763,16 @@
 
       function bindAdminActions() {
         var adminFeedback = function () { return document.getElementById('leave-admin-filter-feedback'); };
-        page.querySelectorAll('[data-approve]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Approve leave', false, function (comment) {
-              c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
-                actionOpts(btn, 'Approving...', adminFeedback()))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave approved.', 'success', 'leave-admin');
-                  renderAdmin(page, helpers);
-                });
-            });
-          });
+        bindLeaveApprovalBulk_(page, helpers, {
+          barId: 'leave-admin-bulk',
+          feedbackEl: adminFeedback(),
+          flashKey: 'leave-admin',
+          onDone: function () { renderAdmin(page, helpers); }
         });
-        page.querySelectorAll('[data-reject]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Reject leave', true, function (comment) {
-              c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
-                actionOpts(btn, 'Rejecting...', adminFeedback()))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave rejected.', 'success', 'leave-admin');
-                  renderAdmin(page, helpers);
-                });
-            });
-          });
+        bindLeaveRowApproveReject_(page, helpers, {
+          feedbackEl: adminFeedback(),
+          flashKey: 'leave-admin',
+          onDone: function () { renderAdmin(page, helpers); }
         });
         page.querySelectorAll('[data-cancel]').forEach(function (btn) {
           btn.addEventListener('click', function () {
