@@ -30,7 +30,6 @@ var ats = read('ats/AtsClient.html');
 var emp = read('employee/EmployeeClient.html');
 var leave = read('leave/LeaveUi.html');
 var payroll = read('payroll/PayrollClient.html');
-var pms = read('pms/PmsClient.html');
 var ntf = read('notifications/NotificationClient.html');
 var bell = read('notifications/NotificationBell.html');
 
@@ -89,7 +88,7 @@ function countBadLoading(text) {
 check('ats-no-bad-loading-text', countBadLoading(ats) === 0);
 check('ntf-no-bad-loading-text', countBadLoading(ntf) === 0);
 check('payroll-spinner-skeleton', /sectionSkeleton/.test(payroll));
-check('pms-spinner-skeleton', /sectionSkeleton/.test(pms));
+check('no-pms-pending-shell', !/route\.indexOf\('pms'\)/.test(scripts));
 
 // RPC surface: sectionSkeleton must not call google.script.run
 check('skeleton-helper-no-rpc', !/function sectionSkeleton[\s\S]{0,800}google\.script\.run/.test(scripts));

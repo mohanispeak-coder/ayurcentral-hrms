@@ -1,5 +1,5 @@
 /**
- * Module adapters — existing Leave/Payroll (and future PMS/ATS) call these
+ * Module adapters — existing Leave/Payroll (and ATS) call these
  * AFTER business commits succeed. Do not call from inside LockService.
  * Leave/Payroll files are not modified in this stream; wire later using
  * docs/NOTIFICATIONS_INTEGRATION_NOTES.md.
@@ -208,57 +208,6 @@ var NotificationPayrollAdapter = (function () {
     notifyApproved: notifyApproved,
     notifyLocked: notifyLocked,
     notifyPayslipsAvailable: notifyPayslipsAvailable
-  };
-})();
-
-var NotificationPmsAdapter = (function () {
-  function safe_(name, fn) {
-    try {
-      return fn();
-    } catch (e) {
-      Logger.log('NotificationPmsAdapter.' + name + ': ' + (e.message || e));
-      return { ok: false, error: String(e.message || e) };
-    }
-  }
-
-  function notifyCycleOpen(cycle, recipients) {
-    return safe_('notifyCycleOpen', function () {
-      var inputs = (recipients || []).map(function (r) {
-        return NotificationEngine.payloads.pmsCycleOpen(cycle, r);
-      });
-      return NotificationService.createNotifications(inputs);
-    });
-  }
-
-  function notifySelfAssessmentDue(cycle, recipient) {
-    return safe_('notifySelfAssessmentDue', function () {
-      return NotificationService.createNotification(
-        NotificationEngine.payloads.pmsSelfAssessmentDue(cycle, recipient)
-      );
-    });
-  }
-
-  function notifyManagerReviewPending(cycle, manager, employeeName) {
-    return safe_('notifyManagerReviewPending', function () {
-      return NotificationService.createNotification(
-        NotificationEngine.payloads.pmsManagerReviewPending(cycle, manager, employeeName)
-      );
-    });
-  }
-
-  function notifyFinalized(cycle, recipient) {
-    return safe_('notifyFinalized', function () {
-      return NotificationService.createNotification(
-        NotificationEngine.payloads.pmsFinalized(cycle, recipient)
-      );
-    });
-  }
-
-  return {
-    notifyCycleOpen: notifyCycleOpen,
-    notifySelfAssessmentDue: notifySelfAssessmentDue,
-    notifyManagerReviewPending: notifyManagerReviewPending,
-    notifyFinalized: notifyFinalized
   };
 })();
 

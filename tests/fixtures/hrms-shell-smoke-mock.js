@@ -42,7 +42,6 @@
             { route: 'employees', label: 'Employees', icon: 'people' },
             { route: 'my-leave', label: 'My Leave', icon: 'leave' },
             { route: 'payroll', label: 'Payroll', icon: 'pay' },
-            { route: 'pms', label: 'Performance', icon: 'person' },
             { route: 'ats', label: 'Recruitment', icon: 'people' },
             { route: 'notifications', label: 'Notifications', icon: 'person' }
           ]

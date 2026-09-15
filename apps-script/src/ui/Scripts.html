@@ -36,13 +36,6 @@
     'payroll-run': 'payroll',
     compensation: 'payroll',
     'my-payslips': 'payroll',
-    pms: 'pms',
-    'pms-cycles': 'pms',
-    'pms-cycle': 'pms',
-    'pms-my-review': 'pms',
-    'pms-team': 'pms',
-    'pms-review': 'pms',
-    'pms-appraisal': 'pms',
     ats: 'ats',
     'ats-jobs': 'ats',
     'ats-job': 'ats',
@@ -68,13 +61,6 @@
     'payroll-run': 'Payroll run',
     compensation: 'Compensation',
     'my-payslips': 'My Payslips',
-    pms: 'Performance',
-    'pms-cycles': 'Review cycles',
-    'pms-cycle': 'Review cycle',
-    'pms-my-review': 'My review',
-    'pms-team': 'Team reviews',
-    'pms-review': 'Review',
-    'pms-appraisal': 'Appraisals',
     ats: 'Recruitment',
     'ats-jobs': 'Jobs',
     'ats-job': 'Job',
@@ -101,13 +87,6 @@
     'payroll-run': 'One primary next step. Locked amounts never change.',
     compensation: 'Save a first structure, then revise so history stays intact.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
-    pms: 'Goals, self-assessment, and reviews for the current cycle.',
-    'pms-cycles': 'Create a cycle, then add goals before you open it.',
-    'pms-cycle': 'Assign goals, then move the cycle forward.',
-    'pms-my-review': 'Update progress and comments, then submit.',
-    'pms-team': 'People assigned to you in the current cycles.',
-    'pms-review': 'Self-assessment, manager ratings, and final appraisal.',
-    'pms-appraisal': 'Finalize ratings after managers submit.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
     'ats-jobs': 'Create, publish, and share requisitions.',
     'ats-job': 'Applications, pipeline, and the public apply link.',
@@ -122,10 +101,9 @@
 
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
-    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'pms-my-review', 'my-payslips'], collapsible: true },
+    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'performance', label: 'Performance', routes: ['pms', 'pms-team', 'pms-cycles', 'pms-appraisal'], collapsible: true },
     { id: 'payroll', label: 'Payroll', routes: ['payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
@@ -135,7 +113,6 @@
   var navSectionExpanded_ = {};
 
   var ROUTE_ALIASES = {
-    'pms-self': 'pms-my-review',
     'ats-applications': 'ats-candidates',
     'ats-interviews': 'ats-candidates',
     'payroll-run': 'payroll',
@@ -192,13 +169,6 @@
     params = params || {};
     if (route === 'employee-profile') return 'employee-profile:' + String(params.employeeId || '');
     if (route === 'payroll-run') return 'payroll-run:' + String(params.runId || '');
-    if (route === 'pms-cycle') return 'pms-cycle:' + String(params.cycleId || '');
-    if (route === 'pms-my-review' || route === 'pms-team' || route === 'pms-appraisal') {
-      return route + ':' + String(params.cycleId || '');
-    }
-    if (route === 'pms-review') {
-      return 'pms-review:' + String(params.cycleId || '') + ':' + String(params.employeeId || '');
-    }
     if (route === 'ats-job' || route === 'ats-job-edit') return route + ':' + String(params.jobId || '');
     if (route === 'ats-candidate') return 'ats-candidate:' + String(params.candidateId || '');
     return route || '';
@@ -904,10 +874,6 @@
     if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
     if (itemRoute === 'payroll' && current === 'payroll-run') return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
-    if (itemRoute === 'pms' && (current === 'pms-cycle' || current === 'pms-review')) return true;
-    if (itemRoute === 'pms-cycles' && current === 'pms-cycle') return true;
-    if (itemRoute === 'pms-team' && current === 'pms-review') return true;
-    if (itemRoute === 'pms-appraisal' && current === 'pms-review') return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
     if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
@@ -1176,9 +1142,6 @@
         tableShell(['Candidate ID', 'Name', 'Email', 'Phone', 'Location', 'Apps', 'Resume'], 'shell-ats-cands', 7);
     } else if (route === 'ats-job' || route === 'ats-candidate' || route === 'ats-job-new' || route === 'ats-job-edit') {
       html = sectionSkeleton({ variant: 'detail', label: 'Loading' });
-    } else if (route.indexOf('pms') === 0) {
-      html = skeletonKpiRow(['Active cycles', 'Pending self-assessment', 'Pending reviews']) +
-        sectionSkeleton({ variant: 'card', label: 'Loading performance' });
     } else if (route.indexOf('ats') === 0) {
       html = skeletonKpiRow(['Open jobs', 'Applications', 'Interviews']) +
         '<div class="card"><div class="skeleton skeleton-block" aria-hidden="true"></div></div>';
@@ -1424,9 +1387,6 @@
       params.openSalaryStructure = true;
     }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
-    if (route === 'pms-review' && params && !params.employeeId) {
-      route = 'pms-team';
-    }
     state.navSeq = (state.navSeq || 0) + 1;
     pauseBackgroundPreload();
     state.currentRoute = route;
@@ -1434,7 +1394,7 @@
     var item = state.navigation.filter(function (n) { return n.route === route; })[0];
     var def = ROUTES[route];
     var title = item ? item.label : (def ? def.title : 'HRMS');
-    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('pms-') === 0 || route.indexOf('ats-') === 0)) {
+    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('ats-') === 0)) {
       title = def.title;
     }
     $('page-title').textContent = title;
@@ -1603,19 +1563,6 @@
     if (data.leave_approvals_count != null) {
       kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
     }
-    if (data.pms && data.pms.kpis) {
-      var pk = data.pms.kpis;
-      if (pk.pending_self_assessment != null) {
-        kpis += dashCard('Self-assessments due', pk.pending_self_assessment);
-      } else if (pk.employees_pending_self != null) {
-        kpis += dashCard('Self-assessments due', pk.employees_pending_self);
-      }
-      if (pk.pending_manager_review != null) {
-        kpis += dashCard('Reviews due', pk.pending_manager_review);
-      } else if (pk.managers_pending_review != null) {
-        kpis += dashCard('Reviews due', pk.managers_pending_review);
-      }
-    }
     if (data.payroll && data.payroll.latest) {
       var run = data.payroll.latest;
       kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
@@ -1636,10 +1583,6 @@
       sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
         '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
     }
-    if (data.pms_actions && data.pms_actions.length) {
-      sections += '<div class="card dash-section"><h2>Performance</h2>' +
-        dashActionList(data.pms_actions, 'No performance actions right now.') + '</div>';
-    }
     if (data.ats_actions && data.ats_actions.length) {
       sections += '<div class="card dash-section"><h2>Recruitment</h2>' +
         dashActionList(data.ats_actions, 'No recruitment actions in your scope.') + '</div>';
@@ -1651,7 +1594,7 @@
     if (!sections) {
       sections = '<div class="card dash-welcome">' +
         '<h2>Welcome to AyurCentral HRMS</h2>' +
-        '<p>Use the sidebar for people, time off, pay, and — if your role allows — performance and recruitment.</p></div>';
+        '<p>Use the sidebar for people, time off, pay, and — if your role allows — recruitment.</p></div>';
     }
     if (state.app && !state.app.configured) {
       sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';

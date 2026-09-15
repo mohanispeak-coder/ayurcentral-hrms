@@ -27,8 +27,6 @@ var HomeDashboardService = (function () {
       leave_approvals_count: null,
       leave_approvals: [],
       payroll: null,
-      pms: null,
-      pms_actions: [],
       ats: null,
       ats_actions: [],
       notes: notes || []
@@ -76,38 +74,6 @@ var HomeDashboardService = (function () {
       });
       if (pay.ok && pay.value && pay.value.length) {
         out.payroll = { latest: pay.value[0] };
-      }
-    }
-
-    if (typeof PmsService !== 'undefined' && PmsService.getDashboard) {
-      var pms = try_('pms', function () {
-        var t = Date.now();
-        var value = PmsService.getDashboard(session);
-        if (typeof HrmsPerf !== 'undefined' && HrmsPerf.addStage) {
-          HrmsPerf.addStage('dash.pms', Date.now() - t);
-        }
-        return value;
-      });
-      if (pms.ok) {
-        out.pms = pms.value;
-        var k = (pms.value && pms.value.kpis) || {};
-        if (pms.value.my_open_cycle) {
-          out.pms_actions.push({
-            label: 'Self-assessment: ' + (pms.value.my_open_cycle.name || 'Open cycle'),
-            meta: 'Update progress and submit',
-            route: 'pms-my-review',
-            params: { cycleId: pms.value.my_open_cycle.cycle_id }
-          });
-        }
-        if (k.managers_pending_review > 0 && (session.role === 'MANAGER' || session.role === 'HR' ||
-            session.role === 'ADMIN' || session.role === 'OWNER')) {
-          out.pms_actions.push({
-            label: String(k.managers_pending_review) + ' manager review(s) pending',
-            meta: 'Team reviews',
-            route: 'pms-team',
-            params: {}
-          });
-        }
       }
     }
 

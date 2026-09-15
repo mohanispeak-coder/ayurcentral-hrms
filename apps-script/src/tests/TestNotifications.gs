@@ -71,7 +71,6 @@ function testNotifications_Engine() {
   check('hr-email-log', NotificationEngine.canViewEmailLog(hr) && !NotificationEngine.canViewEmailLog(emp));
   check('birthday', NotificationEngine.birthdayMatches('1990-08-29', '2026-08-29'));
   check('anniversary-skip-join-year', !NotificationEngine.anniversaryMatches('2026-08-29', '2026-08-29'));
-  check('pms', NotificationEngine.payloads.pmsCycleOpen({ cycle_id: 'C1', name: 'H1' }, emp).type === 'PMS_CYCLE_OPEN');
   check('ats-candidate-not-inbox', NotificationEngine.isCandidateType('ATS_CANDIDATE_INTERVIEW'));
 
   var failed = results.filter(function (r) { return !r.passed; });

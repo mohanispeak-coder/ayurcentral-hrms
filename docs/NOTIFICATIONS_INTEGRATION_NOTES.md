@@ -1,6 +1,6 @@
 # Notification Center — integration notes
 
-The Notification Center is implemented under `apps-script/src/notifications/`. Leave, Payroll, PMS, and ATS are **not** rewritten in this stream. Wire adapters after those modules finish their business commits (never inside `LockService`).
+The Notification Center is implemented under `apps-script/src/notifications/`. Leave, Payroll, and ATS are **not** rewritten in this stream. Wire adapters after those modules finish their business commits (never inside `LockService`).
 
 Existing sheet **`Notifications`** remains the **email delivery log** (`02_DATABASE_SCHEMA.md`: PENDING / SENT / FAILED). In-app unread/read lives on new sheets.
 
@@ -120,17 +120,6 @@ Until wired, Leave continues to write the **email log** via `notifyLeave_`. The 
 Payslip subjects use `NotificationEngine.payslipSubject(year, month)` — **no net pay**.
 
 Large lock: adapter batches inbox inserts then sends up to 40 emails; remainder stay `email_status=PENDING`. Drain with `runNotificationDailyJob` / `NotificationService.processPendingEmails`.
-
-### PMS (future)
-
-```javascript
-NotificationPmsAdapter.notifyCycleOpen(cycle, recipients);
-NotificationPmsAdapter.notifySelfAssessmentDue(cycle, employee);
-NotificationPmsAdapter.notifyManagerReviewPending(cycle, manager, employeeDisplayName);
-NotificationPmsAdapter.notifyFinalized(cycle, employee);
-```
-
-Routes `pms-cycle` / `pms-self` / `pms-review` are placeholders until PMS UI exists.
 
 ### ATS (future)
 
