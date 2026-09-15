@@ -232,10 +232,7 @@ var LeaveEngine = (function () {
       return { status: HRMS.LEAVE_STATUS.PENDING_HR, final: false };
     }
     if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
-      if (applicant === HRMS.ROLES.MANAGER) {
-        return { status: HRMS.LEAVE_STATUS.PENDING_ADMIN, final: false };
-      }
-      return { status: HRMS.LEAVE_STATUS.APPROVED, final: true };
+      return { status: HRMS.LEAVE_STATUS.PENDING_ADMIN, final: false };
     }
     if (status === HRMS.LEAVE_STATUS.PENDING_ADMIN) {
       return { status: HRMS.LEAVE_STATUS.APPROVED, final: true };
@@ -321,7 +318,7 @@ var LeaveEngine = (function () {
   }
 
   /**
-   * Two-stage workflow: manager → HR/Admin; manager applicants → HR → Admin; HR applicants → Admin only.
+   * Workflow: employee → manager → HR → admin; manager applicant → HR → admin; HR applicant → admin only.
    * @param {string=} requestStatus LeaveRequests.status
    * @param {string=} applicantUserRole Users.role for the employee who applied
    */
@@ -340,10 +337,7 @@ var LeaveEngine = (function () {
       return false;
     }
     if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
-      if (applicant === HRMS.ROLES.MANAGER) {
-        return role === HRMS.ROLES.HR;
-      }
-      return role === HRMS.ROLES.HR || isAdminRole_(role);
+      return role === HRMS.ROLES.HR;
     }
     if (status === HRMS.LEAVE_STATUS.PENDING_ADMIN) {
       return isAdminRole_(role);

@@ -66,8 +66,9 @@ check('HR applicant → admin only', LeaveEngine.initialPendingStatus('HR', fals
 check('LV-08 deny other team', LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099', 'PENDING_MANAGER', 'EMPLOYEE') === false);
 check('LV-08 allow team manager stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === true);
 check('manager cannot HR stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === false);
-check('HR final stage employee', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
-check('admin final stage employee', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
+check('HR stage for employee not admin', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
+check('admin cannot skip HR for employee', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === false);
+check('admin final after HR for employee', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_ADMIN', 'EMPLOYEE') === true);
 check('HR only first stage for manager applicant', LeaveEngine.canApproveRequest(hr, 'EMP002', 'EMP001', 'PENDING_HR', 'MANAGER') === true);
 check('admin not first stage for manager applicant', LeaveEngine.canApproveRequest(admin, 'EMP002', 'EMP001', 'PENDING_HR', 'MANAGER') === false);
 check('admin second stage manager applicant', LeaveEngine.canApproveRequest(admin, 'EMP002', 'EMP001', 'PENDING_ADMIN', 'MANAGER') === true);
@@ -81,7 +82,7 @@ check('LV-09 HR cannot self-approve', LeaveEngine.canApproveRequest(
 ) === false);
 
 check('stage after manager', LeaveEngine.statusAfterApproval('PENDING_MANAGER', 'EMPLOYEE').status === 'PENDING_HR');
-check('stage after HR for employee is final', LeaveEngine.statusAfterApproval('PENDING_HR', 'EMPLOYEE').final === true);
+check('stage after HR for employee → admin', LeaveEngine.statusAfterApproval('PENDING_HR', 'EMPLOYEE').status === 'PENDING_ADMIN');
 check('stage after HR for manager applicant', LeaveEngine.statusAfterApproval('PENDING_HR', 'MANAGER').status === 'PENDING_ADMIN');
 
 check('SEC-01 employee other leave', LeaveEngine.canViewEmployeeLeave(
