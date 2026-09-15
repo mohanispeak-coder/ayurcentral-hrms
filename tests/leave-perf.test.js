@@ -75,6 +75,7 @@ check('admin-revoke-rejection-api', /apiLeaveRevokeRejection/.test(api));
 check('admin-filter-keeps-actions', /adminLeaveRowHtml_/.test(ui) &&
   /bindAdminActions\(\)/.test(ui));
 check('leave-approve-no-manager', !/LEAVE_APPROVE.*MANAGER/.test(read('foundation/PermissionService.gs')));
+check('leave-approvals-nav-no-manager', !/leave-approvals[\s\S]{0,120}MANAGER/.test(read('foundation/PermissionService.gs')));
 check('owner-role-constant', /OWNER:\s*'OWNER'/.test(read('foundation/Constants.gs')));
 
 if (failures.length) {

@@ -37,7 +37,7 @@ var PermissionService = (function () {
     { id: 'employees', label: 'Employees', route: 'employees', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'my-team', label: 'My Team', route: 'my-team', icon: 'group', roles: ['MANAGER'] },
     { id: 'leave-admin', label: 'Leave', route: 'leave-admin', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR'] },
-    { id: 'leave-approvals', label: 'Leave Approvals', route: 'leave-approvals', icon: 'approval', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+    { id: 'leave-approvals', label: 'Leave Approvals', route: 'leave-approvals', icon: 'approval', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'my-leave', label: 'My Leave', route: 'my-leave', icon: 'calendar', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'payroll', label: 'Payroll', route: 'payroll', icon: 'payments', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'my-payslips', label: 'My Payslips', route: 'my-payslips', icon: 'receipt', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },

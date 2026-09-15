@@ -1,7 +1,7 @@
 # User Roles and Permissions
 
 **Document:** `03_USER_ROLES_PERMISSIONS.md`  
-**Roles:** `ADMIN` \| `HR` \| `MANAGER` \| `EMPLOYEE` (one primary role).  
+**Roles:** `OWNER` \| `ADMIN` \| `HR` \| `MANAGER` \| `EMPLOYEE` (one primary role).  
 **Identity:** `Users.google_email` + `employee_id` + `role`.
 
 Team = rows with `manager_employee_id` = the manager’s `employee_id` (direct reports only).
@@ -14,7 +14,7 @@ Team = rows with `manager_employee_id` = the manager’s `employee_id` (direct r
 | --- | --- |
 | ADMIN | Configuration, users, all modules, correction runs, settings |
 | HR | Employees, leave (company), payroll, documents, notifications |
-| MANAGER | Team leave approvals; team directory **without** salary |
+| MANAGER | Apply own leave; view team leave context; **no** leave approval (HR/Admin/Owner decide) |
 | EMPLOYEE | Own profile (permitted), own leave, own payslips |
 
 Unmapped or `DISABLED` users: no access.
@@ -31,7 +31,7 @@ Unmapped or `DISABLED` users: no access.
 | Employees / directory | Y | Y | My Team only | N — **My Profile** instead |
 | My Profile | via employee | Y | Y | Y |
 | Leave (company) | Y | Y | N | N |
-| Leave approvals | Y | Y | Y (team) | N |
+| Leave approvals | Y | Y | N | N |
 | My Leave | Y | Y | Y | Y |
 | Payroll | Y | Y | N | N |
 | Compensation | Y | Y | N | N |
@@ -66,7 +66,7 @@ Legend: Y / N / Own / Team.
 | --- | --- | --- | --- | --- |
 | Configure types | Y | Y | N | N |
 | Apply | Y (audit if for others) | Y proxy + audit | Own | Own |
-| Approve/reject SUBMITTED | Y | Y override + audit | Team | N |
+| Approve/reject SUBMITTED | Y | Y | N | N |
 | Cancel DRAFT/SUBMITTED | Y | Y | Own | Own |
 | Cancel APPROVED | Y | Y | N | N (HR) |
 | Calendar | Y all | Y | Team+Own | Own |
