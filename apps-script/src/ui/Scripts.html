@@ -717,6 +717,11 @@
                 });
                 return;
               }
+              // Legacy / unenveloped success payloads (must not become "Request failed").
+              if (Array.isArray(result)) {
+                resolve(result);
+                return;
+              }
               if (result && typeof result === 'object' && result.employee_id &&
                   (result.hasOwnProperty('current') || result.hasOwnProperty('history'))) {
                 resolve(result);
@@ -724,7 +729,10 @@
               }
               if (result && typeof result === 'object') {
                 if (Array.isArray(result.items) || result.hasOwnProperty('unread_count') ||
-                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences')) {
+                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences') ||
+                    result.hasOwnProperty('components') || result.hasOwnProperty('structure') ||
+                    result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
+                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline')) {
                   resolve(result);
                   return;
                 }

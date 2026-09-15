@@ -101,7 +101,7 @@
 
     function isHr() {
       var r = String(session().role || '').toUpperCase();
-      return r === 'HR' || r === 'ADMIN';
+      return r === 'OWNER' || r === 'HR' || r === 'ADMIN';
     }
 
     function relTime(value) {

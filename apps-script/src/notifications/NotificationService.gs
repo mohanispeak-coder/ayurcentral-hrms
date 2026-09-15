@@ -236,7 +236,7 @@ var NotificationService = (function () {
     users.forEach(function (u) {
       if (String(u.status || '').toUpperCase() !== 'ACTIVE') return;
       var role = String(u.role || '').toUpperCase();
-      if (role !== 'HR' && role !== 'ADMIN') return;
+      if (role !== 'OWNER' && role !== 'HR' && role !== 'ADMIN') return;
       var rec = resolveRecipient({ employee_id: u.employee_id, email: u.google_email });
       if (!rec) return;
       var key = rec.employee_id || rec.email;

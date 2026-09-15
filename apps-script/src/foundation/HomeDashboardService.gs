@@ -99,7 +99,8 @@ var HomeDashboardService = (function () {
             params: { cycleId: pms.value.my_open_cycle.cycle_id }
           });
         }
-        if (k.managers_pending_review > 0 && (session.role === 'MANAGER' || session.role === 'HR' || session.role === 'ADMIN')) {
+        if (k.managers_pending_review > 0 && (session.role === 'MANAGER' || session.role === 'HR' ||
+            session.role === 'ADMIN' || session.role === 'OWNER')) {
           out.pms_actions.push({
             label: String(k.managers_pending_review) + ' manager review(s) pending',
             meta: 'Team reviews',

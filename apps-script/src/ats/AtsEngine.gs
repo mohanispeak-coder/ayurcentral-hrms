@@ -225,13 +225,14 @@ var AtsEngine = (function () {
   function canAccessAts(session) {
     if (!session || !session.authorized) return false;
     var role = roleOf(session);
-    return role === 'ADMIN' || role === 'HR' || role === 'MANAGER';
+    // Keep in sync with PermissionService NAV / ACTIONS for Recruitment.
+    return role === 'OWNER' || role === 'ADMIN' || role === 'HR' || role === 'MANAGER';
   }
 
   function canManageAts(session) {
     if (!canAccessAts(session)) return false;
     var role = roleOf(session);
-    return role === 'ADMIN' || role === 'HR';
+    return role === 'OWNER' || role === 'ADMIN' || role === 'HR';
   }
 
   function isManager(session) {

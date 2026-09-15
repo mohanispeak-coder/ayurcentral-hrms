@@ -167,12 +167,12 @@ var PayslipService = (function () {
       if (rec) netPay = rec.net_pay;
     }
     return {
-      document_id: doc.document_id,
-      title: doc.title,
-      period_label: periodLabel,
-      payroll_run_id: doc.payroll_run_id || '',
-      net_pay: netPay,
-      uploaded_at: doc.uploaded_at,
+      document_id: String(doc.document_id || ''),
+      title: String(doc.title || ''),
+      period_label: String(periodLabel || ''),
+      payroll_run_id: runId,
+      net_pay: netPay == null || netPay === '' ? null : Number(netPay),
+      uploaded_at: serializeDateTime_(doc.uploaded_at),
       generated_at: serializeDateTime_(doc.uploaded_at)
     };
   }
@@ -216,12 +216,15 @@ var PayslipService = (function () {
 
   function listOwnPayslips() {
     var session = PermissionService.require(HRMS.ACTIONS.VIEW_OWN_PAYSLIP);
+    var employeeId = String(session.employee_id || '').trim();
+    // My Payslips is always self-scope. Missing employee link → empty list (not all payslips).
+    if (!employeeId) return [];
     var docs = DbService.findRecords(HRMS.SHEETS.DOCUMENTS, {
-      employee_id: session.employee_id,
+      employee_id: employeeId,
       category: HRMS.DOCUMENT_CATEGORY.PAYSLIP
     });
     return dedupePayslipsByRun(docs).map(function (d) {
-      return enrichPayslipDoc_(d, session.employee_id);
+      return enrichPayslipDoc_(d, employeeId);
     });
   }
 

@@ -23,7 +23,7 @@ var AtsPermissionService = (function () {
   function requireManage(session) {
     requireAccess(session);
     if (!AtsEngine.canManageAts(session)) {
-      throw authorizationError_('Only HR or Admin can manage job requisitions.');
+      throw authorizationError_('Only HR, Admin, or Owner can manage job requisitions.');
     }
     return session;
   }

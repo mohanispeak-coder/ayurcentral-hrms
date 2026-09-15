@@ -136,16 +136,21 @@ check('resume-mime-pdf', AtsEngine.allowedResumeMime('application/pdf', 'cv.pdf'
 check('resume-mime-reject-exe', !AtsEngine.allowedResumeMime('application/octet-stream', 'x.exe'));
 
 const admin = { authorized: true, role: 'ADMIN', employee_id: 'EMP001', email: 'admin@test' };
+const owner = { authorized: true, role: 'OWNER', employee_id: 'EMP000', email: 'owner@test' };
 const hr = { authorized: true, role: 'HR', employee_id: 'EMP010', email: 'hr@test' };
 const mgr = { authorized: true, role: 'MANAGER', employee_id: 'EMP002', email: 'mgr@test' };
 const emp = { authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003', email: 'emp@test' };
 const anon = { authorized: false, role: '', email: '' };
 
 check('rbac-admin-access', AtsEngine.canAccessAts(admin) && AtsEngine.canManageAts(admin));
+check('rbac-owner-access', AtsEngine.canAccessAts(owner) && AtsEngine.canManageAts(owner));
 check('rbac-hr-access', AtsEngine.canAccessAts(hr) && AtsEngine.canManageAts(hr));
 check('rbac-manager-access-not-manage', AtsEngine.canAccessAts(mgr) && !AtsEngine.canManageAts(mgr));
 check('rbac-employee-denied', !AtsEngine.canAccessAts(emp));
 check('rbac-anon-denied', !AtsEngine.canAccessAts(anon));
+check('rbac-owner-in-nav', ATS.NAV_ITEMS.every(function (item) {
+  return item.roles.indexOf('OWNER') >= 0;
+}));
 
 const assignedJob = { job_id: 'JOB0001', hiring_manager_employee_id: 'EMP002' };
 const otherJob = { job_id: 'JOB0002', hiring_manager_employee_id: 'EMP009' };

@@ -164,7 +164,8 @@
     }
 
     function isAdmin() {
-      return sessionRole() === 'ADMIN';
+      var r = sessionRole();
+      return r === 'ADMIN' || r === 'OWNER';
     }
 
     function stillOnPayrollModule_(seq) {

@@ -133,7 +133,7 @@ ATS.SHARE_CHANNELS = [
 ];
 
 ATS.NAV_ITEMS = [
-  { id: 'ats', label: 'Recruitment', route: 'ats', icon: 'group', roles: ['ADMIN', 'HR', 'MANAGER'] },
-  { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['ADMIN', 'HR', 'MANAGER'] },
-  { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['ADMIN', 'HR', 'MANAGER'] }
+  { id: 'ats', label: 'Recruitment', route: 'ats', icon: 'group', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+  { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+  { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] }
 ];

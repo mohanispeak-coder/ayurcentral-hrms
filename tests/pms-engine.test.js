@@ -168,6 +168,7 @@ check('PMS-finalize-before-manager', throws(function () {
   PmsEngine.assertCanFinalize(mgrCycle, { status: RS.SELF_SUBMITTED });
 }).threw);
 
+const owner = { authorized: true, role: 'OWNER', employee_id: 'EMP000' };
 const hr = { authorized: true, role: 'HR', employee_id: 'EMP001' };
 const mgr = { authorized: true, role: 'MANAGER', employee_id: 'EMP002' };
 const emp = { authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' };
@@ -175,6 +176,8 @@ const other = { authorized: true, role: 'EMPLOYEE', employee_id: 'EMP004' };
 const report = { employee_id: 'EMP003', manager_employee_id: 'EMP002' };
 const outsider = { employee_id: 'EMP004', manager_employee_id: 'EMP099' };
 
+check('PMS-rbac-owner-is-hr-admin', PmsEngine.isHrOrAdmin(owner) && PmsEngine.isAdmin(owner));
+check('PMS-rbac-owner-cycles', PmsEngine.can(ACT.MANAGE_CYCLES, owner, {}));
 check('PMS-rbac-hr-cycles', PmsEngine.can(ACT.MANAGE_CYCLES, hr, {}));
 check('PMS-rbac-emp-no-cycles', !PmsEngine.can(ACT.MANAGE_CYCLES, emp, {}));
 check('PMS-rbac-mgr-no-cycles', !PmsEngine.can(ACT.MANAGE_CYCLES, mgr, {}));
@@ -191,7 +194,11 @@ check('PMS-rbac-emp-no-team', !PmsEngine.can(ACT.VIEW_TEAM, emp, {}));
 check('PMS-view-invalid-access', !PmsEngine.canViewEmployeePms(other, report, {}));
 check('PMS-view-self', PmsEngine.canViewEmployeePms(emp, report, {}));
 check('PMS-view-hr', PmsEngine.canViewEmployeePms(hr, outsider, {}));
+check('PMS-view-owner', PmsEngine.canViewEmployeePms(owner, outsider, {}));
 
+check('PMS-nav-owner-has-cycles', PmsPermissionService.navItemsForRole('OWNER').some(function (n) {
+  return n.route === 'pms-cycles';
+}));
 check('PMS-nav-hr-has-cycles', PmsPermissionService.navItemsForRole('HR').some(function (n) {
   return n.route === 'pms-cycles';
 }));

@@ -75,8 +75,8 @@ function hrmsResolveAuthAccess_(input) {
     var session = {
       authorized: true,
       email: email,
-      employee_id: user.employee_id,
-      role: String(user.role).toUpperCase(),
+      employee_id: String(user.employee_id || '').trim(),
+      role: String(user.role || '').trim().toUpperCase(),
       status: user.status,
       displayName: input.displayName || '',
       demo: false,

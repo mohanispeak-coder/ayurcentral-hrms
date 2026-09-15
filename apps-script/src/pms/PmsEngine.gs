@@ -108,11 +108,14 @@ var PmsEngine = (function () {
   function isHrOrAdmin(session) {
     if (!session || !session.authorized) return false;
     var role = upper_(session.role);
-    return role === HRMS.ROLES.HR || role === HRMS.ROLES.ADMIN;
+    // Keep in sync with PermissionService.isHrOrAdmin (OWNER has full HR/Admin scope).
+    return role === HRMS.ROLES.OWNER || role === HRMS.ROLES.HR || role === HRMS.ROLES.ADMIN;
   }
 
   function isAdmin(session) {
-    return !!(session && session.authorized && upper_(session.role) === HRMS.ROLES.ADMIN);
+    if (!session || !session.authorized) return false;
+    var role = upper_(session.role);
+    return role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.OWNER;
   }
 
   function isManager(session) {

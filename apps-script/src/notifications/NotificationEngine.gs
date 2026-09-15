@@ -253,11 +253,14 @@ var NotificationEngine = (function () {
   function isHrOrAdmin(session) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
-    return role === 'HR' || role === 'ADMIN';
+    // Keep in sync with PermissionService.isHrOrAdmin.
+    return role === 'OWNER' || role === 'HR' || role === 'ADMIN';
   }
 
   function isAdmin(session) {
-    return !!(session && session.authorized && String(session.role || '').toUpperCase() === 'ADMIN');
+    if (!session || !session.authorized) return false;
+    var role = String(session.role || '').toUpperCase();
+    return role === 'ADMIN' || role === 'OWNER';
   }
 
   function ownsRow(row, session) {

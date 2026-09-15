@@ -91,9 +91,9 @@ HRMS.PMS.CYCLE_STATUS_ORDER = [
 ];
 
 HRMS.PMS.NAV = [
-  { id: 'pms', label: 'Performance', route: 'pms', icon: 'dashboard', roles: ['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
-  { id: 'pms-cycles', label: 'Review cycles', route: 'pms-cycles', icon: 'event', roles: ['ADMIN', 'HR'] },
-  { id: 'pms-my-review', label: 'My review', route: 'pms-my-review', icon: 'person', roles: ['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
-  { id: 'pms-team', label: 'Team reviews', route: 'pms-team', icon: 'group', roles: ['ADMIN', 'HR', 'MANAGER'] },
-  { id: 'pms-appraisal', label: 'Appraisals', route: 'pms-appraisal', icon: 'approval', roles: ['ADMIN', 'HR'] }
+  { id: 'pms', label: 'Performance', route: 'pms', icon: 'dashboard', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
+  { id: 'pms-cycles', label: 'Review cycles', route: 'pms-cycles', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR'] },
+  { id: 'pms-my-review', label: 'My review', route: 'pms-my-review', icon: 'person', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
+  { id: 'pms-team', label: 'Team reviews', route: 'pms-team', icon: 'group', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+  { id: 'pms-appraisal', label: 'Appraisals', route: 'pms-appraisal', icon: 'approval', roles: ['OWNER', 'ADMIN', 'HR'] }
 ];

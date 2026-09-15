@@ -223,7 +223,7 @@
       var session = App.getState().session || {};
       var refreshHtml = App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '';
       var addHtml = '';
-      if (!team && (session.role === 'HR' || session.role === 'ADMIN')) {
+      if (!team && (session.role === 'OWNER' || session.role === 'HR' || session.role === 'ADMIN')) {
         addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-bulk">Bulk upload</button> ' +
           '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
       }
@@ -629,7 +629,7 @@
           headerActions += '<button type="button" class="btn btn-primary" id="btn-activate">Reactivate</button>';
         }
       }
-      if (!isSelf && (App.getState().session.role === 'HR' || App.getState().session.role === 'ADMIN')) {
+      if (!isSelf && (App.getState().session.role === 'OWNER' || App.getState().session.role === 'HR' || App.getState().session.role === 'ADMIN')) {
         headerActions += '<button type="button" class="btn btn-secondary" id="btn-back-dir">Back to directory</button>';
       }
       var header = '<div class="page-header"><div class="page-header-text">' +

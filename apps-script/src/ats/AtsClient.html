@@ -113,7 +113,8 @@
     }
 
     function canManage() {
-      return !!atsMeta.canManage || sessionRole() === 'ADMIN' || sessionRole() === 'HR';
+      var r = sessionRole();
+      return !!atsMeta.canManage || r === 'OWNER' || r === 'ADMIN' || r === 'HR';
     }
 
     function header(title, lede, actions) {

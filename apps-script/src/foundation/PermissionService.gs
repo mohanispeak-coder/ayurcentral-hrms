@@ -55,7 +55,8 @@ var PermissionService = (function () {
   ];
 
   function hasRole_(session, allowedRoles) {
-    return allowedRoles.indexOf(session.role) >= 0;
+    var role = String(session && session.role || '').trim().toUpperCase();
+    return allowedRoles.indexOf(role) >= 0;
   }
 
   /**
@@ -134,13 +135,17 @@ var PermissionService = (function () {
   }
 
   function isAdmin(session) {
-    return session && (session.role === HRMS.ROLES.ADMIN || session.role === HRMS.ROLES.OWNER);
+    if (!session) return false;
+    var role = String(session.role || '').trim().toUpperCase();
+    return role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.OWNER;
   }
 
   function isHrOrAdmin(session) {
-    return session && (session.role === HRMS.ROLES.HR ||
-      session.role === HRMS.ROLES.ADMIN ||
-      session.role === HRMS.ROLES.OWNER);
+    if (!session) return false;
+    var role = String(session.role || '').trim().toUpperCase();
+    return role === HRMS.ROLES.HR ||
+      role === HRMS.ROLES.ADMIN ||
+      role === HRMS.ROLES.OWNER;
   }
 
   return {

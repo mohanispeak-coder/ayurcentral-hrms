@@ -153,7 +153,9 @@ var CompensationService = (function () {
 
   function getOwnCurrentStructure() {
     var session = PermissionService.require(HRMS.ACTIONS.VIEW_OWN_PAYSLIP);
-    var bundle = getCurrentBundle_(session.employee_id, false);
+    var employeeId = String(session.employee_id || '').trim();
+    if (!employeeId) return null;
+    var bundle = getCurrentBundle_(employeeId, false);
     if (!bundle) return null;
     return sanitizeOwnStructure_(bundle);
   }
@@ -417,22 +419,24 @@ var CompensationService = (function () {
   function sanitizeOwnStructure_(bundle) {
     return {
       structure: {
-        salary_structure_id: bundle.structure.salary_structure_id,
-        employee_id: bundle.structure.employee_id,
-        effective_from: bundle.structure.effective_from,
-        status: bundle.structure.status,
-        currency: bundle.structure.currency,
-        ctc_monthly: bundle.structure.ctc_monthly
+        salary_structure_id: String(bundle.structure.salary_structure_id || ''),
+        employee_id: String(bundle.structure.employee_id || ''),
+        effective_from: serializeClientValue_(bundle.structure.effective_from),
+        status: String(bundle.structure.status || ''),
+        currency: String(bundle.structure.currency || ''),
+        ctc_monthly: bundle.structure.ctc_monthly == null || bundle.structure.ctc_monthly === ''
+          ? null
+          : Number(bundle.structure.ctc_monthly)
       },
       components: (bundle.components || []).map(function (c) {
         return {
-          component_code: c.component_code,
-          component_name: c.component_name,
-          component_kind: c.component_kind,
-          calc_method: c.calc_method,
-          amount: c.amount,
-          percent: c.percent,
-          sort_order: c.sort_order
+          component_code: String(c.component_code || ''),
+          component_name: String(c.component_name || ''),
+          component_kind: String(c.component_kind || ''),
+          calc_method: String(c.calc_method || ''),
+          amount: c.amount == null || c.amount === '' ? null : Number(c.amount),
+          percent: c.percent == null || c.percent === '' ? null : Number(c.percent),
+          sort_order: Number(c.sort_order || 0)
         };
       })
     };
