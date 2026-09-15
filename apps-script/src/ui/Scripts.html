@@ -104,7 +104,7 @@
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['payroll'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -872,7 +872,7 @@
   function isNavRouteActive(itemRoute, current) {
     if (itemRoute === current) return true;
     if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
-    if (itemRoute === 'payroll' && current === 'payroll-run') return true;
+    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;

@@ -618,6 +618,9 @@
         '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
 
       if (!currentRun) {
+        if (homeState.salaryStructureOpen) {
+          html += paintSalaryStructureCollapsible_();
+        }
         html += '<div class="card"><h2>Get started</h2>' +
           '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start the month, then upload attendance before calculating.</p>' +
           '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
