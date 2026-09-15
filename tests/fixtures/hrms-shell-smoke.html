@@ -969,6 +969,15 @@ tr.skeleton-row td { padding-top: 14px; padding-bottom: 14px; vertical-align: mi
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; overflow: hidden;
+  transition: width 0.22s ease, height 0.22s ease, max-width 0.22s ease, max-height 0.22s ease, right 0.22s ease, bottom 0.22s ease;
+}
+.ask-hr-panel.is-expanded {
+  width: min(720px, calc(100vw - 32px));
+  height: min(860px, calc(100vh - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  right: 16px;
+  bottom: 16px;
 }
 .ask-hr-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
@@ -1016,20 +1025,53 @@ tr.skeleton-row td { padding-top: 14px; padding-bottom: 14px; vertical-align: mi
   color: var(--color-danger); border-bottom-left-radius: 4px;
 }
 .ask-hr-bubble-status {
-  align-self: flex-start; display: flex; align-items: flex-start; gap: 8px;
+  align-self: flex-start; display: flex; flex-direction: column; gap: 10px;
   background: var(--color-bg-elevated); border: 1px solid var(--color-border);
-  color: var(--color-text-muted); font-size: 0.8125rem;
+  color: var(--color-text-muted); font-size: 0.8125rem; max-width: 92%;
 }
-.ask-hr-status-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ask-hr-skel-stack { width: 100%; min-width: 180px; }
+.ask-hr-skel-stack .skeleton-line { margin: 6px 0; }
+.ask-hr-status-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ask-hr-status-label { font-size: var(--text-sm); color: var(--color-text); }
 .ask-hr-status-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
+.ask-hr-answer { font-size: var(--text-md); line-height: 1.55; color: var(--color-text); }
+.ask-hr-answer .ask-hr-p { margin: 0 0 10px; }
+.ask-hr-answer .ask-hr-p:last-child { margin-bottom: 0; }
+.ask-hr-heading {
+  margin: 14px 0 6px; font-size: 0.98rem; font-weight: 700;
+  color: var(--color-text); line-height: 1.35;
+}
+.ask-hr-answer .ask-hr-heading:first-child { margin-top: 0; }
+.ask-hr-list { margin: 6px 0 12px; padding-left: 1.15rem; }
+.ask-hr-list li { margin: 0 0 4px; }
+.ask-hr-table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: var(--text-sm);
+}
+.ask-hr-table th,
+.ask-hr-table td {
+  border: 1px solid var(--color-border); padding: 6px 8px; text-align: left; vertical-align: top;
+}
+.ask-hr-table th { background: var(--color-bg); font-weight: 600; }
+.ask-hr-notfound-hint {
+  margin: 8px 0 0; font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.45;
+}
 .ask-hr-keypoints { margin: 10px 0 0; padding-left: 18px; }
 .ask-hr-keypoints li { margin: 0 0 4px; }
 .ask-hr-key-label, .ask-hr-src-label {
   margin: 10px 0 4px; font-size: var(--text-xs); font-weight: 700;
   color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em;
 }
-.ask-hr-sources { margin: 0; padding-left: 18px; }
-.ask-hr-sources a { color: var(--color-primary); text-decoration: none; }
+.ask-hr-sources-block {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-border);
+}
+.ask-hr-sources-block .ask-hr-src-label { margin-top: 0; }
+.ask-hr-sources { margin: 0; padding: 0; list-style: none; }
+.ask-hr-sources li {
+  display: flex; align-items: flex-start; gap: 6px; margin: 0 0 6px;
+  font-size: var(--text-sm); line-height: 1.4;
+}
+.ask-hr-src-mark { flex-shrink: 0; line-height: 1.4; }
+.ask-hr-sources a { color: var(--color-primary); text-decoration: none; word-break: break-word; }
 .ask-hr-sources a:hover { text-decoration: underline; }
 .ask-hr-composer {
   display: grid; grid-template-columns: 1fr auto; gap: 8px;
@@ -1086,6 +1128,10 @@ body:has(> .careers-shell) {
   .ask-hr-panel {
     right: 8px; left: 8px; bottom: 8px; width: auto;
     height: min(560px, calc(100vh - 16px)); max-height: none;
+  }
+  .ask-hr-panel.is-expanded {
+    width: auto; left: 8px; right: 8px;
+    height: calc(100vh - 16px); max-height: none;
   }
   .cal-grid { font-size: 0.7rem; }
   .cal-cell { min-height: 56px; padding: 4px; }
@@ -1266,7 +1312,6 @@ body:has(> .careers-shell) {
             { route: 'employees', label: 'Employees', icon: 'people' },
             { route: 'my-leave', label: 'My Leave', icon: 'leave' },
             { route: 'payroll', label: 'Payroll', icon: 'pay' },
-            { route: 'pms', label: 'Performance', icon: 'person' },
             { route: 'ats', label: 'Recruitment', icon: 'people' },
             { route: 'notifications', label: 'Notifications', icon: 'person' }
           ]
@@ -1869,13 +1914,6 @@ body:has(> .careers-shell) {
     'payroll-run': 'payroll',
     compensation: 'payroll',
     'my-payslips': 'payroll',
-    pms: 'pms',
-    'pms-cycles': 'pms',
-    'pms-cycle': 'pms',
-    'pms-my-review': 'pms',
-    'pms-team': 'pms',
-    'pms-review': 'pms',
-    'pms-appraisal': 'pms',
     ats: 'ats',
     'ats-jobs': 'ats',
     'ats-job': 'ats',
@@ -1901,13 +1939,6 @@ body:has(> .careers-shell) {
     'payroll-run': 'Payroll run',
     compensation: 'Compensation',
     'my-payslips': 'My Payslips',
-    pms: 'Performance',
-    'pms-cycles': 'Review cycles',
-    'pms-cycle': 'Review cycle',
-    'pms-my-review': 'My review',
-    'pms-team': 'Team reviews',
-    'pms-review': 'Review',
-    'pms-appraisal': 'Appraisals',
     ats: 'Recruitment',
     'ats-jobs': 'Jobs',
     'ats-job': 'Job',
@@ -1934,13 +1965,6 @@ body:has(> .careers-shell) {
     'payroll-run': 'One primary next step. Locked amounts never change.',
     compensation: 'Save a first structure, then revise so history stays intact.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
-    pms: 'Goals, self-assessment, and reviews for the current cycle.',
-    'pms-cycles': 'Create a cycle, then add goals before you open it.',
-    'pms-cycle': 'Assign goals, then move the cycle forward.',
-    'pms-my-review': 'Update progress and comments, then submit.',
-    'pms-team': 'People assigned to you in the current cycles.',
-    'pms-review': 'Self-assessment, manager ratings, and final appraisal.',
-    'pms-appraisal': 'Finalize ratings after managers submit.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
     'ats-jobs': 'Create, publish, and share requisitions.',
     'ats-job': 'Applications, pipeline, and the public apply link.',
@@ -1955,10 +1979,9 @@ body:has(> .careers-shell) {
 
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
-    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'pms-my-review', 'my-payslips'], collapsible: true },
+    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'performance', label: 'Performance', routes: ['pms', 'pms-team', 'pms-cycles', 'pms-appraisal'], collapsible: true },
     { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
@@ -1968,7 +1991,6 @@ body:has(> .careers-shell) {
   var navSectionExpanded_ = {};
 
   var ROUTE_ALIASES = {
-    'pms-self': 'pms-my-review',
     'ats-applications': 'ats-candidates',
     'ats-interviews': 'ats-candidates'
   };
@@ -2022,13 +2044,6 @@ body:has(> .careers-shell) {
     params = params || {};
     if (route === 'employee-profile') return 'employee-profile:' + String(params.employeeId || '');
     if (route === 'payroll-run') return 'payroll-run:' + String(params.runId || '');
-    if (route === 'pms-cycle') return 'pms-cycle:' + String(params.cycleId || '');
-    if (route === 'pms-my-review' || route === 'pms-team' || route === 'pms-appraisal') {
-      return route + ':' + String(params.cycleId || '');
-    }
-    if (route === 'pms-review') {
-      return 'pms-review:' + String(params.cycleId || '') + ':' + String(params.employeeId || '');
-    }
     if (route === 'ats-job' || route === 'ats-job-edit') return route + ':' + String(params.jobId || '');
     if (route === 'ats-candidate') return 'ats-candidate:' + String(params.candidateId || '');
     return route || '';
@@ -2664,10 +2679,6 @@ body:has(> .careers-shell) {
     if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
     if (itemRoute === 'payroll' && current === 'payroll-run') return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
-    if (itemRoute === 'pms' && (current === 'pms-cycle' || current === 'pms-review')) return true;
-    if (itemRoute === 'pms-cycles' && current === 'pms-cycle') return true;
-    if (itemRoute === 'pms-team' && current === 'pms-review') return true;
-    if (itemRoute === 'pms-appraisal' && current === 'pms-review') return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
     if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
@@ -2918,9 +2929,6 @@ body:has(> .careers-shell) {
         tableShell(['Candidate ID', 'Name', 'Email', 'Phone', 'Location', 'Apps', 'Resume'], 'shell-ats-cands', 7);
     } else if (route === 'ats-job' || route === 'ats-candidate' || route === 'ats-job-new' || route === 'ats-job-edit') {
       html = sectionSkeleton({ variant: 'detail', label: 'Loading' });
-    } else if (route.indexOf('pms') === 0) {
-      html = skeletonKpiRow(['Active cycles', 'Pending self-assessment', 'Pending reviews']) +
-        sectionSkeleton({ variant: 'card', label: 'Loading performance' });
     } else if (route.indexOf('ats') === 0) {
       html = skeletonKpiRow(['Open jobs', 'Applications', 'Interviews']) +
         '<div class="card"><div class="skeleton skeleton-block" aria-hidden="true"></div></div>';
@@ -3162,9 +3170,6 @@ body:has(> .careers-shell) {
   function navigate(route, params) {
     if (!state.session || !state.session.authorized) return;
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
-    if (route === 'pms-review' && params && !params.employeeId) {
-      route = 'pms-team';
-    }
     state.navSeq = (state.navSeq || 0) + 1;
     pauseBackgroundPreload();
     state.currentRoute = route;
@@ -3172,7 +3177,7 @@ body:has(> .careers-shell) {
     var item = state.navigation.filter(function (n) { return n.route === route; })[0];
     var def = ROUTES[route];
     var title = item ? item.label : (def ? def.title : 'HRMS');
-    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('pms-') === 0 || route.indexOf('ats-') === 0)) {
+    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('ats-') === 0)) {
       title = def.title;
     }
     $('page-title').textContent = title;
@@ -3330,19 +3335,6 @@ body:has(> .careers-shell) {
     if (data.leave_approvals_count != null) {
       kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
     }
-    if (data.pms && data.pms.kpis) {
-      var pk = data.pms.kpis;
-      if (pk.pending_self_assessment != null) {
-        kpis += dashCard('Self-assessments due', pk.pending_self_assessment);
-      } else if (pk.employees_pending_self != null) {
-        kpis += dashCard('Self-assessments due', pk.employees_pending_self);
-      }
-      if (pk.pending_manager_review != null) {
-        kpis += dashCard('Reviews due', pk.pending_manager_review);
-      } else if (pk.managers_pending_review != null) {
-        kpis += dashCard('Reviews due', pk.managers_pending_review);
-      }
-    }
     if (data.payroll && data.payroll.latest) {
       var run = data.payroll.latest;
       kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
@@ -3363,10 +3355,6 @@ body:has(> .careers-shell) {
       sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
         '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
     }
-    if (data.pms_actions && data.pms_actions.length) {
-      sections += '<div class="card dash-section"><h2>Performance</h2>' +
-        dashActionList(data.pms_actions, 'No performance actions right now.') + '</div>';
-    }
     if (data.ats_actions && data.ats_actions.length) {
       sections += '<div class="card dash-section"><h2>Recruitment</h2>' +
         dashActionList(data.ats_actions, 'No recruitment actions in your scope.') + '</div>';
@@ -3378,7 +3366,7 @@ body:has(> .careers-shell) {
     if (!sections) {
       sections = '<div class="card dash-welcome">' +
         '<h2>Welcome to AyurCentral HRMS</h2>' +
-        '<p>Use the sidebar for people, time off, pay, and — if your role allows — performance and recruitment.</p></div>';
+        '<p>Use the sidebar for people, time off, pay, and — if your role allows — recruitment.</p></div>';
     }
     if (state.app && !state.app.configured) {
       sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
@@ -3716,17 +3704,22 @@ body:has(> .careers-shell) {
     NOT_CONFIGURED: 'Ask HR is not available yet. Please try again later.',
     CONFIGURATION: 'Ask HR is not available yet. Please try again later.',
     CONFIGURATION_ERROR: 'Ask HR is not available yet. Please try again later.',
-    NOT_FOUND: 'I couldn\'t find that in the HR knowledge base. Try asking about leave, policies, or HR procedures.',
-    UPSTREAM: 'Sorry, I couldn\'t reach the HR knowledge base. Please try again.',
+    NOT_FOUND: 'I couldn\'t find enough information in the HR knowledge base to answer this confidently.',
+    UPSTREAM: 'Unable to search the HR knowledge base right now. Please try again.',
+    RETRIEVAL_FAILED: 'Unable to search the HR knowledge base right now. Please try again.',
+    GENERATION_FAILED: 'I found the relevant HR information, but I\'m unable to generate the answer right now. Please try again.',
     TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
     LOCK_TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
-    SYSTEM: 'Sorry, I couldn\'t reach the HR knowledge base. Please try again.',
-    SYSTEM_ERROR: 'Sorry, I couldn\'t reach the HR knowledge base. Please try again.'
+    SYSTEM: 'Unable to search the HR knowledge base right now. Please try again.',
+    SYSTEM_ERROR: 'Unable to search the HR knowledge base right now. Please try again.'
   };
+  var ASK_HR_NOT_FOUND_HINT =
+    'Try asking about a specific HR policy, leave rule, payroll process, employee procedure or benefit.';
 
   var askHrUi = {
     open: false,
     busy: false,
+    expanded: false,
     requestSeq: 0,
     statusTimer: null,
     statusIndex: 0,
@@ -3809,6 +3802,151 @@ body:has(> .careers-shell) {
     }
   }
 
+  function appendInlineMarkdown(el, text) {
+    var raw = String(text == null ? '' : text);
+    var re = /\*\*([^*]+)\*\*|\*([^*\n]+)\*/g;
+    var last = 0;
+    var match;
+    while ((match = re.exec(raw))) {
+      if (match.index > last) {
+        el.appendChild(document.createTextNode(raw.slice(last, match.index)));
+      }
+      var strong = document.createElement('strong');
+      strong.textContent = match[1] || match[2] || '';
+      el.appendChild(strong);
+      last = match.index + match[0].length;
+    }
+    if (last < raw.length) {
+      el.appendChild(document.createTextNode(raw.slice(last)));
+    }
+  }
+
+  function isAskHrTableSeparator_(line) {
+    return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+  }
+
+  function splitAskHrTableRow_(line) {
+    var trimmed = String(line || '').trim();
+    if (trimmed.charAt(0) === '|') trimmed = trimmed.slice(1);
+    if (trimmed.charAt(trimmed.length - 1) === '|') trimmed = trimmed.slice(0, -1);
+    return trimmed.split('|').map(function (cell) {
+      return cell.replace(/^\s+|\s+$/g, '');
+    });
+  }
+
+  function askHrAnswerLooksStructured(text) {
+    return /(^|\n)\s*#{1,3}\s|(^|\n)\s*[-*•]\s|(^|\n)\s*\d+[.)]\s|(^|\n)\s*\|.+\|/.test(
+      String(text || '')
+    );
+  }
+
+  /**
+   * Safe markdown-lite renderer for Ask HR answers (text nodes / elements only).
+   * Supports headings, bold, bullets, numbered lists, and simple tables.
+   */
+  function renderAskHrMarkdown(container, text) {
+    var lines = String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n');
+    var i = 0;
+    var paraLines = [];
+
+    function flushPara() {
+      if (!paraLines.length) return;
+      var p = document.createElement('p');
+      p.className = 'ask-hr-p';
+      appendInlineMarkdown(p, paraLines.join(' '));
+      container.appendChild(p);
+      paraLines = [];
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+      var trimmed = line.replace(/^\s+|\s+$/g, '');
+
+      if (!trimmed) {
+        flushPara();
+        i += 1;
+        continue;
+      }
+
+      if (/^#{1,3}\s+/.test(trimmed)) {
+        flushPara();
+        var level = trimmed.match(/^(#{1,3})\s+/)[1].length;
+        var heading = document.createElement(level === 1 ? 'h3' : 'h4');
+        heading.className = 'ask-hr-heading';
+        appendInlineMarkdown(heading, trimmed.replace(/^#{1,3}\s+/, ''));
+        container.appendChild(heading);
+        i += 1;
+        continue;
+      }
+
+      if (trimmed.indexOf('|') !== -1 && i + 1 < lines.length && isAskHrTableSeparator_(lines[i + 1])) {
+        flushPara();
+        var headers = splitAskHrTableRow_(trimmed);
+        var table = document.createElement('table');
+        table.className = 'ask-hr-table';
+        var thead = document.createElement('thead');
+        var headRow = document.createElement('tr');
+        var h;
+        for (h = 0; h < headers.length; h++) {
+          var th = document.createElement('th');
+          appendInlineMarkdown(th, headers[h]);
+          headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        var tbody = document.createElement('tbody');
+        i += 2;
+        while (i < lines.length && lines[i].indexOf('|') !== -1 && !isAskHrTableSeparator_(lines[i])) {
+          var cells = splitAskHrTableRow_(lines[i]);
+          var tr = document.createElement('tr');
+          var c;
+          for (c = 0; c < headers.length; c++) {
+            var td = document.createElement('td');
+            appendInlineMarkdown(td, cells[c] || '');
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+          i += 1;
+        }
+        table.appendChild(tbody);
+        container.appendChild(table);
+        continue;
+      }
+
+      if (/^[-*•]\s+/.test(trimmed)) {
+        flushPara();
+        var ul = document.createElement('ul');
+        ul.className = 'ask-hr-list';
+        while (i < lines.length && /^[-*•]\s+/.test(lines[i].replace(/^\s+/, ''))) {
+          var li = document.createElement('li');
+          appendInlineMarkdown(li, lines[i].replace(/^\s+/, '').replace(/^[-*•]\s+/, ''));
+          ul.appendChild(li);
+          i += 1;
+        }
+        container.appendChild(ul);
+        continue;
+      }
+
+      if (/^\d+[.)]\s+/.test(trimmed)) {
+        flushPara();
+        var ol = document.createElement('ol');
+        ol.className = 'ask-hr-list ask-hr-list-numbered';
+        while (i < lines.length && /^\d+[.)]\s+/.test(lines[i].replace(/^\s+/, ''))) {
+          var oli = document.createElement('li');
+          appendInlineMarkdown(oli, lines[i].replace(/^\s+/, '').replace(/^\d+[.)]\s+/, ''));
+          ol.appendChild(oli);
+          i += 1;
+        }
+        container.appendChild(ol);
+        continue;
+      }
+
+      paraLines.push(trimmed);
+      i += 1;
+    }
+    flushPara();
+  }
+
   function setAskHrComposeError(message) {
     var el = $('ask-hr-compose-error');
     if (!el) return;
@@ -3860,21 +3998,33 @@ body:has(> .careers-shell) {
     bubble.id = 'ask-hr-status';
     bubble.className = 'ask-hr-bubble ask-hr-bubble-status';
     bubble.setAttribute('role', 'status');
-    var spin = document.createElement('span');
-    spin.className = 'spinner-sm';
-    spin.setAttribute('aria-hidden', 'true');
+    bubble.setAttribute('aria-live', 'polite');
+
+    var skel = document.createElement('div');
+    skel.className = 'ask-hr-skel-stack hrms-skeleton-stack';
+    skel.setAttribute('aria-hidden', 'true');
+    var widths = ['w60', 'w100', 'w80', 'w40'];
+    var si;
+    for (si = 0; si < widths.length; si++) {
+      var line = document.createElement('div');
+      line.className = 'skeleton skeleton-line hrms-skeleton-line ' + widths[si];
+      skel.appendChild(line);
+    }
+    bubble.appendChild(skel);
+
     var copy = document.createElement('div');
     copy.className = 'ask-hr-status-copy';
     var label = document.createElement('span');
     label.id = 'ask-hr-status-text';
+    label.className = 'ask-hr-status-label';
     label.textContent = ASK_HR_STATUS_STEPS[0];
     var hint = document.createElement('span');
     hint.className = 'ask-hr-status-hint';
     hint.textContent = 'This can take up to a minute.';
     copy.appendChild(label);
     copy.appendChild(hint);
-    bubble.appendChild(spin);
     bubble.appendChild(copy);
+
     thread.appendChild(bubble);
     scrollAskHrToBottom();
     askHrUi.statusTimer = setInterval(function () {
@@ -3926,16 +4076,27 @@ body:has(> .careers-shell) {
     var bubble = document.createElement('div');
     bubble.className = 'ask-hr-bubble ask-hr-bubble-bot';
 
+    var notFound = !!(payload && payload.notFound);
     var answerText = payload && typeof payload.answer === 'string' ? payload.answer : '';
-    if (payload && payload.notFound && !answerText) {
-      answerText = askHrFriendlyError('NOT_FOUND');
-    }
-    if (!answerText) {
-      answerText = askHrFriendlyError('NOT_FOUND');
+    if (notFound || !answerText) {
+      answerText = answerText || askHrFriendlyError('NOT_FOUND');
+      notFound = true;
     }
 
     var body = document.createElement('div');
-    appendMultilineText(body, answerText);
+    body.className = 'ask-hr-answer';
+    if (notFound) {
+      var nf = document.createElement('p');
+      nf.className = 'ask-hr-p';
+      nf.textContent = askHrFriendlyError('NOT_FOUND');
+      body.appendChild(nf);
+      var hint = document.createElement('p');
+      hint.className = 'ask-hr-notfound-hint';
+      hint.textContent = ASK_HR_NOT_FOUND_HINT;
+      body.appendChild(hint);
+    } else {
+      renderAskHrMarkdown(body, answerText);
+    }
     bubble.appendChild(body);
 
     var keyPoints = payload && Array.isArray(payload.keyPoints) ? payload.keyPoints : [];
@@ -3946,7 +4107,8 @@ body:has(> .careers-shell) {
         safePoints.push(String(keyPoints[i]));
       }
     }
-    if (safePoints.length) {
+    // Structured answers already include lists/sections — avoid duplicating as Key points.
+    if (!notFound && safePoints.length && !askHrAnswerLooksStructured(answerText)) {
       var keyLabel = document.createElement('div');
       keyLabel.className = 'ask-hr-key-label';
       keyLabel.textContent = 'Key points';
@@ -3963,21 +4125,30 @@ body:has(> .careers-shell) {
 
     var refs = payload && Array.isArray(payload.references) ? payload.references : [];
     var sourceItems = [];
-    for (i = 0; i < refs.length; i++) {
-      var ref = refs[i] || {};
-      var fileName = String(ref.fileName || ref.name || 'Source document');
-      var href = sanitizeAskHrFileUrl(ref.fileUrl || ref.url || '');
-      sourceItems.push({ fileName: fileName, href: href });
+    if (!notFound) {
+      for (i = 0; i < refs.length; i++) {
+        var ref = refs[i] || {};
+        var fileName = String(ref.fileName || ref.name || 'Source document');
+        var href = sanitizeAskHrFileUrl(ref.fileUrl || ref.url || '');
+        sourceItems.push({ fileName: fileName, href: href });
+      }
     }
     if (sourceItems.length) {
+      var srcWrap = document.createElement('div');
+      srcWrap.className = 'ask-hr-sources-block';
       var srcLabel = document.createElement('div');
       srcLabel.className = 'ask-hr-src-label';
-      srcLabel.textContent = 'Source documents';
-      bubble.appendChild(srcLabel);
+      srcLabel.textContent = 'Sources';
+      srcWrap.appendChild(srcLabel);
       var sources = document.createElement('ul');
       sources.className = 'ask-hr-sources';
       for (i = 0; i < sourceItems.length; i++) {
         var sli = document.createElement('li');
+        var mark = document.createElement('span');
+        mark.className = 'ask-hr-src-mark';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = '📄';
+        sli.appendChild(mark);
         if (sourceItems[i].href) {
           var link = document.createElement('a');
           link.href = sourceItems[i].href;
@@ -3986,15 +4157,37 @@ body:has(> .careers-shell) {
           link.textContent = sourceItems[i].fileName;
           sli.appendChild(link);
         } else {
-          sli.textContent = sourceItems[i].fileName;
+          var nameSpan = document.createElement('span');
+          nameSpan.textContent = sourceItems[i].fileName;
+          sli.appendChild(nameSpan);
         }
         sources.appendChild(sli);
       }
-      bubble.appendChild(sources);
+      srcWrap.appendChild(sources);
+      bubble.appendChild(srcWrap);
     }
 
     thread.appendChild(bubble);
     scrollAskHrToBottom();
+  }
+
+  function setAskHrExpanded(expanded) {
+    askHrUi.expanded = !!expanded;
+    var panel = $('ask-hr-panel');
+    var btn = $('ask-hr-expand');
+    if (panel) {
+      if (askHrUi.expanded) panel.classList.add('is-expanded');
+      else panel.classList.remove('is-expanded');
+    }
+    if (btn) {
+      btn.textContent = askHrUi.expanded ? 'Compact' : 'Expand';
+      btn.setAttribute('aria-pressed', askHrUi.expanded ? 'true' : 'false');
+      btn.title = askHrUi.expanded ? 'Compact view' : 'Expand for longer answers';
+    }
+  }
+
+  function toggleAskHrExpanded() {
+    setAskHrExpanded(!askHrUi.expanded);
   }
 
   function clearAskHrConversation() {
@@ -4013,6 +4206,7 @@ body:has(> .careers-shell) {
     var fab = $('ask-hr-fab');
     if (panel) panel.classList.add('hidden');
     askHrUi.open = false;
+    setAskHrExpanded(false);
     if (fab) {
       fab.setAttribute('aria-expanded', 'false');
       if (isAskHrAllowed()) {
@@ -4119,6 +4313,7 @@ body:has(> .careers-shell) {
     var input = $('ask-hr-input');
     var closeBtn = $('ask-hr-close');
     var clearBtn = $('ask-hr-clear');
+    var expandBtn = $('ask-hr-expand');
     var messages = $('ask-hr-messages');
     if (!fab || !panel || !form) return;
 
@@ -4133,6 +4328,10 @@ body:has(> .careers-shell) {
 
     clearBtn && clearBtn.addEventListener('click', function () {
       clearAskHrConversation();
+    });
+
+    expandBtn && expandBtn.addEventListener('click', function () {
+      toggleAskHrExpanded();
     });
 
     form.addEventListener('submit', function (evt) {

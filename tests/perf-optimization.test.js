@@ -32,7 +32,6 @@ const errors = read('foundation/Errors.gs');
 const api = read('foundation/ApiFoundation.gs');
 const dash = read('foundation/HomeDashboardService.gs');
 const leave = read('leave/LeaveService.gs');
-const pms = read('pms/PmsService.gs');
 const ats = read('ats/AtsService.gs');
 const atsClient = read('ats/AtsClient.html');
 const constants = read('foundation/Constants.gs');
@@ -70,8 +69,7 @@ check('hrmsrun-clears-session', /clearRequestSessionCache/.test(errors));
 check('identity-cache-short-ttl', /IDENTITY_TTL_SEC:\s*15/.test(constants));
 check('identity-cache-gen-bump', /invalidateIdentitySnapshots/.test(auth) && /IDENTITY_GEN_KEY/.test(constants));
 check('leave-reuses-session', /PermissionService\.require\(HRMS\.ACTIONS\.LEAVE_APPLY,\s*\{\},\s*session\)/.test(leave));
-check('pms-dashboard-no-ensure', !/function getDashboard[\s\S]{0,80}ensure_\(\)/.test(pms));
-check('pms-dashboard-accepts-session', /function getDashboard\(optSession\)/.test(pms));
+check('no-pms-module', !/pms\//.test(api));
 check('ats-bootstrap-includes-dashboard', /dashboard:\s*dashboard/.test(ats));
 check('ats-client-reuses-bootstrap-dash', /boot && boot\.dashboard/.test(atsClient));
 

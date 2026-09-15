@@ -29,7 +29,6 @@ var scripts = read('ui/Scripts.html');
 var emp = read('employee/EmployeeClient.html');
 var leaveUi = read('leave/LeaveUi.html');
 var payroll = read('payroll/PayrollClient.html');
-var pms = read('pms/PmsClient.html');
 var ats = read('ats/AtsClient.html');
 var ntf = read('notifications/NotificationClient.html');
 var bell = read('notifications/NotificationBell.html');
@@ -58,7 +57,6 @@ check('leave-restore', /tryRestoreLeave_/.test(leaveUi) && /apiLeaveGetMyLeave/.
 check('leave-approve-still-rpc', /apiLeaveApprove/.test(leaveUi));
 check('payroll-restore-home', /consumeModuleViewRestore\('payroll'\)/.test(payroll));
 check('payroll-lock-still-rpc', /apiLockPayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));
-check('pms-restore-home', /consumeModuleViewRestore\('pms'\)/.test(pms));
 check('ats-restore-home', /consumeModuleViewRestore\('ats'\)/.test(ats));
 check('ntf-restore-inbox', /consumeModuleViewRestore\(ntfKey\)/.test(ntf) && /apiGetNotifications/.test(ntf));
 check('ntf-optimistic-mark', /markLocal\(/.test(ntf) && /apiMarkNotificationRead/.test(ntf));
@@ -75,14 +73,12 @@ check('leave-invalidate-hooks', /invalidateLeaveAfterRequestMutation_/.test(leav
   /invalidateLeaveAfterAdminConfig_/.test(leaveUi));
 check('emp-invalidate-hooks', /invalidateEmpLists_/.test(emp) && /invalidateEmpProfileLists_/.test(emp));
 check('payroll-invalidate-hooks', /invalidatePayrollHome_/.test(payroll) && /invalidateCompensation_/.test(payroll));
-check('pms-invalidate-hooks', /invalidatePmsShells_/.test(pms) && /invalidatePmsAll_/.test(pms));
 check('ats-invalidate-hooks', /invalidateAtsPipeline_/.test(ats) && /invalidateAtsJob_/.test(ats));
 check('ntf-invalidate-hooks', /invalidateNtfInbox_/.test(ntf) && /invalidateNtfPrefs_/.test(ntf));
 check('ntf-mark-read-no-invalidate', /markLocal\(/.test(ntf) && !/markLocal[\s\S]{0,200}invalidateNtf/.test(ntf));
 check('emp-no-dash-inv', !/function invalidateEmpLists_[\s\S]{0,200}invalidateDashboardView/.test(emp));
 check('payroll-home-dash-inv', /function invalidatePayrollHome_[\s\S]{0,160}invalidateDashboardView/.test(payroll));
 check('comp-no-dash-inv', !/function invalidateCompensation_[\s\S]{0,160}invalidateDashboardView/.test(payroll));
-check('pms-dash-inv', /function invalidatePmsShells_[\s\S]*?invalidateDashboardView/.test(pms));
 check('ats-dash-inv', /function invalidateAtsPipeline_[\s\S]*?invalidateDashboardView/.test(ats));
 check('leave-inv-on-success', /apiLeaveApprove[\s\S]{0,220}invalidateLeaveAfterRequestMutation_/.test(leaveUi));
 check('leave-inv-not-in-catch', !/apiLeaveApprove[\s\S]{0,400}\.catch[\s\S]{0,80}invalidateLeave/.test(leaveUi));
@@ -110,7 +106,6 @@ check('navigate-requires-auth', /function navigate[\s\S]*?!\s*state\.session\.au
 check('emp-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?empViewCache\.lists/.test(emp));
 check('leave-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?leaveViewCache/.test(leaveUi));
 check('payroll-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?homeState\.runs/.test(payroll));
-check('pms-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?pmsState\.dashboard/.test(pms));
 check('ats-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?atsView\.dashboard/.test(ats));
 check('ntf-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?ntfState\.inbox/.test(ntf));
 check('rbac-server-emp', /requireAuth|PermissionService/.test(apiEmp));
@@ -231,7 +226,6 @@ function loadShell() {
             { route: 'employees', label: 'Employees' },
             { route: 'my-leave', label: 'My Leave' },
             { route: 'payroll', label: 'Payroll' },
-            { route: 'pms', label: 'Performance' },
             { route: 'ats', label: 'Recruitment' },
             { route: 'notifications', label: 'Notifications' }
           ]
@@ -242,7 +236,7 @@ function loadShell() {
     if (name === 'apiGetHomeDashboardMore') return { ok: true, data: { notes: [] } };
     if (name === 'apiGetModuleUi') return { ok: true, data: { html: '' } };
     if (name.indexOf('apiGet') === 0 || name.indexOf('apiList') === 0 || name.indexOf('apiLeave') === 0 ||
-        name.indexOf('apiPms') === 0 || name.indexOf('apiAts') === 0) {
+        name.indexOf('apiAts') === 0) {
       return { ok: true, data: { rows: [], items: [], unread_count: 0 } };
     }
     return { ok: true, data: {} };
@@ -328,7 +322,7 @@ later().then(function () {
   check('first-dashboard-rpc', env.count('apiGetHomeDashboard') === 1, String(env.count('apiGetHomeDashboard')));
   check('first-dashboard-more-rpc', env.count('apiGetHomeDashboardMore') === 1);
 
-  var fetches = { employees: 0, leave: 0, payroll: 0, pms: 0, ats: 0, notifications: 0 };
+  var fetches = { employees: 0, leave: 0, payroll: 0, ats: 0, notifications: 0 };
   var binds = { employees: 0 };
 
   function mountFake(route, fetchName, bucket) {
@@ -351,7 +345,6 @@ later().then(function () {
   mountFake('employees', 'apiGetEmployeeDirectory', 'employees');
   mountFake('my-leave', 'apiLeaveGetMyLeave', 'leave');
   mountFake('payroll', 'apiListPayrollRuns', 'payroll');
-  mountFake('pms', 'apiPmsGetDashboard', 'pms');
   mountFake('ats', 'apiAtsGetDashboard', 'ats');
   mountFake('notifications', 'apiGetNotifications', 'notifications');
 
@@ -375,15 +368,10 @@ later().then(function () {
   App.refreshCurrentModuleView();
   check('leave-refresh-fetches', fetches.leave === 2);
 
-  App.navigate('pms');
-  check('first-pms-fetch', fetches.pms === 1);
   App.navigate('ats');
   check('first-ats-fetch', fetches.ats === 1);
-  App.navigate('pms');
-  check('return-pms-no-fetch', fetches.pms === 1);
-  App.refreshCurrentModuleView();
-  check('pms-refresh-fetches', fetches.pms === 2);
-
+  App.navigate('payroll');
+  check('return-payroll-no-fetch', fetches.payroll === 1);
   App.navigate('ats');
   check('return-ats-no-fetch', fetches.ats === 1);
   App.refreshCurrentModuleView();
