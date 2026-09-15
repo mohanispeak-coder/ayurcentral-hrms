@@ -104,7 +104,7 @@
   function badgeClass(status) {
     var s = String(status || '').toUpperCase();
     if (s === 'DRAFT') return 'badge status-badge badge-draft';
-    if (s === 'SUBMITTED') return 'badge status-badge badge-submitted';
+    if (s === 'SUBMITTED' || s.indexOf('PENDING_') === 0) return 'badge status-badge badge-submitted';
     if (s === 'APPROVED') return 'badge status-badge badge-approved';
     if (s === 'REJECTED') return 'badge status-badge badge-rejected';
     if (s === 'CANCELLED') return 'badge status-badge badge-cancelled';
@@ -120,7 +120,7 @@
     var c = ctx();
     var id = c.escapeHtml(r.leave_request_id);
     var html = '';
-    if (r.status === 'SUBMITTED') {
+    if (r.status === 'SUBMITTED' || String(r.status || '').indexOf('PENDING_') === 0) {
       html += '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
         '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ' +
         '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
@@ -139,7 +139,7 @@
     return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
       '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
       '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-      c.escapeHtml(r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
+      c.escapeHtml(r.status_label || r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
   }
 
   function payloadFromForm(form) {
@@ -391,13 +391,14 @@
           '<td class="num">' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</td></tr>';
       }).join('');
       var reqRows = (data.requests || []).map(function (r) {
-        var canCancel = r.status === 'DRAFT' || r.status === 'SUBMITTED';
+        var st = String(r.status || '').toUpperCase();
+        var canCancel = st === 'DRAFT' || st === 'SUBMITTED' || st.indexOf('PENDING_') === 0;
         return '<tr>' +
           '<td>' + c.escapeHtml(r.leave_request_id) + '</td>' +
           '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
           '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
           '<td class="num">' + fmtDays(r.total_days) + '</td>' +
-          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status) + '</span></td>' +
+          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
           '<td>' + c.escapeHtml(r.reason) + '</td>' +
           '<td class="col-actions">' + (canCancel ? '<button type="button" class="btn btn-danger btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
             (r.status === 'DRAFT' ? ' <button type="button" class="btn btn-secondary btn-sm" data-edit="' + c.escapeHtml(r.leave_request_id) + '">Edit</button>' : '') +
@@ -469,9 +470,9 @@
     var u = uiHelpers();
     if (tryRestoreLeave_('leave-approvals', function (rows) { paintApprovals_(page, helpers, rows); })) return;
     if (!keepLeavePaint_('leave-approvals')) {
-      page.innerHTML = pageHead('Leave approvals', 'Submitted requests waiting for a decision.') +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody id="appr-body">' + u.skRows(7, 5) + '</tbody></table></div>';
+      page.innerHTML = pageHead('Leave approvals', 'Requests in your approval queue (manager, then HR/admin as applicable).') +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody id="appr-body">' + u.skRows(8, 5) + '</tbody></table></div>';
     }
     c.callServer('apiLeaveGetApprovals').then(function (rows) {
       if (!onRoute('leave-approvals')) return;
@@ -493,23 +494,29 @@
           '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
           '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
           '<td class="num">' + fmtDays(r.total_days) + '</td>' +
+          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
           '<td>' + c.escapeHtml(r.reason) + '</td>' +
           '<td class="col-actions"><button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
             '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button></td></tr>';
       }).join('');
       page.innerHTML = flashHtml('leave-approvals') +
-        pageHead('Leave approvals', 'Submitted requests waiting for a decision.') +
+        pageHead('Leave approvals', 'Requests in your approval queue (manager, then HR/admin as applicable).') +
         '<div id="leave-appr-feedback" class="action-feedback hidden" role="status"></div>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No submitted leave needs a decision right now.</p></div></td></tr>') + '</tbody></table></div>';
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No leave in your queue right now.</p></div></td></tr>') + '</tbody></table></div>';
       page.querySelectorAll('[data-approve]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             openDecisionModal(helpers, 'Approve leave', false, function (comment) {
               c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
                 actionOpts(btn, 'Approving...', document.getElementById('leave-appr-feedback')))
-                .then(function () {
+                .then(function (res) {
                   invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave approved.', 'success', 'leave-approvals');
+                  var final = res && String(res.status || '').toUpperCase() === 'APPROVED';
+                  setFlash(
+                    final ? 'Leave fully approved.' : 'Stage approved — forwarded for the next approver.',
+                    'success',
+                    'leave-approvals'
+                  );
                   renderApprovals(page, helpers);
                 });
             });

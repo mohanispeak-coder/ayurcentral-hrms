@@ -14,7 +14,7 @@ Team = rows with `manager_employee_id` = the manager’s `employee_id` (direct r
 | --- | --- |
 | ADMIN | Configuration, users, all modules, correction runs, settings |
 | HR | Employees, leave (company), payroll, documents, notifications |
-| MANAGER | Apply own leave; view team leave context; **no** leave approval (HR/Admin/Owner decide) |
+| MANAGER | Apply own leave; **stage-1 approve** direct reports; view team leave; final HR/Admin stages |
 | EMPLOYEE | Own profile (permitted), own leave, own payslips |
 
 Unmapped or `DISABLED` users: no access.
@@ -31,7 +31,7 @@ Unmapped or `DISABLED` users: no access.
 | Employees / directory | Y | Y | My Team only | N — **My Profile** instead |
 | My Profile | via employee | Y | Y | Y |
 | Leave (company) | Y | Y | N | N |
-| Leave approvals | Y | Y | N | N |
+| Leave approvals | Y (final stages) | Y (final stages) | Y (manager queue + own HR path) | N |
 | My Leave | Y | Y | Y | Y |
 | Payroll | Y | Y | N | N |
 | Compensation | Y | Y | N | N |
@@ -66,7 +66,7 @@ Legend: Y / N / Own / Team.
 | --- | --- | --- | --- | --- |
 | Configure types | Y | Y | N | N |
 | Apply | Y (audit if for others) | Y proxy + audit | Own | Own |
-| Approve/reject SUBMITTED | Y | Y | N | N |
+| Approve/reject (two-stage; see leave module) | Final + admin for HR apps | Final + admin for HR apps | Team stage 1 | N |
 | Cancel DRAFT/SUBMITTED | Y | Y | Own | Own |
 | Cancel APPROVED | Y | Y | N | N (HR) |
 | Calendar | Y all | Y | Team+Own | Own |

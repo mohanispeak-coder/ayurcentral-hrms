@@ -55,23 +55,44 @@ check('LV-07 May split', LeaveEngine.lopDaysInMonth('2026-04-29', '2026-05-02', 
 check('available days', LeaveEngine.availableDays({ entitled_days: 12, carried_forward_days: 2, used_days: 3, pending_days: 1 }) === 10);
 
 const mgr = { authorized: true, role: 'MANAGER', employee_id: 'EMP002' };
-check('LV-08 deny other team', LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099') === false);
-check('LV-08 allow team', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002') === true);
+const hr = { authorized: true, role: 'HR', employee_id: 'EMP001' };
+const admin = { authorized: true, role: 'ADMIN', employee_id: 'EMP099' };
+
+check('employee initial pending manager', LeaveEngine.initialPendingStatus('EMPLOYEE', true) === 'PENDING_MANAGER');
+check('employee no manager → HR', LeaveEngine.initialPendingStatus('EMPLOYEE', false) === 'PENDING_HR');
+check('manager applicant → HR first', LeaveEngine.initialPendingStatus('MANAGER', true) === 'PENDING_HR');
+check('HR applicant → admin only', LeaveEngine.initialPendingStatus('HR', false) === 'PENDING_ADMIN');
+
+check('LV-08 deny other team', LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099', 'PENDING_MANAGER', 'EMPLOYEE') === false);
+check('LV-08 allow team manager stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === true);
+check('manager cannot HR stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === false);
+check('HR final stage employee', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
+check('admin final stage employee', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
+check('HR only first stage for manager applicant', LeaveEngine.canApproveRequest(hr, 'EMP002', 'EMP001', 'PENDING_HR', 'MANAGER') === true);
+check('admin not first stage for manager applicant', LeaveEngine.canApproveRequest(admin, 'EMP002', 'EMP001', 'PENDING_HR', 'MANAGER') === false);
+check('admin second stage manager applicant', LeaveEngine.canApproveRequest(admin, 'EMP002', 'EMP001', 'PENDING_ADMIN', 'MANAGER') === true);
+check('HR cannot admin-only stage', LeaveEngine.canApproveRequest(hr, 'EMP001', '', 'PENDING_ADMIN', 'HR') === false);
+
 check('LV-09 self-approve deny', LeaveEngine.canApproveRequest(
-  { authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' }, 'EMP003', 'EMP002'
+  { authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' }, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE'
 ) === false);
 check('LV-09 HR cannot self-approve', LeaveEngine.canApproveRequest(
-  { authorized: true, role: 'HR', employee_id: 'EMP001' }, 'EMP001', ''
+  hr, 'EMP001', '', 'PENDING_ADMIN', 'HR'
 ) === false);
-check('HR override others', LeaveEngine.canApproveRequest(
-  { authorized: true, role: 'HR', employee_id: 'EMP001' }, 'EMP003', 'EMP002'
-) === true);
+
+check('stage after manager', LeaveEngine.statusAfterApproval('PENDING_MANAGER', 'EMPLOYEE').status === 'PENDING_HR');
+check('stage after HR for employee is final', LeaveEngine.statusAfterApproval('PENDING_HR', 'EMPLOYEE').final === true);
+check('stage after HR for manager applicant', LeaveEngine.statusAfterApproval('PENDING_HR', 'MANAGER').status === 'PENDING_ADMIN');
+
 check('SEC-01 employee other leave', LeaveEngine.canViewEmployeeLeave(
   { authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' }, 'EMP004', 'EMP002'
 ) === false);
+
+check('legacy SUBMITTED blocks overlap', LeaveEngine.isBlockingStatus('SUBMITTED') === true);
+check('pending admin blocks', LeaveEngine.isBlockingStatus('PENDING_ADMIN') === true);
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
   process.exit(1);
 }
-console.log('\nAll LeaveEngine checks passed (' + (20) + ')');
+console.log('\nAll LeaveEngine checks passed');

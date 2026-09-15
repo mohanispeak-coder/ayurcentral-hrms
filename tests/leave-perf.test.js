@@ -74,8 +74,10 @@ check('admin-revoke-button', /data-revoke/.test(ui) && /Revoke/.test(ui));
 check('admin-revoke-rejection-api', /apiLeaveRevokeRejection/.test(api));
 check('admin-filter-keeps-actions', /adminLeaveRowHtml_/.test(ui) &&
   /bindAdminActions\(\)/.test(ui));
-check('leave-approve-no-manager', !/LEAVE_APPROVE.*MANAGER/.test(read('foundation/PermissionService.gs')));
-check('leave-approvals-nav-no-manager', !/leave-approvals[\s\S]{0,120}MANAGER/.test(read('foundation/PermissionService.gs')));
+check('leave-approve-includes-manager', /LEAVE_APPROVE.*MANAGER/.test(read('foundation/PermissionService.gs')));
+check('leave-approvals-nav-includes-manager', /leave-approvals[\s\S]{0,120}MANAGER/.test(read('foundation/PermissionService.gs')));
+check('two-stage-pending-statuses', /PENDING_MANAGER/.test(read('leave/LeaveEngine.gs')) &&
+  /statusAfterApproval/.test(read('leave/LeaveEngine.gs')));
 check('owner-role-constant', /OWNER:\s*'OWNER'/.test(read('foundation/Constants.gs')));
 
 if (failures.length) {

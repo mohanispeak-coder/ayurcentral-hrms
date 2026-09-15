@@ -82,6 +82,14 @@ var LeaveService = (function () {
     return emp;
   }
 
+  function applicantUserRole_(employeeId) {
+    if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.findUserByEmployeeId) {
+      var user = EmployeeRepository.findUserByEmployeeId(employeeId);
+      if (user && user.role) return String(user.role).trim().toUpperCase();
+    }
+    return HRMS.ROLES.EMPLOYEE;
+  }
+
   function publicEmployee_(emp) {
     if (!emp) return null;
     return {
@@ -146,6 +154,8 @@ var LeaveService = (function () {
       half_day_session: row.half_day_session || '',
       total_days: LeaveEngine.toNumber(row.total_days),
       status: String(row.status || '').toUpperCase(),
+      status_label: LeaveEngine.statusLabel(row.status),
+      applicant_role: applicantUserRole_(row.employee_id),
       reason: row.reason || '',
       approver_employee_id: row.approver_employee_id || '',
       decision_at: serializeDateTime_(row.decision_at),
@@ -530,6 +540,9 @@ var LeaveService = (function () {
       assertSufficientLocked_(targetId, type, leaveYear, totalDays, balanceIndex);
       applyPendingDeltaLocked_(targetId, type, leaveYear, totalDays, 0, balanceIndex);
       var submittedAt = now_();
+      var applicantRole = applicantUserRole_(targetId);
+      var hasManager = !!String(emp.manager_employee_id || '').trim();
+      var pendingStatus = LeaveEngine.initialPendingStatus(applicantRole, hasManager);
       var record;
       if (existing) {
         record = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', existing.leave_request_id, {
@@ -539,8 +552,11 @@ var LeaveService = (function () {
           is_half_day: dates.isHalf,
           half_day_session: dates.session,
           total_days: totalDays,
-          status: HRMS.LEAVE_STATUS.SUBMITTED,
+          status: pendingStatus,
           reason: reason,
+          approver_employee_id: '',
+          decision_at: '',
+          decision_comment: '',
           submitted_at: submittedAt
         });
       } else {
@@ -553,7 +569,7 @@ var LeaveService = (function () {
           is_half_day: dates.isHalf,
           half_day_session: dates.session,
           total_days: totalDays,
-          status: HRMS.LEAVE_STATUS.SUBMITTED,
+          status: pendingStatus,
           reason: reason,
           approver_employee_id: '',
           decision_at: '',
@@ -569,17 +585,20 @@ var LeaveService = (function () {
       return serializeRequest_(record, typeMap_(), empMap_());
     });
 
-    var mgrEmail = managerWorkEmail_(emp);
-    notifyLeave_(
-      'LEAVE_SUBMITTED',
-      mgrEmail,
-      targetId,
-      'Leave submitted for ' + (emp.display_name || targetId),
-      result.leave_request_id
-    );
     fireLeaveInbox_(function () {
       var mgr = emp.manager_employee_id ? getEmployee_(emp.manager_employee_id) : null;
-      NotificationLeaveAdapter.notifySubmitted(result, emp, mgr);
+      if (pendingStatus === HRMS.LEAVE_STATUS.PENDING_MANAGER && mgr) {
+        notifyLeave_(
+          'LEAVE_SUBMITTED',
+          managerWorkEmail_(emp),
+          targetId,
+          'Leave submitted for ' + (emp.display_name || targetId),
+          result.leave_request_id
+        );
+        NotificationLeaveAdapter.notifyManagerApprovalRequired(result, emp, mgr);
+      } else {
+        NotificationLeaveAdapter.notifyHrReviewRequired(result, emp, null);
+      }
     });
     return result;
   }
@@ -590,37 +609,61 @@ var LeaveService = (function () {
       var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
-      if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.SUBMITTED) {
-        throw conflictError_('Only submitted leave can be approved.');
+      if (!LeaveEngine.isPendingApprovalStatus(row.status)) {
+        throw conflictError_('Only pending leave can be approved.');
       }
       var emp = requireEmployee_(row.employee_id);
-      if (!LeaveEngine.canApproveRequest(session, row.employee_id, emp.manager_employee_id)) {
+      var applicantRole = applicantUserRole_(row.employee_id);
+      if (!LeaveEngine.canApproveRequest(session, row.employee_id, emp.manager_employee_id, row.status, applicantRole)) {
         throw authorizationError_('You cannot approve this leave request.');
       }
       var type = coerceType_(getType_(row.leave_type_id));
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);
-      applyPendingDeltaLocked_(row.employee_id, type, year, -days, days, balanceIndex);
-      var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, {
-        status: HRMS.LEAVE_STATUS.APPROVED,
-        approver_employee_id: session.employee_id,
-        decision_at: now_(),
+      var step = LeaveEngine.statusAfterApproval(row.status, applicantRole);
+      var patch = {
         decision_comment: comment || ''
-      });
-      AuditService.log(HRMS.LEAVE_AUDIT.APPROVE, 'LeaveRequest', leaveRequestId, 'Approved ' + days + ' day(s)', row.employee_id);
-      refreshLopIfNeeded_(type, row.employee_id, row.start_date, row.end_date);
+      };
+      if (step.final) {
+        applyPendingDeltaLocked_(row.employee_id, type, year, -days, days, balanceIndex);
+        patch.status = HRMS.LEAVE_STATUS.APPROVED;
+        patch.approver_employee_id = session.employee_id;
+        patch.decision_at = now_();
+      } else {
+        patch.status = step.status;
+      }
+      var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, patch);
+      var auditNote = step.final
+        ? 'Approved ' + days + ' day(s)'
+        : ('Stage approved → ' + step.status);
+      AuditService.log(HRMS.LEAVE_AUDIT.APPROVE, 'LeaveRequest', leaveRequestId, auditNote, row.employee_id);
+      if (step.final) {
+        refreshLopIfNeeded_(type, row.employee_id, row.start_date, row.end_date);
+      }
       return {
         serialized: serializeRequest_(updated, typeMap_(), empMap_()),
         work_email: emp.work_email,
         employee_id: row.employee_id,
         employee: emp,
-        request: updated
+        request: updated,
+        final: step.final,
+        next_status: step.status
       };
     });
-    notifyLeave_('LEAVE_APPROVED', outcome.work_email, outcome.employee_id, 'Leave approved', leaveRequestId);
-    fireLeaveInbox_(function () {
-      NotificationLeaveAdapter.notifyApproved(outcome.request || outcome.serialized, outcome.employee);
-    });
+    if (outcome.final) {
+      notifyLeave_('LEAVE_APPROVED', outcome.work_email, outcome.employee_id, 'Leave approved', leaveRequestId);
+      fireLeaveInbox_(function () {
+        NotificationLeaveAdapter.notifyApproved(outcome.request || outcome.serialized, outcome.employee);
+      });
+    } else {
+      fireLeaveInbox_(function () {
+        NotificationLeaveAdapter.notifyHrReviewRequired(
+          outcome.request || outcome.serialized,
+          outcome.employee,
+          null
+        );
+      });
+    }
     return outcome.serialized;
   }
 
@@ -630,11 +673,12 @@ var LeaveService = (function () {
       var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
-      if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.SUBMITTED) {
-        throw conflictError_('Only submitted leave can be rejected.');
+      if (!LeaveEngine.isPendingApprovalStatus(row.status)) {
+        throw conflictError_('Only pending leave can be rejected.');
       }
       var emp = requireEmployee_(row.employee_id);
-      if (!LeaveEngine.canApproveRequest(session, row.employee_id, emp.manager_employee_id)) {
+      var applicantRole = applicantUserRole_(row.employee_id);
+      if (!LeaveEngine.canApproveRequest(session, row.employee_id, emp.manager_employee_id, row.status, applicantRole)) {
         throw authorizationError_('You cannot reject this leave request.');
       }
       var type = coerceType_(getType_(row.leave_type_id));
@@ -676,7 +720,7 @@ var LeaveService = (function () {
       var type = coerceType_(getType_(row.leave_type_id));
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);
-      if (status === HRMS.LEAVE_STATUS.SUBMITTED) {
+      if (LeaveEngine.isPendingApprovalStatus(status)) {
         applyPendingDeltaLocked_(row.employee_id, type, year, -days, 0, balanceIndex);
       } else if (status === HRMS.LEAVE_STATUS.APPROVED) {
         applyPendingDeltaLocked_(row.employee_id, type, year, 0, -days, balanceIndex);
@@ -724,8 +768,12 @@ var LeaveService = (function () {
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);
       applyPendingDeltaLocked_(row.employee_id, type, year, days, 0, balanceIndex);
+      var emp = requireEmployee_(row.employee_id);
+      var applicantRole = applicantUserRole_(row.employee_id);
+      var hasManager = !!String(emp.manager_employee_id || '').trim();
+      var restored = LeaveEngine.initialPendingStatus(applicantRole, hasManager);
       var updated = DbService.updateRecord(HRMS.SHEETS.LEAVE_REQUESTS, 'leave_request_id', leaveRequestId, {
-        status: HRMS.LEAVE_STATUS.SUBMITTED,
+        status: restored,
         approver_employee_id: '',
         decision_at: '',
         decision_comment: comment || ''
@@ -734,7 +782,7 @@ var LeaveService = (function () {
         HRMS.LEAVE_AUDIT.REVOKE,
         'LeaveRequest',
         leaveRequestId,
-        'Revoked rejection — restored to submitted',
+        'Revoked rejection — restored to ' + restored,
         row.employee_id
       );
       return serializeRequest_(updated, typeMap_(), empMap_());
@@ -802,12 +850,13 @@ var LeaveService = (function () {
     var tmap = typeMap_();
     var emap = empMap_();
     var rows = DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).filter(function (r) {
-      return String(r.status).toUpperCase() === HRMS.LEAVE_STATUS.SUBMITTED;
+      return LeaveEngine.isPendingApprovalStatus(r.status);
     });
     var visible = rows.filter(function (r) {
       var emp = emap[String(r.employee_id)];
       var mgr = emp ? emp.manager_employee_id : '';
-      return LeaveEngine.canApproveRequest(session, r.employee_id, mgr);
+      var applicantRole = applicantUserRole_(r.employee_id);
+      return LeaveEngine.canApproveRequest(session, r.employee_id, mgr, r.status, applicantRole);
     });
     return visible.map(function (r) { return serializeRequest_(r, tmap, emap); });
   }

@@ -6,7 +6,11 @@ var HRMS = HRMS || {};
 
 HRMS.LEAVE_STATUS = {
   DRAFT: 'DRAFT',
+  /** Legacy: treated as PENDING_MANAGER for employees. */
   SUBMITTED: 'SUBMITTED',
+  PENDING_MANAGER: 'PENDING_MANAGER',
+  PENDING_HR: 'PENDING_HR',
+  PENDING_ADMIN: 'PENDING_ADMIN',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
   CANCELLED: 'CANCELLED'
@@ -172,7 +176,80 @@ var LeaveEngine = (function () {
   }
 
   function blockingStatuses() {
-    return [HRMS.LEAVE_STATUS.SUBMITTED, HRMS.LEAVE_STATUS.APPROVED];
+    return [
+      HRMS.LEAVE_STATUS.SUBMITTED,
+      HRMS.LEAVE_STATUS.PENDING_MANAGER,
+      HRMS.LEAVE_STATUS.PENDING_HR,
+      HRMS.LEAVE_STATUS.PENDING_ADMIN,
+      HRMS.LEAVE_STATUS.APPROVED
+    ];
+  }
+
+  function isPendingApprovalStatus(status) {
+    var s = normalizeLeaveStatus_(status);
+    return s === HRMS.LEAVE_STATUS.PENDING_MANAGER ||
+      s === HRMS.LEAVE_STATUS.PENDING_HR ||
+      s === HRMS.LEAVE_STATUS.PENDING_ADMIN;
+  }
+
+  /** Map legacy SUBMITTED to the manager queue. */
+  function normalizeLeaveStatus_(status) {
+    var s = String(status || '').toUpperCase();
+    if (s === HRMS.LEAVE_STATUS.SUBMITTED) return HRMS.LEAVE_STATUS.PENDING_MANAGER;
+    return s;
+  }
+
+  function normalizeApplicantRole_(role) {
+    role = String(role || HRMS.ROLES.EMPLOYEE).trim().toUpperCase();
+    if (role === HRMS.ROLES.OWNER) return HRMS.ROLES.ADMIN;
+    return role;
+  }
+
+  /**
+   * First queue after submit.
+   * @param {string} applicantUserRole Users.role for the applicant.
+   * @param {boolean} hasManager Whether Employees.manager_employee_id is set.
+   */
+  function initialPendingStatus(applicantUserRole, hasManager) {
+    var role = normalizeApplicantRole_(applicantUserRole);
+    if (role === HRMS.ROLES.HR || role === HRMS.ROLES.ADMIN) {
+      return HRMS.LEAVE_STATUS.PENDING_ADMIN;
+    }
+    if (role === HRMS.ROLES.MANAGER) {
+      return HRMS.LEAVE_STATUS.PENDING_HR;
+    }
+    if (hasManager) return HRMS.LEAVE_STATUS.PENDING_MANAGER;
+    return HRMS.LEAVE_STATUS.PENDING_HR;
+  }
+
+  /**
+   * @return {{ status: string, final: boolean }}
+   */
+  function statusAfterApproval(currentStatus, applicantUserRole) {
+    var status = normalizeLeaveStatus_(currentStatus);
+    var applicant = normalizeApplicantRole_(applicantUserRole);
+    if (status === HRMS.LEAVE_STATUS.PENDING_MANAGER) {
+      return { status: HRMS.LEAVE_STATUS.PENDING_HR, final: false };
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
+      if (applicant === HRMS.ROLES.MANAGER) {
+        return { status: HRMS.LEAVE_STATUS.PENDING_ADMIN, final: false };
+      }
+      return { status: HRMS.LEAVE_STATUS.APPROVED, final: true };
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_ADMIN) {
+      return { status: HRMS.LEAVE_STATUS.APPROVED, final: true };
+    }
+    return { status: status, final: false };
+  }
+
+  function statusLabel(status) {
+    var s = normalizeLeaveStatus_(status);
+    if (s === HRMS.LEAVE_STATUS.PENDING_MANAGER) return 'Awaiting manager';
+    if (s === HRMS.LEAVE_STATUS.PENDING_HR) return 'Awaiting HR';
+    if (s === HRMS.LEAVE_STATUS.PENDING_ADMIN) return 'Awaiting admin';
+    if (s === HRMS.LEAVE_STATUS.SUBMITTED) return 'Submitted';
+    return s;
   }
 
   function isBlockingStatus(status) {
@@ -238,16 +315,40 @@ var LeaveEngine = (function () {
     return role === HRMS.ROLES.OWNER || role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR;
   }
 
+  function isAdminRole_(role) {
+    role = String(role || '').toUpperCase();
+    return role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.OWNER;
+  }
+
   /**
-   * Self-approve is always denied. HR/ADMIN/OWNER may decide others. Managers apply only.
+   * Two-stage workflow: manager → HR/Admin; manager applicants → HR → Admin; HR applicants → Admin only.
+   * @param {string=} requestStatus LeaveRequests.status
+   * @param {string=} applicantUserRole Users.role for the employee who applied
    */
-  function canApproveRequest(session, targetEmployeeId, managerEmployeeId) {
+  function canApproveRequest(session, targetEmployeeId, managerEmployeeId, requestStatus, applicantUserRole) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
     var selfId = String(session.employee_id || '');
     var target = String(targetEmployeeId || '');
     if (selfId && target && selfId === target) return false;
-    return isLeaveAuthority_(role);
+
+    var status = normalizeLeaveStatus_(requestStatus || HRMS.LEAVE_STATUS.PENDING_MANAGER);
+    var applicant = normalizeApplicantRole_(applicantUserRole);
+
+    if (status === HRMS.LEAVE_STATUS.PENDING_MANAGER) {
+      if (role === HRMS.ROLES.MANAGER && String(managerEmployeeId || '') === selfId) return true;
+      return false;
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
+      if (applicant === HRMS.ROLES.MANAGER) {
+        return role === HRMS.ROLES.HR;
+      }
+      return role === HRMS.ROLES.HR || isAdminRole_(role);
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_ADMIN) {
+      return isAdminRole_(role);
+    }
+    return false;
   }
 
   function canViewEmployeeLeave(session, targetEmployeeId, managerEmployeeId) {
@@ -269,7 +370,7 @@ var LeaveEngine = (function () {
     var role = String(session.role || '').toUpperCase();
     var own = String(session.employee_id || '') === String(request.employee_id || '');
     var authority = isLeaveAuthority_(role);
-    if (status === HRMS.LEAVE_STATUS.DRAFT || status === HRMS.LEAVE_STATUS.SUBMITTED) {
+    if (status === HRMS.LEAVE_STATUS.DRAFT || isPendingApprovalStatus(status)) {
       return own || authority;
     }
     if (status === HRMS.LEAVE_STATUS.APPROVED) {
@@ -283,7 +384,7 @@ var LeaveEngine = (function () {
     if (!session || !session.authorized || !request) return false;
     if (!isLeaveAuthority_(session.role)) return false;
     var status = String(request.status || '').toUpperCase();
-    return status === HRMS.LEAVE_STATUS.SUBMITTED ||
+    return isPendingApprovalStatus(status) ||
       status === HRMS.LEAVE_STATUS.APPROVED ||
       status === HRMS.LEAVE_STATUS.REJECTED;
   }
@@ -324,6 +425,11 @@ var LeaveEngine = (function () {
     canCancel: canCancel,
     canRevokeDecision: canRevokeDecision,
     canApplyFor: canApplyFor,
-    normalizeSession: normalizeSession
+    normalizeSession: normalizeSession,
+    normalizeLeaveStatus: normalizeLeaveStatus_,
+    initialPendingStatus: initialPendingStatus,
+    statusAfterApproval: statusAfterApproval,
+    isPendingApprovalStatus: isPendingApprovalStatus,
+    statusLabel: statusLabel
   };
 })();
