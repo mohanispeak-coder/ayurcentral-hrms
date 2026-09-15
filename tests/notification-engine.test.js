@@ -1,5 +1,5 @@
 /**
- * Local NotificationEngine tests (inbox, RBAC, duplicates, leave/PMS/ATS/birthday).
+ * Local NotificationEngine tests (inbox, RBAC, duplicates, leave/ATS/birthday).
  * Run: node tests/notification-engine.test.js
  */
 const fs = require('fs');
@@ -174,14 +174,8 @@ const managerRec = { employee_id: 'EMP002', display_name: 'Mo Manager', email: '
   check('NTF-payslip-reject-net', bad.indexOf('Payslip notifications must not include net pay.') >= 0);
 }
 
-// --- PMS / ATS ---
+// --- ATS ---
 {
-  const cycle = { cycle_id: 'CY-1', name: 'FY26 H1' };
-  check('NTF-pms-open', E.payloads.pmsCycleOpen(cycle, emp).type === 'PMS_CYCLE_OPEN');
-  check('NTF-pms-self', E.payloads.pmsSelfAssessmentDue(cycle, emp).priority === 'HIGH');
-  check('NTF-pms-mgr', E.payloads.pmsManagerReviewPending(cycle, manager, 'Ada').message.indexOf('Ada') >= 0);
-  check('NTF-pms-final', E.payloads.pmsFinalized(cycle, emp).type === 'PMS_FINALIZED');
-
   const appn = { application_id: 'APP-9', candidate_name: 'Riya', requisition_title: 'Pharmacist' };
   check('NTF-ats-new', E.payloads.atsInternal('ATS_NEW_APPLICATION', appn, hr).title.indexOf('New application') >= 0);
   check('NTF-ats-shortlist', E.payloads.atsInternal('ATS_SHORTLISTED', appn, hr).type === 'ATS_SHORTLISTED');

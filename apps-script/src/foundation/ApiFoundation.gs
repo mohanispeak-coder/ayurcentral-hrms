@@ -7,7 +7,6 @@ var HRMS_MODULE_UI_FILES_ = {
   employee: ['employee/EmployeePages', 'employee/EmployeeClient'],
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
   payroll: ['payroll/PayrollClient'],
-  pms: ['pms/PmsClient'],
   ats: ['ats/AtsClient'],
   notifications: ['notifications/NotificationClient']
 };
@@ -94,7 +93,7 @@ function apiGetAppBootstrap(sessionToken) {
 /**
  * Lazy-load module HTML/JS for first paint optimization.
  * Requires ACCESS_APP. Returns concatenated HTML for allowlisted modules only.
- * @param {string} moduleId employee | leave | payroll | pms | ats | notifications
+ * @param {string} moduleId employee | leave | payroll | ats | notifications
  * @param {string=} sessionToken
  * @return {Object} { moduleId, html }
  */
@@ -208,7 +207,7 @@ function apiGetHomeDashboard(sessionToken) {
   }, sessionToken);
 }
 
-/** Secondary dashboard cards (payroll / PMS / ATS). */
+/** Secondary dashboard cards (payroll / ATS). */
 function apiGetHomeDashboardMore(sessionToken) {
   return hrmsRun_(function () {
     var session = PermissionService.require(HRMS.ACTIONS.ACCESS_APP);

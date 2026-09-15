@@ -27,7 +27,6 @@ var NotificationEngine = (function () {
   var MODULE = {
     LEAVE: 'LEAVE',
     PAYROLL: 'PAYROLL',
-    PMS: 'PMS',
     ATS: 'ATS',
     GENERAL: 'GENERAL',
     SYSTEM: 'SYSTEM'
@@ -107,18 +106,6 @@ var NotificationEngine = (function () {
   });
   CATALOG_[TYPE.PAYSLIP_AVAILABLE] = def_(TYPE.PAYSLIP_AVAILABLE, MODULE.PAYROLL, 'Payslip available', PRIORITY.HIGH, true, true, {
     orgEmailSetting: 'notification_payroll', actionRoute: 'my-payslips'
-  });
-  CATALOG_[TYPE.PMS_CYCLE_OPEN] = def_(TYPE.PMS_CYCLE_OPEN, MODULE.PMS, 'Review cycle open', PRIORITY.NORMAL, true, true, {
-    actionRoute: 'pms-cycle'
-  });
-  CATALOG_[TYPE.PMS_SELF_ASSESSMENT_DUE] = def_(TYPE.PMS_SELF_ASSESSMENT_DUE, MODULE.PMS, 'Self-assessment due', PRIORITY.HIGH, true, true, {
-    actionRoute: 'pms-self'
-  });
-  CATALOG_[TYPE.PMS_MANAGER_REVIEW_PENDING] = def_(TYPE.PMS_MANAGER_REVIEW_PENDING, MODULE.PMS, 'Manager review pending', PRIORITY.HIGH, true, true, {
-    actionRoute: 'pms-review'
-  });
-  CATALOG_[TYPE.PMS_FINALIZED] = def_(TYPE.PMS_FINALIZED, MODULE.PMS, 'Review finalized', PRIORITY.NORMAL, true, false, {
-    actionRoute: 'pms-cycle'
   });
   CATALOG_[TYPE.ATS_NEW_APPLICATION] = def_(TYPE.ATS_NEW_APPLICATION, MODULE.ATS, 'New application', PRIORITY.NORMAL, true, false, {
     actionRoute: 'ats-applications'
@@ -318,9 +305,6 @@ var NotificationEngine = (function () {
     }
     if ((route === 'employee-profile' || route === 'my-profile') && extra.employee_id && !params.employeeId) {
       params.employeeId = extra.employee_id;
-    }
-    if (route.indexOf('pms') === 0 && sourceRecordId && !params.cycleId) {
-      params.cycleId = sourceRecordId;
     }
     if (route.indexOf('ats') === 0 && sourceRecordId && !params.applicationId) {
       params.applicationId = sourceRecordId;
@@ -896,37 +880,6 @@ var NotificationEngine = (function () {
     });
   }
 
-  function buildPmsCycleOpen(cycle, recipient) {
-    return payloadBase_(TYPE.PMS_CYCLE_OPEN, recipient, cycle.cycle_id, {
-      cycle_name: cycle.name || cycle.cycle_id
-    }, {
-      title: 'Performance cycle open',
-      message: (cycle.name || 'A performance cycle') + ' is open. Complete your self-assessment when due.'
-    });
-  }
-
-  function buildPmsSelfAssessmentDue(cycle, recipient) {
-    return payloadBase_(TYPE.PMS_SELF_ASSESSMENT_DUE, recipient, cycle.cycle_id, {}, {
-      title: 'Self-assessment due',
-      message: 'Your self-assessment is due for ' + (cycle.name || 'the current cycle') + '.',
-      priority: PRIORITY.HIGH
-    });
-  }
-
-  function buildPmsManagerReviewPending(cycle, recipient, employeeName) {
-    return payloadBase_(TYPE.PMS_MANAGER_REVIEW_PENDING, recipient, cycle.cycle_id, {}, {
-      title: 'Manager review pending',
-      message: 'A review is waiting for you' + (employeeName ? ' (' + employeeName + ')' : '') + '.'
-    });
-  }
-
-  function buildPmsFinalized(cycle, recipient) {
-    return payloadBase_(TYPE.PMS_FINALIZED, recipient, cycle.cycle_id, {}, {
-      title: 'Review finalized',
-      message: 'Your review for ' + (cycle.name || 'the cycle') + ' has been finalized.'
-    });
-  }
-
   function buildAtsInternal(type, application, recipient) {
     var name = application.candidate_name || 'A candidate';
     var titles = {};
@@ -1133,10 +1086,6 @@ var NotificationEngine = (function () {
       payrollReadyReview: buildPayrollReadyReview,
       payrollApproved: buildPayrollApproved,
       payrollLocked: buildPayrollLocked,
-      pmsCycleOpen: buildPmsCycleOpen,
-      pmsSelfAssessmentDue: buildPmsSelfAssessmentDue,
-      pmsManagerReviewPending: buildPmsManagerReviewPending,
-      pmsFinalized: buildPmsFinalized,
       atsInternal: buildAtsInternal,
       atsCandidateEmail: buildAtsCandidateEmail,
       happyBirthday: buildHappyBirthday,

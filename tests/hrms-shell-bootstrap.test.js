@@ -212,7 +212,6 @@ function loadShell() {
             { route: 'employees', label: 'Employees' },
             { route: 'my-leave', label: 'My Leave' },
             { route: 'payroll', label: 'Payroll' },
-            { route: 'pms', label: 'Performance' },
             { route: 'ats', label: 'Recruitment' },
             { route: 'notifications', label: 'Notifications' }
           ]
@@ -352,7 +351,7 @@ later().then(function () {
   check('shell querySelector only on elements', badQs.length === 0, badQs[0] ? JSON.stringify(badQs[0]) : '');
 
   var App = env.sandbox.window.HrmsApp;
-  ['employees', 'my-leave', 'payroll', 'pms', 'ats', 'notifications'].forEach(function (route) {
+  ['employees', 'my-leave', 'payroll', 'ats', 'notifications'].forEach(function (route) {
     try {
       App.navigate(route);
       check('navigate ' + route + ' no throw', true);
@@ -369,10 +368,10 @@ later().then(function () {
   check('lazy employee module', !!mods.employee);
   check('lazy leave module', !!mods.leave);
   check('lazy payroll module', !!mods.payroll);
-  check('lazy pms module', !!mods.pms);
   check('lazy ats module', !!mods.ats);
   check('lazy notifications module', !!mods.notifications);
-  check('preload herd absent at boot', env.rpcCalls.filter(function (c) { return c.name === 'apiGetModuleUi'; }).length <= 6);
+  check('no lazy pms module', !mods.pms);
+  check('preload herd absent at boot', env.rpcCalls.filter(function (c) { return c.name === 'apiGetModuleUi'; }).length <= 5);
 
   if (failures.length) {
     console.error('\n' + failures.length + ' failed, ' + passed + ' passed');

@@ -211,17 +211,10 @@ var SchemaService = (function () {
   }
 
   /**
-   * PMS / ATS / Notification sheets. Does not add them to the locked 14-sheet core list.
+   * ATS / Notification sheets. Does not add them to the locked 14-sheet core list.
    */
   function ensureModuleSheets_(ss) {
-    var out = { pms: null, ats: null, notifications: null };
-    try {
-      if (typeof PmsSchemaService !== 'undefined' && PmsSchemaService.ensure) {
-        out.pms = PmsSchemaService.ensure();
-      }
-    } catch (e) {
-      Logger.log('ensureModuleSheets PMS: ' + (e.message || e));
-    }
+    var out = { ats: null, notifications: null };
     try {
       if (typeof AtsSchemaService !== 'undefined' && AtsSchemaService.ensureSheets) {
         out.ats = AtsSchemaService.ensureSheets(ss || ConfigService.openSpreadsheet());

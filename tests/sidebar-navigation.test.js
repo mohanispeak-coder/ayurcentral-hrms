@@ -37,19 +37,17 @@ if (navMatch) {
 
 check('nav-groups-defined', /var NAV_GROUPS = \[/.test(scripts));
 check('nav-main-section', /id:\s*'main'[\s\S]*label:\s*'Main'[\s\S]*dashboard/.test(scripts));
-check('nav-my-work-section', /id:\s*'my-work'[\s\S]*my-profile[\s\S]*my-leave[\s\S]*pms-my-review[\s\S]*my-payslips/.test(scripts));
+check('nav-my-work-section', /id:\s*'my-work'[\s\S]*my-profile[\s\S]*my-leave[\s\S]*my-payslips/.test(scripts));
 check('nav-people-section', /id:\s*'people'[\s\S]*employees[\s\S]*my-team/.test(scripts));
 check('nav-time-off-section', /id:\s*'time-off'[\s\S]*leave-admin[\s\S]*leave-approvals/.test(scripts));
-check('nav-performance-section', /id:\s*'performance'[\s\S]*pms[\s\S]*pms-team[\s\S]*pms-cycles[\s\S]*pms-appraisal/.test(scripts));
+check('no-nav-performance-section', !/id:\s*'performance'/.test(scripts));
 check('nav-payroll-section', /id:\s*'payroll'[\s\S]*payroll[\s\S]*compensation/.test(scripts));
 check('nav-recruitment-section', /id:\s*'recruitment'[\s\S]*ats[\s\S]*ats-jobs[\s\S]*ats-candidates/.test(scripts));
 check('nav-admin-section', /id:\s*'admin'[\s\S]*notifications[\s\S]*settings[\s\S]*users/.test(scripts));
 
-var perfBlock = scripts.match(/id:\s*'performance'[\s\S]*?collapsible:\s*true/);
 var timeOffBlock = scripts.match(/id:\s*'time-off'[\s\S]*?collapsible:\s*true/);
 var payrollBlock = scripts.match(/id:\s*'payroll'[\s\S]*?collapsible:\s*true/);
 
-check('pms-my-review-not-in-performance', !!(perfBlock && perfBlock[0].indexOf('pms-my-review') < 0));
 check('my-leave-not-in-time-off', !!(timeOffBlock && timeOffBlock[0].indexOf('my-leave') < 0));
 check('my-payslips-not-in-payroll', !!(payrollBlock && payrollBlock[0].indexOf('my-payslips') < 0));
 

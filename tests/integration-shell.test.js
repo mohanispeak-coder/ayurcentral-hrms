@@ -31,16 +31,15 @@ const permSrc = read('foundation/PermissionService.gs');
 const schema = read('foundation/SchemaService.gs');
 const leave = read('leave/LeaveService.gs');
 const payroll = read('payroll/PayrollService.gs');
-const pms = read('pms/PmsService.gs');
 const ats = read('ats/AtsService.gs');
 const atsWeb = read('ats/AtsWeb.gs');
 
 check('doGet-ats-public', /AtsWeb\.tryServe/.test(main), 'Main.gs public/internal ATS entry');
 check('index-bell-slot', /ntf-bell-slot/.test(index) && /NotificationBell/.test(index));
-check('lazy-pms', /pms:\s*\['pms\/PmsClient'\]/.test(api));
+check('no-lazy-pms', !/pms:\s*\['pms\//.test(api));
 check('lazy-ats', /ats:\s*\['ats\/AtsClient'\]/.test(api));
 check('lazy-ntf', /notifications:\s*\['notifications\/NotificationClient'\]/.test(api));
-check('route-pms', /'pms-my-review':\s*'pms'/.test(scripts));
+check('no-route-pms', !/\bpms['"]/.test(scripts));
 check('route-ats', /'ats-candidates':\s*'ats'/.test(scripts));
 check('route-ntf', /notifications:\s*'notifications'/.test(scripts));
 check('nav-recruit', /id:\s*'recruitment'/.test(scripts));
@@ -52,9 +51,6 @@ check('leave-inbox-cancel', /NotificationLeaveAdapter\.notifyCancelled/.test(lea
 check('leave-email-retained', /MailApp\.sendEmail/.test(leave));
 check('payroll-locked-notify', /NotificationPayrollAdapter\.notifyLocked/.test(payroll));
 check('payroll-payslip-notify', /notifyPayslipsAvailable/.test(payroll));
-check('pms-cycle-open-notify', /NotificationPmsAdapter\.notifyCycleOpen/.test(pms));
-check('pms-manager-notify', /notifyManagerReviewPending/.test(pms));
-check('pms-final-notify', /notifyFinalized/.test(pms));
 check('ats-apply-notify', /notifyNewApplication/.test(ats));
 check('ats-no-employee-on-apply', /created_employee:\s*false/.test(ats));
 check('ats-web-internal-first', /isInternalAppRequest\(e\)[\s\S]*isPublicApplyRequest/.test(atsWeb));
@@ -82,11 +78,11 @@ const hrRoutes = nav('HR').map(function (i) { return i.route; });
 const adminRoutes = nav('ADMIN').map(function (i) { return i.route; });
 
 check('rbac-employee-no-ats', empRoutes.indexOf('ats') < 0);
-check('rbac-employee-pms', empRoutes.indexOf('pms') >= 0 && empRoutes.indexOf('pms-cycles') < 0);
+check('rbac-employee-no-pms', empRoutes.indexOf('pms') < 0 && empRoutes.indexOf('pms-cycles') < 0);
 check('rbac-employee-no-payroll-admin', empRoutes.indexOf('payroll') < 0);
 check('rbac-manager-ats', mgrRoutes.indexOf('ats') >= 0);
-check('rbac-manager-no-cycles', mgrRoutes.indexOf('pms-cycles') < 0);
-check('rbac-hr-pms-admin', hrRoutes.indexOf('pms-cycles') >= 0 && hrRoutes.indexOf('ats-jobs') >= 0);
+check('rbac-manager-no-pms', mgrRoutes.indexOf('pms') < 0 && mgrRoutes.indexOf('pms-cycles') < 0);
+check('rbac-hr-ats-admin', hrRoutes.indexOf('ats-jobs') >= 0 && hrRoutes.indexOf('pms-cycles') < 0);
 check('rbac-admin-notifications', adminRoutes.indexOf('notifications') >= 0);
 check('rbac-employee-no-notifications-nav', empRoutes.indexOf('notifications') < 0);
 

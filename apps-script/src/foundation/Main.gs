@@ -35,7 +35,6 @@ function onOpen() {
     .createMenu('HRMS')
     .addItem('Run database setup', 'menuRunDatabaseSetup')
     .addItem('Run Drive setup', 'menuRunDriveSetup')
-    .addItem('Ensure PMS sheets', 'menuEnsurePmsSchema')
     .addItem('Ensure ATS sheets', 'menuEnsureAtsSchema')
     .addItem('Ensure notification sheets', 'menuEnsureNotificationSchema')
     .addToUi();
