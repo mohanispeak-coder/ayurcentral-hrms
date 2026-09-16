@@ -127,6 +127,8 @@ const jobVal = AtsEngine.validateJobPayload({ title: 'Role', openings: 2, employ
 check('job-validate-ok', jobVal.ok && jobVal.openings === 2);
 const closeDmy = AtsEngine.parseClosingDate('31/12/2026');
 check('closing-date-dmy', closeDmy.ok && closeDmy.iso === '2026-12-31');
+const closeDmyDash = AtsEngine.parseClosingDate('31-12-2026');
+check('closing-date-dmy-dash', closeDmyDash.ok && closeDmyDash.iso === '2026-12-31');
 const closeIso = AtsEngine.parseClosingDate('2026-12-31');
 check('closing-date-iso', closeIso.ok && closeIso.iso === '2026-12-31');
 check('closing-date-bad', !AtsEngine.parseClosingDate('not-a-date').ok);

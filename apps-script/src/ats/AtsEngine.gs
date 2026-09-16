@@ -247,6 +247,10 @@ var AtsEngine = (function () {
       };
     }
     var s = trim_(value);
+    var dmyHyphen = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dmyHyphen) {
+      s = dmyHyphen[1] + '/' + dmyHyphen[2] + '/' + dmyHyphen[3];
+    }
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
       return { ok: true, iso: s.substring(0, 10), error: '' };
     }
@@ -266,7 +270,7 @@ var AtsEngine = (function () {
         error: ''
       };
     }
-    return { ok: false, iso: '', error: 'Closing date must be DD/MM/YYYY.' };
+    return { ok: false, iso: '', error: 'Closing date must be DD/MM/YYYY (e.g. 31/12/2026 or 31-12-2026).' };
   }
 
   function canAccessAts(session) {

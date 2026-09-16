@@ -1028,7 +1028,12 @@ var LeaveService = (function () {
       var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
-      if (!LeaveEngine.canCancel(session, row)) {
+      var empRow = requireEmployee_(row.employee_id);
+      var cancelCtx = {
+        manager_employee_id: empRow.manager_employee_id,
+        applicant_role: applicantUserRole_(row.employee_id)
+      };
+      if (!LeaveEngine.canCancel(session, row, cancelCtx)) {
         throw authorizationError_('You cannot cancel this leave request.');
       }
       var status = String(row.status).toUpperCase();
@@ -1068,12 +1073,17 @@ var LeaveService = (function () {
   }
 
   function revokeRejection(session, leaveRequestId, comment) {
-    PermissionService.require(HRMS.ACTIONS.LEAVE_ADMIN, {}, session);
+    PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
     return withScriptLock_(function () {
       var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
       if (!row) throw notFoundError_('Leave request not found.');
-      if (!LeaveEngine.canRevokeDecision(session, row)) {
+      var empRow = requireEmployee_(row.employee_id);
+      var revokeCtx = {
+        manager_employee_id: empRow.manager_employee_id,
+        applicant_role: applicantUserRole_(row.employee_id)
+      };
+      if (!LeaveEngine.canRevokeDecision(session, row, revokeCtx)) {
         throw authorizationError_('You cannot revoke this leave decision.');
       }
       if (String(row.status).toUpperCase() !== HRMS.LEAVE_STATUS.REJECTED) {

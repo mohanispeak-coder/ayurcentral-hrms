@@ -270,7 +270,7 @@ var AtsBulkService = (function () {
       'Upload .xlsx or .csv. Required columns are marked with *.',
       'Duplicate job titles in one file are rejected.',
       'publish: YES to publish immediately, otherwise job stays DRAFT.',
-      'closing_date: use DD/MM/YYYY (example 31/12/2026). ISO YYYY-MM-DD is also accepted.',
+      'closing_date: use DD/MM/YYYY or DD-MM-YYYY (example 31/12/2026).',
       'Valid source values are not used for jobs.',
       'Maximum ' + MAX_ROWS_ + ' rows per upload.'
     ];
@@ -335,6 +335,9 @@ var AtsBulkService = (function () {
       JOB_HEADERS_.forEach(function (h) {
         if (row.hasOwnProperty(h)) payload[h] = row[h];
       });
+      if (payload.closing_date) {
+        payload.closing_date = trim_(payload.closing_date).replace(/^(\d{1,2})-(\d{1,2})-(\d{4})$/, '$1/$2/$3');
+      }
 
       try {
         var v = AtsEngine.validateJobPayload(payload, true);

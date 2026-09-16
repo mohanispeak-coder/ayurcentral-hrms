@@ -218,6 +218,48 @@
     refreshBulkBar_();
   }
 
+  function bindLeaveRevokeActions_(scopeEl, helpers, options) {
+    var c = ctx();
+    options = options || {};
+    var feedback = options.feedbackEl;
+    var flashKey = options.flashKey || 'leave-approvals';
+    var onDone = options.onDone || function () {};
+    scopeEl.querySelectorAll('[data-revoke]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var kind = btn.getAttribute('data-revoke-kind') || 'approved';
+        var title = kind === 'rejected' ? 'Revoke rejection' :
+          (kind === 'submitted' ? 'Revoke pending leave' : 'Revoke approved leave');
+        openDecisionModal(helpers, title, true, function (comment) {
+          var id = btn.getAttribute('data-revoke');
+          var call = kind === 'rejected'
+            ? c.callServer('apiLeaveRevokeRejection', id, comment, actionOpts(btn, 'Revoking...', feedback))
+            : c.callServer('apiLeaveCancel', id, actionOpts(btn, 'Revoking...', feedback));
+          call.then(function () {
+            invalidateLeaveAfterRequestMutation_();
+            setFlash('Leave decision revoked.', 'success', flashKey);
+            onDone();
+          });
+        });
+      });
+    });
+  }
+
+  function approvalLeaveActionsHtml_(r) {
+    var c = ctx();
+    var id = c.escapeHtml(r.leave_request_id);
+    var st = String(r.status || '').toUpperCase();
+    var html = '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
+      '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ';
+    if (st === 'SUBMITTED' || st.indexOf('PENDING_') === 0) {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
+    } else if (st === 'APPROVED') {
+      html += '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + id + '" data-revoke-kind="approved">Revoke</button>';
+    } else if (st === 'REJECTED') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="rejected">Revoke</button>';
+    }
+    return html;
+  }
+
   function bindLeaveRowApproveReject_(scopeEl, helpers, options) {
     var c = ctx();
     options = options || {};
@@ -660,8 +702,7 @@
           '<td class="num">' + fmtDays(r.total_days) + '</td>' +
           '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
           '<td>' + c.escapeHtml(r.reason) + '</td>' +
-          '<td class="col-actions"><button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
-            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button></td></tr>';
+          '<td class="col-actions">' + approvalLeaveActionsHtml_(r) + '</td></tr>';
       }).join('');
       page.innerHTML = flashHtml('leave-approvals') +
         pageHead('Leave approvals', 'Select one or more requests, or use Select all. Your queue is filtered to what you can act on at this stage.') +
@@ -677,6 +718,11 @@
         onDone: function () { renderApprovals(page, helpers); }
       });
       bindLeaveRowApproveReject_(page, helpers, {
+        feedbackEl: apprFeedback,
+        flashKey: 'leave-approvals',
+        onDone: function () { renderApprovals(page, helpers); }
+      });
+      bindLeaveRevokeActions_(page, helpers, {
         feedbackEl: apprFeedback,
         flashKey: 'leave-approvals',
         onDone: function () { renderApprovals(page, helpers); }
@@ -817,23 +863,10 @@
               });
           });
         });
-        page.querySelectorAll('[data-revoke]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var kind = btn.getAttribute('data-revoke-kind') || 'approved';
-            var title = kind === 'rejected' ? 'Revoke rejection' :
-              (kind === 'submitted' ? 'Revoke pending leave' : 'Revoke approved leave');
-            openDecisionModal(helpers, title, true, function (comment) {
-              var id = btn.getAttribute('data-revoke');
-              var call = kind === 'rejected'
-                ? c.callServer('apiLeaveRevokeRejection', id, comment, actionOpts(btn, 'Revoking...', adminFeedback()))
-                : c.callServer('apiLeaveCancel', id, actionOpts(btn, 'Revoking...', adminFeedback()));
-              call.then(function () {
-                invalidateLeaveAfterRequestMutation_();
-                setFlash('Leave decision revoked.', 'success', 'leave-admin');
-                renderAdmin(page, helpers);
-              });
-            });
-          });
+        bindLeaveRevokeActions_(page, helpers, {
+          feedbackEl: adminFeedback(),
+          flashKey: 'leave-admin',
+          onDone: function () { renderAdmin(page, helpers); }
         });
       }
       bindAdminActions();
