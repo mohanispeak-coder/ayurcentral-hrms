@@ -71,16 +71,19 @@ function persistSimulator() {
       var type = types.filter(function (t) { return t.leave_type_id === item.leave_type_id; })[0];
       var prev = find(emp.employee_id, item.leave_type_id, LeaveEngine.previousLeaveYear(item.leave_year));
       var cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
+      var entitled = LeaveEngine.entitledDaysForLeaveYear
+        ? LeaveEngine.entitledDaysForLeaveYear(emp.joining_date, item.leave_year, 1, type.annual_entitlement_days)
+        : type.annual_entitlement_days;
       store.push({
         employee_id: emp.employee_id,
         leave_type_id: item.leave_type_id,
         leave_year: String(item.leave_year),
-        entitled_days: type.annual_entitlement_days,
+        entitled_days: entitled,
         used_days: 0,
         pending_days: 0,
         carried_forward_days: cf,
         available_days: LeaveEngine.availableDays({
-          entitled_days: type.annual_entitlement_days,
+          entitled_days: entitled,
           used_days: 0,
           pending_days: 0,
           carried_forward_days: cf
@@ -126,6 +129,12 @@ const hireCurrent = plan({
   existing: []
 });
 check('hire current year allocates that year', yearsFor(hireCurrent, 'LT001').join(',') === '2026');
+check('lop type not balance-planned', yearsFor(hireCurrent, 'LT003').length === 0);
+
+var proRataJoin = LeaveEngine.entitledDaysForLeaveYear('2024-07-01', '2024', 1, 12);
+check('join-year pro-rata entitlement', proRataJoin > 5 && proRataJoin < 7, 'got ' + proRataJoin);
+var fullAfterJoin = LeaveEngine.entitledDaysForLeaveYear('2024-07-01', '2025', 1, 12);
+check('year after join full entitlement', fullAfterJoin === 12);
 
 const hirePrevious = plan({
   joiningDate: '2025-03-01',
@@ -233,12 +242,13 @@ const types = [CL, SL];
 
 sim.grant(emp, types, '2024-06-01', '2024');
 const y2024 = sim.find('SAPL-1001', 'LT001', '2024');
-check('year X entitled from policy', y2024 && y2024.entitled_days === 12 && y2024.available_days === 12);
+var y2024Entitled = LeaveEngine.entitledDaysForLeaveYear('2024-01-10', '2024', 1, 12);
+check('year X entitled from policy', y2024 && y2024.entitled_days === y2024Entitled && y2024.available_days === y2024Entitled);
 
 sim.apply('SAPL-1001', 'LT001', '2024', 3);
 sim.approve('SAPL-1001', 'LT001', '2024', 3);
 check('year X after approve', sim.find('SAPL-1001', 'LT001', '2024').used_days === 3 &&
-  sim.find('SAPL-1001', 'LT001', '2024').available_days === 9);
+  sim.find('SAPL-1001', 'LT001', '2024').available_days === y2024Entitled - 3);
 
 sim.grant(emp, types, '2025-01-05', '2025');
 const y2025 = sim.find('SAPL-1001', 'LT001', '2025');
@@ -275,7 +285,8 @@ check('insufficient balance in later year still blocked', blocked);
 
 sim.apply('SAPL-1001', 'LT002', '2026', 1);
 sim.approve('SAPL-1001', 'LT002', '2026', 1);
-check('different leave type has its own year rows', sim.find('SAPL-1001', 'LT002', '2024').entitled_days === 6 &&
+var sl2024Entitled = LeaveEngine.entitledDaysForLeaveYear('2024-01-10', '2024', 1, 6);
+check('different leave type has its own year rows', sim.find('SAPL-1001', 'LT002', '2024').entitled_days === sl2024Entitled &&
   sim.find('SAPL-1001', 'LT002', '2026').used_days === 1);
 
 const changedPolicy = persistSimulator();

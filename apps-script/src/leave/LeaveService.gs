@@ -320,15 +320,22 @@ var LeaveService = (function () {
     return rows;
   }
 
-  function buildNewBalanceRecordLocked_(employeeId, type, leaveYear, balanceIndex) {
+  function buildNewBalanceRecordLocked_(employeeId, type, leaveYear, balanceIndex, joiningDate, startMonth) {
+    if (!type.requires_balance) return null;
     var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear), balanceIndex);
     var cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
+    var entitled = LeaveEngine.entitledDaysForLeaveYear(
+      joiningDate,
+      leaveYear,
+      startMonth != null ? startMonth : leaveYearStartMonth_(),
+      type.annual_entitlement_days
+    );
     var record = {
       leave_balance_id: nextLeaveBalanceIdLocked_(),
       employee_id: employeeId,
       leave_type_id: type.leave_type_id,
       leave_year: String(leaveYear),
-      entitled_days: LeaveEngine.toNumber(type.annual_entitlement_days),
+      entitled_days: entitled,
       used_days: 0,
       pending_days: 0,
       carried_forward_days: cf,
@@ -339,13 +346,14 @@ var LeaveService = (function () {
     return record;
   }
 
-  function applyPlanLocked_(employeeId, typeMap, plan, balanceIndex) {
+  function applyPlanLocked_(employeeId, typeMap, plan, balanceIndex, joiningDate, startMonth) {
     var toInsert = [];
     (plan || []).forEach(function (item) {
       var type = typeMap[String(item.leave_type_id)];
-      if (!type) return;
+      if (!type || !type.requires_balance) return;
       if (findBalance_(employeeId, type.leave_type_id, item.leave_year, balanceIndex)) return;
-      var record = buildNewBalanceRecordLocked_(employeeId, type, item.leave_year, balanceIndex);
+      var record = buildNewBalanceRecordLocked_(employeeId, type, item.leave_year, balanceIndex, joiningDate, startMonth);
+      if (!record) return;
       toInsert.push(record);
       putBalanceInIndex_(balanceIndex, record);
     });
@@ -376,11 +384,23 @@ var LeaveService = (function () {
     });
   }
 
-  function ensureBalanceLocked_(employeeId, type, leaveYear, createIfMissing, balanceIndex) {
+  function ensureBalanceLocked_(employeeId, type, leaveYear, createIfMissing, balanceIndex, joiningDate) {
     var existing = findBalance_(employeeId, type.leave_type_id, leaveYear, balanceIndex);
     if (existing) return existing;
-    if (!createIfMissing) return null;
-    var record = buildNewBalanceRecordLocked_(employeeId, type, leaveYear, balanceIndex);
+    if (!createIfMissing || !type.requires_balance) return null;
+    if (joiningDate === undefined) {
+      var empRow = getEmployee_(employeeId);
+      joiningDate = empRow ? empRow.joining_date : null;
+    }
+    var record = buildNewBalanceRecordLocked_(
+      employeeId,
+      type,
+      leaveYear,
+      balanceIndex,
+      joiningDate,
+      leaveYearStartMonth_()
+    );
+    if (!record) return null;
     return writeBalance_(record, balanceIndex);
   }
 
@@ -1197,16 +1217,24 @@ var LeaveService = (function () {
     }
 
     function run_(balanceIndex) {
-      var types = listTypes_(true);
+      var startMonth = leaveYearStartMonth_();
+      var types = listTypes_(true).filter(function (t) { return t.requires_balance; });
       var plan = LeaveEngine.planBalanceGrants({
         joiningDate: emp.joining_date,
         asOfDate: todayDateOnly_(),
-        startMonth: leaveYearStartMonth_(),
+        startMonth: startMonth,
         targetYear: throughYear,
         types: types,
         existing: collectExisting_(balanceIndex)
       });
-      var inserted = applyPlanLocked_(employeeId, typeMapFromList_(types), plan, balanceIndex);
+      var inserted = applyPlanLocked_(
+        employeeId,
+        typeMapFromList_(types),
+        plan,
+        balanceIndex,
+        emp.joining_date,
+        startMonth
+      );
       if (inserted.length) {
         AuditService.log(
           HRMS.LEAVE_AUDIT.GRANT,
@@ -1229,7 +1257,7 @@ var LeaveService = (function () {
     }
 
     var peekIndex = loadBalanceIndex_();
-    var peekTypes = listTypes_(true);
+    var peekTypes = listTypes_(true).filter(function (t) { return t.requires_balance; });
     var peekPlan = LeaveEngine.planBalanceGrants({
       joiningDate: emp.joining_date,
       asOfDate: todayDateOnly_(),
@@ -1251,7 +1279,8 @@ var LeaveService = (function () {
       var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(function (e) {
         return String(e.status).toUpperCase() === 'ACTIVE';
       });
-      var types = listTypes_(true);
+      var startMonth = leaveYearStartMonth_();
+      var types = listTypes_(true).filter(function (t) { return t.requires_balance; });
       var typeMap = typeMapFromList_(types);
       var balanceIndex = loadBalanceIndex_();
       var toInsert = [];
@@ -1259,7 +1288,7 @@ var LeaveService = (function () {
         var plan = LeaveEngine.planBalanceGrants({
           joiningDate: emp.joining_date,
           asOfDate: todayDateOnly_(),
-          startMonth: leaveYearStartMonth_(),
+          startMonth: startMonth,
           targetYear: year,
           types: types,
           existing: existingKeysForEmployee_(balanceIndex, emp.employee_id)
@@ -1268,7 +1297,15 @@ var LeaveService = (function () {
           var type = typeMap[String(item.leave_type_id)];
           if (!type) return;
           if (findBalanceInIndex_(balanceIndex, emp.employee_id, type.leave_type_id, item.leave_year)) return;
-          var record = buildNewBalanceRecordLocked_(emp.employee_id, type, item.leave_year, balanceIndex);
+          var record = buildNewBalanceRecordLocked_(
+            emp.employee_id,
+            type,
+            item.leave_year,
+            balanceIndex,
+            emp.joining_date,
+            startMonth
+          );
+          if (!record) return;
           toInsert.push(record);
           putBalanceInIndex_(balanceIndex, record);
         });

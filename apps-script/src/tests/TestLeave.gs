@@ -45,6 +45,11 @@ function testLeave_Engine() {
   check('grant-through-next-year', lateYearPlan.length === 2 &&
     lateYearPlan[0].leave_year === '2025' && lateYearPlan[1].leave_year === '2026');
 
+  var proRata = LeaveEngine.entitledDaysForLeaveYear('2024-07-01', '2024', 1, 12);
+  check('join-year-pro-rata', proRata > 5 && proRata < 7, 'got ' + proRata);
+  check('later-year-full-entitlement', LeaveEngine.entitledDaysForLeaveYear('2024-07-01', '2025', 1, 12) === 12);
+  check('dmy-join-parse', LeaveEngine.getLeaveYear('15/03/2020', 1) === '2020');
+
   var overlapFull = LeaveEngine.requestsOverlap(
     { start_date: '2026-04-06', end_date: '2026-04-10', is_half_day: false },
     { start_date: '2026-04-09', end_date: '2026-04-12', is_half_day: false }

@@ -447,11 +447,17 @@ var EmployeeService = (function () {
     var seeded = 0;
     years.forEach(function (year) {
       types.forEach(function (t) {
+        if (typeof LeaveEngine !== 'undefined' && LeaveEngine.isTruthy && t.hasOwnProperty('requires_balance') &&
+            !LeaveEngine.isTruthy(t.requires_balance)) {
+          return;
+        }
         var already = existing.some(function (b) {
           return String(b.leave_type_id) === String(t.leave_type_id) && String(b.leave_year) === String(year);
         });
         if (already) return;
-        var entitled = Number(t.annual_entitlement_days) || 0;
+        var entitled = (typeof LeaveEngine !== 'undefined' && LeaveEngine.entitledDaysForLeaveYear)
+          ? LeaveEngine.entitledDaysForLeaveYear(emp && emp.joining_date, year, startMonth, t.annual_entitlement_days)
+          : (Number(t.annual_entitlement_days) || 0);
         var prevYear = String((Number(year) || 0) - 1);
         var prev = null;
         for (var i = 0; i < existing.length; i++) {
@@ -551,7 +557,7 @@ var EmployeeService = (function () {
         department: trim_(payload.department),
         designation: trim_(payload.designation),
         manager_employee_id: trim_(payload.manager_employee_id),
-        joining_date: trim_(payload.joining_date),
+        joining_date: toIsoDate_(trim_(payload.joining_date)) || trim_(payload.joining_date),
         employment_type: validated.employment_type,
         location: trim_(payload.location),
         status: HRMS.EMPLOYEE_STATUS.ACTIVE,
@@ -660,6 +666,9 @@ var EmployeeService = (function () {
       }
     });
     if (updates.work_email) updates.work_email = normalizeEmail_(updates.work_email);
+    if (updates.hasOwnProperty('joining_date')) {
+      updates.joining_date = toIsoDate_(updates.joining_date) || updates.joining_date;
+    }
     if (updates.employment_type) updates.employment_type = String(updates.employment_type).toUpperCase();
     if (updates.first_name || updates.last_name) {
       if (!trim_(payload.display_name) && payload.first_name && payload.last_name) {

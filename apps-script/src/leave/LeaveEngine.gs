@@ -53,9 +53,19 @@ var LeaveEngine = (function () {
     if (Object.prototype.toString.call(value) === '[object Date]') {
       if (isNaN(value.getTime())) return null;
       d = value;
-    } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-      var parts = value.substring(0, 10).split('-');
-      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else if (typeof value === 'string') {
+      var s = String(value).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        var parts = s.substring(0, 10).split('-');
+        d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      } else {
+        var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+        if (dmy) {
+          d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+        } else {
+          d = new Date(s);
+        }
+      }
     } else {
       d = new Date(value);
     }
@@ -164,6 +174,53 @@ var LeaveEngine = (function () {
   }
 
   /**
+   * Inclusive calendar bounds for a leave year label (e.g. FY April: 2025 → 1 Apr 2025–31 Mar 2026).
+   */
+  function leaveYearDateRange(leaveYear, startMonth) {
+    var y = toNumber(leaveYear);
+    var sm = toNumber(startMonth, 1);
+    if (sm < 1 || sm > 12) sm = 1;
+    if (!y) return { start: null, end: null };
+    var start = new Date(y, sm - 1, 1);
+    var end = new Date(y + 1, sm - 1, 0);
+    return { start: start, end: end };
+  }
+
+  function inclusiveDaysBetween(startDate, endDate) {
+    var start = toDateOnly(startDate);
+    var end = toDateOnly(endDate);
+    if (!start || !end || end.getTime() < start.getTime()) return 0;
+    return Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  }
+
+  /**
+   * Annual entitlement for one leave year. Join-year is pro-rated from DOJ through year-end; later years use full annual.
+   */
+  function entitledDaysForLeaveYear(joiningDate, leaveYear, startMonth, annualEntitlementDays) {
+    var annual = toNumber(annualEntitlementDays, 0);
+    if (annual <= 0) return 0;
+    var range = leaveYearDateRange(leaveYear, startMonth);
+    if (!range.start || !range.end) return roundHalf_(annual);
+    var join = toDateOnly(joiningDate);
+    if (!join) return roundHalf_(annual);
+    var joinYear = getLeaveYear(join, startMonth);
+    if (toNumber(joinYear) > toNumber(leaveYear)) return 0;
+    if (toNumber(joinYear) < toNumber(leaveYear)) return roundHalf_(annual);
+    if (join.getTime() > range.end.getTime()) return 0;
+    if (join.getTime() <= range.start.getTime()) return roundHalf_(annual);
+    var daysEligible = inclusiveDaysBetween(join, range.end);
+    var totalDays = inclusiveDaysBetween(range.start, range.end);
+    if (totalDays <= 0) return 0;
+    return roundHalf_(annual * daysEligible / totalDays);
+  }
+
+  function typeRequiresBalance_(type) {
+    if (!type) return true;
+    if (!type.hasOwnProperty('requires_balance') && !type.hasOwnProperty('requiresBalance')) return true;
+    return isTruthy(type.requires_balance !== undefined ? type.requires_balance : type.requiresBalance);
+  }
+
+  /**
    * Decide which (leave_type_id, leave_year) rows to persist.
    * Existing rows are never overwritten. A newly added leave type is granted
    * for the through-year (and later), not back-filled into already-closed years,
@@ -198,6 +255,7 @@ var LeaveEngine = (function () {
     var planned = [];
     years.forEach(function (year) {
       types.forEach(function (type) {
+        if (!typeRequiresBalance_(type)) return;
         var id = String(type.leave_type_id || '');
         if (!id) return;
         var key = id + '|' + year;
@@ -505,6 +563,8 @@ var LeaveEngine = (function () {
     leaveYearsInclusive: leaveYearsInclusive,
     employeeLeaveYears: employeeLeaveYears,
     isEligibleForLeaveYear: isEligibleForLeaveYear,
+    leaveYearDateRange: leaveYearDateRange,
+    entitledDaysForLeaveYear: entitledDaysForLeaveYear,
     planBalanceGrants: planBalanceGrants,
     matchesStatusFilter: matchesStatusFilter,
     carryForwardDays: carryForwardDays,
