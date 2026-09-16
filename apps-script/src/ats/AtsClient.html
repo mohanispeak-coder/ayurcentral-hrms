@@ -291,7 +291,7 @@
         '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
         '<ol class="bulk-steps"><li>Download template</li><li>Choose Excel/CSV file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
         (kind === 'jobs' ? '<p class="hint">Job closing_date must be DD/MM/YYYY (e.g. 31/12/2026).</p>' : '') +
-        '<div class="primary-next" style="flex-wrap:wrap">' +
+        '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-template">Download template</button>' +
         '<label class="btn btn-secondary" for="ats-' + kind + '-bulk-file">Choose Excel/CSV file</label>' +
         '<input type="file" id="ats-' + kind + '-bulk-file" accept=".xlsx,.xls,.csv" style="display:none">' +

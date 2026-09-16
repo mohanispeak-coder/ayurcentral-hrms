@@ -61,14 +61,14 @@ if (pms) {
 
 const candFn = fnBlock(ats, 'getCandidate', 'addComment');
 
-check('ats-job-candidate-index', /function getJob[\s\S]{0,600}listCandidates\(\)/.test(ats));
-check('ats-job-no-per-app-find', !/function getJob[\s\S]{0,700}findCandidate\(/.test(ats));
+check('ats-job-no-full-candidate-scan', !/function getJob[\s\S]{0,700}listCandidates\(\)/.test(ats));
+check('ats-job-per-app-find', /function getJob[\s\S]{0,700}findCandidate\(/.test(ats));
 check('ats-candidate-job-map', /jobById/.test(candFn) && /packed\.jobs\.forEach/.test(candFn));
 check('ats-list-candidates-once', !/function listCandidates[\s\S]{0,900}listCandidates\(\)[\s\S]{0,400}listCandidates\(\)/.test(ats));
 check('ats-list-app-count-index', /appCountByCandidate/.test(ats));
 check('ats-sharepack-light', !/function getSharePack[\s\S]{0,120}getJob\(/.test(ats));
 check('ats-scoped-interview-index', /interviewsByJob_/.test(ats));
-check('ats-move-stage-locked', /function moveStage[\s\S]{0,120}withScriptLock_/.test(ats));
+check('ats-move-stage-locked', /function moveStage[\s\S]{0,200}runLocked_/.test(ats));
 check('ats-create-job-reentrant-lock', /function createJob[\s\S]{0,400}runLocked_/.test(ats) &&
   /options\.alreadyLocked/.test(ats));
 check('ats-client-patch-move', /patchJobDetailAfterMove_/.test(atsClient));

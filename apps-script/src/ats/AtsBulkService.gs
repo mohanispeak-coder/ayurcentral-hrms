@@ -560,27 +560,58 @@ var AtsBulkService = (function () {
     var payloads = staged.validPayloads || [];
     if (!payloads.length) throw validationError_('No valid rows to import.');
 
+    AtsSchemaService.ensureSheets();
     var created = [];
     var failed = [];
+    var recordsToInsert = [];
+    var now = new Date();
 
-    return withScriptLock_(function () {
-      payloads.forEach(function (payload, index) {
-        try {
-          var lockOpts = { alreadyLocked: true };
-          var result = AtsService.createJob(session, payload, lockOpts);
-          var job = result.job;
-          if (shouldPublish_(payload.publish)) {
-            result = AtsService.transitionJob(session, job.job_id, ATS.JOB_STATUS.PUBLISHED, lockOpts);
-            job = result.job;
-          }
-          created.push({ rowNumber: index + 1, job_id: job.job_id, title: job.title, status: job.status });
-        } catch (e) {
-          failed.push({ title: payload.title || '', message: e.message || 'Create failed.' });
-        }
-      });
-      cache.remove(stageKeyJobs_(uploadId));
-      return { createdCount: created.length, failedCount: failed.length, created: created, failed: failed };
+    payloads.forEach(function (payload, index) {
+      try {
+        var record = AtsService.buildJobInsertRecord(session, payload, {
+          now: now,
+          publish: shouldPublish_(payload.publish)
+        });
+        recordsToInsert.push({ record: record, index: index, title: payload.title || '' });
+      } catch (e) {
+        failed.push({ title: payload.title || '', message: e.message || 'Create failed.' });
+      }
     });
+
+    withScriptLock_(function () {
+      recordsToInsert.forEach(function (item) {
+        item.record.job_id = nextId_(ATS.SEQ.JOB, ATS.ID_PREFIX.JOB);
+      });
+      if (recordsToInsert.length) {
+        DbService.insertRecords(ATS.SHEETS.JOBS, recordsToInsert.map(function (item) { return item.record; }));
+      }
+    });
+
+    recordsToInsert.forEach(function (item) {
+      var job = item.record;
+      try {
+        if (typeof AuditService !== 'undefined' && AuditService.log) {
+          AuditService.log(ATS.AUDIT.JOB_CREATE, 'JobRequisition', job.job_id,
+            'Bulk import: created job "' + job.title + '"');
+        }
+        created.push({
+          rowNumber: item.index + 1,
+          job_id: job.job_id,
+          title: job.title,
+          status: job.status
+        });
+      } catch (ignoreAudit) {
+        created.push({
+          rowNumber: item.index + 1,
+          job_id: job.job_id,
+          title: job.title,
+          status: job.status
+        });
+      }
+    });
+
+    cache.remove(stageKeyJobs_(uploadId));
+    return { createdCount: created.length, failedCount: failed.length, created: created, failed: failed };
   }
 
   function nextId_(seqKey, prefix) {
@@ -607,35 +638,65 @@ var AtsBulkService = (function () {
     var created = [];
     var failed = [];
     var actor = session.email ? String(session.email).toLowerCase() : 'system';
+    var now = new Date();
 
-    return withScriptLock_(function () {
-      payloads.forEach(function (payload, index) {
-        try {
-          var now = new Date();
-          var candidate = AtsRepository.findCandidateByEmail(payload.email);
-          var createdCandidate = false;
-          if (!candidate) {
-            createdCandidate = true;
-            candidate = {
-              candidate_id: nextId_(ATS.SEQ.CANDIDATE, ATS.ID_PREFIX.CAND),
-              full_name: payload.full_name,
-              email: payload.email,
-              phone: payload.phone,
-              location: payload.location || '',
-              education: payload.education || '',
-              experience_summary: payload.experience_summary || '',
-              skills: payload.skills || '',
-              source: payload.source,
-              resume_drive_file_id: '',
-              resume_file_name: '',
-              resume_mime_type: '',
-              hired_employee_id: '',
-              created_at: now,
-              updated_at: now
-            };
-            AtsRepository.insertCandidate(candidate);
-          } else {
-            AtsRepository.updateCandidate(candidate.candidate_id, {
+    var candidateByEmail = {};
+    var candidateById = {};
+    (AtsRepository.listCandidates() || []).forEach(function (c) {
+      var em = normalizeEmail_(c.email);
+      if (em) candidateByEmail[em] = c;
+      candidateById[c.candidate_id] = c;
+    });
+
+    var appDupKeys = {};
+    (AtsRepository.listApplications() || []).forEach(function (a) {
+      var cand = candidateById[a.candidate_id];
+      if (cand && cand.email) {
+        appDupKeys[normalizeEmail_(cand.email) + '|' + a.job_id] = true;
+      }
+    });
+
+    var newCandidates = [];
+    var candidateUpdates = [];
+    var newApplications = [];
+    var newActivities = [];
+    var stagedRows = [];
+
+    payloads.forEach(function (payload, index) {
+      try {
+        var email = normalizeEmail_(payload.email);
+        var dupKey = email + '|' + payload.job_id;
+        if (appDupKeys[dupKey]) {
+          throw conflictError_('Candidate already applied to this job.');
+        }
+
+        var candidate = candidateByEmail[email];
+        var createdCandidate = false;
+        if (!candidate) {
+          createdCandidate = true;
+          candidate = {
+            candidate_id: '',
+            full_name: payload.full_name,
+            email: payload.email,
+            phone: payload.phone,
+            location: payload.location || '',
+            education: payload.education || '',
+            experience_summary: payload.experience_summary || '',
+            skills: payload.skills || '',
+            source: payload.source,
+            resume_drive_file_id: '',
+            resume_file_name: '',
+            resume_mime_type: '',
+            hired_employee_id: '',
+            created_at: now,
+            updated_at: now
+          };
+          newCandidates.push(candidate);
+          candidateByEmail[email] = candidate;
+        } else {
+          candidateUpdates.push({
+            candidate_id: candidate.candidate_id,
+            updates: {
               full_name: payload.full_name || candidate.full_name,
               phone: payload.phone || candidate.phone,
               location: payload.location || candidate.location,
@@ -644,59 +705,95 @@ var AtsBulkService = (function () {
               skills: payload.skills || candidate.skills,
               source: payload.source,
               updated_at: now
-            });
-            candidate = AtsRepository.findCandidate(candidate.candidate_id);
-          }
-
-          var apps = AtsRepository.applicationsForJob(payload.job_id);
-          var enriched = apps.map(function (a) {
-            var c = AtsRepository.findCandidate(a.candidate_id);
-            return { job_id: a.job_id, email: c ? c.email : '', stage: a.stage, application_id: a.application_id };
+            }
           });
-          var dup = AtsEngine.findDuplicateApplication(enriched, payload.email, payload.job_id);
-          if (dup) throw conflictError_('Candidate already applied to this job.');
-
-          var application = {
-            application_id: nextId_(ATS.SEQ.APPLICATION, ATS.ID_PREFIX.APP),
-            job_id: payload.job_id,
-            candidate_id: candidate.candidate_id,
-            stage: ATS.STAGE.APPLIED,
-            cover_letter: payload.cover_letter || '',
-            source: payload.source,
-            applied_at: now,
-            updated_at: now,
-            stage_changed_at: now,
-            stage_changed_by_email: actor
-          };
-          AtsRepository.insertApplication(application);
-
-          var activity = {
-            activity_id: nextId_(ATS.SEQ.ACTIVITY, ATS.ID_PREFIX.ACT),
-            candidate_id: candidate.candidate_id,
-            application_id: application.application_id,
-            job_id: payload.job_id,
-            actor_email: actor,
-            action: 'BULK_IMPORT',
-            summary: 'Bulk import application for job ' + payload.job_id + ' (source: ' + payload.source + ')',
-            created_at: now
-          };
-          AtsRepository.insertActivity(activity);
-
-          created.push({
-            rowNumber: index + 1,
-            candidate_id: candidate.candidate_id,
-            application_id: application.application_id,
-            email: payload.email,
-            source: payload.source,
-            created_candidate: createdCandidate
+          Object.keys(candidateUpdates[candidateUpdates.length - 1].updates).forEach(function (k) {
+            candidate[k] = candidateUpdates[candidateUpdates.length - 1].updates[k];
           });
-        } catch (e) {
-          failed.push({ email: payload.email || '', job_id: payload.job_id || '', message: e.message || 'Import failed.' });
         }
-      });
-      cache.remove(stageKeyCands_(uploadId));
-      return { createdCount: created.length, failedCount: failed.length, created: created, failed: failed };
+
+        appDupKeys[dupKey] = true;
+
+        var application = {
+          application_id: '',
+          job_id: payload.job_id,
+          candidate_id: candidate.candidate_id,
+          stage: ATS.STAGE.APPLIED,
+          cover_letter: payload.cover_letter || '',
+          source: payload.source,
+          applied_at: now,
+          updated_at: now,
+          stage_changed_at: now,
+          stage_changed_by_email: actor
+        };
+        newApplications.push(application);
+
+        var activity = {
+          activity_id: '',
+          candidate_id: candidate.candidate_id,
+          application_id: application.application_id,
+          job_id: payload.job_id,
+          actor_email: actor,
+          action: 'BULK_IMPORT',
+          summary: 'Bulk import application for job ' + payload.job_id + ' (source: ' + payload.source + ')',
+          created_at: now
+        };
+        newActivities.push(activity);
+
+        stagedRows.push({
+          index: index,
+          email: payload.email,
+          source: payload.source,
+          createdCandidate: createdCandidate,
+          candidate: candidate,
+          application: application
+        });
+      } catch (e) {
+        failed.push({ email: payload.email || '', job_id: payload.job_id || '', message: e.message || 'Import failed.' });
+      }
     });
+
+    withScriptLock_(function () {
+      newCandidates.forEach(function (c) {
+        c.candidate_id = nextId_(ATS.SEQ.CANDIDATE, ATS.ID_PREFIX.CAND);
+      });
+      candidateUpdates.forEach(function (row) {
+        AtsRepository.updateCandidate(row.candidate_id, row.updates);
+      });
+      stagedRows.forEach(function (row, i) {
+        var app = newApplications[i];
+        var act = newActivities[i];
+        app.candidate_id = row.candidate.candidate_id;
+        app.application_id = nextId_(ATS.SEQ.APPLICATION, ATS.ID_PREFIX.APP);
+        row.application.application_id = app.application_id;
+        act.candidate_id = row.candidate.candidate_id;
+        act.application_id = app.application_id;
+        act.activity_id = nextId_(ATS.SEQ.ACTIVITY, ATS.ID_PREFIX.ACT);
+      });
+      if (newCandidates.length) {
+        DbService.insertRecords(ATS.SHEETS.CANDIDATES, newCandidates);
+      }
+      if (newApplications.length) {
+        DbService.insertRecords(ATS.SHEETS.APPLICATIONS, newApplications);
+      }
+      if (newActivities.length) {
+        DbService.insertRecords(ATS.SHEETS.ACTIVITY, newActivities);
+      }
+    });
+
+    stagedRows.forEach(function (row) {
+      created.push({
+        rowNumber: row.index + 1,
+        candidate_id: row.candidate.candidate_id,
+        application_id: row.application.application_id,
+        email: row.email,
+        source: row.source,
+        created_candidate: row.createdCandidate
+      });
+    });
+
+    cache.remove(stageKeyCands_(uploadId));
+    return { createdCount: created.length, failedCount: failed.length, created: created, failed: failed };
   }
 
   return {

@@ -711,7 +711,7 @@
         '<summary>Bulk upload salary structures (one-time setup)</summary>' +
         '<div class="collapsible-section-body"><p class="page-lede">Set up or update salary structures in bulk — do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
         '<ol class="bulk-steps"><li>Download Excel or CSV template</li><li>Choose file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
-        '<div class="primary-next" style="flex-wrap:wrap">' +
+        '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-template">Download Excel template</button>' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-csv">Download CSV template</button>' +
         '<label class="btn btn-secondary" for="comp-bulk-file">Choose Excel/CSV file</label>' +
@@ -731,7 +731,7 @@
         '<div class="collapsible-section-body">' +
         '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only — you fill working days and attendance columns, then upload.</p>' +
         '<ol class="bulk-steps"><li>Download template (ID, name, email pre-filled — attendance columns blank)</li><li>Fill working_days, days_present, days_absent, leave_days</li><li>Choose Excel/CSV file and validate</li><li>Confirm import</li></ol>';
-      html += '<div class="primary-next" style="flex-wrap:wrap">';
+      html += '<div class="bulk-action-bar">';
       if (hasRun && runId) {
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
       }

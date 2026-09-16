@@ -404,14 +404,10 @@ var AtsService = (function () {
     var relatedIv = interviews.filter(function (iv) { return trim_(iv.job_id) === trim_(job.job_id); });
     AtsPermissionService.requireJob(session, job, relatedIv);
     var applications = AtsRepository.applicationsForJob(job.job_id);
-    var candidateIndex = {};
-    AtsRepository.listCandidates().forEach(function (c) {
-      candidateIndex[c.candidate_id] = c;
-    });
     var candidatesById = {};
     applications.forEach(function (app) {
       if (!candidatesById[app.candidate_id]) {
-        candidatesById[app.candidate_id] = candidateIndex[app.candidate_id] || null;
+        candidatesById[app.candidate_id] = AtsRepository.findCandidate(app.candidate_id);
       }
     });
     var hired = applications.filter(function (a) {
@@ -431,27 +427,44 @@ var AtsService = (function () {
     };
   }
 
+  function buildJobInsertRecord_(session, payload, options) {
+    options = options || {};
+    var fields = jobFromPayload_(payload, null);
+    var now = options.now || now_();
+    var record = {
+      job_id: options.job_id || '',
+      public_slug: '',
+      status: ATS.JOB_STATUS.DRAFT,
+      published_at: '',
+      paused_at: '',
+      closed_at: '',
+      created_at: now,
+      created_by_email: actorEmail_(session),
+      updated_at: now,
+      updated_by_email: actorEmail_(session)
+    };
+    Object.keys(fields).forEach(function (k) { record[k] = fields[k]; });
+    if (options.publish) {
+      record.status = ATS.JOB_STATUS.PUBLISHED;
+      record.published_at = now;
+      if (!trim_(record.public_slug)) {
+        var uuid = '';
+        try { uuid = Utilities.getUuid(); } catch (ignore) {}
+        record.public_slug = AtsEngine.newPublicSlug(uuid || Math.random);
+      }
+    }
+    return record;
+  }
+
   function createJob(session, payload, options) {
     options = options || {};
     AtsPermissionService.requireManage(session);
-    AtsSchemaService.ensureSheets();
-    var fields = jobFromPayload_(payload, null);
-    var now = now_();
-    var record;
+    if (!options.skipEnsureSheets) {
+      AtsSchemaService.ensureSheets();
+    }
+    var record = buildJobInsertRecord_(session, payload, options);
     runLocked_(function () {
-      record = {
-        job_id: nextId_(ATS.SEQ.JOB, ATS.ID_PREFIX.JOB),
-        public_slug: '',
-        status: ATS.JOB_STATUS.DRAFT,
-        published_at: '',
-        paused_at: '',
-        closed_at: '',
-        created_at: now,
-        created_by_email: actorEmail_(session),
-        updated_at: now,
-        updated_by_email: actorEmail_(session)
-      };
-      Object.keys(fields).forEach(function (k) { record[k] = fields[k]; });
+      record.job_id = nextId_(ATS.SEQ.JOB, ATS.ID_PREFIX.JOB);
       AtsRepository.insertJob(record);
     }, options.alreadyLocked);
     audit_(ATS.AUDIT.JOB_CREATE, 'JobRequisition', record.job_id, 'Created job "' + record.title + '"');
@@ -636,9 +649,10 @@ var AtsService = (function () {
     return getCandidate(session, candidate.candidate_id);
   }
 
-  function moveStage(session, applicationId, toStage, comment) {
+  function moveStage(session, applicationId, toStage, comment, options) {
+    options = options || {};
     AtsPermissionService.requireAccess(session);
-    return withScriptLock_(function () {
+    return runLocked_(function () {
       var app = AtsRepository.findApplication(applicationId);
       if (!app) throw notFoundError_('Application not found.');
       var job = AtsRepository.findJob(app.job_id);
@@ -697,7 +711,7 @@ var AtsService = (function () {
         }
       });
       return { application: sanitizeApplication_(updated, job), pipeline: pipeline_() };
-    });
+    }, options.alreadyLocked);
   }
 
   function scheduleInterview(session, payload) {
@@ -713,6 +727,7 @@ var AtsService = (function () {
     if (!v.ok) throw validationError_('Please correct the interview fields.', v.errors);
     var now = now_();
     var record;
+    var lockOpts = { alreadyLocked: true };
     withScriptLock_(function () {
       record = {
         interview_id: nextId_(ATS.SEQ.INTERVIEW, ATS.ID_PREFIX.INT),
@@ -732,12 +747,12 @@ var AtsService = (function () {
         updated_at: now
       };
       AtsRepository.insertInterview(record);
+      if (AtsEngine.upper(app.stage) === ATS.STAGE.SHORTLISTED || AtsEngine.upper(app.stage) === ATS.STAGE.SCREENING) {
+        try {
+          moveStage(session, app.application_id, ATS.STAGE.INTERVIEW, '', lockOpts);
+        } catch (ignore) {}
+      }
     });
-    if (AtsEngine.upper(app.stage) === ATS.STAGE.SHORTLISTED || AtsEngine.upper(app.stage) === ATS.STAGE.SCREENING) {
-      try {
-        moveStage(session, app.application_id, ATS.STAGE.INTERVIEW, '');
-      } catch (ignore) {}
-    }
     activity_(app.candidate_id, app.application_id, app.job_id, actorEmail_(session), 'INTERVIEW',
       'Interview scheduled' + (record.interviewer_name ? (' with ' + record.interviewer_name) : ''));
     audit_(ATS.AUDIT.INTERVIEW, 'Interview', record.interview_id, 'Interview scheduled');
@@ -1063,6 +1078,7 @@ var AtsService = (function () {
     getDashboard: getDashboard,
     listJobs: listJobs,
     getJob: getJob,
+    buildJobInsertRecord: buildJobInsertRecord_,
     createJob: createJob,
     updateJob: updateJob,
     transitionJob: transitionJob,
