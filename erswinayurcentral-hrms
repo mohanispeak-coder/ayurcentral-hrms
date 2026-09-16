@@ -1,0 +1,66 @@
+[33m19c7282[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mcursor/experiment-500f[m[33m, [m[1;31morigin/cursor/experiment-500f[m[33m)[m Admin UI: configure HRMS module access per role (Employee/Manager/HR/Admin)
+[33m48c1ea8[m Bump client assets version 2026.09.16.4
+[33m03b8c7d[m Rename SettingsAdminService.gs so it loads after Constants.gs in Apps Script
+[33m1b77e2e[m Fix AdminSettingsService HRMS.ROLES init crash (Apps Script load order)
+[33m2d7341a[m Fix AdminSettingsService load order: avoid HRMS.ROLES at init
+[33m3909383[m Bump client assets version to reload module UI after deploy
+[33mb16610b[m Fix leave names lookup, manager revoke permission, payroll bulk visibility, org settings tab
+[33m7984a2a[m HRMS: leave names, settings UI, employee-create email, payroll attendance bulk actions
+[33mf48bd52[m Merge branch 'cursor/experiment-500f' of https://github.com/mohanispeak-coder/ayurcentral-hrms into cursor/experiment-500f
+[33m4f64106[m ATS: candidate partial refresh after schedule and richer interview emails.
+[33m481b5ea[m Rebase onto manager ATS/leave updates; fix browser back/forward navigation
+[33m3e9094f[m Targeted fixes: work email sync blur, jobs template DD-MM-YYYY sample, bulk date tests
+[33mb9f400a[m Fix jobs bulk closing_date: normalize DD/MM and DD-MM before validation
+[33m483aa8c[m Four targeted fixes: employee login email sync, manager leave revoke, job dates, candidates list
+[33mf54c53e[m Extend leave notifications, ATS client flows, and add validation docs and diagrams.
+[33m84abb58[m Improve ATS concurrency: re-entrant locks, batch bulk writes, UI spacing
+[33m8402fac[m Fix ATS admin access, bulk job locks, and DD/MM closing dates
+[33m69be05f[m Payroll: fix blank attendance UI, open bulk upload, sync employees
+[33mce39d15[m Fix leave-perf seed fallback regex after seed helper growth
+[33meb5b6ec[m Leave balances: pro-rata by DOJ, per-year grants, carry-forward chain
+[33m0bcb09e[m UI: sync in-app navigation with browser back/forward (history API)
+[33m7e50040[m Leave: record approver and timestamp per approval stage on LeaveRequests
+[33m6bc7c41[m Fix leave allocation so entitlement continues after the joining year.
+[33m5bbf754[m docs: full HRMS PDF with repo index and Apps Script file catalog
+[33mb016f66[m Leave approvals: select all / multi-select bulk approve and reject
+[33m73b4871[m[33m ([m[1;32mmain[m[33m)[m Leave: stage 2 for employees is HR or Admin; manager apps stay HR then Admin
+[33m9f40b94[m Leave: require both HR then Admin for employees (no admin skip at HR stage)
+[33m986599a[m Leave: two-stage approval (manager→HR/admin; manager apps HR→admin; HR→admin)
+[33mc33b632[m Hide Leave Approvals nav from managers (approve is HR/Admin/Owner only)
+[33m468a7ae[m Remove Compensation from sidebar navigation.
+[33m489d13e[m Group Compensation under Payroll; show salary structure when no payroll run
+[33m4bb1b45[m Merge main PMS removal into experiment branch; keep OWNER and payroll experiment work
+[33m5d709c8[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge pull request #2 from mohanispeak-coder/cursor/remove-pms-8d47
+[33m8a92c9b[m Remove Performance (PMS) module from app and tests
+[33m85e6ee3[m Fix cross-module auth fragmentation after OWNER role.
+[33m4deb25f[m UX: payroll scroll fix, leave revoke, OWNER role
+[33madc3e1f[m Phase 5 - PMS and ATS performance
+[33m2493008[m Phase 4 - Dashboard and notifications performance
+[33md325f80[m Phase 3 - Leave performance optimization
+[33md4d1e06[m Restore Performance nav and payslip email notifications
+[33m262242b[m Hide Performance nav, PDF payslips, global button lock, no payslip email
+[33m1b2e10f[m Debounce employee search and lazy-load profile tabs.
+[33m0079fad[m Batch payroll sheet writes instead of per-employee updates.
+[33mf7d35d9[m Document Sheets performance baseline using existing HrmsPerf.
+[33med9ea46[m Add prominent attendance upload gate banner and deploy build label
+[33md3784ab[m Fix attendance upload visibility and blank template rows
+[33ma3d914d[m Align attendance bulk upload with choose-file then validate flow
+[33mb358a3d[m Document Google Drive API setup for bulk Excel uploads
+[33ma992404[m Add collapsible arrow sections for template bulk uploads
+[33m36466c4[m Enforce attendance-first payroll workflow before calculate
+[33m31c78e2[m Fix attendance template download and include all employees with name and email
+[33m3c56cb1[m Fix bulk upload visibility and add source column to candidates list
+[33m62f7bb8[m Add bulk upload for salary structures, payroll attendance, and ATS
+[33mc3e4948[m Fix sidebar hamburger toggle on desktop by collapsing sidebar when closed.
+[33m0ecee09[m Add prominent per-employee payslip generator box in Payslips card.
+[33maa4e7b0[m Per-employee payslip generate with email notification only to that employee.
+[33m48857d8[m Fix payroll blockers UX and add per-employee payslip generation.
+[33m3243e83[m Payroll one-page UX with Excel bulk upload and salary structure fixes.
+[33m97d6974[m Fix document upload Drive setup and complete bulk upload UX
+[33m2b7423b[m Fix bulk upload template download and Excel validation
+[33m08f97d4[m Add clasp npm scripts for Apps Script deploy
+[33mf22b07d[m Add per-employee app access flags and multi-document upload
+[33m321d346[m Add bulk upload CSV template and webapp testing guide
+[33m07a54a9[m Add form hint style for employee code helper text
+[33m96be39b[m Add manual employee codes and bulk employee upload
+[33mcba5c1c[m Initial commit: Ayurcentral HRMS Apps Script application.
