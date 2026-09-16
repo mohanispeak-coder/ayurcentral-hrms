@@ -457,7 +457,8 @@
       }
       html += '</form>';
       if (mode === 'create') {
-        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create login (role EMPLOYEE)</label>';
+        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create Google login</label>';
+        html += '<p class="form-hint">New logins are always created as <strong>Employee</strong>. Only Admin or Owner can change HRMS role later on the employee profile.</p>';
         html += fieldGroup('google_login_email', 'Google login email',
           input('google_login_email', 'email', emp.google_login_email) +
           '<p class="form-hint">Required when login is enabled. Can match work email.</p>');
@@ -666,7 +667,7 @@
       var tabBtns = tabs.map(function (t) {
         var labels = {
           personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary',
-          documents: 'Documents', payslips: 'Payslips', 'app-access': 'App access'
+          documents: 'Documents', payslips: 'Payslips', 'app-access': 'Login & role'
         };
         return '<button type="button" class="emp-tab' + (t === savedTab ? ' active' : '') + '" data-tab="' + t + '">' + labels[t] + '</button>';
       }).join('');
@@ -686,7 +687,7 @@
       if (emp.can_view_payslips) html += '<div class="tab-panel' + (savedTab === 'payslips' ? ' active' : '') + '" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
       if (emp.can_manage_app_access) {
         html += '<div class="tab-panel' + (savedTab === 'app-access' ? ' active' : '') + '" data-panel="app-access"><div id="app-access-panel">' +
-          loadingHtml('Loading app access…') + '</div></div>';
+          loadingHtml('Loading login & role…') + '</div></div>';
       }
       page.innerHTML = html;
 
@@ -1284,8 +1285,28 @@
           return;
         }
         var access = data.access || {};
+        var roleHtml = '';
+        if (data.role_is_owner) {
+          roleHtml = '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + ' · Role: Owner (cannot be changed)</p>';
+        } else if (data.can_edit_role && data.assignable_roles && data.assignable_roles.length) {
+          var roleOpts = data.assignable_roles.map(function (r) {
+            var sel = String(data.role || '').toUpperCase() === String(r).toUpperCase() ? ' selected' : '';
+            return '<option value="' + escapeHtml(r) + '"' + sel + '>' + escapeHtml(r) + '</option>';
+          }).join('');
+          roleHtml = '<div class="form-grid emp-form-grid">' +
+            fieldGroup('acc-role', 'HRMS role',
+              '<select class="form-select" id="acc-role">' + roleOpts + '</select>' +
+              '<p class="form-hint">Admin/Owner only. Managers and HR are assigned here after hire.</p>') +
+            '</div>' +
+            '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + '</p>';
+        } else {
+          roleHtml = '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + ' · Role: ' + escapeHtml(data.role || '') + '</p>' +
+            '<p class="form-hint">Only Admin/Owner can change HRMS role. New employees are created as Employee.</p>';
+        }
+        var saveLabel = data.can_edit_role ? 'Save role & access' : 'Save access';
         el.innerHTML =
           '<p class="hint">Control what this employee can access in the app. HR and Admin always have full access.</p>' +
+          roleHtml +
           '<div class="form-grid emp-form-grid">' +
           '<label class="checkbox-row"><input type="checkbox" id="acc-documents"' +
           (access.access_documents ? ' checked' : '') + '> Download documents</label>' +
@@ -1294,8 +1315,7 @@
           '<label class="checkbox-row"><input type="checkbox" id="acc-leave"' +
           (access.access_leave ? ' checked' : '') + '> Leave apply and history</label>' +
           '</div>' +
-          '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + ' · Role: ' + escapeHtml(data.role || '') + '</p>' +
-          '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-app-access">Save access</button></div>' +
+          '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-app-access">' + saveLabel + '</button></div>' +
           '<div id="emp-app-access-feedback" class="action-feedback hidden" role="status"></div>';
         if ($('btn-save-app-access')) {
           $('btn-save-app-access').addEventListener('click', function () {
@@ -1316,15 +1336,19 @@
         access_payslips: $('acc-payslips') && $('acc-payslips').checked,
         access_leave: $('acc-leave') && $('acc-leave').checked
       };
+      var roleEl = $('acc-role');
+      if (roleEl) payload.role = roleEl.value;
+      var saveBtn = $('btn-save-app-access');
+      var successMsg = roleEl ? 'Role and access saved.' : 'Access saved.';
       callServer('apiSaveEmployeeAppAccess', emp.employee_id, payload, {
-        button: $('btn-save-app-access'),
+        button: saveBtn,
         loadingText: 'Saving…',
         feedback: feedback
       }).then(function (data) {
         if (empViewCache.extras[emp.employee_id]) {
           empViewCache.extras[emp.employee_id].appAccess = data;
         }
-        if (setActionFeedback) setActionFeedback(feedback, 'App access saved.', 'success');
+        if (setActionFeedback) setActionFeedback(feedback, successMsg, 'success');
       });
     }
 

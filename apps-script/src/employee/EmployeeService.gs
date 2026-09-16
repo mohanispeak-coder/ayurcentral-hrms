@@ -184,6 +184,7 @@ var EmployeeService = (function () {
     out.can_change_status = hr;
     out.can_upload_documents = hr;
     out.can_manage_app_access = hr && !isSelf;
+    out.can_manage_user_role = PermissionService.isAdmin(session) && !isSelf;
     if (hr) {
       out.can_view_documents = true;
       out.can_view_leave = true;
