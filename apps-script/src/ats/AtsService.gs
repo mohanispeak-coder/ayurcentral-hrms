@@ -102,6 +102,38 @@ var AtsService = (function () {
     return list;
   }
 
+  function formatNotifyWhen_(value) {
+    if (!value) return '';
+    try {
+      var d = value instanceof Date ? value : new Date(value);
+      if (isNaN(d.getTime())) return trim_(value);
+      var tz = Session.getScriptTimeZone() || 'Asia/Kolkata';
+      return Utilities.formatDate(d, tz, 'dd MMM yyyy, hh:mm a');
+    } catch (e) {
+      return toIso_(value);
+    }
+  }
+
+  function atsNotifyPack_(appRow, job, extras) {
+    extras = extras || {};
+    var cand = extras.candidate;
+    if (!cand && appRow && appRow.candidate_id) {
+      cand = AtsRepository.findCandidate(appRow.candidate_id);
+    }
+    var pack = {
+      application_id: appRow.application_id,
+      job_id: job.job_id,
+      candidate_id: appRow.candidate_id,
+      title: job.title,
+      requisition_title: job.title,
+      candidate_name: cand ? trim_(cand.full_name) : trim_(extras.candidate_name || '')
+    };
+    if (extras.interview_at) {
+      pack.interview_at = formatNotifyWhen_(extras.interview_at);
+    }
+    return pack;
+  }
+
   function resumeMaxBytes_() {
     try {
       var n = Number(ConfigService.getSetting(ATS.SETTINGS.RESUME_MAX, ATS.LIMITS.RESUME_MAX_BYTES));
@@ -744,12 +776,8 @@ var AtsService = (function () {
       AtsRepository.insertActivity(activityRow);
       audit_(ATS.AUDIT.STAGE, 'Application', app.application_id, note);
       fireAtsNotify_(function () {
-        var packed = {
-          application_id: updated.application_id,
-          job_id: job.job_id,
-          candidate_id: app.candidate_id,
-          title: job.title
-        };
+        var cand = AtsRepository.findCandidate(app.candidate_id);
+        var packed = atsNotifyPack_(updated, job, { candidate: cand });
         var recips = atsInternalRecipients_(job);
         if (target === ATS.STAGE.SHORTLISTED) {
           NotificationAtsAdapter.notifyShortlisted(packed, recips);
@@ -777,6 +805,7 @@ var AtsService = (function () {
     if (!v.ok) throw validationError_('Please correct the interview fields.', v.errors);
     var now = now_();
     var record;
+    var updatedAppView = null;
     var lockOpts = { alreadyLocked: true };
     withScriptLock_(function () {
       record = {
@@ -800,7 +829,8 @@ var AtsService = (function () {
       AtsRepository.insertInterview(record);
       if (AtsEngine.upper(app.stage) === ATS.STAGE.SHORTLISTED || AtsEngine.upper(app.stage) === ATS.STAGE.SCREENING) {
         try {
-          moveStage(session, app.application_id, ATS.STAGE.INTERVIEW, '', lockOpts);
+          var moved = moveStage(session, app.application_id, ATS.STAGE.INTERVIEW, '', lockOpts);
+          updatedAppView = moved && moved.application ? moved.application : null;
         } catch (ignore) {}
       }
     });
@@ -808,12 +838,8 @@ var AtsService = (function () {
       'Interview scheduled' + (record.interviewer_name ? (' with ' + record.interviewer_name) : ''));
     audit_(ATS.AUDIT.INTERVIEW, 'Interview', record.interview_id, 'Interview scheduled');
     fireAtsNotify_(function () {
-      var packed = {
-        application_id: app.application_id,
-        job_id: job.job_id,
-        candidate_id: app.candidate_id,
-        title: job.title
-      };
+      var cand = AtsRepository.findCandidate(app.candidate_id);
+      var packed = atsNotifyPack_(app, job, { candidate: cand, interview_at: record.scheduled_at });
       var recips = atsInternalRecipients_(job);
       if (record.interviewer_employee_id && typeof NotificationService !== 'undefined') {
         recips = recips.concat([NotificationService.resolveRecipient({ employee_id: record.interviewer_employee_id })]);
@@ -821,14 +847,14 @@ var AtsService = (function () {
         recips = recips.concat([NotificationService.resolveRecipient({ email: record.interviewer_email })]);
       }
       NotificationAtsAdapter.notifyInterviewScheduled(packed, recips);
-      var cand = AtsRepository.findCandidate(app.candidate_id);
       if (cand) {
         NotificationAtsAdapter.notifyCandidate('ATS_CANDIDATE_INTERVIEW', cand, {
-          interview_at: record.scheduled_at
+          interview_at: formatNotifyWhen_(record.scheduled_at),
+          requisition_title: job.title
         });
       }
     });
-    return { interview: sanitizeInterview_(record) };
+    return { interview: sanitizeInterview_(record), application: updatedAppView };
   }
 
   function updateInterview(session, interviewId, payload) {
@@ -1111,14 +1137,11 @@ var AtsService = (function () {
       'Public application for job ' + job.job_id);
 
     fireAtsNotify_(function () {
-      var packed = {
-        application_id: result.application.application_id,
-        job_id: job.job_id,
-        candidate_id: result.candidate.candidate_id,
-        title: job.title
-      };
+      var packed = atsNotifyPack_(result.application, job, { candidate: result.candidate });
       NotificationAtsAdapter.notifyNewApplication(packed, atsInternalRecipients_(job));
-      NotificationAtsAdapter.notifyCandidate('ATS_CANDIDATE_APPLICATION', result.candidate);
+      NotificationAtsAdapter.notifyCandidate('ATS_CANDIDATE_APPLICATION', result.candidate, {
+        requisition_title: job.title
+      });
     });
 
     return {

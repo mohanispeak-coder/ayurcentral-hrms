@@ -988,7 +988,10 @@ var NotificationEngine = (function () {
   }
 
   function buildAtsInternal(type, application, recipient) {
+    application = application || {};
     var name = application.candidate_name || 'A candidate';
+    var role = application.requisition_title || application.title || 'a role';
+    var when = application.interview_at ? String(application.interview_at) : '';
     var titles = {};
     titles[TYPE.ATS_NEW_APPLICATION] = 'New application received';
     titles[TYPE.ATS_SHORTLISTED] = name + ' shortlisted';
@@ -996,14 +999,27 @@ var NotificationEngine = (function () {
     titles[TYPE.ATS_FEEDBACK_PENDING] = 'Interview feedback pending — ' + name;
     titles[TYPE.ATS_SELECTED] = name + ' selected';
     var messages = {};
-    messages[TYPE.ATS_NEW_APPLICATION] = name + ' applied for ' + (application.requisition_title || 'a role') + '.';
-    messages[TYPE.ATS_SHORTLISTED] = name + ' was shortlisted for ' + (application.requisition_title || 'a role') + '.';
-    messages[TYPE.ATS_INTERVIEW_SCHEDULED] = 'An interview is scheduled for ' + name + '.';
-    messages[TYPE.ATS_FEEDBACK_PENDING] = 'Feedback is pending for ' + name + '.';
-    messages[TYPE.ATS_SELECTED] = name + ' was selected. Complete offer steps in ATS.';
+    messages[TYPE.ATS_NEW_APPLICATION] = name + ' applied for ' + role + '.';
+    messages[TYPE.ATS_SHORTLISTED] = name + ' was shortlisted for ' + role + '.';
+    messages[TYPE.ATS_INTERVIEW_SCHEDULED] = when
+      ? ('Interview with ' + name + ' for ' + role + ' is scheduled on ' + when + '.')
+      : ('Interview with ' + name + ' for ' + role + ' is scheduled.');
+    messages[TYPE.ATS_FEEDBACK_PENDING] = when
+      ? ('Feedback is pending for ' + name + ' (interview on ' + when + ').')
+      : ('Feedback is pending for ' + name + '.');
+    messages[TYPE.ATS_SELECTED] = name + ' was selected for ' + role + '. Complete offer steps in ATS.';
+    var subject = titles[type] || 'ATS update';
+    if (type === TYPE.ATS_INTERVIEW_SCHEDULED && when) {
+      subject = 'Interview scheduled — ' + name + ' on ' + when;
+    } else if (type === TYPE.ATS_FEEDBACK_PENDING && when) {
+      subject = 'Interview feedback pending — ' + name + ' (' + when + ')';
+    }
+    var message = messages[type] || '';
     return payloadBase_(type, recipient, application.application_id, {}, {
       title: titles[type] || 'ATS update',
-      message: messages[type] || ''
+      message: message,
+      email_subject: subject,
+      email_body: message
     });
   }
 
@@ -1013,7 +1029,7 @@ var NotificationEngine = (function () {
     if (!def || def.audience !== 'candidate') {
       return { ok: false, errors: ['Not a candidate email type.'] };
     }
-    var name = candidate.candidate_name || 'there';
+    var name = candidate.full_name || candidate.candidate_name || 'there';
     var role = extra.requisition_title || candidate.requisition_title || 'the role';
     var subject = extra.subject;
     var body = extra.body;

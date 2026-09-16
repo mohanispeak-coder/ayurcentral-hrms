@@ -353,6 +353,171 @@
         '<div class="pipeline-board-terminal">' + terminalStages.map(colHtml).join('') + '</div>';
     }
 
+    var IV_REC_OPTIONS_ = ['', 'STRONG_HIRE', 'HIRE', 'HOLD', 'NO_HIRE'];
+
+    function candidateActivityHtml_(act) {
+      act = act || [];
+      return act.length ? '<ul class="activity-list">' + act.map(function (row) {
+        return '<li><div>' + escapeHtml(row.summary) + '</div><div class="activity-meta">' +
+          escapeHtml(row.action) + ' · ' + escapeHtml(row.actor_email || '') + ' · ' + escapeHtml(fmtWhen(row.created_at)) + '</div></li>';
+      }).join('') + '</ul>' : '<p class="muted">No activity yet.</p>';
+    }
+
+    function candidateInterviewListHtml_(ivs) {
+      ivs = ivs || [];
+      if (!ivs.length) {
+        return emptyState('No interviews', 'Schedule an interview from an application.');
+      }
+      var nowMs = Date.now();
+      return ivs.map(function (iv) {
+        var status = String(iv.status || 'SCHEDULED').toUpperCase();
+        var done = status === 'COMPLETED';
+        var whenMs = iv.scheduled_at ? new Date(iv.scheduled_at).getTime() : 0;
+        var upcoming = !done && whenMs > nowMs;
+        var cardClass = 'ats-interview-card' + (done ? ' is-done' : (upcoming ? ' is-upcoming' : ''));
+        var statusLabel = done ? 'Completed' : (upcoming ? 'Upcoming' : 'Awaiting feedback');
+        var body = '<div class="' + cardClass + '" data-iv="' + escapeHtml(iv.interview_id) + '">' +
+          '<div class="profile-header"><div><strong>' + escapeHtml(fmtWhen(iv.scheduled_at)) +
+          '</strong> · ' + escapeHtml(iv.interviewer_name || iv.interviewer_employee_id || 'Interviewer') +
+          '</div>' + badge(statusLabel) + '</div>' +
+          (done
+            ? ('<p class="muted">Internal feedback (not shared with candidate)</p>' +
+              '<p>Rating: ' + escapeHtml(String(iv.rating || '—')) + ' · Recommendation: ' +
+              escapeHtml(iv.recommendation || '—') + '</p>' +
+              (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : ''))
+            : ('<p class="muted">' + (upcoming ? 'Scheduled interview' : 'Interview time has passed — submit feedback when done.') + '</p>' +
+              (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : '') +
+              (!upcoming
+                ? ('<div class="ats-interview-feedback">' +
+                  '<p class="hint">Feedback and ratings are internal only.</p>' +
+                  '<div class="form-row">' +
+                  '<div class="form-group"><label class="form-label">Rating (1–5)</label>' +
+                  '<input class="form-input" type="number" min="1" max="5" data-iv-rate="' + escapeHtml(iv.interview_id) + '"></div>' +
+                  '<div class="form-group"><label class="form-label">Recommendation</label>' +
+                  '<select class="form-select" data-iv-rec="' + escapeHtml(iv.interview_id) + '">' +
+                  IV_REC_OPTIONS_.map(function (r) {
+                    return '<option value="' + r + '">' + (r ? r.replace(/_/g, ' ') : '—') + '</option>';
+                  }).join('') + '</select></div></div>' +
+                  '<div class="form-group"><label class="form-label">Feedback notes</label>' +
+                  '<textarea class="form-input" rows="3" data-iv-notes="' + escapeHtml(iv.interview_id) + '"></textarea></div>' +
+                  '<button type="button" class="btn btn-primary btn-sm" data-iv-complete="' + escapeHtml(iv.interview_id) + '">' +
+                  'Save feedback & mark complete</button></div>')
+                : '')));
+        return body + '</div>';
+      }).join('');
+    }
+
+    function candidateApplicationsBodyHtml_(apps, stages) {
+      return (apps || []).map(function (a) {
+        return '<tr><td class="mono">' + escapeHtml(a.job_id) + '</td><td>' + escapeHtml(a.job_title || '') +
+          '</td><td>' + badge(a.stage) + '</td><td>' + escapeHtml(fmtWhen(a.applied_at)) + '</td>' +
+          '<td>' + stageMoveSelectHtml_(a.application_id, a.stage, stages) + '</td></tr>';
+      }).join('');
+    }
+
+    function syncScheduleAppSelect_(apps) {
+      var sel = $('ats-iv-app');
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = (apps || []).map(function (a) {
+        return '<option value="' + escapeHtml(a.application_id) + '">' + escapeHtml(a.job_title || a.job_id) +
+          ' · ' + escapeHtml(a.stage) + '</option>';
+      }).join('');
+      if (prev && sel.querySelector('option[value="' + prev.replace(/"/g, '') + '"]')) sel.value = prev;
+    }
+
+    function bindCandidateInterviewCompleteHandlers_(page, candidateId, seq) {
+      if (!page) return;
+      Array.prototype.forEach.call(page.querySelectorAll('[data-iv-complete]'), function (btn) {
+        btn.addEventListener('click', function () {
+          var ivId = btn.getAttribute('data-iv-complete');
+          var rateEl = page.querySelector('[data-iv-rate="' + ivId + '"]');
+          var recEl = page.querySelector('[data-iv-rec="' + ivId + '"]');
+          var notesEl = page.querySelector('[data-iv-notes="' + ivId + '"]');
+          rpc('apiAtsUpdateInterview', [ivId, {
+            complete: true,
+            rating: rateEl ? rateEl.value : '',
+            recommendation: recEl ? recEl.value : '',
+            notes: notesEl ? notesEl.value : ''
+          }], btn, 'Saving…')
+            .then(function (res) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              var cached = atsView.candidate[candidateId];
+              if (cached && res && res.interview) {
+                cached.interviews = (cached.interviews || []).map(function (iv) {
+                  return iv.interview_id === res.interview.interview_id ? res.interview : iv;
+                });
+                var ivList = $('ats-cand-iv-list');
+                if (ivList) ivList.innerHTML = candidateInterviewListHtml_(cached.interviews);
+                bindCandidateInterviewCompleteHandlers_(page, candidateId, seq);
+              }
+              showToast('Interview feedback saved.');
+            })
+            .catch(function (err) { showToast((err && err.message) || 'Save failed', 'error'); });
+        });
+      });
+    }
+
+    function patchCandidateAfterSchedule_(candidateId, res, stages, seq) {
+      res = res || {};
+      var cached = atsView.candidate[candidateId] || {};
+      if (res.interview) {
+        cached.interviews = cached.interviews || [];
+        cached.interviews.unshift(res.interview);
+      }
+      if (res.application) {
+        cached.applications = (cached.applications || []).map(function (a) {
+          return a.application_id === res.application.application_id ? Object.assign({}, a, res.application) : a;
+        });
+      }
+      atsView.candidate[candidateId] = cached;
+      var tbody = $('ats-cand-apps-body');
+      if (tbody) tbody.innerHTML = candidateApplicationsBodyHtml_(cached.applications, stages);
+      var ivList = $('ats-cand-iv-list');
+      if (ivList) ivList.innerHTML = candidateInterviewListHtml_(cached.interviews);
+      syncScheduleAppSelect_(cached.applications);
+      var page = pageEl();
+      bindCandidateApplicationMoveHandlers_(page, candidateId, cached.applications, stages, seq);
+      bindCandidateInterviewCompleteHandlers_(page, candidateId, seq);
+      if ($('ats-iv-when')) $('ats-iv-when').value = '';
+      if ($('ats-iv-notes')) $('ats-iv-notes').value = '';
+      callServer('apiAtsGetCandidate', candidateId, { background: true }).then(function (fresh) {
+        if (!stillOn(seq, 'ats-candidate')) return;
+        atsView.candidate[candidateId] = fresh;
+        var actEl = $('ats-cand-activity');
+        if (actEl) actEl.innerHTML = candidateActivityHtml_(fresh.activity);
+      }).catch(function () {});
+    }
+
+    function bindCandidateApplicationMoveHandlers_(page, candidateId, apps, stages, seq) {
+      if (!page) return;
+      Array.prototype.forEach.call(page.querySelectorAll('[data-move]'), function (sel) {
+        sel.addEventListener('change', function () {
+          var stage = sel.value;
+          if (!stage) return;
+          rpc('apiAtsMoveApplicationStage', [sel.getAttribute('data-move'), stage, ''], sel, 'Moving…')
+            .then(function (moveRes) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              var cached = atsView.candidate[candidateId];
+              if (cached && moveRes && moveRes.application) {
+                cached.applications = (cached.applications || []).map(function (a) {
+                  return a.application_id === moveRes.application.application_id
+                    ? Object.assign({}, a, moveRes.application) : a;
+                });
+                atsView.candidate[candidateId] = cached;
+                var tbody = $('ats-cand-apps-body');
+                if (tbody) tbody.innerHTML = candidateApplicationsBodyHtml_(cached.applications, stages);
+                syncScheduleAppSelect_(cached.applications);
+                bindCandidateApplicationMoveHandlers_(page, candidateId, cached.applications, stages, seq);
+              }
+              invalidateAtsCandidate_(candidateId, (apps || []).map(function (a) { return a.job_id; }));
+              sel.value = '';
+            })
+            .catch(function (err) { showToast((err && err.message) || 'Move failed', 'error'); sel.value = ''; });
+        });
+      });
+    }
+
     function atsBulkPanelHtml_(kind, title, hint, requiredColumns) {
       var reqHtml = App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(requiredColumns || []) : '';
       return '<details class="card collapsible-section bulk-upload-card" id="ats-' + kind + '-bulk-card">' +
@@ -1032,53 +1197,9 @@
         var ivs = data.interviews || [];
         var act = data.activity || [];
         var stages = data.pipeline || atsMeta.pipeline || [];
-        var recs = ['', 'STRONG_HIRE', 'HIRE', 'HOLD', 'NO_HIRE'];
-        var appRows = apps.map(function (a) {
-          return '<tr><td class="mono">' + escapeHtml(a.job_id) + '</td><td>' + escapeHtml(a.job_title || '') +
-            '</td><td>' + badge(a.stage) + '</td><td>' + escapeHtml(fmtWhen(a.applied_at)) + '</td>' +
-            '<td>' + stageMoveSelectHtml_(a.application_id, a.stage, stages) + '</td></tr>';
-        }).join('');
-        var nowMs = Date.now();
-        var ivHtml = ivs.length ? ivs.map(function (iv) {
-          var status = String(iv.status || 'SCHEDULED').toUpperCase();
-          var done = status === 'COMPLETED';
-          var whenMs = iv.scheduled_at ? new Date(iv.scheduled_at).getTime() : 0;
-          var upcoming = !done && whenMs > nowMs;
-          var cardClass = 'ats-interview-card' + (done ? ' is-done' : (upcoming ? ' is-upcoming' : ''));
-          var statusLabel = done ? 'Completed' : (upcoming ? 'Upcoming' : 'Awaiting feedback');
-          var body = '<div class="' + cardClass + '" data-iv="' + escapeHtml(iv.interview_id) + '">' +
-            '<div class="profile-header"><div><strong>' + escapeHtml(fmtWhen(iv.scheduled_at)) +
-            '</strong> · ' + escapeHtml(iv.interviewer_name || iv.interviewer_employee_id || 'Interviewer') +
-            '</div>' + badge(statusLabel) + '</div>' +
-            (done
-              ? ('<p class="muted">Internal feedback (not shared with candidate)</p>' +
-                '<p>Rating: ' + escapeHtml(String(iv.rating || '—')) + ' · Recommendation: ' +
-                escapeHtml(iv.recommendation || '—') + '</p>' +
-                (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : ''))
-              : ('<p class="muted">' + (upcoming ? 'Scheduled interview' : 'Interview time has passed — submit feedback when done.') + '</p>' +
-                (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : '') +
-                (!upcoming
-                  ? ('<div class="ats-interview-feedback">' +
-                    '<p class="hint">Feedback and ratings are internal only.</p>' +
-                    '<div class="form-row">' +
-                    '<div class="form-group"><label class="form-label">Rating (1–5)</label>' +
-                    '<input class="form-input" type="number" min="1" max="5" data-iv-rate="' + escapeHtml(iv.interview_id) + '"></div>' +
-                    '<div class="form-group"><label class="form-label">Recommendation</label>' +
-                    '<select class="form-select" data-iv-rec="' + escapeHtml(iv.interview_id) + '">' +
-                    recs.map(function (r) {
-                      return '<option value="' + r + '">' + (r ? r.replace(/_/g, ' ') : '—') + '</option>';
-                    }).join('') + '</select></div></div>' +
-                    '<div class="form-group"><label class="form-label">Feedback notes</label>' +
-                    '<textarea class="form-input" rows="3" data-iv-notes="' + escapeHtml(iv.interview_id) + '"></textarea></div>' +
-                    '<button type="button" class="btn btn-primary btn-sm" data-iv-complete="' + escapeHtml(iv.interview_id) + '">' +
-                    'Save feedback & mark complete</button></div>')
-                  : '')));
-          return body + '</div>';
-        }).join('') : emptyState('No interviews', 'Schedule an interview from an application.');
-        var actHtml = act.length ? '<ul class="activity-list">' + act.map(function (row) {
-          return '<li><div>' + escapeHtml(row.summary) + '</div><div class="activity-meta">' +
-            escapeHtml(row.action) + ' · ' + escapeHtml(row.actor_email || '') + ' · ' + escapeHtml(fmtWhen(row.created_at)) + '</div></li>';
-        }).join('') + '</ul>' : '<p class="muted">No activity yet.</p>';
+        var appRows = candidateApplicationsBodyHtml_(apps, stages);
+        var ivHtml = candidateInterviewListHtml_(ivs);
+        var actHtml = candidateActivityHtml_(act);
         $('ats-cand-detail').innerHTML =
           '<div class="card"><div class="profile-header"><div>' +
             '<h2>' + escapeHtml(c.full_name) + '</h2>' +
@@ -1096,7 +1217,7 @@
             '<dt>Linked employee</dt><dd>' + escapeHtml(c.hired_employee_id || 'None — hiring does not create an employee') + '</dd>' +
           '</dl></div>' +
           '<div class="card"><h2>Applications</h2>' +
-            (appRows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job</th><th>Title</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody>' + appRows + '</tbody></table></div>' : '<p class="muted">None</p>') +
+            (appRows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job</th><th>Title</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody id="ats-cand-apps-body">' + appRows + '</tbody></table></div>' : '<p class="muted">None</p>') +
           '</div>' +
           '<div class="card"><h2>Schedule interview</h2>' +
             '<p class="hint">Scheduling sends calendar-style notifications to the interviewer and candidate. Feedback is collected after the interview.</p>' +
@@ -1115,31 +1236,22 @@
             '<textarea class="form-input" id="ats-iv-notes" rows="2" placeholder="Location, meeting link, or instructions"></textarea></div>' +
             '<p class="action-feedback hidden" id="ats-iv-fb"></p>' +
             '<button type="button" class="btn btn-primary" id="ats-iv-save">Schedule interview</button></div>' +
-          '<div class="card"><h2>Interviews</h2>' + ivHtml + '</div>' +
+          '<div class="card"><h2>Interviews</h2><div id="ats-cand-iv-list">' + ivHtml + '</div></div>' +
           '<div class="card"><h2>Comments</h2>' +
             '<div class="form-group"><label class="form-label" for="ats-comment">Add comment</label>' +
             '<textarea class="form-input" id="ats-comment" rows="3"></textarea></div>' +
             '<p class="action-feedback hidden" id="ats-comment-fb"></p>' +
             '<button type="button" class="btn btn-secondary" id="ats-comment-save">Add comment</button></div>' +
-          '<div class="card"><h2>Activity</h2>' + actHtml + '</div>';
+          '<div class="card"><h2>Activity</h2><div id="ats-cand-activity">' + actHtml + '</div></div>';
 
+        var page = pageEl();
         if ($('ats-dl-resume')) $('ats-dl-resume').addEventListener('click', function () {
           rpc('apiAtsDownloadResume', [c.candidate_id], $('ats-dl-resume'), 'Preparing…')
             .then(downloadBlob)
             .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
         });
-        Array.prototype.forEach.call(page.querySelectorAll('[data-move]'), function (sel) {
-          sel.addEventListener('change', function () {
-            var stage = sel.value;
-            if (!stage) return;
-            rpc('apiAtsMoveApplicationStage', [sel.getAttribute('data-move'), stage, ''], sel, 'Moving…')
-              .then(function () {
-                invalidateAtsCandidate_(c.candidate_id, apps.map(function (a) { return a.job_id; }));
-                renderCandidate(c.candidate_id);
-              })
-              .catch(function (err) { showToast((err && err.message) || 'Move failed', 'error'); sel.value = ''; });
-          });
-        });
+        bindCandidateApplicationMoveHandlers_(page, c.candidate_id, apps, stages, seq);
+        bindCandidateInterviewCompleteHandlers_(page, c.candidate_id, seq);
         if ($('ats-iv-save')) $('ats-iv-save').addEventListener('click', function () {
           if (!apps.length) { showToast('No application to attach an interview to.', 'error'); return; }
           rpc('apiAtsScheduleInterview', [{
@@ -1149,32 +1261,13 @@
             interviewer_email: $('ats-iv-email') ? $('ats-iv-email').value : '',
             notes: $('ats-iv-notes').value
           }], $('ats-iv-save'), 'Scheduling…', $('ats-iv-fb'))
-            .then(function () {
+            .then(function (res) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              patchCandidateAfterSchedule_(c.candidate_id, res, stages, seq);
               invalidateAtsCandidate_(c.candidate_id);
               showToast('Interview scheduled.');
-              renderCandidate(c.candidate_id);
             })
             .catch(function (err) { showToast((err && err.message) || 'Schedule failed', 'error'); });
-        });
-        Array.prototype.forEach.call(page.querySelectorAll('[data-iv-complete]'), function (btn) {
-          btn.addEventListener('click', function () {
-            var ivId = btn.getAttribute('data-iv-complete');
-            var rateEl = page.querySelector('[data-iv-rate="' + ivId + '"]');
-            var recEl = page.querySelector('[data-iv-rec="' + ivId + '"]');
-            var notesEl = page.querySelector('[data-iv-notes="' + ivId + '"]');
-            rpc('apiAtsUpdateInterview', [ivId, {
-              complete: true,
-              rating: rateEl ? rateEl.value : '',
-              recommendation: recEl ? recEl.value : '',
-              notes: notesEl ? notesEl.value : ''
-            }], btn, 'Saving…')
-              .then(function () {
-                invalidateAtsCandidate_(c.candidate_id);
-                showToast('Interview feedback saved.');
-                renderCandidate(c.candidate_id);
-              })
-              .catch(function (err) { showToast((err && err.message) || 'Save failed', 'error'); });
-          });
         });
         if ($('ats-comment-save')) $('ats-comment-save').addEventListener('click', function () {
           rpc('apiAtsAddCandidateComment', [c.candidate_id, { body: $('ats-comment').value }], $('ats-comment-save'), 'Saving…', $('ats-comment-fb'))
