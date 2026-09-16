@@ -119,6 +119,107 @@
     compensation: 'payroll'
   };
 
+  /** When true, navigate() must not push/replace browser history (popstate / hash restore). */
+  var suppressHistoryPush_ = false;
+
+  function isKnownRoute_(route) {
+    if (!route) return false;
+    if (route === 'dashboard') return true;
+    if (ROUTES[route]) return true;
+    if (ROUTE_MODULE[route]) return true;
+    return false;
+  }
+
+  function routeToHash_(route, params) {
+    var base = '#/' + encodeURIComponent(route || 'dashboard');
+    params = params || {};
+    var keys = Object.keys(params).filter(function (k) {
+      return params[k] !== undefined && params[k] !== null && String(params[k]) !== '';
+    });
+    if (!keys.length) return base;
+    var q = keys.map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(String(params[k]));
+    }).join('&');
+    return base + '?' + q;
+  }
+
+  function parseRouteHash_(hash) {
+    var raw = String(hash || window.location.hash || '').replace(/^#/, '').replace(/^\//, '');
+    if (!raw) return { route: '', params: {} };
+    var qIdx = raw.indexOf('?');
+    var routePart = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
+    var route = '';
+    try {
+      route = decodeURIComponent(routePart.split('/')[0] || '');
+    } catch (ignore) {
+      route = routePart.split('/')[0] || '';
+    }
+    var params = {};
+    if (qIdx >= 0) {
+      raw.slice(qIdx + 1).split('&').forEach(function (pair) {
+        if (!pair) return;
+        var eq = pair.indexOf('=');
+        if (eq < 1) return;
+        try {
+          params[decodeURIComponent(pair.slice(0, eq))] = decodeURIComponent(pair.slice(eq + 1));
+        } catch (ignore2) {}
+      });
+    }
+    return { route: route, params: params };
+  }
+
+  function syncBrowserRoute_(route, params, replace) {
+    if (typeof history === 'undefined' || !history.pushState) return;
+    var hash = routeToHash_(route, params);
+    var base = window.location.pathname + (window.location.search || '');
+    var url = base + hash;
+    var st = { hrmsRoute: route, params: params || {} };
+    try {
+      if (replace) history.replaceState(st, '', url);
+      else if (window.location.pathname + window.location.search + window.location.hash !== url) {
+        history.pushState(st, '', url);
+      }
+    } catch (e) {
+      if (window.location.hash !== hash) window.location.hash = hash;
+    }
+  }
+
+  function clearBrowserRoute_() {
+    if (typeof history === 'undefined' || !history.replaceState) {
+      if (window.location.hash) window.location.hash = '';
+      return;
+    }
+    try {
+      history.replaceState(null, '', window.location.pathname + (window.location.search || ''));
+    } catch (ignore) {
+      window.location.hash = '';
+    }
+  }
+
+  function onPopState_(ev) {
+    if (!state.session || !state.session.authorized) return;
+    var parsed;
+    if (ev && ev.state && ev.state.hrmsRoute) {
+      parsed = { route: ev.state.hrmsRoute, params: ev.state.params || {} };
+    } else {
+      parsed = parseRouteHash_(window.location.hash);
+    }
+    if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+    suppressHistoryPush_ = true;
+    navigate(parsed.route, parsed.params, { fromHistory: true });
+    suppressHistoryPush_ = false;
+  }
+
+  function bindBrowserHistory_() {
+    if (window.__hrmsHistoryBound) return;
+    window.__hrmsHistoryBound = true;
+    window.addEventListener('popstate', onPopState_);
+    window.addEventListener('hashchange', function () {
+      if (suppressHistoryPush_) return;
+      onPopState_({ state: history.state });
+    });
+  }
+
   var moduleLoaded_ = {};
   var moduleLoading_ = {};
   var userRpcBusy_ = 0;
@@ -1380,8 +1481,9 @@
     });
   }
 
-  function navigate(route, params) {
+  function navigate(route, params, options) {
     if (!state.session || !state.session.authorized) return;
+    options = options || {};
     params = params || {};
     if (route === 'compensation') {
       params.openSalaryStructure = true;
@@ -1406,6 +1508,9 @@
       renderPlaceholder();
     }
     scheduleRefreshControls_();
+    if (!options.fromHistory && !suppressHistoryPush_) {
+      syncBrowserRoute_(route, state.routeParams, !!options.replaceHistory);
+    }
   }
 
   function renderPlaceholder() {
@@ -1663,6 +1768,7 @@
    */
   function showAuthLogin(sessionHint) {
     clearUserSessionViewState_();
+    clearBrowserRoute_();
     state.navigation = [];
     state.currentRoute = '';
     state.routeParams = {};
@@ -1871,9 +1977,15 @@
     setAuthedChrome(true);
     updateUserChip();
     initShell();
+    bindBrowserHistory_();
     bindModuleRefreshUi();
     renderNav();
-    navigate('dashboard');
+    var initial = parseRouteHash_(window.location.hash);
+    if (initial.route && isKnownRoute_(initial.route)) {
+      navigate(initial.route, initial.params || {}, { replaceHistory: true, fromHistory: true });
+    } else {
+      navigate('dashboard', {}, { replaceHistory: true });
+    }
     syncAskHrVisibility();
     if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
       window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });

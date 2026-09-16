@@ -64,6 +64,9 @@ check('grouped-nav-passes-id', /id:\s*g\.id/.test(scripts) && /collapsible:\s*!!
 check('render-nav-no-rpc', !/function renderNav[\s\S]{0,1200}google\.script\.run/.test(scripts));
 check('toggle-nav-no-rpc', !/navSectionExpanded_[\s\S]{0,400}google\.script\.run/.test(scripts));
 check('toggle-nav-no-callserver', !/nav-group-toggle[\s\S]{0,600}callServer/.test(scripts));
+check('browser-history-popstate', /addEventListener\('popstate'/.test(scripts));
+check('browser-history-sync', /syncBrowserRoute_/.test(scripts) && /pushState/.test(scripts));
+check('browser-history-restore', /parseRouteHash_/.test(scripts) && /fromHistory/.test(scripts));
 
 navRoutes.forEach(function (route) {
   if (route === 'dashboard') return;
