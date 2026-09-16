@@ -277,6 +277,13 @@ var NotificationService = (function () {
     } catch (ignore) {}
   }
 
+  function formatBodyWithEmployeeId_(employeeId, body) {
+    body = String(body || '');
+    var id = trim_(employeeId);
+    if (!id || body.indexOf('Employee ID:') >= 0) return body;
+    return 'Employee ID: ' + id + '\n' + body;
+  }
+
   function sendMail_(to, subject, body) {
     if (typeof NotificationService !== 'undefined' && NotificationService._testSendEmail) {
       return NotificationService._testSendEmail(to, subject, body);
@@ -292,6 +299,7 @@ var NotificationService = (function () {
     var to = trim_(record.recipient_email);
     var subject = (normalized && normalized.email_subject) || record.title;
     var body = (normalized && normalized.email_body) || record.message || subject;
+    body = formatBodyWithEmployeeId_(record.recipient_employee_id, body);
     var company = companyName_();
     if (body.indexOf(company) < 0) {
       body = body + '\n\n— ' + company;
@@ -822,11 +830,8 @@ var NotificationService = (function () {
     }
     var to = trim_(options.to);
     var subject = String(options.subject || '').trim();
-    var body = String(options.body || subject || '').trim();
     var empId = trim_(options.employee_id);
-    if (empId && body.indexOf('Employee ID:') < 0) {
-      body = 'Employee ID: ' + empId + '\n\n' + body;
-    }
+    var body = formatBodyWithEmployeeId_(empId, String(options.body || subject || '').trim());
     var status = NotificationEngine.EMAIL_STATUS.PENDING;
     var errorMessage = '';
     var sentAt = '';
@@ -880,6 +885,7 @@ var NotificationService = (function () {
     listHrAdminRecipients: listHrAdminRecipients,
     catalogForClient: catalogForClient,
     sendOrgEventEmail: sendOrgEventEmail,
+    formatBodyWithEmployeeId: formatBodyWithEmployeeId_,
     ensureSchema: ensure_,
     EMAIL_BATCH_LIMIT: EMAIL_BATCH_LIMIT_,
     _testSendEmail: null

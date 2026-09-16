@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.16-attendance-bulk-bar';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.16-attendance-bulk-v2';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -727,7 +727,8 @@
 
     function paintAttendanceBulkSection_(runId, uploadAllowed, hasRun, st) {
       st = statusKey(st);
-      var openAttr = (hasRun && (uploadAllowed || bulkState.preview)) ? ' open' : '';
+      // Keep bulk upload visible whenever a payroll run exists (upload buttons still respect uploadAllowed).
+      var openAttr = hasRun ? ' open' : '';
       var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
