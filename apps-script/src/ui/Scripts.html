@@ -168,12 +168,26 @@
     return { route: route, params: params };
   }
 
+  function routeParamsEqual_(a, b) {
+    a = a || {};
+    b = b || {};
+    var keysA = Object.keys(a);
+    var keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (var i = 0; i < keysA.length; i++) {
+      var k = keysA[i];
+      if (String(a[k]) !== String(b[k])) return false;
+    }
+    return true;
+  }
+
   function syncBrowserRoute_(route, params, replace) {
     if (typeof history === 'undefined' || !history.pushState) return;
     var hash = routeToHash_(route, params);
     var base = window.location.pathname + (window.location.search || '');
     var url = base + hash;
     var st = { hrmsRoute: route, params: params || {} };
+    suppressHistoryPush_ = true;
     try {
       if (replace) history.replaceState(st, '', url);
       else if (window.location.pathname + window.location.search + window.location.hash !== url) {
@@ -181,6 +195,8 @@
       }
     } catch (e) {
       if (window.location.hash !== hash) window.location.hash = hash;
+    } finally {
+      suppressHistoryPush_ = false;
     }
   }
 
@@ -205,9 +221,15 @@
       parsed = parseRouteHash_(window.location.hash);
     }
     if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+    if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
+      return;
+    }
     suppressHistoryPush_ = true;
-    navigate(parsed.route, parsed.params, { fromHistory: true });
-    suppressHistoryPush_ = false;
+    try {
+      navigate(parsed.route, parsed.params, { fromHistory: true });
+    } finally {
+      suppressHistoryPush_ = false;
+    }
   }
 
   function bindBrowserHistory_() {
@@ -216,6 +238,11 @@
     window.addEventListener('popstate', onPopState_);
     window.addEventListener('hashchange', function () {
       if (suppressHistoryPush_) return;
+      var parsed = parseRouteHash_(window.location.hash);
+      if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+      if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
+        return;
+      }
       onPopState_({ state: history.state });
     });
   }

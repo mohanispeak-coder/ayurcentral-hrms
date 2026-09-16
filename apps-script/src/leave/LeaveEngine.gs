@@ -531,29 +531,58 @@ var LeaveEngine = (function () {
     return false;
   }
 
-  function canCancel(session, request) {
+  function canCancel(session, request, context) {
     if (!session || !session.authorized || !request) return false;
+    context = context || {};
     var status = String(request.status || '').toUpperCase();
     var role = String(session.role || '').toUpperCase();
-    var own = String(session.employee_id || '') === String(request.employee_id || '');
+    var selfId = String(session.employee_id || '');
+    var own = selfId === String(request.employee_id || '');
     var authority = isLeaveAuthority_(role);
+    var managerId = String(context.manager_employee_id || '');
+    var managerScope = role === HRMS.ROLES.MANAGER && managerId && managerId === selfId;
     if (status === HRMS.LEAVE_STATUS.DRAFT || isPendingApprovalStatus(status)) {
-      return own || authority;
+      if (own || authority) return true;
+      if (managerScope) {
+        return canApproveRequest(
+          session,
+          request.employee_id,
+          managerId,
+          status,
+          context.applicant_role || ''
+        );
+      }
+      return false;
     }
     if (status === HRMS.LEAVE_STATUS.APPROVED) {
-      return authority;
+      if (authority) return true;
+      return managerScope;
     }
     return false;
   }
 
   /** Undo an authority decision (approved, rejected, or pending submission). */
-  function canRevokeDecision(session, request) {
+  function canRevokeDecision(session, request, context) {
     if (!session || !session.authorized || !request) return false;
-    if (!isLeaveAuthority_(session.role)) return false;
+    context = context || {};
     var status = String(request.status || '').toUpperCase();
-    return isPendingApprovalStatus(status) ||
+    var allowedStatus = isPendingApprovalStatus(status) ||
       status === HRMS.LEAVE_STATUS.APPROVED ||
       status === HRMS.LEAVE_STATUS.REJECTED;
+    if (!allowedStatus) return false;
+    if (isLeaveAuthority_(session.role)) return true;
+    var role = String(session.role || '').toUpperCase();
+    var selfId = String(session.employee_id || '');
+    var managerId = String(context.manager_employee_id || '');
+    if (role !== HRMS.ROLES.MANAGER || !managerId || managerId !== selfId) return false;
+    if (status === HRMS.LEAVE_STATUS.REJECTED) return true;
+    return canApproveRequest(
+      session,
+      request.employee_id,
+      managerId,
+      status,
+      context.applicant_role || ''
+    );
   }
 
   function canApplyFor(session, targetEmployeeId) {

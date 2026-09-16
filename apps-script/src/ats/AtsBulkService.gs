@@ -5,7 +5,7 @@
 var ATS = ATS || {};
 
 var AtsBulkService = (function () {
-  var JOBS_TEMPLATE_VERSION_ = '2';
+  var JOBS_TEMPLATE_VERSION_ = '3';
   var CAND_TEMPLATE_VERSION_ = '1';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
@@ -41,7 +41,7 @@ var AtsBulkService = (function () {
     skills: 'Communication, Excel',
     openings: '1',
     hiring_manager_employee_id: '',
-    closing_date: '31/12/2026',
+    closing_date: '31-12-2026',
     notes_internal: '',
     publish: 'NO'
   };
@@ -77,21 +77,53 @@ var AtsBulkService = (function () {
     return trim_(v);
   }
 
+  function pad2Bulk_(n) {
+    n = String(Number(n) || 0);
+    return n.length < 2 ? '0' + n : n;
+  }
+
+  /**
+   * Bulk upload: accept DD/MM/YYYY, DD-MM-YYYY, ISO, Date, or Excel serial — return yyyy-MM-dd for storage.
+   * @return {string|null} ISO date, empty string if blank, null if invalid
+   */
+  function closingDateToIso_(value) {
+    if (value === null || value === undefined || value === '') return '';
+    if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+      return value.getFullYear() + '-' + pad2Bulk_(value.getMonth() + 1) + '-' + pad2Bulk_(value.getDate());
+    }
+    if (typeof AtsEngine !== 'undefined' && AtsEngine.parseClosingDate) {
+      var parsed = AtsEngine.parseClosingDate(value);
+      if (parsed.ok) return parsed.iso || '';
+      return null;
+    }
+    var s = trim_(value);
+    s = s.replace(/^(\d{1,2})-(\d{1,2})-(\d{4})$/, '$1/$2/$3');
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+    if (dmy) {
+      return dmy[3] + '-' + pad2Bulk_(dmy[2]) + '-' + pad2Bulk_(dmy[1]);
+    }
+    var serial = Number(s);
+    if (isFinite(serial) && serial > 20000 && serial < 120000) {
+      var utcMs = Math.round((serial - 25569) * 86400 * 1000);
+      var d = new Date(utcMs);
+      if (!isNaN(d.getTime())) {
+        return d.getUTCFullYear() + '-' + pad2Bulk_(d.getUTCMonth() + 1) + '-' + pad2Bulk_(d.getUTCDate());
+      }
+    }
+    return null;
+  }
+
   function normalizeJobRowDates_(row) {
     if (!row || !row.hasOwnProperty('closing_date')) return row;
     var raw = row.closing_date;
     if (raw === null || raw === undefined || raw === '') return row;
-    if (Object.prototype.toString.call(raw) === '[object Date]' && !isNaN(raw.getTime())) {
-      row.closing_date = formatCellValue_(raw);
-      return row;
-    }
-    if (typeof AtsEngine !== 'undefined' && AtsEngine.parseClosingDate) {
-      var parsed = AtsEngine.parseClosingDate(raw);
-      if (parsed.ok && parsed.iso) {
-        var parts = parsed.iso.split('-');
-        if (parts.length === 3) {
-          row.closing_date = parts[2] + '/' + parts[1] + '/' + parts[0];
-        }
+    var iso = closingDateToIso_(raw);
+    if (iso === null) return row;
+    if (iso) {
+      var parts = iso.split('-');
+      if (parts.length === 3) {
+        row.closing_date = parts[2] + '/' + parts[1] + '/' + parts[0];
       }
     }
     return row;
@@ -270,7 +302,7 @@ var AtsBulkService = (function () {
       'Upload .xlsx or .csv. Required columns are marked with *.',
       'Duplicate job titles in one file are rejected.',
       'publish: YES to publish immediately, otherwise job stays DRAFT.',
-      'closing_date: use DD/MM/YYYY (example 31/12/2026). ISO YYYY-MM-DD is also accepted.',
+      'closing_date: use DD/MM/YYYY or DD-MM-YYYY (example 31/12/2026).',
       'Valid source values are not used for jobs.',
       'Maximum ' + MAX_ROWS_ + ' rows per upload.'
     ];
@@ -335,9 +367,20 @@ var AtsBulkService = (function () {
       JOB_HEADERS_.forEach(function (h) {
         if (row.hasOwnProperty(h)) payload[h] = row[h];
       });
+      if (payload.closing_date !== undefined && payload.closing_date !== null && trim_(payload.closing_date) !== '') {
+        var closingIso = closingDateToIso_(payload.closing_date);
+        if (closingIso === null) {
+          rowErrors.push({
+            field: 'closing_date',
+            message: 'Closing date must be DD/MM/YYYY or DD-MM-YYYY (e.g. 31/12/2026).'
+          });
+        } else {
+          payload.closing_date = closingIso;
+        }
+      }
 
       try {
-        var v = AtsEngine.validateJobPayload(payload, true);
+        var v = rowErrors.length ? { ok: false, errors: {} } : AtsEngine.validateJobPayload(payload, true);
         if (!v.ok) {
           Object.keys(v.errors).forEach(function (k) {
             rowErrors.push({ field: k, message: v.errors[k] });
@@ -807,6 +850,7 @@ var AtsBulkService = (function () {
     CAND_HEADERS: CAND_HEADERS_,
     parseCsvRows: parseCsvRows_,
     validateJobRows: validateJobRows_,
-    validateCandidateRows: validateCandidateRows_
+    validateCandidateRows: validateCandidateRows_,
+    closingDateToIso: closingDateToIso_
   };
 })();

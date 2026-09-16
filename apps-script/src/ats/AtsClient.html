@@ -526,7 +526,7 @@
         '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
         reqHtml +
         '<ol class="bulk-steps"><li>Download template</li><li>Choose Excel/CSV file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
-        (kind === 'jobs' ? '<p class="hint">Job closing_date must be DD/MM/YYYY (e.g. 31/12/2026).</p>' : '') +
+        (kind === 'jobs' ? '<p class="hint">Job closing_date must be DD/MM/YYYY or DD-MM-YYYY (e.g. 31/12/2026).</p>' : '') +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-template">Download template</button>' +
         '<label class="btn btn-secondary" for="ats-' + kind + '-bulk-file">Choose Excel/CSV file</label>' +
@@ -1149,16 +1149,19 @@
         });
       }
       if ($('ats-cand-q')) $('ats-cand-q').addEventListener('change', loadCands);
-      if (restoreCands) {
-        paintCandRows(atsView.candidates);
-      } else if (keepRefresh) {
-        paintCandRows(atsView.candidates);
-        loadCands();
-      } else {
-        var wrap = $('ats-cand-wrap');
-        if (wrap) wrap.setAttribute('aria-busy', 'true');
-        loadCands();
+      function bootCandidates_() {
+        if (restoreCands) {
+          paintCandRows(atsView.candidates);
+        } else if (keepRefresh) {
+          paintCandRows(atsView.candidates);
+          loadCands();
+        } else {
+          var wrap = $('ats-cand-wrap');
+          if (wrap) wrap.setAttribute('aria-busy', 'true');
+          loadCands();
+        }
       }
+      ensureMeta().then(bootCandidates_).catch(function () { bootCandidates_(); });
     }
 
     function downloadBlob(file) {

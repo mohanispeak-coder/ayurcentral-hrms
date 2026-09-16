@@ -533,6 +533,25 @@
       }
       markView_(createKey);
       $('btn-emp-cancel').addEventListener('click', function () { navigate('employees'); });
+      (function syncGoogleLoginFromWork_() {
+        var work = $('work_email');
+        var google = $('google_login_email');
+        var createUser = $('create_user');
+        if (!work || !google) return;
+        function mirror() {
+          if (createUser && !createUser.checked) return;
+          if (google.dataset.userEdited === '1') return;
+          google.value = work.value.trim();
+        }
+        work.addEventListener('input', mirror);
+        work.addEventListener('change', mirror);
+        work.addEventListener('blur', mirror);
+        if (createUser) createUser.addEventListener('change', mirror);
+        google.addEventListener('input', function () {
+          google.dataset.userEdited = google.value.trim() ? '1' : '';
+        });
+        mirror();
+      })();
       $('btn-emp-save').addEventListener('click', function () {
         clearFieldErrors();
         var btn = $('btn-emp-save');
