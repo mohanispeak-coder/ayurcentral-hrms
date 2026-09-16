@@ -2042,7 +2042,23 @@
     }
   }
 
+  function syncClientAssetsVersion_(app) {
+    var v = (app && app.clientAssetsVersion) || '';
+    if (!v) return;
+    try {
+      var key = 'hrms_client_assets_v';
+      var prev = sessionStorage.getItem(key);
+      if (prev && prev !== v) {
+        moduleLoaded_ = {};
+        moduleLoading_ = {};
+        invalidateModuleViewCachePrefix('');
+      }
+      sessionStorage.setItem(key, v);
+    } catch (ignore) {}
+  }
+
   function applyBootstrapSuccess(data) {
+    syncClientAssetsVersion_(data.app);
     clearUserSessionViewState_();
     state.session = data.session;
     state.app = data.app;
@@ -2076,6 +2092,7 @@
   function bootstrap() {
     callServer('apiGetAppBootstrap')
       .then(function (data) {
+        syncClientAssetsVersion_(data.app);
         state.app = data.app;
         if (data.session) state.session = data.session;
         askHrUi.sessionKnown = true;

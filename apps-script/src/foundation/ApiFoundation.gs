@@ -81,7 +81,10 @@ function apiGetAppBootstrap(sessionToken) {
         timezone: timezone,
         configured: configured,
         configError: configError,
-        mode: mode
+        mode: mode,
+        clientAssetsVersion: (typeof HRMS !== 'undefined' && HRMS.CLIENT_ASSETS_VERSION)
+          ? HRMS.CLIENT_ASSETS_VERSION
+          : '1'
       },
       navigation: nav,
       phase: 'foundation'

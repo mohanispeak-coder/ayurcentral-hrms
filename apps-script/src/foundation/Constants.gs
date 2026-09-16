@@ -202,6 +202,9 @@ HRMS.AUTH_CACHE = {
   SESSION_PREFIX: 'hrms_sess_v1_'
 };
 
+/** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
+HRMS.CLIENT_ASSETS_VERSION = '2026.09.16.2';
+
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,
   OTP_TTL_MS: 600000,
