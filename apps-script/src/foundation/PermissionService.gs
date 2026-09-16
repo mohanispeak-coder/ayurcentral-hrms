@@ -56,7 +56,7 @@ var PermissionService = (function () {
     { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'notifications', label: 'Notifications', route: 'notifications', icon: 'mail', roles: ['OWNER', 'ADMIN', 'HR'] },
-    { id: 'settings', label: 'Settings', route: 'settings', icon: 'settings', roles: ['OWNER', 'ADMIN'], placeholder: true },
+    { id: 'settings', label: 'Settings', route: 'settings', icon: 'settings', roles: ['OWNER', 'ADMIN'] },
     { id: 'users', label: 'Users', route: 'users', icon: 'admin_panel_settings', roles: ['OWNER', 'ADMIN'], placeholder: true }
   ];
 

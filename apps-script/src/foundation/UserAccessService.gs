@@ -25,8 +25,16 @@ var UserAccessService = (function () {
     return defaultValue;
   }
 
+  function roleDefaults_(role) {
+    if (typeof AdminSettingsService !== 'undefined' && AdminSettingsService.roleAccessDefaultsForRole) {
+      return AdminSettingsService.roleAccessDefaultsForRole(role);
+    }
+    return defaultFlags_();
+  }
+
   function flagsFromUser_(user) {
-    var defaults = defaultFlags_();
+    var role = user && user.role ? String(user.role).toUpperCase() : HRMS.ROLES.EMPLOYEE;
+    var defaults = roleDefaults_(role);
     if (!user) return defaults;
     return {
       access_documents: parseFlag_(user.access_documents, defaults.access_documents),
@@ -135,11 +143,12 @@ var UserAccessService = (function () {
     return getEmployeeAccess(session, employeeId);
   }
 
-  function newUserAccessDefaults_() {
+  function newUserAccessDefaults_(role) {
+    var flags = roleDefaults_(role || HRMS.ROLES.EMPLOYEE);
     return {
-      access_documents: 'TRUE',
-      access_payslips: 'TRUE',
-      access_leave: 'TRUE'
+      access_documents: flags.access_documents ? 'TRUE' : 'FALSE',
+      access_payslips: flags.access_payslips ? 'TRUE' : 'FALSE',
+      access_leave: flags.access_leave ? 'TRUE' : 'FALSE'
     };
   }
 

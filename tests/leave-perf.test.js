@@ -99,7 +99,9 @@ check('grant-api-include-inactive', /includeInactive:\s*true/.test(api));
 check('calendar-uses-config-today', /function getCalendar[\s\S]{0,400}todayDateOnly_/.test(leave));
 check('my-leave-persisted-rows-only', !/t\.is_active && String\(year\) === String\(currentYear\)/.test(leave));
 check('sync-stale-entitlement', /function syncEntitlementFromTypeLocked_/.test(leave));
-check('leave-decision-email-body', /Employee Name:/.test(leave) && !/Employee ID:/.test(leave));
+check('leave-decision-email-body', /Employee Name:/.test(leave) && /Employee ID:/.test(leave));
+check('leave-admin-name-column', /employee_name/.test(read('leave/LeaveUi.html')) &&
+  /adminLeaveRowHtml_[\s\S]{0,400}employee_name/.test(read('leave/LeaveUi.html')));
 check('leave-decision-dispatch', /function dispatchLeaveDecisionNotifications_/.test(leave));
 check('leave-decision-settings', /leave_decision_notify_employee/.test(read('foundation/SchemaService.gs')));
 check('leave-decision-recipient-dedupe', /seen\[key\]/.test(leave));

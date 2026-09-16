@@ -810,6 +810,56 @@ var NotificationService = (function () {
     };
   }
 
+  /**
+   * Send a one-off org email and log to Notifications sheet (leave-style log).
+   * @param {Object} options event_type, to, subject, body, employee_id, related_entity_type, related_entity_id, orgSettingKey
+   */
+  function sendOrgEventEmail(options) {
+    options = options || {};
+    var enabled = true;
+    if (options.orgSettingKey) {
+      enabled = NotificationEngine.isTruthy(ConfigService.getSetting(options.orgSettingKey, true));
+    }
+    var to = trim_(options.to);
+    var subject = String(options.subject || '').trim();
+    var body = String(options.body || subject || '').trim();
+    var empId = trim_(options.employee_id);
+    if (empId && body.indexOf('Employee ID:') < 0) {
+      body = 'Employee ID: ' + empId + '\n\n' + body;
+    }
+    var status = NotificationEngine.EMAIL_STATUS.PENDING;
+    var errorMessage = '';
+    var sentAt = '';
+    if (!enabled) {
+      status = 'SKIPPED';
+      errorMessage = String(options.orgSettingKey || 'disabled') + ' disabled';
+    } else if (!to) {
+      status = NotificationEngine.EMAIL_STATUS.NO_EMAIL;
+      errorMessage = 'NO_EMAIL';
+    } else {
+      try {
+        sendMail_(to, subject, body);
+        status = NotificationEngine.EMAIL_STATUS.SENT;
+        sentAt = now_();
+      } catch (e) {
+        status = NotificationEngine.EMAIL_STATUS.FAILED;
+        errorMessage = String(e.message || e).substring(0, 300);
+      }
+    }
+    writeEmailLog_({
+      event_type: options.event_type || 'ORG_EMAIL',
+      recipient_email: to,
+      employee_id: empId,
+      subject: subject,
+      status: status,
+      error_message: errorMessage,
+      related_entity_type: options.related_entity_type || '',
+      related_entity_id: options.related_entity_id || '',
+      sent_at: sentAt
+    });
+    return { status: status, error_message: errorMessage };
+  }
+
   return {
     createNotification: createNotification,
     createNotifications: createNotifications,
@@ -829,6 +879,7 @@ var NotificationService = (function () {
     resolveRecipient: resolveRecipient,
     listHrAdminRecipients: listHrAdminRecipients,
     catalogForClient: catalogForClient,
+    sendOrgEventEmail: sendOrgEventEmail,
     ensureSchema: ensure_,
     EMAIL_BATCH_LIMIT: EMAIL_BATCH_LIMIT_,
     _testSendEmail: null

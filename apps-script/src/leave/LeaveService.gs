@@ -146,6 +146,7 @@ var LeaveService = (function () {
     var name = employeeDisplayName_(emp);
     var typeLabel = type ? (type.name || type.code || '') : '';
     var lines = [
+      'Employee ID: ' + String(emp.employee_id || ''),
       'Employee Name: ' + name,
       'Leave Type: ' + typeLabel,
       'Leave Dates: ' + LeaveEngine.formatIsoDate(req.start_date) + ' to ' + LeaveEngine.formatIsoDate(req.end_date),
@@ -676,7 +677,8 @@ var LeaveService = (function () {
     var mailBody = body;
     if (!mailBody) {
       var name = employeeDisplayName_(emp);
-      mailBody = subject + '\n\nOpen HRMS to review this leave request.\nEmployee Name: ' + name;
+      mailBody = subject + '\n\nOpen HRMS to review this leave request.\nEmployee ID: ' +
+        String(employeeId || (emp && emp.employee_id) || '') + '\nEmployee Name: ' + name;
     }
     return sendLeaveDecisionEmail_(eventType, recipientEmail, subject, mailBody, employeeId, entityId);
   }
