@@ -97,6 +97,9 @@ check('calendar-uses-config-today', /function getCalendar[\s\S]{0,400}todayDateO
 check('my-leave-no-synthetic-past', /t\.is_active && String\(year\) === String\(currentYear\)/.test(leave));
 check('seed-fallback-timezone', /formatDate\(now, ConfigService\.getTimezone/.test(emp));
 check('seed-fallback-carry-forward', /function seedLeaveBalances_[\s\S]{0,1800}carryForwardDays/.test(emp));
+check('leave-approval-stage-columns', /manager_approver_employee_id/.test(read('foundation/SchemaService.gs')) &&
+  /recordApprovalStage_/.test(read('leave/LeaveService.gs')));
+check('owner-role-constant', /OWNER:\s*'OWNER'/.test(read('foundation/Constants.gs')));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

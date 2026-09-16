@@ -30,7 +30,11 @@ var SchemaService = (function () {
     'leave_request_id', 'employee_id', 'leave_type_id', 'start_date', 'end_date',
     'is_half_day', 'half_day_session', 'total_days', 'status', 'reason',
     'approver_employee_id', 'decision_at', 'decision_comment', 'submitted_at',
-    'cancelled_at', 'created_at'
+    'cancelled_at', 'created_at',
+    'manager_employee_id_at_submit',
+    'manager_approver_employee_id', 'manager_decision_at', 'manager_decision_comment',
+    'hr_approver_employee_id', 'hr_decision_at', 'hr_decision_comment',
+    'admin_approver_employee_id', 'admin_decision_at', 'admin_decision_comment'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_STRUCTURES] = [
     'salary_structure_id', 'employee_id', 'effective_from', 'effective_to', 'status',
@@ -122,6 +126,29 @@ var SchemaService = (function () {
     }
   }
 
+  function mergeSheetHeaders_(sheet, headers) {
+    if (!sheet || !headers || !headers.length) return;
+    var lastCol = Math.max(sheet.getLastColumn(), 1);
+    var row1 = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var existing = [];
+    row1.forEach(function (cell) {
+      var h = String(cell || '').trim();
+      if (h) existing.push(h);
+    });
+    if (!existing.length) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      return;
+    }
+    headers.forEach(function (header) {
+      if (existing.indexOf(header) >= 0) return;
+      var col = existing.length + 1;
+      sheet.getRange(1, col).setValue(header).setFontWeight('bold');
+      existing.push(header);
+    });
+  }
+
   function ensureSheet_(ss, name, headers) {
     var sheet = ss.getSheetByName(name);
     var created = false;
@@ -129,11 +156,7 @@ var SchemaService = (function () {
       sheet = ss.insertSheet(name);
       created = true;
     }
-    if (sheet.getLastRow() === 0 || sheet.getRange(1, 1).getValue() === '') {
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.setFrozenRows(1);
-      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
-    }
+    mergeSheetHeaders_(sheet, headers);
     if (name === HRMS.SHEETS.USERS && created) {
       applyUsersValidations_(sheet);
     }
@@ -241,9 +264,19 @@ var SchemaService = (function () {
     };
   }
 
+  function ensureSheetHeaders(sheetName) {
+    var headers = SHEET_HEADERS_[sheetName];
+    if (!headers) return { ok: false, reason: 'unknown sheet' };
+    var sheet = ConfigService.openSpreadsheet().getSheetByName(sheetName);
+    if (!sheet) return { ok: false, reason: 'missing tab' };
+    mergeSheetHeaders_(sheet, headers);
+    return { ok: true };
+  }
+
   return {
     setupDatabase: setupDatabase,
     getSchemaInfo: getSchemaInfo,
+    ensureSheetHeaders: ensureSheetHeaders,
     ensureModuleSheets: function () {
       return ensureModuleSheets_(ConfigService.openSpreadsheet());
     }
