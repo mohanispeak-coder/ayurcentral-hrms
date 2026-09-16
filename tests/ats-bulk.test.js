@@ -36,6 +36,8 @@ check('valid-sources', /ATS\.SOURCES/.test(bulk));
 check('dup-job-title', /Duplicate job title/.test(bulk));
 check('jobs-closing-dmy-sample', /closing_date:\s*'31\/12\/2026'/.test(bulk));
 check('jobs-closing-dmy-instructions', /DD\/MM\/YYYY/.test(bulk));
+check('jobs-bulk-closing-iso-normalize', /function closingDateToIso_/.test(bulk) &&
+  /Closing date must be DD\/MM\/YYYY or DD-MM-YYYY/.test(bulk));
 check('jobs-bulk-batch-insert', /DbService\.insertRecords\(ATS\.SHEETS\.JOBS/.test(bulk));
 check('cands-bulk-batch-insert', /DbService\.insertRecords\(ATS\.SHEETS\.APPLICATIONS/.test(bulk));
 check('dup-application', /Duplicate application/.test(bulk));
@@ -100,6 +102,10 @@ function loadBulk() {
 }
 
 var Bulk = loadBulk();
+
+check('closing-iso-slash', Bulk.closingDateToIso('31/12/2026') === '2026-12-31');
+check('closing-iso-dash', Bulk.closingDateToIso('31-12-2026') === '2026-12-31');
+check('closing-iso-empty', Bulk.closingDateToIso('') === '');
 
 var jobCsv = 'title,department\nSales Exec,Sales\n';
 var jobRows = Bulk.parseCsvRows(jobCsv);
