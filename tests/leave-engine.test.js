@@ -6,14 +6,23 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+<<<<<<< HEAD
 const root = path.join(__dirname, '..', 'apps-script', 'src');
+=======
+const src = path.join(__dirname, '..', 'apps-script', 'src');
+>>>>>>> origin/cursor/hrms-dev-env-06b9
 const context = {
   HRMS: {},
   Logger: { log: function () {} }
 };
 vm.createContext(context);
+<<<<<<< HEAD
 vm.runInContext(fs.readFileSync(path.join(root, 'foundation', 'Constants.gs'), 'utf8'), context);
 vm.runInContext(fs.readFileSync(path.join(root, 'leave', 'LeaveEngine.gs'), 'utf8'), context);
+=======
+vm.runInContext(fs.readFileSync(path.join(src, 'foundation', 'Constants.gs'), 'utf8'), context);
+vm.runInContext(fs.readFileSync(path.join(src, 'leave', 'LeaveEngine.gs'), 'utf8'), context);
+>>>>>>> origin/cursor/hrms-dev-env-06b9
 
 const LeaveEngine = context.LeaveEngine;
 const failures = [];
