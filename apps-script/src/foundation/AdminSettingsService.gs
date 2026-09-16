@@ -15,7 +15,11 @@ var AdminSettingsService = (function () {
     { key: 'leave_decision_notify_additional_email', label: 'Leave approve/reject — extra recipient email', type: 'string' }
   ];
 
-  var ROLE_ACCESS_ROLES_ = [HRMS.ROLES.EMPLOYEE, HRMS.ROLES.MANAGER];
+  /** Lazy — AdminSettingsService loads before Constants.gs in Apps Script file order. */
+  function roleAccessRoles_() {
+    return ['EMPLOYEE', 'MANAGER'];
+  }
+
   var ROLE_ACCESS_FEATURES_ = [
     { id: 'documents', label: 'Download documents' },
     { id: 'payslips', label: 'Download payslips' },
