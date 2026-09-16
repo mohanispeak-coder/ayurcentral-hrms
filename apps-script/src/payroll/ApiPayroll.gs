@@ -15,6 +15,13 @@ function apiGetPayrollRun(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiSyncPayrollEmployees(runId, sessionToken) {
+  return hrmsRun_(function () {
+    PayrollService.syncEligibleEmployees(runId);
+    return PayrollService.getRunDetail(runId, { skipSync: false });
+  }, sessionToken);
+}
+
 function apiCreatePayrollRun(periodYear, periodMonth, notes, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.createRun(periodYear, periodMonth, notes);

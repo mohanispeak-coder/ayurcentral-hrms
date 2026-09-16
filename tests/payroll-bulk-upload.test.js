@@ -57,6 +57,10 @@ check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
 check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client) &&
   /<details[^>]*attendance-bulk-card[\s\S]*<summary>/.test(client));
+check('attendance-bulk-open-when-upload', /hasRun && \(uploadAllowed \|\| bulkState\.preview\)\) \? ' open'/.test(client));
+check('payroll-sync-employees-api', /apiSyncPayrollEmployees/.test(api));
+check('payroll-table-reset-on-run', /resetPayrollTableView_/.test(client) && /tableRunId/.test(client));
+check('payroll-load-eligible-button', /btn-pr-sync-employees/.test(client));
 check('collapsible-template-sections', /collapsible-section/.test(client) && /collapsible-section-body/.test(client));
 const styles = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ui', 'Styles.html'), 'utf8');
 check('payroll-single-scroll-css', /overflow:\s*visible/.test(styles) &&

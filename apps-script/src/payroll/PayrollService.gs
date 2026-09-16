@@ -21,9 +21,11 @@ var PayrollService = (function () {
     if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
       return new Date(v.getFullYear(), v.getMonth(), v.getDate());
     }
-    var s = String(v).substring(0, 10);
-    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    var s = String(v).trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+    if (dmy) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
     var d = new Date(v);
     if (isNaN(d.getTime())) return null;
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -284,10 +286,18 @@ var PayrollService = (function () {
     options = options || {};
     var run = getRun_(runId);
     var st = String(run.status).toUpperCase();
+    var syncMeta = { added: 0, total: 0, error: '' };
     if (!options.skipSync &&
         (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED)) {
-      syncEligibleEmployees(runId, { alreadyLocked: !!options.alreadyLocked });
+      try {
+        syncMeta = syncEligibleEmployees(runId, { alreadyLocked: !!options.alreadyLocked }) || syncMeta;
+      } catch (syncErr) {
+        syncMeta.error = String(syncErr && syncErr.message ? syncErr.message : syncErr);
+        Logger.log('Payroll syncEligibleEmployees: ' + syncMeta.error);
+      }
       run = getRun_(runId);
+    } else {
+      syncMeta.total = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).length;
     }
     var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
     var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
@@ -314,7 +324,9 @@ var PayrollService = (function () {
       finalizeBlockers: buildFinalizeBlockers_(records, employees),
       payslipStatus: payslipStatus_(records),
       uiPhase: uiPhase,
-      uiPhaseLabel: uiPhaseLabel_(uiPhase)
+      uiPhaseLabel: uiPhaseLabel_(uiPhase),
+      syncMeta: syncMeta,
+      eligibleCount: eligibleEmployees_(run.period_year, run.period_month).length
     };
   }
 

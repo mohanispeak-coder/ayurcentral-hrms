@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.10-attendance-v2';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.16-attendance-fix';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -79,6 +79,7 @@
       tableQuery: '',
       tableFilter: 'all',
       tablePage: 1,
+      tableRunId: '',
       dirty: false,
       inputDraft: {}
     };
@@ -134,6 +135,10 @@
         payrollState.detail = null;
         payrollState.dirty = false;
         payrollState.inputDraft = {};
+        payrollState.tableQuery = '';
+        payrollState.tableFilter = 'all';
+        payrollState.tablePage = 1;
+        payrollState.tableRunId = '';
         bulkState.preview = null;
         homeState.salaryStructureOpen = false;
         payslipCache = null;
@@ -578,6 +583,15 @@
       renderPayrollHome({ openSalaryStructure: true });
     }
 
+    function resetPayrollTableView_(runId) {
+      var id = String(runId || '');
+      if (!id || payrollState.tableRunId === id) return;
+      payrollState.tableRunId = id;
+      payrollState.tableQuery = '';
+      payrollState.tableFilter = 'all';
+      payrollState.tablePage = 1;
+    }
+
     function paintUnifiedPayroll_(page, seq, detail) {
       var year = homeState.year;
       var month = homeState.month;
@@ -627,6 +641,7 @@
           escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
         html += paintCompensationBulkCard_();
       } else if (detail) {
+        resetPayrollTableView_(currentRun.payroll_run_id);
         html += paintAttendanceGateBanner_(st);
         html += paintPayrollWorkflowCard_(detail, st);
         html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st);
@@ -710,7 +725,7 @@
 
     function paintAttendanceBulkSection_(runId, uploadAllowed, hasRun, st) {
       st = statusKey(st);
-      var openAttr = (bulkState.preview || !uploadAllowed) ? ' open' : '';
+      var openAttr = (hasRun && (uploadAllowed || bulkState.preview)) ? ' open' : '';
       var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
@@ -739,9 +754,17 @@
     }
 
     function paintPayrollDataSection_(detail, editable) {
+      var tableHtml;
+      try {
+        tableHtml = paintEmployeeTable_(detail, editable);
+      } catch (paintErr) {
+        tableHtml = '<div class="alert alert-warning">Could not render the attendance table. ' +
+          escapeHtml(String(paintErr && paintErr.message ? paintErr.message : paintErr)) +
+          '</div><button type="button" class="btn btn-secondary" id="btn-pr-sync-employees">Reload employee list</button>';
+      }
       return '<div class="card" id="payroll-data-card"><h2>Step 1 — Attendance manual entry</h2>' +
         '<p class="page-lede">Alternatively, enter working days, paid days, and LOP in the table below. Save before calculating.</p>' +
-        paintEmployeeTable_(detail, editable) + '</div>';
+        tableHtml + '</div>';
     }
 
     function paintBulkPreview_(preview) {
@@ -1667,7 +1690,9 @@
     }
 
     function paintEmployeeTable_(detail, editable) {
-      var rows = filterRows_(detail.rows || []);
+      detail = detail || {};
+      var allRows = detail.rows || [];
+      var rows = filterRows_(allRows);
       var total = rows.length;
       var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
       if (payrollState.tablePage > pages) payrollState.tablePage = pages;
@@ -1688,35 +1713,54 @@
         optFilter_('mismatch', payrollState.tableFilter, 'LOP differs from leave') +
         '</select></label></div></div>';
 
-      if (!(detail.rows || []).length) {
-        html += '<div class="empty-state"><h2>No employees in this run</h2><p>No ACTIVE employees had joined by the end of this month.</p></div></div>';
+      if (!allRows.length) {
+        var elig = detail.eligibleCount != null ? detail.eligibleCount : '—';
+        var syncNote = detail.syncMeta && detail.syncMeta.error
+          ? ('<p class="hint" style="margin-top:8px">Sync note: ' + escapeHtml(detail.syncMeta.error) + '</p>')
+          : '';
+        html += '<div class="empty-state"><h2>No employees in this run</h2>' +
+          '<p>No payroll input rows yet. <strong>' + escapeHtml(String(elig)) +
+          '</strong> ACTIVE employee(s) are eligible for this month.</p>' +
+          syncNote +
+          '<div class="primary-next" style="justify-content:center;margin-top:16px">' +
+          '<button type="button" class="btn btn-primary" id="btn-pr-sync-employees">Load eligible employees</button>' +
+          '</div></div></div>';
         return html;
       }
       if (!pageRows.length) {
-        html += '<div class="empty-state"><h2>No matching employees</h2><p>Try a different search or filter.</p></div></div>';
+        html += '<div class="empty-state"><h2>No matching employees</h2>' +
+          '<p>Try a different search or filter, or reset filters below.</p>' +
+          '<div class="primary-next" style="justify-content:center;margin-top:12px">' +
+          '<button type="button" class="btn btn-secondary" id="btn-pr-reset-filters">Show all employees</button>' +
+          '</div></div></div>';
         return html;
       }
+
+      html += '<p class="hint" style="margin:0 0 10px">' + escapeHtml(String(allRows.length)) +
+        ' employee(s) in this payroll · showing ' + escapeHtml(String(start + 1)) + '–' +
+        escapeHtml(String(Math.min(start + PAGE_SIZE, total))) + '</p>';
 
       html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
         '<th>Employee</th><th class="num">Basic</th><th class="num">Allowances</th><th class="num">Deductions</th>' +
         '<th class="num">Working</th><th class="num">Paid</th><th class="num">LOP</th><th class="num">Leave LOP</th>' +
         '<th class="num">Net pay</th><th>Flags</th>' + (isLocked ? '<th>Payslip</th>' : '') + '</tr></thead><tbody>';
       pageRows.forEach(function (row) {
-        var inp = row.input;
+        var inp = row.input || {};
         var rec = row.record;
-        var emp = row.employee;
+        var emp = row.employee || { employee_id: '', display_name: '—' };
         var amt = row.amounts || {};
         var warnings = row.warnings || [];
         var cls = '';
         if (warnings.indexOf('EXCEPTION') >= 0) cls = 'row-block';
         else if (warnings.indexOf('LOP_MISMATCH') >= 0 || warnings.indexOf('DAYS_INCONSISTENT') >= 0) cls = 'row-warn';
         function cell(name, val, step) {
-          if (!editable) return '<td class="num">' + escapeHtml(val) + '</td>';
+          if (!editable || !inp.payroll_input_id) return '<td class="num">' + escapeHtml(val) + '</td>';
           return '<td><input class="form-input js-inp" type="number" step="' + (step || '0.01') + '" min="0" data-id="' +
             escapeHtml(inp.payroll_input_id) + '" data-field="' + name + '" value="' + escapeHtml(val) + '"></td>';
         }
         html += '<tr class="' + cls + '">' +
-          '<td><div>' + escapeHtml(emp.display_name) + '</div><div class="hint mono">' + escapeHtml(emp.employee_id) + '</div></td>' +
+          '<td><div>' + escapeHtml(emp.display_name || emp.employee_id || '—') + '</div><div class="hint mono">' +
+          escapeHtml(emp.employee_id || '') + '</div></td>' +
           '<td class="num">' + (rec ? fmtMoney(amt.basic) : '—') + '</td>' +
           '<td class="num">' + (rec ? fmtMoney(amt.allowances) : '—') + '</td>' +
           '<td class="num">' + (rec ? fmtMoney(amt.deductions) : '—') + '</td>' +
@@ -1908,6 +1952,19 @@
       }
     }
 
+    function syncPayrollEmployees_(runId, page) {
+      if (!runId) return;
+      rpc('apiSyncPayrollEmployees', [runId], null, 'Loading employees…', $('pr-action-feedback'))
+        .then(function (nextDetail) {
+          payrollState.detail = nextDetail;
+          paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
+          showToast('Employee list updated for this payroll run.', 'success');
+        })
+        .catch(function (err) {
+          showToast((err && err.message) || 'Could not load employees', 'error');
+        });
+    }
+
     function bindRunTable_(page, detail, editable) {
       var card = $('payroll-data-card');
       if (!card) return;
@@ -1916,6 +1973,22 @@
 
       if (card.getAttribute('data-table-bound') === '1') return;
       card.setAttribute('data-table-bound', '1');
+
+      card.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (!t || !t.id) return;
+        if (t.id === 'btn-pr-sync-employees') {
+          var d = payrollState.detail;
+          if (d && d.run) syncPayrollEmployees_(d.run.payroll_run_id, page);
+          return;
+        }
+        if (t.id === 'btn-pr-reset-filters') {
+          payrollState.tableQuery = '';
+          payrollState.tableFilter = 'all';
+          payrollState.tablePage = 1;
+          repaintPayrollTable_(page);
+        }
+      });
 
       card.addEventListener('input', function (ev) {
         if (ev.target && ev.target.id === 'pr-emp-search') {
