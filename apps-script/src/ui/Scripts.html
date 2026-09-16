@@ -2051,7 +2051,10 @@
       if (prev && prev !== v) {
         moduleLoaded_ = {};
         moduleLoading_ = {};
-        invalidateModuleViewCachePrefix('');
+        clearModuleViewCache();
+        moduleDataCacheClearHooks_.forEach(function (fn) {
+          try { fn(); } catch (ignore) {}
+        });
       }
       sessionStorage.setItem(key, v);
     } catch (ignore) {}

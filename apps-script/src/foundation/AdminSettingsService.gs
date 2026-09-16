@@ -70,7 +70,7 @@ var AdminSettingsService = (function () {
 
   function readRoleAccessMatrix_() {
     var matrix = [];
-    ROLE_ACCESS_ROLES_.forEach(function (role) {
+    roleAccessRoles_().forEach(function (role) {
       var row = { role: role, flags: {} };
       ROLE_ACCESS_FEATURES_.forEach(function (feat) {
         var key = roleAccessKey_(role, feat.id);
@@ -79,7 +79,7 @@ var AdminSettingsService = (function () {
       matrix.push(row);
     });
     return {
-      roles: ROLE_ACCESS_ROLES_,
+      roles: roleAccessRoles_(),
       features: ROLE_ACCESS_FEATURES_,
       matrix: matrix
     };
@@ -107,7 +107,7 @@ var AdminSettingsService = (function () {
       }
     });
     var roleAccess = payload.role_access || {};
-    ROLE_ACCESS_ROLES_.forEach(function (role) {
+    roleAccessRoles_().forEach(function (role) {
       var patch = roleAccess[role] || roleAccess[String(role).toUpperCase()];
       if (!patch) return;
       ROLE_ACCESS_FEATURES_.forEach(function (feat) {
@@ -121,8 +121,8 @@ var AdminSettingsService = (function () {
   }
 
   function roleAccessDefaultsForRole_(role) {
-    role = String(role || HRMS.ROLES.EMPLOYEE).toUpperCase();
-    if (ROLE_ACCESS_ROLES_.indexOf(role) < 0) {
+    role = String(role || 'EMPLOYEE').toUpperCase();
+    if (roleAccessRoles_().indexOf(role) < 0) {
       return UserAccessService.defaultFlags();
     }
     return {
