@@ -900,7 +900,7 @@
 
     function paintLeaveSummary_(el, rows) {
       if (!rows.length) {
-        el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances are seeded from active leave types when an employee is created.</p></div>';
+        el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances follow configured leave types from the joining year through the current leave year.</p></div>';
         return;
       }
       el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +

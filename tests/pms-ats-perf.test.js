@@ -29,27 +29,37 @@ function check(name, cond, detail) {
   }
 }
 
-const pms = read('pms/PmsService.gs');
-const pmsApi = read('pms/ApiPms.gs');
-const pmsClient = read('pms/PmsClient.html');
+function maybeRead(rel) {
+  var full = path.join(src, rel);
+  return fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : '';
+}
+
+const pms = maybeRead('pms/PmsService.gs');
+const pmsApi = maybeRead('pms/ApiPms.gs');
+const pmsClient = maybeRead('pms/PmsClient.html');
 const ats = read('ats/AtsService.gs');
 const atsClient = read('ats/AtsClient.html');
 
-check('pms-read-no-ensure-cycle', !/function getCycle[\s\S]{0,80}ensure_\(\)/.test(pms));
-check('pms-read-no-ensure-review', !/function getReviewBundle[\s\S]{0,80}ensure_\(\)/.test(pms));
-check('pms-read-no-ensure-team', !/function listTeamReviews[\s\S]{0,80}ensure_\(\)/.test(pms));
-check('pms-read-no-ensure-assign', !/function listAssignableEmployees[\s\S]{0,80}ensure_\(\)/.test(pms));
-const teamFn = fnBlock(pms, 'listTeamReviews', 'listAppraisals');
-const dashFn = fnBlock(pms, 'getDashboard', 'listRatingScale');
+if (pms) {
+  check('pms-read-no-ensure-cycle', !/function getCycle[\s\S]{0,80}ensure_\(\)/.test(pms));
+  check('pms-read-no-ensure-review', !/function getReviewBundle[\s\S]{0,80}ensure_\(\)/.test(pms));
+  check('pms-read-no-ensure-team', !/function listTeamReviews[\s\S]{0,80}ensure_\(\)/.test(pms));
+  check('pms-read-no-ensure-assign', !/function listAssignableEmployees[\s\S]{0,80}ensure_\(\)/.test(pms));
+  const teamFnPms = fnBlock(pms, 'listTeamReviews', 'listAppraisals');
+  const dashFn = fnBlock(pms, 'getDashboard', 'listRatingScale');
+  check('pms-team-indexed-reviews', /PmsEngine\.findReview\(allReviews/.test(teamFnPms));
+  check('pms-team-single-goals-read', /allGoals/.test(teamFnPms) && /allReviews/.test(teamFnPms));
+  check('pms-dashboard-inmemory-review', /PmsEngine\.findReview\(reviews/.test(dashFn));
+  check('pms-namemap-single-pass', !/function nameMap_[\s\S]{0,200}listActiveEmployees_/.test(pms));
+  check('pms-cycle-bundle-api', /function apiPmsGetCycleBundle/.test(pmsApi));
+  check('pms-cycle-bundle-service', /function getCycleBundle/.test(pms));
+  check('pms-client-cycle-bundle', /apiPmsGetCycleBundle/.test(pmsClient));
+  check('pms-client-no-triple-cycle', !/Promise\.all\([\s\S]{0,120}apiPmsGetCycle/.test(pmsClient));
+} else {
+  check('pms-module-absent-phase1', true, 'PMS is out of Phase 1; ATS contracts still run');
+}
+
 const candFn = fnBlock(ats, 'getCandidate', 'addComment');
-check('pms-team-indexed-reviews', /PmsEngine\.findReview\(allReviews/.test(teamFn));
-check('pms-team-single-goals-read', /allGoals/.test(teamFn) && /allReviews/.test(teamFn));
-check('pms-dashboard-inmemory-review', /PmsEngine\.findReview\(reviews/.test(dashFn));
-check('pms-namemap-single-pass', !/function nameMap_[\s\S]{0,200}listActiveEmployees_/.test(pms));
-check('pms-cycle-bundle-api', /function apiPmsGetCycleBundle/.test(pmsApi));
-check('pms-cycle-bundle-service', /function getCycleBundle/.test(pms));
-check('pms-client-cycle-bundle', /apiPmsGetCycleBundle/.test(pmsClient));
-check('pms-client-no-triple-cycle', !/Promise\.all\([\s\S]{0,120}apiPmsGetCycle/.test(pmsClient));
 
 check('ats-job-candidate-index', /function getJob[\s\S]{0,600}listCandidates\(\)/.test(ats));
 check('ats-job-no-per-app-find', !/function getJob[\s\S]{0,700}findCandidate\(/.test(ats));

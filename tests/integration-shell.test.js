@@ -46,7 +46,8 @@ check('route-ats', /'ats-candidates':\s*'ats'/.test(scripts));
 check('route-ntf', /notifications:\s*'notifications'/.test(scripts));
 check('nav-recruit', /id:\s*'recruitment'/.test(scripts));
 check('schema-module-hook', /ensureModuleSheets_/.test(schema));
-check('leave-inbox-submit', /NotificationLeaveAdapter\.notifySubmitted/.test(leave));
+check('leave-inbox-submit', /NotificationLeaveAdapter\.notifyManagerApprovalRequired/.test(leave) &&
+  /NotificationLeaveAdapter\.notifyHrReviewRequired/.test(leave));
 check('leave-inbox-hr-notify', /notifyHrReviewRequired/.test(read('notifications/NotificationAdapters.gs')));
 check('leave-inbox-mgr-notify', /notifyManagerApprovalRequired/.test(read('notifications/NotificationAdapters.gs')));
 check('leave-inbox-approve', /NotificationLeaveAdapter\.notifyApproved/.test(leave));

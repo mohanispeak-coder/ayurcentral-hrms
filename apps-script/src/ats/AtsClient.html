@@ -827,7 +827,9 @@
         '<div class="candidates-table-section"><h2 class="section-title" style="margin:0 0 12px">All candidates</h2>' +
         '<div class="table-wrap" id="ats-cand-wrap"><table class="data-table"><thead><tr>' +
           '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Source</th><th>Location</th><th>Apps</th><th>Resume</th>' +
-        '</tr></thead><tbody id="ats-cand-body"></tbody></table></div></div>';
+        '</tr></thead><tbody id="ats-cand-body">' +
+          ((restoreCands || keepRefresh) ? '' : skRows(8, 8)) +
+        '</tbody></table></div></div>';
       if (atsView.candQuery && $('ats-cand-q')) $('ats-cand-q').value = atsView.candQuery;
       if (canManage()) {
         ensureMeta().then(function () { bindAtsBulkPanel_('candidates', { onCommitted: function () { loadCands(); } }); });
@@ -877,10 +879,8 @@
         paintCandRows(atsView.candidates);
         load();
       } else {
-        var body = $('ats-cand-body');
         var wrap = $('ats-cand-wrap');
         if (wrap) wrap.setAttribute('aria-busy', 'true');
-        if (body) body.innerHTML = skRows(8, 8);
         load();
       }
     }

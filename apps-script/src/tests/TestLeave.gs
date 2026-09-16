@@ -31,6 +31,19 @@ function testLeave_Engine() {
 
   check('leave-year-jan', LeaveEngine.getLeaveYear('2026-03-15', 1) === '2026');
   check('leave-year-april-fy', LeaveEngine.getLeaveYear('2026-03-15', 4) === '2025');
+  check('years-join-current', LeaveEngine.employeeLeaveYears('2026-06-01', '2026-09-15', 1).join(',') === '2026');
+  check('years-join-previous', LeaveEngine.employeeLeaveYears('2025-06-01', '2026-09-15', 1).join(',') === '2025,2026');
+  check('years-join-several', LeaveEngine.employeeLeaveYears('2023-01-10', '2026-09-15', 1).join(',') === '2023,2024,2025,2026');
+  check('years-future-joiner', LeaveEngine.employeeLeaveYears('2027-01-01', '2026-09-15', 1).length === 0);
+  var lateYearPlan = LeaveEngine.planBalanceGrants({
+    joiningDate: '2025-12-31',
+    asOfDate: '2026-01-02',
+    startMonth: 1,
+    types: [{ leave_type_id: 'LT001' }],
+    existing: []
+  });
+  check('grant-through-next-year', lateYearPlan.length === 2 &&
+    lateYearPlan[0].leave_year === '2025' && lateYearPlan[1].leave_year === '2026');
 
   var overlapFull = LeaveEngine.requestsOverlap(
     { start_date: '2026-04-06', end_date: '2026-04-10', is_half_day: false },
@@ -161,7 +174,7 @@ function testLeave_SheetFixtures() {
       is_half_day: false,
       reason: 'P0 submit test'
     });
-    record('LV-01-submit', submitted.status === 'SUBMITTED', submitted.status);
+    record('LV-01-submit', LeaveEngine.isPendingApprovalStatus(submitted.status) || submitted.status === 'SUBMITTED', submitted.status);
 
     var mine = LeaveService.getMyLeave(session, empId);
     var bal = mine.balances.filter(function (b) { return b.leave_type_id === type.leave_type_id; })[0];

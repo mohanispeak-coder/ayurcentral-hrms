@@ -430,28 +430,56 @@ var EmployeeService = (function () {
       return 0;
     }
     if (!types.length) return 0;
-    var year = currentLeaveYear_();
+    var emp = EmployeeRepository.findById(employeeId);
+    var startMonth = Number(ConfigService.getSetting('leave_year_start_month', 1)) || 1;
+    var asOf = now;
+    try {
+      asOf = Utilities.formatDate(now, ConfigService.getTimezone(), 'yyyy-MM-dd');
+    } catch (ignore) {}
+    var years;
+    if (typeof LeaveEngine !== 'undefined' && LeaveEngine.employeeLeaveYears) {
+      years = LeaveEngine.employeeLeaveYears(emp && emp.joining_date, asOf, startMonth);
+    } else {
+      years = [currentLeaveYear_()];
+    }
+    if (!years.length) return 0;
     var existing = EmployeeRepository.listLeaveBalances(employeeId);
     var seeded = 0;
-    types.forEach(function (t) {
-      var already = existing.some(function (b) {
-        return String(b.leave_type_id) === String(t.leave_type_id) && String(b.leave_year) === year;
+    years.forEach(function (year) {
+      types.forEach(function (t) {
+        var already = existing.some(function (b) {
+          return String(b.leave_type_id) === String(t.leave_type_id) && String(b.leave_year) === String(year);
+        });
+        if (already) return;
+        var entitled = Number(t.annual_entitlement_days) || 0;
+        var prevYear = String((Number(year) || 0) - 1);
+        var prev = null;
+        for (var i = 0; i < existing.length; i++) {
+          if (String(existing[i].leave_type_id) === String(t.leave_type_id) &&
+              String(existing[i].leave_year) === prevYear) {
+            prev = existing[i];
+            break;
+          }
+        }
+        var cf = (typeof LeaveEngine !== 'undefined' && LeaveEngine.carryForwardDays)
+          ? LeaveEngine.carryForwardDays(prev, t.carry_forward_max_days)
+          : 0;
+        var record = {
+          leave_balance_id: DbService.generateId('LB'),
+          employee_id: employeeId,
+          leave_type_id: t.leave_type_id,
+          leave_year: String(year),
+          entitled_days: entitled,
+          used_days: 0,
+          pending_days: 0,
+          carried_forward_days: cf,
+          available_days: entitled + cf,
+          updated_at: now
+        };
+        EmployeeRepository.insertLeaveBalance(record);
+        existing.push(record);
+        seeded++;
       });
-      if (already) return;
-      var entitled = Number(t.annual_entitlement_days) || 0;
-      EmployeeRepository.insertLeaveBalance({
-        leave_balance_id: DbService.generateId('LB'),
-        employee_id: employeeId,
-        leave_type_id: t.leave_type_id,
-        leave_year: year,
-        entitled_days: entitled,
-        used_days: 0,
-        pending_days: 0,
-        carried_forward_days: 0,
-        available_days: entitled,
-        updated_at: now
-      });
-      seeded++;
     });
     return seeded;
   }
@@ -490,6 +518,11 @@ var EmployeeService = (function () {
     var now = new Date();
 
     var runCreate = function () {
+      if (EmployeeRepository.findById(employeeId)) {
+        throw validationError_('Employee code already exists.', {
+          fields: { employee_id: 'Employee code already exists.' }
+        });
+      }
       ensureUniqueEmail_(validated.work_email, null);
       if (createUser) {
         if (!loginEmail) {
@@ -697,6 +730,12 @@ var EmployeeService = (function () {
         }
       }
       EmployeeRepository.update(id, updates);
+      if (hr && updates.hasOwnProperty('joining_date') &&
+          typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+        try {
+          LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
+        } catch (ignore) {}
+      }
       AuditService.log(
         'EMPLOYEE_UPDATE',
         'Employees',
@@ -742,6 +781,12 @@ var EmployeeService = (function () {
         'Status set to ' + next + (user ? '; user ' + (next === HRMS.EMPLOYEE_STATUS.INACTIVE ? 'DISABLED' : 'ACTIVE') : ''),
         id
       );
+      if (next === HRMS.EMPLOYEE_STATUS.ACTIVE &&
+          typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+        try {
+          LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
+        } catch (ignore) {}
+      }
       return getEmployee(session, id);
     });
   }
@@ -897,6 +942,12 @@ var EmployeeService = (function () {
     if (!view.can_view_leave) {
       throw authorizationError_('You do not have access to leave information.');
     }
+    if (String(emp.status || '').toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE &&
+        typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+      try {
+        LeaveService.grantBalancesForEmployee(emp.employee_id, null);
+      } catch (ignore) {}
+    }
     var types = [];
     try {
       types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);
@@ -904,17 +955,24 @@ var EmployeeService = (function () {
     var typeName = {};
     types.forEach(function (t) { typeName[t.leave_type_id] = t.name || t.code; });
     return EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
+      var available = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
+        ? LeaveEngine.availableDays(b)
+        : Number(b.available_days) || 0;
       return {
         leave_balance_id: b.leave_balance_id,
         leave_type_id: b.leave_type_id,
         leave_type_name: typeName[b.leave_type_id] || b.leave_type_id,
-        leave_year: b.leave_year,
+        leave_year: String(b.leave_year),
         entitled_days: Number(b.entitled_days) || 0,
         used_days: Number(b.used_days) || 0,
         pending_days: Number(b.pending_days) || 0,
         carried_forward_days: Number(b.carried_forward_days) || 0,
-        available_days: Number(b.available_days) || 0
+        available_days: available
       };
+    }).sort(function (a, b) {
+      var yearCmp = String(b.leave_year).localeCompare(String(a.leave_year));
+      if (yearCmp) return yearCmp;
+      return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
     });
   }
 

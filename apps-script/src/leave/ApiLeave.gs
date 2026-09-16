@@ -2,10 +2,18 @@
  * Client-callable Leave APIs. AuthZ on every entry.
  */
 
-function apiLeaveGetMyLeave(employeeId, sessionToken) {
+function apiLeaveGetMyLeave(employeeIdOrQuery, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return LeaveService.getMyLeave(session, employeeId || '');
+    var employeeId = '';
+    var leaveYear = '';
+    if (employeeIdOrQuery && typeof employeeIdOrQuery === 'object') {
+      employeeId = employeeIdOrQuery.employee_id || '';
+      leaveYear = employeeIdOrQuery.leave_year || '';
+    } else {
+      employeeId = employeeIdOrQuery || '';
+    }
+    return LeaveService.getMyLeave(session, employeeId, leaveYear);
   }, sessionToken);
 }
 
@@ -115,7 +123,7 @@ function apiLeaveGrantBalances(employeeId, leaveYear, sessionToken) {
     if (!PermissionService.isHrOrAdmin(session)) {
       throw authorizationError_('Only HR or Admin can grant leave balances.');
     }
-    return LeaveService.grantBalancesForEmployee(employeeId, leaveYear);
+    return LeaveService.grantBalancesForEmployee(employeeId, leaveYear, { includeInactive: true });
   }, sessionToken);
 }
 

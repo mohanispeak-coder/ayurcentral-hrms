@@ -510,7 +510,7 @@
           '<tbody id="leave-req-body">' + u.skRows(7, 4) + '</tbody></table></div></div>';
     }
 
-    c.callServer('apiLeaveGetMyLeave', '').then(function (data) {
+    c.callServer('apiLeaveGetMyLeave', { employee_id: '', leave_year: leaveViewCache['my-leave-year'] || '' }).then(function (data) {
       if (!onRoute('my-leave')) return;
       leaveViewCache['my-leave'] = data;
       markLeaveView_('my-leave');
@@ -523,6 +523,15 @@
 
   function paintMyLeave_(page, helpers, data) {
       var c = ctx();
+      leaveViewCache['my-leave-year'] = data.leave_year || '';
+      var yearOpts = (data.available_years || [data.leave_year]).map(function (y) {
+        return '<option value="' + c.escapeHtml(String(y)) + '"' +
+          (String(y) === String(data.leave_year) ? ' selected' : '') + '>' +
+          c.escapeHtml(String(y)) + '</option>';
+      }).join('');
+      var yearSelect = (data.available_years && data.available_years.length)
+        ? '<select class="form-select" id="leave-year-select" aria-label="Leave year">' + yearOpts + '</select>'
+        : '';
       var balRows = (data.balances || []).map(function (b) {
         return '<tr><td>' + c.escapeHtml(b.code) + '</td><td>' + c.escapeHtml(b.name) + '</td>' +
           '<td class="num">' + fmtDays(b.entitled_days) + '</td>' +
@@ -547,7 +556,11 @@
       }).join('');
       page.innerHTML =
         flashHtml('my-leave') +
-        pageHead('My Leave', 'Balances for leave year ' + (data.leave_year || '') + '.',
+        pageHead('My Leave', 'Balances for leave year ' + (data.leave_year || '') +
+          (data.current_leave_year && String(data.current_leave_year) !== String(data.leave_year)
+            ? ' (current year ' + data.current_leave_year + ')'
+            : '') + '.',
+          yearSelect +
           '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
           '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>') +
         '<div class="card"><h2 class="section-title">Balances</h2>' +
@@ -565,6 +578,14 @@
       if (calBtn) calBtn.addEventListener('click', function () {
         helpers.navigate('leave-calendar');
       });
+      var yearSel = document.getElementById('leave-year-select');
+      if (yearSel) {
+        yearSel.addEventListener('change', function () {
+          leaveViewCache['my-leave-year'] = yearSel.value;
+          delete leaveViewCache['my-leave'];
+          renderMyLeave(page, helpers);
+        });
+      }
       page.querySelectorAll('[data-cancel]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           if (!confirm('Cancel this leave request?')) return;
@@ -708,7 +729,7 @@
           '<td>' + (t.is_active ? 'Active' : 'Inactive') + '</td>' +
           '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit-type="' + c.escapeHtml(t.leave_type_id) + '">Edit</button></td></tr>';
       }).join('');
-      var reqRows = (data.requests || []).slice(0, 25).map(adminLeaveRowHtml_).join('');
+      var reqRows = (data.requests || []).map(adminLeaveRowHtml_).join('');
       var empFilter = employees.map(function (e) {
         return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
       }).join('');
@@ -724,7 +745,15 @@
           '<div class="page-toolbar"><div class="filters">' +
             '<div class="form-group"><label class="form-label" for="flt-emp">Employee</label><select class="form-select" id="flt-emp"><option value="">All</option>' + empFilter + '</select></div>' +
             '<div class="form-group"><label class="form-label" for="flt-status">Status</label><select class="form-select" id="flt-status">' +
-              '<option value="">All</option><option>DRAFT</option><option>SUBMITTED</option><option>APPROVED</option><option>REJECTED</option><option>CANCELLED</option></select></div>' +
+              '<option value="">All</option>' +
+              '<option value="PENDING">Awaiting approval</option>' +
+              '<option value="PENDING_MANAGER">Awaiting manager</option>' +
+              '<option value="PENDING_HR">Awaiting HR</option>' +
+              '<option value="PENDING_ADMIN">Awaiting admin</option>' +
+              '<option value="DRAFT">DRAFT</option>' +
+              '<option value="APPROVED">APPROVED</option>' +
+              '<option value="REJECTED">REJECTED</option>' +
+              '<option value="CANCELLED">CANCELLED</option></select></div>' +
             '<div class="form-group"><button type="button" class="btn btn-secondary" id="btn-flt">Apply filters</button></div>' +
           '</div></div>' +
           '<div id="leave-admin-filter-feedback" class="action-feedback hidden" role="status"></div>' +
@@ -828,10 +857,10 @@
           employee_id: document.getElementById('flt-emp').value,
           status: document.getElementById('flt-status').value
         }, actionOpts(fltBtn, 'Filtering...', feedback)).then(function (next) {
-          var html = (next.requests || []).slice(0, 25).map(adminLeaveRowHtml_).join('');
+          var html = (next.requests || []).map(adminLeaveRowHtml_).join('');
           var tbody = document.getElementById('admin-req-body');
           if (tbody) {
-            tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+            tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
             bindAdminActions();
           }
         });
@@ -894,7 +923,7 @@
         });
       });
       document.getElementById('btn-start-year').addEventListener('click', function () {
-        if (!confirm('Grant leave balances for the current leave year for all ACTIVE employees?')) return;
+        if (!confirm('Grant missing leave balances from each active employee\'s joining year through the current leave year? Existing balances are not overwritten.')) return;
         var yearBtn = this;
         c.callServer('apiLeaveStartLeaveYear', '',
           actionOpts(yearBtn, 'Granting balances...', document.getElementById('leave-year-feedback')))

@@ -135,6 +135,95 @@ var LeaveEngine = (function () {
     return String(toNumber(leaveYear) - 1);
   }
 
+  function leaveYearsInclusive(fromYear, toYear) {
+    var start = toNumber(fromYear);
+    var end = toNumber(toYear);
+    var out = [];
+    if (!start || !end || start > end) return out;
+    for (var y = start; y <= end; y++) out.push(String(y));
+    return out;
+  }
+
+  /**
+   * Leave years an employee should hold balances for, from joining year through as-of year.
+   * Future joiners (joining leave year after as-of) get no years.
+   */
+  function employeeLeaveYears(joiningDate, asOfDate, startMonth) {
+    var asOfYear = getLeaveYear(asOfDate || new Date(), startMonth);
+    var join = toDateOnly(joiningDate);
+    if (!join) return [asOfYear];
+    var joinYear = getLeaveYear(join, startMonth);
+    if (toNumber(joinYear) > toNumber(asOfYear)) return [];
+    return leaveYearsInclusive(joinYear, asOfYear);
+  }
+
+  function isEligibleForLeaveYear(joiningDate, leaveYear, startMonth) {
+    var join = toDateOnly(joiningDate);
+    if (!join) return true;
+    return toNumber(getLeaveYear(join, startMonth)) <= toNumber(leaveYear);
+  }
+
+  /**
+   * Decide which (leave_type_id, leave_year) rows to persist.
+   * Existing rows are never overwritten. A newly added leave type is granted
+   * for the through-year (and later), not back-filled into already-closed years,
+   * unless the employee has no balances yet (first grant / recovery).
+   *
+   * @param {Object} opts
+   * @param {Date|string=} opts.joiningDate
+   * @param {Date|string=} opts.asOfDate
+   * @param {number=} opts.startMonth
+   * @param {string|number=} opts.targetYear  Through-year (inclusive). Defaults to as-of leave year.
+   * @param {Array.<{leave_type_id: string}>} opts.types
+   * @param {Array.<{leave_type_id: string, leave_year: string}>} opts.existing
+   * @return {Array.<{leave_type_id: string, leave_year: string}>}
+   */
+  function planBalanceGrants(opts) {
+    opts = opts || {};
+    var startMonth = toNumber(opts.startMonth, 1);
+    var throughYear = opts.targetYear
+      ? String(opts.targetYear)
+      : getLeaveYear(opts.asOfDate || new Date(), startMonth);
+    if (!isEligibleForLeaveYear(opts.joiningDate, throughYear, startMonth)) return [];
+    var join = toDateOnly(opts.joiningDate);
+    var joinYear = join ? getLeaveYear(join, startMonth) : throughYear;
+    var years = leaveYearsInclusive(joinYear, throughYear);
+    var existingSet = {};
+    var existing = opts.existing || [];
+    existing.forEach(function (b) {
+      existingSet[String(b.leave_type_id) + '|' + String(b.leave_year)] = true;
+    });
+    var hasAny = existing.length > 0;
+    var types = opts.types || [];
+    var planned = [];
+    years.forEach(function (year) {
+      types.forEach(function (type) {
+        var id = String(type.leave_type_id || '');
+        if (!id) return;
+        var key = id + '|' + year;
+        if (existingSet[key]) return;
+        var isThrough = String(year) === String(throughYear);
+        var prevExists = !!existingSet[id + '|' + previousLeaveYear(year)];
+        if (isThrough || !hasAny || prevExists) {
+          planned.push({ leave_type_id: id, leave_year: year });
+          existingSet[key] = true;
+        }
+      });
+    });
+    return planned;
+  }
+
+  function matchesStatusFilter(status, filter) {
+    var f = String(filter || '').toUpperCase();
+    if (!f) return true;
+    var raw = String(status || '').toUpperCase();
+    var normalized = normalizeLeaveStatus_(status);
+    if (f === 'SUBMITTED' || f === 'PENDING') {
+      return isPendingApprovalStatus(status) || raw === 'SUBMITTED';
+    }
+    return raw === f || normalized === f;
+  }
+
   function carryForwardDays(previousBalance, carryForwardMax) {
     if (!previousBalance) return 0;
     var unused = availableDays({
@@ -413,6 +502,11 @@ var LeaveEngine = (function () {
     getLeaveYear: getLeaveYear,
     availableDays: availableDays,
     previousLeaveYear: previousLeaveYear,
+    leaveYearsInclusive: leaveYearsInclusive,
+    employeeLeaveYears: employeeLeaveYears,
+    isEligibleForLeaveYear: isEligibleForLeaveYear,
+    planBalanceGrants: planBalanceGrants,
+    matchesStatusFilter: matchesStatusFilter,
     carryForwardDays: carryForwardDays,
     requestsOverlap: requestsOverlap,
     isBlockingStatus: isBlockingStatus,

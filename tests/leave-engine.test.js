@@ -34,6 +34,27 @@ check('LV-10 half day', LeaveEngine.computeTotalDays('2026-04-08', '2026-04-08',
 check('ERR-01 inverted range counts 0', LeaveEngine.computeTotalDays('2026-04-10', '2026-04-08', false, 'CALENDAR_DAYS') === 0);
 check('leave year calendar', LeaveEngine.getLeaveYear('2026-03-15', 1) === '2026');
 check('leave year FY April', LeaveEngine.getLeaveYear('2026-03-15', 4) === '2025');
+check('leave year Jan 1', LeaveEngine.getLeaveYear('2026-01-01', 1) === '2026');
+check('leave year Dec 31', LeaveEngine.getLeaveYear('2026-12-31', 1) === '2026');
+check('leave year FY Apr on Apr 1', LeaveEngine.getLeaveYear('2026-04-01', 4) === '2026');
+check('leave year FY Apr on Mar 31', LeaveEngine.getLeaveYear('2026-03-31', 4) === '2025');
+check('leap day count calendar', LeaveEngine.computeTotalDays('2024-02-28', '2024-03-01', false, 'CALENDAR_DAYS') === 3);
+
+check('leave years inclusive', JSON.stringify(LeaveEngine.leaveYearsInclusive('2024', '2026')) === '["2024","2025","2026"]');
+check('leave years inverted empty', LeaveEngine.leaveYearsInclusive('2026', '2024').length === 0);
+check('employee years join current', JSON.stringify(LeaveEngine.employeeLeaveYears('2026-01-15', '2026-09-15', 1)) === '["2026"]');
+check('employee years join previous', JSON.stringify(LeaveEngine.employeeLeaveYears('2025-06-01', '2026-09-15', 1)) === '["2025","2026"]');
+check('employee years join several ago', JSON.stringify(LeaveEngine.employeeLeaveYears('2023-01-01', '2026-02-01', 1)) === '["2023","2024","2025","2026"]');
+check('employee years join Dec 31', JSON.stringify(LeaveEngine.employeeLeaveYears('2025-12-31', '2026-01-01', 1)) === '["2025","2026"]');
+check('employee years join Jan 1', JSON.stringify(LeaveEngine.employeeLeaveYears('2026-01-01', '2026-01-01', 1)) === '["2026"]');
+check('future joiner no years', LeaveEngine.employeeLeaveYears('2027-01-01', '2026-09-15', 1).length === 0);
+check('eligible current year', LeaveEngine.isEligibleForLeaveYear('2025-12-31', '2026', 1) === true);
+check('not eligible before join year', LeaveEngine.isEligibleForLeaveYear('2027-01-15', '2026', 1) === false);
+
+check('status filter pending alias', LeaveEngine.matchesStatusFilter('PENDING_HR', 'SUBMITTED') === true);
+check('status filter awaiting manager', LeaveEngine.matchesStatusFilter('PENDING_MANAGER', 'PENDING_MANAGER') === true);
+check('status filter approved exact', LeaveEngine.matchesStatusFilter('APPROVED', 'APPROVED') === true);
+check('status filter rejects mismatch', LeaveEngine.matchesStatusFilter('APPROVED', 'PENDING') === false);
 check('LV-06 overlap', LeaveEngine.requestsOverlap(
   { start_date: '2026-04-06', end_date: '2026-04-10', is_half_day: false },
   { start_date: '2026-04-09', end_date: '2026-04-12', is_half_day: false }

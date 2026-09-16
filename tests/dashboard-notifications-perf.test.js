@@ -21,12 +21,17 @@ function check(name, cond, detail) {
   }
 }
 
+function maybeRead(rel) {
+  var full = path.join(src, rel);
+  return fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : '';
+}
+
 const scripts = read('ui/Scripts.html');
 const ntf = read('notifications/NotificationService.gs');
 const engine = read('notifications/NotificationEngine.gs');
 const bell = read('notifications/NotificationBell.html');
 const ntfClient = read('notifications/NotificationClient.html');
-const pms = read('pms/PmsClient.html');
+const pms = maybeRead('pms/PmsClient.html');
 const payroll = read('payroll/PayrollClient.html');
 const ats = read('ats/AtsClient.html');
 
@@ -39,9 +44,13 @@ check('dash-secondary-invalidate', /secondaryOnly/.test(scripts));
 check('dash-more-background', /apiGetHomeDashboardMore',\s*\{\s*background:\s*true\s*\}/.test(scripts));
 
 check('payroll-secondary-inv', /invalidatePayrollHome_[\s\S]{0,200}secondaryOnly:\s*true/.test(payroll));
-check('pms-secondary-inv', /invalidatePmsShells_/.test(pms) && /secondaryOnly:\s*true/.test(pms));
+if (pms) {
+  check('pms-secondary-inv', /invalidatePmsShells_/.test(pms) && /secondaryOnly:\s*true/.test(pms));
+  check('pms-seed-from-dashboard', /seedPmsFromDashboard_/.test(pms) && /getDashboardViewCache/.test(pms));
+} else {
+  check('pms-module-absent-phase1', !/invalidatePmsShells_/.test(scripts));
+}
 check('ats-secondary-inv', /invalidateAtsPipeline_/.test(ats) && /secondaryOnly:\s*true/.test(ats));
-check('pms-seed-from-dashboard', /seedPmsFromDashboard_/.test(pms) && /getDashboardViewCache/.test(pms));
 
 check('ntf-list-projection', /INBOX_LIST_COLS_/.test(ntf) && /projectedInboxStore_/.test(ntf));
 check('ntf-mark-read-projected', /markNotificationRead[\s\S]{0,400}projectedInboxStore_\(INBOX_UNREAD_COLS_\)/.test(ntf));

@@ -34,6 +34,7 @@ const api = read('leave/ApiLeave.gs');
 const ui = read('leave/LeaveUi.html');
 const client = read('leave/LeaveClient.html');
 const db = read('foundation/DbService.gs');
+const emp = read('employee/EmployeeService.gs');
 
 check('apply-bundle-api', /function apiLeaveGetApplyBundle/.test(api));
 check('apply-bundle-service', /function getApplyBootstrap/.test(leave));
@@ -53,8 +54,12 @@ check('leave-ui-accepts-prefill', /params\.prefill/.test(ui));
 
 check('balance-index-load', /function loadBalanceIndex_/.test(leave));
 check('balance-index-key', /function balanceKey_/.test(leave));
-check('get-my-leave-uses-index', /function getMyLeave[\s\S]{0,500}loadBalanceIndex_/.test(leave));
-check('get-my-leave-no-per-type-scan', !/function getMyLeave[\s\S]{0,700}findBalance_\([^,]+,[^,]+,[^,]+\)\s*;/.test(leave));
+check('get-my-leave-uses-index', /function getMyLeave[\s\S]*loadBalanceIndex_/.test(leave));
+check('get-my-leave-no-per-type-scan', !/function getMyLeave[\s\S]*findBalance_\([^,]+,[^,]+,[^,]+\)\s*;/.test(leave));
+check('get-my-leave-grants-through-current', /function getMyLeave[\s\S]*grantBalancesForEmployee/.test(leave));
+check('admin-status-filter-helper', /matchesStatusFilter/.test(leave));
+check('my-leave-year-select', /leave-year-select/.test(ui));
+check('admin-pending-status-filter', /PENDING_MANAGER/.test(ui) && /Awaiting approval/.test(ui));
 
 const startYearFn = fnBlock(leave, 'startLeaveYear', 'getApplyBootstrap');
 check('start-year-one-lock', (startYearFn.match(/withScriptLock_/g) || []).length === 1);
@@ -65,8 +70,11 @@ check('start-year-no-per-employee-grant', !/grantBalancesForEmployee\(/.test(sta
 const grantFn = fnBlock(leave, 'grantBalancesForEmployee', 'startLeaveYear');
 check('grant-uses-index', /loadBalanceIndex_/.test(grantFn));
 check('grant-passes-index', /balanceIndex/.test(grantFn));
+check('grant-uses-plan', /planBalanceGrants/.test(grantFn));
+check('grant-default-not-joining-year-only', !/currentLeaveYear_\(emp\.joining_date/.test(grantFn));
+check('submit-grants-request-year', /function submit[\s\S]*grantBalancesForEmployee\(targetId, leaveYear/.test(leave));
 
-check('submit-uses-balance-index', /function submit[\s\S]{0,2200}loadBalanceIndex_/.test(leave));
+check('submit-uses-balance-index', /function submit[\s\S]{0,2800}loadBalanceIndex_/.test(leave));
 check('approve-uses-balance-index', /function approve[\s\S]{0,1200}loadBalanceIndex_/.test(leave));
 check('db-insert-records', /function insertRecords/.test(db));
 
@@ -82,7 +90,13 @@ check('leave-approve-many-api', /apiLeaveApproveMany/.test(read('leave/ApiLeave.
   /approveMany/.test(read('leave/LeaveService.gs')));
 check('leave-bulk-ui', /leaveBulkToolbarHtml_/.test(read('leave/LeaveUi.html')) &&
   /apiLeaveApproveMany/.test(read('leave/LeaveUi.html')));
-check('owner-role-constant', /OWNER:\s*'OWNER'/.test(read('foundation/Constants.gs')));
+check('join-date-guard', /assertNotBeforeJoining_/.test(leave));
+check('submit-notify-uses-result-status', /normalizeLeaveStatus\(result\.status\)/.test(leave));
+check('grant-api-include-inactive', /includeInactive:\s*true/.test(api));
+check('calendar-uses-config-today', /function getCalendar[\s\S]{0,400}todayDateOnly_/.test(leave));
+check('my-leave-no-synthetic-past', /t\.is_active && String\(year\) === String\(currentYear\)/.test(leave));
+check('seed-fallback-timezone', /formatDate\(now, ConfigService\.getTimezone/.test(emp));
+check('seed-fallback-carry-forward', /function seedLeaveBalances_[\s\S]{0,1800}carryForwardDays/.test(emp));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

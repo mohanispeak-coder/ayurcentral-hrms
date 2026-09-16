@@ -82,8 +82,10 @@ function loadAuthStack() {
   run('ats/AtsConstants.gs');
   run('ats/AtsEngine.gs');
   run('ats/AtsPermissionService.gs');
-  run('pms/PmsConstants.gs');
-  run('pms/PmsEngine.gs');
+  if (fs.existsSync(path.join(src, 'pms', 'PmsConstants.gs'))) {
+    run('pms/PmsConstants.gs');
+    run('pms/PmsEngine.gs');
+  }
   run('notifications/NotificationEngine.gs');
   return context;
 }
@@ -162,7 +164,11 @@ try {
 }
 
 // --- PMS / Notifications OWNER alignment ---
-check('pms-owner-hr-admin', PmsEngine.isHrOrAdmin(owner) && PmsEngine.isAdmin(owner));
+if (PmsEngine) {
+  check('pms-owner-hr-admin', PmsEngine.isHrOrAdmin(owner) && PmsEngine.isAdmin(owner));
+} else {
+  check('pms-module-absent-phase1', empNav.indexOf('pms') < 0 && adminNav.indexOf('pms') < 0);
+}
 check('notif-owner-hr-admin', NotificationEngine.isHrOrAdmin(owner));
 check('notif-admin-hr-admin', NotificationEngine.isHrOrAdmin(admin));
 check('notif-emp-not-hr-admin', !NotificationEngine.isHrOrAdmin(emp));
