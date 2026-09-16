@@ -86,6 +86,11 @@ check('HR applicant → admin only', LeaveEngine.initialPendingStatus('HR', fals
 
 check('LV-08 deny other team', LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099', 'PENDING_MANAGER', 'EMPLOYEE') === false);
 check('LV-08 allow team manager stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === true);
+check('manager stage id trim/case', LeaveEngine.canApproveRequest(mgr, 'EMP003', ' emp002 ', 'PENDING_MANAGER', 'EMPLOYEE') === true);
+check('assigned HR manager stage 1', LeaveEngine.canApproveRequest(
+  { authorized: true, role: 'HR', employee_id: 'EMP002' }, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE'
+) === true);
+check('HR not assigned manager stage 1', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === false);
 check('manager cannot HR stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === false);
 check('HR or admin can finalize employee stage 2', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
 check('admin can finalize employee stage 2', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);

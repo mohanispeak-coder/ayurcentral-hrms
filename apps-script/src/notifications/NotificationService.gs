@@ -721,7 +721,7 @@ var NotificationService = (function () {
       errorMessage = 'NO_EMAIL';
     } else {
       try {
-        sendMail_(to, row.subject, row.subject + '\n\nOpen HRMS to continue.\nEmployee ID: ' + (row.employee_id || ''));
+        sendMail_(to, row.subject, row.body || row.subject);
         newStatus = NotificationEngine.EMAIL_STATUS.SENT;
         sentAt = now_();
       } catch (e) {

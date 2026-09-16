@@ -84,6 +84,9 @@ check('admin-filter-keeps-actions', /adminLeaveRowHtml_/.test(ui) &&
   /bindAdminActions\(\)/.test(ui));
 check('leave-approve-includes-manager', /LEAVE_APPROVE.*MANAGER/.test(read('foundation/PermissionService.gs')));
 check('leave-approvals-nav-includes-manager', /leave-approvals[\s\S]{0,120}MANAGER/.test(read('foundation/PermissionService.gs')));
+check('leave-can-approve-normalize-id', /normalizeEmployeeId_/.test(read('leave/LeaveEngine.gs')) &&
+  /isAssignedReportingManager_/.test(read('leave/LeaveEngine.gs')));
+check('leave-admin-can-approve-flag', /can_approve/.test(read('leave/LeaveService.gs')));
 check('two-stage-pending-statuses', /PENDING_MANAGER/.test(read('leave/LeaveEngine.gs')) &&
   /statusAfterApproval/.test(read('leave/LeaveEngine.gs')));
 check('leave-approve-many-api', /apiLeaveApproveMany/.test(read('leave/ApiLeave.gs')) &&
@@ -94,7 +97,12 @@ check('join-date-guard', /assertNotBeforeJoining_/.test(leave));
 check('submit-notify-uses-result-status', /normalizeLeaveStatus\(result\.status\)/.test(leave));
 check('grant-api-include-inactive', /includeInactive:\s*true/.test(api));
 check('calendar-uses-config-today', /function getCalendar[\s\S]{0,400}todayDateOnly_/.test(leave));
-check('my-leave-no-synthetic-past', /t\.is_active && String\(year\) === String\(currentYear\)/.test(leave));
+check('my-leave-persisted-rows-only', !/t\.is_active && String\(year\) === String\(currentYear\)/.test(leave));
+check('sync-stale-entitlement', /function syncEntitlementFromTypeLocked_/.test(leave));
+check('leave-decision-email-body', /Employee Name:/.test(leave) && !/Employee ID:/.test(leave));
+check('leave-decision-dispatch', /function dispatchLeaveDecisionNotifications_/.test(leave));
+check('leave-decision-settings', /leave_decision_notify_employee/.test(read('foundation/SchemaService.gs')));
+check('leave-decision-recipient-dedupe', /seen\[key\]/.test(leave));
 check('seed-fallback-timezone', /formatDate\(now, ConfigService\.getTimezone/.test(emp));
 check('seed-fallback-carry-forward', /function seedLeaveBalances_[\s\S]{0,2800}carryForwardDays/.test(emp));
 check('entitled-days-pro-rata', /entitledDaysForLeaveYear/.test(read('leave/LeaveEngine.gs')) &&

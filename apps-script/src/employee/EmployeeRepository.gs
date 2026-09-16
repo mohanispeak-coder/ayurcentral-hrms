@@ -6,7 +6,14 @@ var HRMS = HRMS || {};
 var EmployeeRepository = (function () {
   function findById(employeeId) {
     if (!employeeId) return null;
-    return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: String(employeeId) });
+    var raw = String(employeeId);
+    var row = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: raw });
+    if (row) return row;
+    var norm = raw.trim().toUpperCase();
+    if (norm && norm !== raw) {
+      return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: norm });
+    }
+    return null;
   }
 
   function findByWorkEmail(email) {
@@ -34,7 +41,15 @@ var EmployeeRepository = (function () {
   }
 
   function findUserByEmployeeId(employeeId) {
-    return DbService.findOne(HRMS.SHEETS.USERS, { employee_id: String(employeeId) });
+    if (!employeeId) return null;
+    var raw = String(employeeId);
+    var row = DbService.findOne(HRMS.SHEETS.USERS, { employee_id: raw });
+    if (row) return row;
+    var norm = raw.trim().toUpperCase();
+    if (norm && norm !== raw) {
+      return DbService.findOne(HRMS.SHEETS.USERS, { employee_id: norm });
+    }
+    return null;
   }
 
   function findUserByEmail(email) {

@@ -109,8 +109,9 @@ var EmployeeService = (function () {
   function canAccessEmployee_(session, emp) {
     if (!session || !session.authorized || !emp) return false;
     if (PermissionService.isHrOrAdmin(session)) return true;
-    if (session.employee_id && session.employee_id === emp.employee_id) return true;
-    if (session.role === HRMS.ROLES.MANAGER && emp.manager_employee_id === session.employee_id) return true;
+    if (session.employee_id && normalizeEmployeeId_(session.employee_id) === normalizeEmployeeId_(emp.employee_id)) return true;
+    if (session.role === HRMS.ROLES.MANAGER &&
+        normalizeEmployeeId_(emp.manager_employee_id) === normalizeEmployeeId_(session.employee_id)) return true;
     return false;
   }
 
@@ -121,8 +122,8 @@ var EmployeeService = (function () {
 
   function isTeamWorkOnly_(session, emp) {
     return session.role === HRMS.ROLES.MANAGER &&
-      session.employee_id !== emp.employee_id &&
-      emp.manager_employee_id === session.employee_id;
+      normalizeEmployeeId_(session.employee_id) !== normalizeEmployeeId_(emp.employee_id) &&
+      normalizeEmployeeId_(emp.manager_employee_id) === normalizeEmployeeId_(session.employee_id);
   }
 
   /**
@@ -249,15 +250,23 @@ var EmployeeService = (function () {
     };
   }
 
-  function scopedEmployees_(session) {
-    var all = EmployeeRepository.listAll();
+  function scopedEmployeesFrom_(session, all) {
+    all = all || [];
     if (PermissionService.isHrOrAdmin(session)) return all;
     if (session.role === HRMS.ROLES.MANAGER) {
+      var selfId = normalizeEmployeeId_(session.employee_id);
       return all.filter(function (e) {
-        return e.employee_id === session.employee_id || e.manager_employee_id === session.employee_id;
+        return normalizeEmployeeId_(e.employee_id) === selfId ||
+          normalizeEmployeeId_(e.manager_employee_id) === selfId;
       });
     }
-    return all.filter(function (e) { return e.employee_id === session.employee_id; });
+    return all.filter(function (e) {
+      return normalizeEmployeeId_(e.employee_id) === normalizeEmployeeId_(session.employee_id);
+    });
+  }
+
+  function scopedEmployees_(session) {
+    return scopedEmployeesFrom_(session, EmployeeRepository.listAll());
   }
 
   function uniqueSorted_(values) {
@@ -279,9 +288,12 @@ var EmployeeService = (function () {
     if (session.role === HRMS.ROLES.EMPLOYEE) {
       throw authorizationError_('Employees cannot open the company directory.');
     }
-    var all = scopedEmployees_(session);
+    var org = EmployeeRepository.listAll();
+    var all = scopedEmployeesFrom_(session, org);
     if (session.role === HRMS.ROLES.MANAGER && query.teamOnly) {
-      all = all.filter(function (e) { return e.manager_employee_id === session.employee_id; });
+      all = all.filter(function (e) {
+        return normalizeEmployeeId_(e.manager_employee_id) === normalizeEmployeeId_(session.employee_id);
+      });
     }
     var q = trim_(query.q).toLowerCase();
     var status = trim_(query.status).toUpperCase();
@@ -297,7 +309,7 @@ var EmployeeService = (function () {
     filtered.sort(function (a, b) {
       return String(a.employee_id).localeCompare(String(b.employee_id));
     });
-    var nameMap = managerNameMap_(EmployeeRepository.listAll());
+    var nameMap = managerNameMap_(org);
     var pageSize = Number(query.pageSize) || 25;
     if (pageSize < 1) pageSize = 25;
     var page = Number(query.page) || 1;
@@ -1000,7 +1012,9 @@ var EmployeeService = (function () {
 
   function getDirectReportIds(managerEmployeeId) {
     return EmployeeRepository.listAll()
-      .filter(function (e) { return e.manager_employee_id === managerEmployeeId; })
+      .filter(function (e) {
+        return normalizeEmployeeId_(e.manager_employee_id) === normalizeEmployeeId_(managerEmployeeId);
+      })
       .map(function (e) { return e.employee_id; });
   }
 

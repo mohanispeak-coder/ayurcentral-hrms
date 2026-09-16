@@ -1,0 +1,95 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "AyurCentral HRMS Phase 1 Workflow",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "leave-gate",
+        "label": "Leave request to decision",
+        "focus": ["apply", "validate", "submitted", "decide", "reject"],
+        "note": "Apply is validated server-side, then a manager or HR override decides."
+      },
+      {
+        "id": "payroll-close",
+        "label": "LOP into locked payroll",
+        "focus": ["decide", "inputs", "calculate", "lock", "notify"],
+        "note": "Approved LOP hints open PayrollInputs; LOCKED snapshots and MailApp payslips."
+      },
+      {
+        "id": "stop-and-correct",
+        "label": "Reject and correction run",
+        "focus": ["decide", "reject", "lock", "correction"],
+        "note": "Rejected leave stops the path; a LOCKED run is never overwritten."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "employee", "label": "Employee" },
+    { "id": "approval", "label": "Manager / HR" },
+    { "id": "payroll", "label": "Monthly Payroll" },
+    { "id": "exceptions", "label": "Reject + Correction", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "request", "label": "Request", "fromCol": 0, "toCol": 1 },
+    { "id": "decide", "label": "Review + decide", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "close", "label": "Calculate + lock", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "leave_queue", "label": "Leave approval gate", "lane": "approval", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "payroll_close", "label": "Payroll close", "lane": "payroll", "fromCol": 3, "toCol": 5, "variant": "dashed" },
+    { "id": "exception_path", "label": "Stop or new run", "lane": "exceptions", "fromCol": 3, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["apply", "validate", "submitted", "decide", "inputs", "calculate", "lock", "notify"],
+  "nodes": [
+    { "id": "apply", "lane": "employee", "col": 0, "type": "frontend", "label": "Apply Leave", "sublabel": "employee form", "width": 132 },
+    { "id": "validate", "lane": "approval", "col": 1, "type": "backend", "label": "Validate", "sublabel": "overlap + balance", "width": 132 },
+    { "id": "submitted", "lane": "approval", "col": 2, "type": "database", "label": "SUBMITTED", "sublabel": "pending queue", "width": 132 },
+    { "id": "decide", "lane": "approval", "col": 3, "type": "security", "label": "Manager Review", "sublabel": "or HR override", "tag": "no self-approve", "width": 132 },
+    { "id": "inputs", "lane": "payroll", "col": 3, "type": "database", "label": "PayrollInputs", "sublabel": "DRAFT + lop_days", "width": 132 },
+    { "id": "calculate", "lane": "payroll", "col": 4, "type": "backend", "label": "Calculate", "sublabel": "server-side net", "tag": "UNDER_REVIEW", "width": 132 },
+    { "id": "lock", "lane": "payroll", "col": 5, "type": "database", "label": "LOCKED", "sublabel": "snapshot + Drive", "tag": "immutable", "width": 132 },
+    { "id": "notify", "lane": "employee", "col": 5, "type": "external", "label": "MailApp", "sublabel": "payslip + leave mail", "width": 132 },
+    { "id": "reject", "lane": "exceptions", "col": 3, "type": "security", "label": "REJECTED", "sublabel": "balance unchanged", "width": 132 },
+    { "id": "correction", "lane": "exceptions", "col": 5, "type": "messagebus", "label": "Correction Run", "sublabel": "correction_of_run_id", "width": 132 }
+  ],
+  "edges": [
+    { "id": "apply-validate", "from": "apply", "to": "validate", "variant": "emphasis" },
+    { "id": "validate-submitted", "from": "validate", "to": "submitted", "label": "SUBMITTED" },
+    { "id": "submitted-decide", "from": "submitted", "to": "decide" },
+    { "id": "decide-inputs", "from": "decide", "to": "inputs", "label": "APPROVED; LOP hint", "variant": "emphasis" },
+    { "id": "inputs-calculate", "from": "inputs", "to": "calculate" },
+    { "id": "calculate-lock", "from": "calculate", "to": "lock", "label": "APPROVED → LOCKED", "variant": "emphasis" },
+    { "id": "lock-notify", "from": "lock", "to": "notify", "label": "PAYSLIP_AVAILABLE", "variant": "emphasis" },
+    { "id": "decide-reject", "from": "decide", "to": "reject", "label": "REJECTED", "variant": "security", "role": "error" },
+    { "id": "lock-correction", "from": "lock", "to": "correction", "label": "new run only", "variant": "security", "role": "branch" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Leave Contract",
+      "items": [
+        "Server checks overlap, balance, and self-approval",
+        "SUBMITTED waits for manager review or HR override"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Payroll Immutability",
+      "items": [
+        "LOP hints lop_days only on an open run",
+        "LOCKED is immutable; correction is a new run"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Notification Events",
+      "items": [
+        "Leave submit, approve, and reject go through MailApp",
+        "UNDER_REVIEW, APPROVED, and PAYSLIP_AVAILABLE after calculate"
+      ]
+    }
+  ]
+}

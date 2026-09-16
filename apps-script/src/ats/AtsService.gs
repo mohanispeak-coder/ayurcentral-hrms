@@ -256,6 +256,34 @@ var AtsService = (function () {
     };
   }
 
+  function listJobRow_(job, appCount) {
+    if (!job) return null;
+    return {
+      job_id: job.job_id,
+      title: job.title,
+      department: job.department || '',
+      location: job.location || '',
+      status: AtsEngine.upper(job.status),
+      application_count: appCount || 0,
+      hiring_manager_employee_id: job.hiring_manager_employee_id || '',
+      hiring_manager_name: job.hiring_manager_name || ''
+    };
+  }
+
+  function listCandidateRow_(row, appCount) {
+    if (!row) return null;
+    return {
+      candidate_id: row.candidate_id,
+      full_name: row.full_name,
+      email: row.email,
+      phone: row.phone || '',
+      location: row.location || '',
+      source: row.source || '',
+      application_count: appCount || 0,
+      has_resume: !!trim_(row.resume_drive_file_id)
+    };
+  }
+
   function sanitizeApplication_(row, job) {
     if (!row) return null;
     return {
@@ -270,6 +298,32 @@ var AtsService = (function () {
       job_title: job ? job.title : '',
       job_status: job ? job.status : ''
     };
+  }
+
+  function buildCandidateIndex_() {
+    var candidateIndex = {};
+    AtsRepository.listCandidates().forEach(function (c) {
+      candidateIndex[c.candidate_id] = c;
+    });
+    return candidateIndex;
+  }
+
+  function enrichApplicationView_(app, job, candidateIndex) {
+    var view = sanitizeApplication_(app, job);
+    var cand = candidateIndex && candidateIndex[app.candidate_id];
+    view.candidate_name = cand ? (cand.full_name || '') : '';
+    view.candidate_email = cand ? (cand.email || '') : '';
+    return view;
+  }
+
+  function interviewStatus_(row) {
+    if (!row) return ATS.INTERVIEW_STATUS.SCHEDULED;
+    var st = AtsEngine.upper(row.status);
+    if (st === ATS.INTERVIEW_STATUS.COMPLETED || st === ATS.INTERVIEW_STATUS.SCHEDULED) return st;
+    if (trim_(row.recommendation) || (row.rating !== '' && row.rating !== null && row.rating !== undefined)) {
+      return ATS.INTERVIEW_STATUS.COMPLETED;
+    }
+    return ATS.INTERVIEW_STATUS.SCHEDULED;
   }
 
   function sanitizeInterview_(row) {
@@ -287,6 +341,7 @@ var AtsService = (function () {
       notes: row.notes || '',
       rating: row.rating === '' || row.rating === null || row.rating === undefined ? '' : Number(row.rating),
       recommendation: row.recommendation || '',
+      status: interviewStatus_(row),
       created_at: toIso_(row.created_at),
       created_by_email: row.created_by_email
     };
@@ -321,11 +376,13 @@ var AtsService = (function () {
     return AtsSchemaService.ensureSheets();
   }
 
-  function getBootstrap(session) {
+  function getBootstrap(session, options) {
+    options = options || {};
+    var includeDashboard = options.includeDashboard !== false;
     var s = AtsPermissionService.requireAccess(session);
     var ready = AtsSchemaService.sheetsExist();
     var dashboard = null;
-    if (ready) {
+    if (includeDashboard && ready) {
       try {
         dashboard = getDashboard(s);
       } catch (ignoreDash) {
@@ -390,9 +447,7 @@ var AtsService = (function () {
       });
     } catch (ignore) {}
     return rows.map(function (job) {
-      var view = sanitizeJob_(job, session);
-      view.application_count = counts[job.job_id] || 0;
-      return view;
+      return listJobRow_(job, counts[job.job_id] || 0);
     });
   }
 
@@ -404,25 +459,19 @@ var AtsService = (function () {
     var relatedIv = interviews.filter(function (iv) { return trim_(iv.job_id) === trim_(job.job_id); });
     AtsPermissionService.requireJob(session, job, relatedIv);
     var applications = AtsRepository.applicationsForJob(job.job_id);
-    var candidatesById = {};
-    applications.forEach(function (app) {
-      if (!candidatesById[app.candidate_id]) {
-        candidatesById[app.candidate_id] = AtsRepository.findCandidate(app.candidate_id);
-      }
-    });
+    var candidateIndex = buildCandidateIndex_();
     var hired = applications.filter(function (a) {
       return AtsEngine.upper(a.stage) === ATS.STAGE.HIRED;
     }).length;
+    var visibleApps = applications.filter(function (app) {
+      return !!candidateIndex[app.candidate_id];
+    });
     return {
       job: sanitizeJob_(job, session),
       pipeline: pipeline_(),
       hired_count: hired,
-      applications: applications.map(function (app) {
-        var view = sanitizeApplication_(app, job);
-        var cand = candidatesById[app.candidate_id];
-        view.candidate_name = cand ? cand.full_name : '';
-        view.candidate_email = cand ? cand.email : '';
-        return view;
+      applications: visibleApps.map(function (app) {
+        return enrichApplicationView_(app, job, candidateIndex);
       })
     };
   }
@@ -581,9 +630,7 @@ var AtsService = (function () {
       return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
     });
     return rows.map(function (c) {
-      var view = sanitizeCandidate_(c);
-      view.application_count = appCountByCandidate[c.candidate_id] || 0;
-      return view;
+      return listCandidateRow_(c, appCountByCandidate[c.candidate_id] || 0);
     });
   }
 
@@ -710,7 +757,10 @@ var AtsService = (function () {
           NotificationAtsAdapter.notifySelected(packed, recips);
         }
       });
-      return { application: sanitizeApplication_(updated, job), pipeline: pipeline_() };
+      return {
+        application: enrichApplicationView_(updated, job, buildCandidateIndex_()),
+        pipeline: pipeline_()
+      };
     }, options.alreadyLocked);
   }
 
@@ -723,7 +773,7 @@ var AtsService = (function () {
     if (!job) throw notFoundError_('Job requisition not found.');
     var existingIv = AtsRepository.interviewsForApplication(app.application_id);
     AtsPermissionService.requireJob(session, job, existingIv);
-    var v = AtsEngine.validateInterviewPayload(payload);
+    var v = AtsEngine.validateInterviewSchedulePayload(payload);
     if (!v.ok) throw validationError_('Please correct the interview fields.', v.errors);
     var now = now_();
     var record;
@@ -740,8 +790,9 @@ var AtsService = (function () {
         interviewer_name: trim_(payload.interviewer_name) || session.displayName || '',
         interviewer_email: trim_(payload.interviewer_email) || actorEmail_(session),
         notes: trim_(payload.notes),
-        rating: v.rating,
-        recommendation: v.recommendation,
+        rating: '',
+        recommendation: '',
+        status: ATS.INTERVIEW_STATUS.SCHEDULED,
         created_at: now,
         created_by_email: actorEmail_(session),
         updated_at: now
@@ -766,9 +817,10 @@ var AtsService = (function () {
       var recips = atsInternalRecipients_(job);
       if (record.interviewer_employee_id && typeof NotificationService !== 'undefined') {
         recips = recips.concat([NotificationService.resolveRecipient({ employee_id: record.interviewer_employee_id })]);
+      } else if (trim_(record.interviewer_email) && typeof NotificationService !== 'undefined') {
+        recips = recips.concat([NotificationService.resolveRecipient({ email: record.interviewer_email })]);
       }
       NotificationAtsAdapter.notifyInterviewScheduled(packed, recips);
-      NotificationAtsAdapter.notifyFeedbackPending(packed, recips);
       var cand = AtsRepository.findCandidate(app.candidate_id);
       if (cand) {
         NotificationAtsAdapter.notifyCandidate('ATS_CANDIDATE_INTERVIEW', cand, {
@@ -788,14 +840,22 @@ var AtsService = (function () {
     if (!AtsEngine.canWriteInterview(session, job, interview)) {
       throw authorizationError_('You cannot update this interview.');
     }
+    var completing = payload.complete === true ||
+      AtsEngine.upper(payload.status) === ATS.INTERVIEW_STATUS.COMPLETED;
     var v = AtsEngine.validateInterviewPayload(payload || {});
     if (!v.ok) throw validationError_('Please correct the interview fields.', v.errors);
+    if (completing && !v.rating && !v.recommendation) {
+      throw validationError_('Provide a rating or recommendation to complete the interview.');
+    }
     var updates = {
       notes: payload.notes !== undefined ? trim_(payload.notes) : interview.notes,
       rating: payload.rating !== undefined ? v.rating : interview.rating,
       recommendation: payload.recommendation !== undefined ? v.recommendation : interview.recommendation,
       updated_at: now_()
     };
+    if (completing) {
+      updates.status = ATS.INTERVIEW_STATUS.COMPLETED;
+    }
     if (payload.scheduled_at) updates.scheduled_at = new Date(payload.scheduled_at);
     if (payload.interviewer_name) updates.interviewer_name = trim_(payload.interviewer_name);
     if (payload.interviewer_employee_id) updates.interviewer_employee_id = trim_(payload.interviewer_employee_id);

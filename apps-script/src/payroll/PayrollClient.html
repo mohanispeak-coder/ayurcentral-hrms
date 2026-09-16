@@ -710,6 +710,8 @@
       return '<details class="card section-details collapsible-section bulk-upload-card" id="comp-bulk-card">' +
         '<summary>Bulk upload salary structures (one-time setup)</summary>' +
         '<div class="collapsible-section-body"><p class="page-lede">Set up or update salary structures in bulk — do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
+        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(['employee_id', 'effective_from', 'ctc_monthly']) : '') +
+        '<p class="form-hint">Salary component columns in the template are all required (use 0 when not applicable).</p>' +
         '<ol class="bulk-steps"><li>Download Excel or CSV template</li><li>Choose file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-template">Download Excel template</button>' +
@@ -730,6 +732,9 @@
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
         '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only — you fill working days and attendance columns, then upload.</p>' +
+        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(
+          ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days']
+        ) : '') +
         '<ol class="bulk-steps"><li>Download template (ID, name, email pre-filled — attendance columns blank)</li><li>Fill working_days, days_present, days_absent, leave_days</li><li>Choose Excel/CSV file and validate</li><li>Confirm import</li></ol>';
       html += '<div class="bulk-action-bar">';
       if (hasRun && runId) {

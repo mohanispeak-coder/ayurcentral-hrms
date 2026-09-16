@@ -84,18 +84,18 @@ function testLeave_Engine() {
 
   var mgr = { authorized: true, role: 'MANAGER', employee_id: 'EMP002' };
   check('LV-08-manager-other-team',
-    LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099') === false);
-  check('LV-08-manager-cannot-approve',
-    LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002') === false);
+    LeaveEngine.canApproveRequest(mgr, 'EMP004', 'EMP099', 'PENDING_MANAGER', 'EMPLOYEE') === false);
+  check('LV-08-manager-can-approve-team',
+    LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === true);
   var owner = { authorized: true, role: 'OWNER', employee_id: 'EMP000' };
-  check('owner-can-approve-other',
-    LeaveEngine.canApproveRequest(owner, 'EMP003', 'EMP002') === true);
+  check('owner-can-approve-hr-stage',
+    LeaveEngine.canApproveRequest(owner, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
   check('LV-09-self-approve',
-    LeaveEngine.canApproveRequest({ authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' }, 'EMP003', 'EMP002') === false);
+    LeaveEngine.canApproveRequest({ authorized: true, role: 'EMPLOYEE', employee_id: 'EMP003' }, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === false);
   check('LV-09-hr-self-approve',
-    LeaveEngine.canApproveRequest({ authorized: true, role: 'HR', employee_id: 'EMP001' }, 'EMP001', '') === false);
-  check('HR-override-other',
-    LeaveEngine.canApproveRequest({ authorized: true, role: 'HR', employee_id: 'EMP001' }, 'EMP003', 'EMP002') === true);
+    LeaveEngine.canApproveRequest({ authorized: true, role: 'HR', employee_id: 'EMP001' }, 'EMP001', '', 'PENDING_ADMIN', 'HR') === false);
+  check('HR-finalize-after-manager',
+    LeaveEngine.canApproveRequest({ authorized: true, role: 'HR', employee_id: 'EMP001' }, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
 
   check('cancel-own-submitted',
     LeaveEngine.canCancel(

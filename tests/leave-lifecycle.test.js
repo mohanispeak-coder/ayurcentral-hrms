@@ -120,7 +120,16 @@ function persistSimulator() {
     bal.available_days = LeaveEngine.availableDays(bal);
     return bal;
   }
-  return { store: store, grant: grant, find: find, apply: apply, approve: approve, reject: reject, cancelApproved: cancelApproved };
+  function syncEntitlement(employeeId, typeId, year, policyDays) {
+    var bal = find(employeeId, typeId, year);
+    if (!bal || policyDays <= 0) return bal;
+    if (LeaveEngine.toNumber(bal.used_days) > 0 || LeaveEngine.toNumber(bal.pending_days) > 0) return bal;
+    if (LeaveEngine.toNumber(bal.entitled_days) === policyDays) return bal;
+    bal.entitled_days = policyDays;
+    bal.available_days = LeaveEngine.availableDays(bal);
+    return bal;
+  }
+  return { store: store, grant: grant, find: find, apply: apply, approve: approve, reject: reject, cancelApproved: cancelApproved, syncEntitlement: syncEntitlement };
 }
 
 const hireCurrent = plan({
@@ -300,6 +309,12 @@ const lateJoin = persistSimulator();
 lateJoin.grant({ employee_id: 'SAPL-1002', joining_date: '2025-12-20' }, types, '2026-01-10', '2026');
 check('late-year joiner has join year and next year', !!lateJoin.find('SAPL-1002', 'LT001', '2025') &&
   !!lateJoin.find('SAPL-1002', 'LT001', '2026'));
+
+const staleZero = persistSimulator();
+staleZero.grant(emp, [{ leave_type_id: 'LT001', annual_entitlement_days: 0, carry_forward_max_days: 5 }], '2026-01-01', '2026');
+staleZero.syncEntitlement('SAPL-1001', 'LT001', '2026', 12);
+check('stale zero entitlement syncs from policy', staleZero.find('SAPL-1001', 'LT001', '2026').entitled_days === 12 &&
+  staleZero.find('SAPL-1001', 'LT001', '2026').available_days === 12);
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

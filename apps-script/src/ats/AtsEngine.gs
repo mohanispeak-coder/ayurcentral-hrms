@@ -423,6 +423,29 @@ var AtsEngine = (function () {
     };
   }
 
+  function validateInterviewSchedulePayload(payload) {
+    payload = payload || {};
+    var errors = {};
+    if (trim_(payload.notes).length > ATS.LIMITS.TEXT_MAX) {
+      errors.notes = 'Notes are too long.';
+    }
+    return { ok: Object.keys(errors).length === 0, errors: errors };
+  }
+
+  function forwardStageTargets(fromStage, pipeline) {
+    var from = upper_(fromStage);
+    var path = happyPath(pipeline);
+    var fromIdx = path.indexOf(from);
+    var out = [];
+    if (fromIdx >= 0) {
+      for (var i = fromIdx + 1; i < path.length; i++) out.push(path[i]);
+    }
+    ATS.TERMINAL_EXTRA.forEach(function (t) {
+      if (t !== from && out.indexOf(t) < 0) out.push(t);
+    });
+    return out;
+  }
+
   function validateInterviewPayload(payload) {
     payload = payload || {};
     var errors = {};
@@ -563,6 +586,7 @@ var AtsEngine = (function () {
     assertPublicJobSafe: assertPublicJobSafe,
     findDuplicateApplication: findDuplicateApplication,
     canMoveStage: canMoveStage,
+    forwardStageTargets: forwardStageTargets,
     canAccessAts: canAccessAts,
     canManageAts: canManageAts,
     isManager: isManager,
@@ -576,6 +600,7 @@ var AtsEngine = (function () {
     validateJobPayload: validateJobPayload,
     validatePublicApplyPayload: validatePublicApplyPayload,
     validateInterviewPayload: validateInterviewPayload,
+    validateInterviewSchedulePayload: validateInterviewSchedulePayload,
     allowedResumeMime: allowedResumeMime,
     computeKpis: computeKpis,
     sharePack: sharePack,

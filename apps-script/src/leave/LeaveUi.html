@@ -262,9 +262,11 @@
     var id = c.escapeHtml(r.leave_request_id);
     var html = '';
     if (r.status === 'SUBMITTED' || String(r.status || '').indexOf('PENDING_') === 0) {
-      html += '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
-        '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ' +
-        '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
+      if (r.can_approve !== false) {
+        html += '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
+          '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ';
+      }
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
     } else if (r.status === 'APPROVED') {
       html += '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + id + '" data-revoke-kind="approved">Revoke</button>';
     } else if (r.status === 'REJECTED') {
@@ -382,8 +384,8 @@
                   '<option value="PM"' + (prefill.half_day_session === 'PM' ? ' selected' : '') + '>PM</option>' +
                 '</select></div>' +
             '</div>' +
-            '<div class="form-group"><label class="form-label" for="leave-reason">Reason</label>' +
-              '<textarea class="form-input form-textarea" id="leave-reason" name="reason" rows="3">' + c.escapeHtml(prefill.reason || '') + '</textarea></div>' +
+            '<div class="form-group"><label class="form-label is-required" for="leave-reason">Reason</label>' +
+              '<textarea class="form-input form-textarea" id="leave-reason" name="reason" rows="3" required>' + c.escapeHtml(prefill.reason || '') + '</textarea></div>' +
             '<p class="hint" id="leave-preview">Duration will be calculated on the server.</p>' +
             '<div class="form-actions">' +
               '<button type="button" class="btn btn-secondary" id="btn-leave-draft">Save draft</button>' +

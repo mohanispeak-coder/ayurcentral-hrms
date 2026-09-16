@@ -322,6 +322,9 @@
     var existing = actions.querySelector('.js-module-refresh');
     var stamp = actions.querySelector('#module-updated-stamp');
     if (existing) {
+      if (globalLoadingButton_ === existing) {
+        try { restoreButton(existing); } catch (ignoreRestore) {}
+      }
       if (stamp) stamp.remove();
       existing.remove();
     }
@@ -354,6 +357,7 @@
   function markModuleViewLoaded(key, meta) {
     key = key || moduleViewKey(state.currentRoute, state.routeParams);
     if (!key) return;
+    var endingRefresh = refreshBusy_;
     moduleViewCache_[key] = {
       loaded: true,
       lastLoadedAt: Date.now(),
@@ -366,7 +370,11 @@
     if (refreshForceKey_ === key || refreshForceKey_ === '*') refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
-    scheduleRefreshControls_();
+    if (endingRefresh) {
+      finishModuleRefresh(false);
+    } else {
+      scheduleRefreshControls_();
+    }
     logClientPerf_({ kind: 'module-view-loaded', key: key, route: state.currentRoute });
   }
 
@@ -375,17 +383,34 @@
     return refreshForceKey_ === key || refreshForceKey_ === '*';
   }
 
+  function clearOrphanGlobalBusy_() {
+    if (!globalLoadingButton_) return;
+    try {
+      if (!document.body.contains(globalLoadingButton_)) {
+        globalLoadingButton_ = null;
+        setGlobalActionBusy_(false);
+        return;
+      }
+      restoreButton(globalLoadingButton_);
+    } catch (ignore) {
+      globalLoadingButton_ = null;
+      setGlobalActionBusy_(false);
+    }
+  }
+
   function finishModuleRefresh(failed) {
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
     var pageBusy = $('page-content');
     if (pageBusy) pageBusy.removeAttribute('aria-busy');
+    clearOrphanGlobalBusy_();
     var btn = $('btn-module-refresh');
     if (btn) {
       try { restoreButton(btn); } catch (ignore) {}
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
+      if (btn.classList) btn.classList.remove('btn-loading');
     }
     scheduleRefreshControls_();
     if (failed) {
@@ -1842,7 +1867,29 @@
     return p;
   }
 
+  function bulkRequiredColumnsHtml(columnLabels) {
+    if (!columnLabels || !columnLabels.length) return '';
+    var items = columnLabels.map(function (label) {
+      return '<li><span class="form-label is-required bulk-required-label">' + escapeHtml(label) + '</span></li>';
+    }).join('');
+    return '<div class="bulk-required-block">' +
+      '<p class="form-label bulk-required-heading">Required columns in upload file</p>' +
+      '<ul class="bulk-required-list">' + items + '</ul></div>';
+  }
+
   function bindAuthUi() {
+    function onEnterSubmit(inputEl, btnId) {
+      if (!inputEl) return;
+      inputEl.addEventListener('keydown', function (evt) {
+        if (evt.key !== 'Enter') return;
+        evt.preventDefault();
+        var btn = $(btnId);
+        if (btn && !btn.disabled) btn.click();
+      });
+    }
+    onEnterSubmit($('auth-email'), 'auth-send-btn');
+    onEnterSubmit($('auth-code'), 'auth-verify-btn');
+
     $('auth-send-btn').addEventListener('click', function () {
       var email = ($('auth-email').value || '').trim();
       showAuthError($('auth-email-error'), '');
@@ -2753,6 +2800,7 @@
     bindSectionRetry: bindSectionRetry,
     tableShell: tableShell,
     pageHeaderHtml: pageHeaderHtml,
+    bulkRequiredColumnsHtml: bulkRequiredColumnsHtml,
     moduleViewKey: moduleViewKey,
     shouldRestoreModuleView: shouldRestoreModuleView,
     consumeModuleViewRestore: consumeModuleViewRestore,

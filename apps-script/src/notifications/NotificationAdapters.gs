@@ -9,10 +9,12 @@ var HRMS = HRMS || {};
 var NotificationLeaveAdapter = (function () {
   function employeeHint_(emp) {
     emp = emp || {};
+    var dn = String(emp.display_name || '').trim();
+    if (!dn) dn = String((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
     return {
       employee_id: emp.employee_id,
       email: emp.work_email || emp.email,
-      display_name: emp.display_name
+      display_name: dn || emp.employee_id
     };
   }
 
@@ -85,6 +87,50 @@ var NotificationLeaveAdapter = (function () {
     }
   }
 
+  function notifyLeaveDecisionToManager(leaveRequest, employee, manager, decision, options) {
+    if (!manager || !manager.employee_id) return { ok: true, skipped: true };
+    try {
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveDecisionNotice(
+        leaveRequest,
+        employeeHint_(employee),
+        employeeHint_(manager),
+        decision,
+        { audience: 'manager', email_body: options.email_body, comment: options.comment }
+      );
+      payload.force_email = false;
+      payload.force_in_app = true;
+      return NotificationService.createNotification(payload);
+    } catch (e) {
+      Logger.log('NotificationLeaveAdapter.notifyLeaveDecisionToManager: ' + (e.message || e));
+      return { ok: false, error: String(e.message || e) };
+    }
+  }
+
+  function notifyLeaveDecisionToAdditional(leaveRequest, employee, decision, options) {
+    try {
+      var enabled = LeaveEngine.isTruthy(ConfigService.getSetting('leave_decision_notify_additional_enabled', false));
+      var extraEmail = String(ConfigService.getSetting('leave_decision_notify_additional_email', '') || '').trim().toLowerCase();
+      if (!enabled || !extraEmail) return { ok: true, skipped: true };
+      var resolved = NotificationService.resolveRecipient({ email: extraEmail });
+      if (!resolved || !resolved.employee_id) return { ok: true, skipped: true, reason: 'external_email' };
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveDecisionNotice(
+        leaveRequest,
+        employeeHint_(employee),
+        resolved,
+        decision,
+        { audience: 'hr', email_body: options.email_body, comment: options.comment }
+      );
+      payload.force_email = false;
+      payload.force_in_app = true;
+      return NotificationService.createNotification(payload);
+    } catch (e) {
+      Logger.log('NotificationLeaveAdapter.notifyLeaveDecisionToAdditional: ' + (e.message || e));
+      return { ok: false, error: String(e.message || e) };
+    }
+  }
+
   /**
    * Cancel: employee always; manager when the request had been SUBMITTED.
    */
@@ -129,6 +175,8 @@ var NotificationLeaveAdapter = (function () {
     notifyManagerApprovalRequired: notifyManagerApprovalRequired,
     notifyApproved: notifyApproved,
     notifyRejected: notifyRejected,
+    notifyLeaveDecisionToManager: notifyLeaveDecisionToManager,
+    notifyLeaveDecisionToAdditional: notifyLeaveDecisionToAdditional,
     notifyCancelled: notifyCancelled
   };
 })();

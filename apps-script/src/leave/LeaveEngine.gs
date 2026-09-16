@@ -467,6 +467,26 @@ var LeaveEngine = (function () {
     return role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.OWNER;
   }
 
+  function normalizeEmployeeId_(id) {
+    return String(id || '').trim().toUpperCase();
+  }
+
+  /** Session user is the Employees.manager_employee_id for the applicant. */
+  function isAssignedReportingManager_(session, managerEmployeeId) {
+    if (!session || !session.employee_id) return false;
+    var selfId = normalizeEmployeeId_(session.employee_id);
+    var mgrId = normalizeEmployeeId_(managerEmployeeId);
+    return !!selfId && !!mgrId && selfId === mgrId;
+  }
+
+  /** Roles that may complete stage 1 when they are the assigned reporting manager. */
+  function canActManagerApprovalStage_(role) {
+    role = String(role || '').toUpperCase();
+    return role === HRMS.ROLES.MANAGER ||
+      role === HRMS.ROLES.HR ||
+      isAdminRole_(role);
+  }
+
   /**
    * Employee: manager → HR or Admin (either). Manager applicant: HR then Admin. HR applicant: Admin only.
    * @param {string=} requestStatus LeaveRequests.status
@@ -475,16 +495,16 @@ var LeaveEngine = (function () {
   function canApproveRequest(session, targetEmployeeId, managerEmployeeId, requestStatus, applicantUserRole) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
-    var selfId = String(session.employee_id || '');
-    var target = String(targetEmployeeId || '');
+    var selfId = normalizeEmployeeId_(session.employee_id);
+    var target = normalizeEmployeeId_(targetEmployeeId);
     if (selfId && target && selfId === target) return false;
 
     var status = normalizeLeaveStatus_(requestStatus || HRMS.LEAVE_STATUS.PENDING_MANAGER);
     var applicant = normalizeApplicantRole_(applicantUserRole);
 
     if (status === HRMS.LEAVE_STATUS.PENDING_MANAGER) {
-      if (role === HRMS.ROLES.MANAGER && String(managerEmployeeId || '') === selfId) return true;
-      return false;
+      if (!isAssignedReportingManager_(session, managerEmployeeId)) return false;
+      return canActManagerApprovalStage_(role);
     }
     if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
       if (applicant === HRMS.ROLES.MANAGER) {
@@ -501,12 +521,12 @@ var LeaveEngine = (function () {
   function canViewEmployeeLeave(session, targetEmployeeId, managerEmployeeId) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
-    var selfId = String(session.employee_id || '');
-    var target = String(targetEmployeeId || '');
-    if (selfId === target) return true;
+    var selfId = normalizeEmployeeId_(session.employee_id);
+    var target = normalizeEmployeeId_(targetEmployeeId);
+    if (selfId && target && selfId === target) return true;
     if (isLeaveAuthority_(role)) return true;
     if (role === HRMS.ROLES.MANAGER) {
-      return String(managerEmployeeId || '') === selfId;
+      return isAssignedReportingManager_(session, managerEmployeeId);
     }
     return false;
   }
@@ -581,6 +601,7 @@ var LeaveEngine = (function () {
     canApplyFor: canApplyFor,
     normalizeSession: normalizeSession,
     normalizeLeaveStatus: normalizeLeaveStatus_,
+    normalizeEmployeeId: normalizeEmployeeId_,
     initialPendingStatus: initialPendingStatus,
     statusAfterApproval: statusAfterApproval,
     isPendingApprovalStatus: isPendingApprovalStatus,

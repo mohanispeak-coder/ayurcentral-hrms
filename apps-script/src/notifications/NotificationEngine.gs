@@ -846,6 +846,7 @@ var NotificationEngine = (function () {
         'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was approved.'
       ),
       email_subject: extra.email_subject || extra.title || 'Leave approved',
+      email_body: extra.email_body || '',
       action_route: extra.action_route || leaveRouteForRecipient_(
         employee && employee.employee_id,
         requestEmployeeId,
@@ -861,7 +862,8 @@ var NotificationEngine = (function () {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
       start_date: rec.start_date,
-      end_date: rec.end_date
+      end_date: rec.end_date,
+      total_days: rec.total_days
     };
     var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
     return payloadBase_(TYPE.LEAVE_REJECTED, employee, rec.leave_request_id, vars, {
@@ -870,12 +872,47 @@ var NotificationEngine = (function () {
         'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was not approved.'
       ),
       email_subject: extra.email_subject || extra.title || 'Leave rejected',
+      email_body: extra.email_body || '',
       action_route: extra.action_route || leaveRouteForRecipient_(
         employee && employee.employee_id,
         requestEmployeeId,
         'employee'
       ),
       dedupe_bucket: extra.dedupe_bucket || ''
+    });
+  }
+
+  function buildLeaveDecisionNotice(rec, employee, recipient, decision, extra) {
+    extra = extra || {};
+    var vars = {
+      employee_id: employee.employee_id,
+      display_name: employee.display_name || employee.employee_id,
+      start_date: rec.start_date,
+      end_date: rec.end_date,
+      total_days: rec.total_days,
+      status: String(decision || '').toLowerCase() === 'rejected' ? 'Rejected' : 'Approved'
+    };
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
+    var typeDef = String(decision || '').toLowerCase() === 'rejected' ? TYPE.LEAVE_REJECTED : TYPE.LEAVE_APPROVED;
+    var title = vars.status === 'Rejected'
+      ? ('Leave rejected for ' + vars.display_name)
+      : ('Leave approved for ' + vars.display_name);
+    var message = extra.email_body || (
+      'Employee Name: ' + vars.display_name + '\n' +
+      'Leave Dates: ' + vars.start_date + ' to ' + vars.end_date + '\n' +
+      'Number of Days: ' + vars.total_days + '\n' +
+      'Status: ' + vars.status
+    );
+    return payloadBase_(typeDef, recipient, rec.leave_request_id, vars, {
+      title: extra.title || title,
+      message: extra.message || message,
+      email_body: extra.email_body || message,
+      action_route: extra.action_route || leaveRouteForRecipient_(
+        recipient && recipient.employee_id,
+        requestEmployeeId,
+        extra.audience || 'approver'
+      ),
+      dedupe_bucket: extra.dedupe_bucket || ('decision|' + vars.status)
     });
   }
 
@@ -1153,6 +1190,7 @@ var NotificationEngine = (function () {
       leaveSubmitted: buildLeaveSubmitted,
       leaveApproved: buildLeaveApproved,
       leaveRejected: buildLeaveRejected,
+      leaveDecisionNotice: buildLeaveDecisionNotice,
       leaveCancelled: buildLeaveCancelled,
       payslipAvailable: buildPayslipAvailable,
       payrollReadyReview: buildPayrollReadyReview,

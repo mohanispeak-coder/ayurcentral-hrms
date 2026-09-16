@@ -172,8 +172,8 @@
         escapeHtml(value || '') + '"' + (required ? ' required' : '') + '>';
     }
 
-    function select(id, options, value) {
-      var html = '<select class="form-select" id="' + id + '" name="' + id + '">';
+    function select(id, options, value, required) {
+      var html = '<select class="form-select" id="' + id + '" name="' + id + '"' + (required ? ' required' : '') + '>';
       options.forEach(function (o) {
         var v = typeof o === 'string' ? o : o.value;
         var l = typeof o === 'string' ? o : o.label;
@@ -443,7 +443,7 @@
       html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
       html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
       html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
-      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT'));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT', true));
       html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
       if (emp.can_view_payroll_ids || mode === 'create') {
         html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
@@ -760,7 +760,7 @@
       html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
       html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
       html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
-      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type, true));
       html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
       html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
       html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-employment">Save</button></div>' +
@@ -1063,6 +1063,11 @@
         (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-back">Back to directory</button></div></div>' +
         '<div class="card">' +
+        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml([
+          'employee_id', 'first_name', 'last_name', 'work_email', 'department', 'designation',
+          'location', 'employment_type', 'joining_date', 'create_login'
+        ]) : '') +
+        '<p class="form-hint">When create_login is YES, google_login_email is also required.</p>' +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-template">Download Excel template</button>' +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">Download CSV template</button>' +
