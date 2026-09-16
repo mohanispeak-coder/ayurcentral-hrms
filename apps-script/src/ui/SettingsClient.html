@@ -55,6 +55,9 @@
       var body = $('settings-body');
       if (!body || !data) return;
       var email = data.email || [];
+      var rm = data.role_modules || {};
+      var modFeatures = rm.modules || [];
+      var modMatrix = rm.matrix || [];
       var ra = data.role_access || {};
       var features = ra.features || [];
       var matrix = ra.matrix || [];
@@ -75,8 +78,27 @@
       });
       emailHtml += '</div>';
 
-      var roleHtml = '<div class="card" style="margin-top:16px"><h2>Role-based self-service access</h2>' +
-        '<p class="hint">Defaults for new user logins and fallback when per-user flags are unset. Per-employee overrides remain on the employee profile.</p>' +
+      var modHtml = '<div class="card" style="margin-top:16px"><h2>HRMS module access by role</h2>' +
+        '<p class="hint">Control which sidebar areas each role can see and use (Employee, Manager, HR, Admin). ' +
+        'OWNER always has full access. Users should refresh after you save. This cannot grant modules outside a role’s built-in scope.</p>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th>';
+      modFeatures.forEach(function (f) {
+        modHtml += '<th title="' + escapeHtml(f.id) + '">' + escapeHtml(f.label) + '</th>';
+      });
+      modHtml += '</tr></thead><tbody>';
+      modMatrix.forEach(function (row) {
+        modHtml += '<tr><td><strong>' + escapeHtml(row.role) + '</strong></td>';
+        modFeatures.forEach(function (f) {
+          var on = row.modules && row.modules[f.id];
+          modHtml += '<td><label class="form-check"><input type="checkbox" data-mod-role="' + escapeHtml(row.role) +
+            '" data-mod-id="' + escapeHtml(f.id) + '"' + (on ? ' checked' : '') + '></label></td>';
+        });
+        modHtml += '</tr>';
+      });
+      modHtml += '</tbody></table></div></div>';
+
+      var roleHtml = '<div class="card" style="margin-top:16px"><h2>New login defaults (self-service)</h2>' +
+        '<p class="hint">Default document / payslip / leave checkboxes when creating a user login. Per-employee overrides remain on the employee profile.</p>' +
         '<div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th>';
       features.forEach(function (f) {
         roleHtml += '<th>' + escapeHtml(f.label) + '</th>';
@@ -93,7 +115,7 @@
       });
       roleHtml += '</tbody></table></div></div>';
 
-      body.innerHTML = emailHtml + roleHtml +
+      body.innerHTML = emailHtml + modHtml + roleHtml +
         '<div class="form-actions" style="margin-top:16px">' +
         '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
         '<span class="hint" id="settings-save-hint"></span></div>';
@@ -113,7 +135,14 @@
           if (!rolePatch[role]) rolePatch[role] = {};
           rolePatch[role][feat] = el.checked;
         });
-        callServer('apiSaveAdminSettings', { email: emailPatch, role_access: rolePatch }, {
+        var modPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-mod-role][data-mod-id]'), function (el) {
+          var role = el.getAttribute('data-mod-role');
+          var mid = el.getAttribute('data-mod-id');
+          if (!modPatch[role]) modPatch[role] = {};
+          modPatch[role][mid] = el.checked;
+        });
+        callServer('apiSaveAdminSettings', { email: emailPatch, role_modules: modPatch, role_access: rolePatch }, {
           button: btn, loadingText: 'Saving…'
         }).then(function (next) {
           settingsState.data = next;

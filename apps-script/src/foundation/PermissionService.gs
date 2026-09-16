@@ -79,6 +79,10 @@ var PermissionService = (function () {
     if (!allowed) return false;
     if (!hasRole_(session, allowed)) return false;
 
+    if (typeof AdminSettingsService !== 'undefined' && AdminSettingsService.isActionAllowedForRole) {
+      if (!AdminSettingsService.isActionAllowedForRole(session.role, action)) return false;
+    }
+
     if (action === HRMS.ACTIONS.EMPLOYEE_DIRECTORY &&
         normalizeUserRole_(session.role) === HRMS.ROLES.MANAGER) {
       return true;
@@ -125,7 +129,11 @@ var PermissionService = (function () {
   function getNavForRole(role) {
     role = normalizeUserRole_(role);
     return NAV_ITEMS_.filter(function (item) {
-      return item.roles.indexOf(role) >= 0;
+      if (item.roles.indexOf(role) < 0) return false;
+      if (typeof AdminSettingsService !== 'undefined' && AdminSettingsService.isNavAllowedForRole) {
+        return AdminSettingsService.isNavAllowedForRole(role, item.id);
+      }
+      return true;
     });
   }
 

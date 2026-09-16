@@ -244,6 +244,9 @@
       var body = $('ntf-body');
       if (!body || !data) return;
       var email = data.email || [];
+      var rm = data.role_modules || {};
+      var modFeatures = rm.modules || [];
+      var modMatrix = rm.matrix || [];
       var ra = data.role_access || {};
       var features = ra.features || [];
       var matrix = ra.matrix || [];
