@@ -41,7 +41,7 @@ var AtsBulkService = (function () {
     skills: 'Communication, Excel',
     openings: '1',
     hiring_manager_employee_id: '',
-    closing_date: '31/12/2026',
+    closing_date: '31-12-2026',
     notes_internal: '',
     publish: 'NO'
   };

@@ -545,6 +545,7 @@
         }
         work.addEventListener('input', mirror);
         work.addEventListener('change', mirror);
+        work.addEventListener('blur', mirror);
         if (createUser) createUser.addEventListener('change', mirror);
         google.addEventListener('input', function () {
           google.dataset.userEdited = google.value.trim() ? '1' : '';
