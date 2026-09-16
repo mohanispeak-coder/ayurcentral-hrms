@@ -96,7 +96,7 @@ check('grant-api-include-inactive', /includeInactive:\s*true/.test(api));
 check('calendar-uses-config-today', /function getCalendar[\s\S]{0,400}todayDateOnly_/.test(leave));
 check('my-leave-no-synthetic-past', /t\.is_active && String\(year\) === String\(currentYear\)/.test(leave));
 check('seed-fallback-timezone', /formatDate\(now, ConfigService\.getTimezone/.test(emp));
-check('seed-fallback-carry-forward', /function seedLeaveBalances_[\s\S]{0,1800}carryForwardDays/.test(emp));
+check('seed-fallback-carry-forward', /function seedLeaveBalances_[\s\S]{0,2800}carryForwardDays/.test(emp));
 check('entitled-days-pro-rata', /entitledDaysForLeaveYear/.test(read('leave/LeaveEngine.gs')) &&
   /entitledDaysForLeaveYear/.test(read('leave/LeaveService.gs')));
 check('leave-approval-stage-columns', /manager_approver_employee_id/.test(read('foundation/SchemaService.gs')) &&
