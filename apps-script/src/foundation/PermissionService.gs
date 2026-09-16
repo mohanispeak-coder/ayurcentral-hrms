@@ -30,6 +30,17 @@ var PermissionService = (function () {
   ACTION_ROLES_[HRMS.ACTIONS.PAYROLL_RUN] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR];
   ACTION_ROLES_[HRMS.ACTIONS.COMPENSATION_MANAGE] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR];
   ACTION_ROLES_[HRMS.ACTIONS.VIEW_OWN_PAYSLIP] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR, HRMS.ROLES.MANAGER, HRMS.ROLES.EMPLOYEE];
+  ACTION_ROLES_[HRMS.ACTIONS.ATS_ACCESS] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR, HRMS.ROLES.MANAGER];
+  ACTION_ROLES_[HRMS.ACTIONS.ATS_MANAGE] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR];
+
+  function normalizeUserRole_(role) {
+    var r = String(role || '').trim().toUpperCase();
+    if (!r) return '';
+    if (r === 'ADMINISTRATOR' || r === 'SYSTEM ADMIN' || r === 'SYSADMIN' ||
+        r === 'ADMIN USER' || r === 'COMPANY ADMIN') return HRMS.ROLES.ADMIN;
+    if (r === 'SUPERADMIN' || r === 'SUPER_ADMIN') return HRMS.ROLES.OWNER;
+    return r;
+  }
 
   var NAV_ITEMS_ = [
     { id: 'dashboard', label: 'Dashboard', route: 'dashboard', icon: 'dashboard', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
@@ -50,7 +61,7 @@ var PermissionService = (function () {
   ];
 
   function hasRole_(session, allowedRoles) {
-    var role = String(session && session.role || '').trim().toUpperCase();
+    var role = normalizeUserRole_(session && session.role);
     return allowedRoles.indexOf(role) >= 0;
   }
 
@@ -68,7 +79,8 @@ var PermissionService = (function () {
     if (!allowed) return false;
     if (!hasRole_(session, allowed)) return false;
 
-    if (action === HRMS.ACTIONS.EMPLOYEE_DIRECTORY && session.role === HRMS.ROLES.MANAGER) {
+    if (action === HRMS.ACTIONS.EMPLOYEE_DIRECTORY &&
+        normalizeUserRole_(session.role) === HRMS.ROLES.MANAGER) {
       return true;
     }
 
@@ -111,7 +123,7 @@ var PermissionService = (function () {
   }
 
   function getNavForRole(role) {
-    role = String(role || '').toUpperCase();
+    role = normalizeUserRole_(role);
     return NAV_ITEMS_.filter(function (item) {
       return item.roles.indexOf(role) >= 0;
     });
@@ -131,13 +143,13 @@ var PermissionService = (function () {
 
   function isAdmin(session) {
     if (!session) return false;
-    var role = String(session.role || '').trim().toUpperCase();
+    var role = normalizeUserRole_(session.role);
     return role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.OWNER;
   }
 
   function isHrOrAdmin(session) {
     if (!session) return false;
-    var role = String(session.role || '').trim().toUpperCase();
+    var role = normalizeUserRole_(session.role);
     return role === HRMS.ROLES.HR ||
       role === HRMS.ROLES.ADMIN ||
       role === HRMS.ROLES.OWNER;
@@ -149,6 +161,7 @@ var PermissionService = (function () {
     getNavForRole: getNavForRole,
     getNavForSession: getNavForSession,
     isAdmin: isAdmin,
-    isHrOrAdmin: isHrOrAdmin
+    isHrOrAdmin: isHrOrAdmin,
+    normalizeUserRole: normalizeUserRole_
   };
 })();

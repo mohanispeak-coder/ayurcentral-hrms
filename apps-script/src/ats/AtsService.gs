@@ -137,7 +137,13 @@ var AtsService = (function () {
     } catch (ignore) {}
   }
 
-  function activity_(candidateId, applicationId, jobId, actorEmail, action, summary) {
+  function runLocked_(fn, alreadyLocked) {
+    if (alreadyLocked) return fn();
+    return withScriptLock_(fn);
+  }
+
+  function activity_(candidateId, applicationId, jobId, actorEmail, action, summary, options) {
+    options = options || {};
     var row = {
       activity_id: '',
       candidate_id: candidateId || '',
@@ -148,10 +154,10 @@ var AtsService = (function () {
       summary: String(summary || '').substring(0, 500),
       created_at: now_()
     };
-    withScriptLock_(function () {
+    runLocked_(function () {
       row.activity_id = nextId_(ATS.SEQ.ACTIVITY, ATS.ID_PREFIX.ACT);
       AtsRepository.insertActivity(row);
-    });
+    }, options.alreadyLocked);
     return row;
   }
 
@@ -187,7 +193,7 @@ var AtsService = (function () {
       openings: v.openings,
       hiring_manager_employee_id: trim_(payload.hiring_manager_employee_id),
       hiring_manager_name: trim_(payload.hiring_manager_name) || hiringManagerName_(payload.hiring_manager_employee_id),
-      closing_date: trim_(payload.closing_date).substring(0, 10),
+      closing_date: v.closingDateIso || '',
       notes_internal: trim_(payload.notes_internal),
       external_ref_json: trim_(payload.external_ref_json) || existing.external_ref_json || '{}'
     };
@@ -425,13 +431,14 @@ var AtsService = (function () {
     };
   }
 
-  function createJob(session, payload) {
+  function createJob(session, payload, options) {
+    options = options || {};
     AtsPermissionService.requireManage(session);
     AtsSchemaService.ensureSheets();
     var fields = jobFromPayload_(payload, null);
     var now = now_();
     var record;
-    withScriptLock_(function () {
+    runLocked_(function () {
       record = {
         job_id: nextId_(ATS.SEQ.JOB, ATS.ID_PREFIX.JOB),
         public_slug: '',
@@ -446,12 +453,13 @@ var AtsService = (function () {
       };
       Object.keys(fields).forEach(function (k) { record[k] = fields[k]; });
       AtsRepository.insertJob(record);
-    });
+    }, options.alreadyLocked);
     audit_(ATS.AUDIT.JOB_CREATE, 'JobRequisition', record.job_id, 'Created job "' + record.title + '"');
     return { job: sanitizeJob_(record, session) };
   }
 
-  function updateJob(session, jobId, payload) {
+  function updateJob(session, jobId, payload, options) {
+    options = options || {};
     AtsPermissionService.requireManage(session);
     var job = AtsRepository.findJob(jobId);
     if (!job) throw notFoundError_('Job requisition not found.');
@@ -461,12 +469,16 @@ var AtsService = (function () {
     var fields = jobFromPayload_(payload, job);
     fields.updated_at = now_();
     fields.updated_by_email = actorEmail_(session);
-    var updated = AtsRepository.updateJob(job.job_id, fields);
+    var updated;
+    runLocked_(function () {
+      updated = AtsRepository.updateJob(job.job_id, fields);
+    }, options.alreadyLocked);
     audit_(ATS.AUDIT.JOB_UPDATE, 'JobRequisition', job.job_id, 'Updated job "' + fields.title + '"');
     return { job: sanitizeJob_(updated, session) };
   }
 
-  function transitionJob(session, jobId, toStatus) {
+  function transitionJob(session, jobId, toStatus, options) {
+    options = options || {};
     AtsPermissionService.requireManage(session);
     var job = AtsRepository.findJob(jobId);
     if (!job) throw notFoundError_('Job requisition not found.');
@@ -491,7 +503,10 @@ var AtsService = (function () {
     }
     if (target === ATS.JOB_STATUS.PAUSED) updates.paused_at = now;
     if (target === ATS.JOB_STATUS.CLOSED) updates.closed_at = now;
-    var updated = AtsRepository.updateJob(job.job_id, updates);
+    var updated;
+    runLocked_(function () {
+      updated = AtsRepository.updateJob(job.job_id, updates);
+    }, options.alreadyLocked);
     var action = AtsEngine.jobActionForTransition(job.status, target);
     audit_(action, 'JobRequisition', job.job_id, 'Job ' + job.job_id + ' ' + job.status + ' → ' + target);
     return { job: sanitizeJob_(updated, session) };

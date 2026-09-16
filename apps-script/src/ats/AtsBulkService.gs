@@ -5,7 +5,7 @@
 var ATS = ATS || {};
 
 var AtsBulkService = (function () {
-  var JOBS_TEMPLATE_VERSION_ = '1';
+  var JOBS_TEMPLATE_VERSION_ = '2';
   var CAND_TEMPLATE_VERSION_ = '1';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
@@ -41,7 +41,7 @@ var AtsBulkService = (function () {
     skills: 'Communication, Excel',
     openings: '1',
     hiring_manager_employee_id: '',
-    closing_date: '2026-12-31',
+    closing_date: '31/12/2026',
     notes_internal: '',
     publish: 'NO'
   };
@@ -62,6 +62,39 @@ var AtsBulkService = (function () {
   function trim_(v) {
     if (v === null || v === undefined) return '';
     return String(v).trim();
+  }
+
+  function formatCellValue_(v) {
+    if (v === null || v === undefined || v === '') return '';
+    if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+      var day = v.getDate();
+      var month = v.getMonth() + 1;
+      var year = v.getFullYear();
+      var dd = day < 10 ? '0' + day : String(day);
+      var mm = month < 10 ? '0' + month : String(month);
+      return dd + '/' + mm + '/' + year;
+    }
+    return trim_(v);
+  }
+
+  function normalizeJobRowDates_(row) {
+    if (!row || !row.hasOwnProperty('closing_date')) return row;
+    var raw = row.closing_date;
+    if (raw === null || raw === undefined || raw === '') return row;
+    if (Object.prototype.toString.call(raw) === '[object Date]' && !isNaN(raw.getTime())) {
+      row.closing_date = formatCellValue_(raw);
+      return row;
+    }
+    if (typeof AtsEngine !== 'undefined' && AtsEngine.parseClosingDate) {
+      var parsed = AtsEngine.parseClosingDate(raw);
+      if (parsed.ok && parsed.iso) {
+        var parts = parsed.iso.split('-');
+        if (parts.length === 3) {
+          row.closing_date = parts[2] + '/' + parts[1] + '/' + parts[0];
+        }
+      }
+    }
+    return row;
   }
 
   function normalizeHeader_(header) {
@@ -115,8 +148,9 @@ var AtsBulkService = (function () {
       var row = { rowNumber: r + 1 };
       for (var i = 0; i < headers.length; i++) {
         if (!headers[i]) continue;
-        row[headers[i]] = trim_(line[i]);
+        row[headers[i]] = formatCellValue_(line[i]);
       }
+      normalizeJobRowDates_(row);
       out.push(row);
     }
     return out;
@@ -136,8 +170,9 @@ var AtsBulkService = (function () {
       var row = { rowNumber: r + 1 };
       for (var i = 0; i < headers.length; i++) {
         if (!headers[i]) continue;
-        row[headers[i]] = trim_(line[i]);
+        row[headers[i]] = formatCellValue_(line[i]);
       }
+      normalizeJobRowDates_(row);
       out.push(row);
     }
     return out;
@@ -235,6 +270,7 @@ var AtsBulkService = (function () {
       'Upload .xlsx or .csv. Required columns are marked with *.',
       'Duplicate job titles in one file are rejected.',
       'publish: YES to publish immediately, otherwise job stays DRAFT.',
+      'closing_date: use DD/MM/YYYY (example 31/12/2026). ISO YYYY-MM-DD is also accepted.',
       'Valid source values are not used for jobs.',
       'Maximum ' + MAX_ROWS_ + ' rows per upload.'
     ];
@@ -530,10 +566,11 @@ var AtsBulkService = (function () {
     return withScriptLock_(function () {
       payloads.forEach(function (payload, index) {
         try {
-          var result = AtsService.createJob(session, payload);
+          var lockOpts = { alreadyLocked: true };
+          var result = AtsService.createJob(session, payload, lockOpts);
           var job = result.job;
           if (shouldPublish_(payload.publish)) {
-            result = AtsService.transitionJob(session, job.job_id, ATS.JOB_STATUS.PUBLISHED);
+            result = AtsService.transitionJob(session, job.job_id, ATS.JOB_STATUS.PUBLISHED, lockOpts);
             job = result.job;
           }
           created.push({ rowNumber: index + 1, job_id: job.job_id, title: job.title, status: job.status });

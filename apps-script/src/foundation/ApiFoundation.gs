@@ -102,8 +102,12 @@ function apiGetAppBootstrap(sessionToken) {
  */
 function apiGetModuleUi(moduleId, sessionToken) {
   return hrmsRun_(function () {
-    PermissionService.require(HRMS.ACTIONS.ACCESS_APP);
+    var session = AuthService.requireAuth();
+    PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
     var id = String(moduleId || '').trim().toLowerCase();
+    if (id === 'ats') {
+      PermissionService.require(HRMS.ACTIONS.ATS_ACCESS, {}, session);
+    }
     var files = HRMS_MODULE_UI_FILES_[id];
     if (!files) {
       throw validationError_('Unknown module UI: ' + id);

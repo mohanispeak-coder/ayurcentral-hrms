@@ -72,11 +72,15 @@ function hrmsResolveAuthAccess_(input) {
       };
     }
 
+    var role = String(user.role || '').trim().toUpperCase();
+    if (typeof PermissionService !== 'undefined' && PermissionService.normalizeUserRole) {
+      role = PermissionService.normalizeUserRole(role);
+    }
     var session = {
       authorized: true,
       email: email,
       employee_id: String(user.employee_id || '').trim(),
-      role: String(user.role || '').trim().toUpperCase(),
+      role: role,
       status: user.status,
       displayName: input.displayName || '',
       demo: false,

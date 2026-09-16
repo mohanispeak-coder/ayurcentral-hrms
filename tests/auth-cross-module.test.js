@@ -110,6 +110,7 @@ function session(role, employeeId) {
 
 const owner = session('OWNER', 'EMP000');
 const admin = session('ADMIN', 'EMP001');
+const administrator = session('Administrator', 'EMP001');
 const hr = session('HR', 'EMP010');
 const mgr = session('MANAGER', 'EMP002');
 const emp = session('EMPLOYEE', 'EMP003');
@@ -126,10 +127,15 @@ check('perm-emp-no-payroll', !PermissionService.can(HRMS.ACTIONS.PAYROLL_RUN, {}
 check('perm-mgr-no-payroll', !PermissionService.can(HRMS.ACTIONS.PAYROLL_RUN, {}, mgr));
 check('perm-hr-payroll', PermissionService.can(HRMS.ACTIONS.PAYROLL_RUN, {}, hr));
 check('perm-owner-is-hr-admin', PermissionService.isHrOrAdmin(owner) && PermissionService.isAdmin(owner));
+check('perm-administrator-normalized', PermissionService.normalizeUserRole('Administrator') === HRMS.ROLES.ADMIN);
+check('perm-administrator-ats-access', PermissionService.can(HRMS.ACTIONS.ATS_ACCESS, {}, administrator));
+check('perm-administrator-ats-manage', PermissionService.can(HRMS.ACTIONS.ATS_MANAGE, {}, administrator));
 
 const adminNav = PermissionService.getNavForSession(admin).map(function (n) { return n.route; });
 check('nav-admin-has-my-payslips', adminNav.indexOf('my-payslips') >= 0);
 check('nav-admin-has-ats', adminNav.indexOf('ats') >= 0);
+const administratorNav = PermissionService.getNavForSession(administrator).map(function (n) { return n.route; });
+check('nav-administrator-has-ats', administratorNav.indexOf('ats') >= 0);
 const ownerNav = PermissionService.getNavForSession(owner).map(function (n) { return n.route; });
 check('nav-owner-has-ats', ownerNav.indexOf('ats') >= 0);
 check('nav-owner-has-payroll', ownerNav.indexOf('payroll') >= 0);
@@ -141,6 +147,7 @@ check('nav-emp-has-my-payslips', empNav.indexOf('my-payslips') >= 0);
 // --- ATS must match central nav for OWNER/ADMIN ---
 check('ats-owner-access', AtsEngine.canAccessAts(owner) && AtsEngine.canManageAts(owner));
 check('ats-admin-access', AtsEngine.canAccessAts(admin) && AtsEngine.canManageAts(admin));
+check('ats-administrator-access', AtsEngine.canAccessAts(administrator) && AtsEngine.canManageAts(administrator));
 check('ats-mgr-access-not-manage', AtsEngine.canAccessAts(mgr) && !AtsEngine.canManageAts(mgr));
 check('ats-emp-denied', !AtsEngine.canAccessAts(emp));
 try {
@@ -153,8 +160,7 @@ try {
   AtsPermissionService.requireAccess(emp);
   check('ats-require-emp-denied', false, 'should throw');
 } catch (e) {
-  check('ats-require-emp-denied', e.hrmsCode === HRMS.ERROR_CODES.AUTHORIZATION &&
-    String(e.message).indexOf('not available') >= 0);
+  check('ats-require-emp-denied', e.hrmsCode === HRMS.ERROR_CODES.AUTHORIZATION);
 }
 try {
   AtsPermissionService.requireAccess(anon);

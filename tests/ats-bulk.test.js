@@ -34,6 +34,10 @@ check('candidates-template', /downloadCandidatesTemplate/.test(bulk));
 check('source-required', /source is required for reverse tracking/.test(bulk));
 check('valid-sources', /ATS\.SOURCES/.test(bulk));
 check('dup-job-title', /Duplicate job title/.test(bulk));
+check('jobs-closing-dmy-sample', /closing_date:\s*'31\/12\/2026'/.test(bulk));
+check('jobs-closing-dmy-instructions', /DD\/MM\/YYYY/.test(bulk));
+check('jobs-bulk-nested-lock', /createJob\(session, payload, lockOpts\)/.test(bulk) &&
+  /alreadyLocked:\s*true/.test(bulk));
 check('dup-application', /Duplicate application/.test(bulk));
 check('csv-xlsx', /Upload a \.csv or \.xlsx file/.test(bulk));
 check('api-jobs', /apiAtsValidateJobsBulkUpload/.test(api));

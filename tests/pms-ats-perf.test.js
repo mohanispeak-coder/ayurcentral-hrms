@@ -69,6 +69,8 @@ check('ats-list-app-count-index', /appCountByCandidate/.test(ats));
 check('ats-sharepack-light', !/function getSharePack[\s\S]{0,120}getJob\(/.test(ats));
 check('ats-scoped-interview-index', /interviewsByJob_/.test(ats));
 check('ats-move-stage-locked', /function moveStage[\s\S]{0,120}withScriptLock_/.test(ats));
+check('ats-create-job-reentrant-lock', /function createJob[\s\S]{0,400}runLocked_/.test(ats) &&
+  /options\.alreadyLocked/.test(ats));
 check('ats-client-patch-move', /patchJobDetailAfterMove_/.test(atsClient));
 
 if (failures.length) {
