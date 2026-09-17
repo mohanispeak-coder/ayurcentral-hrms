@@ -632,18 +632,25 @@ var EmployeeService = (function () {
         leaveSeeded = seedLeaveBalances_(employeeId, now);
       }
 
+      var welcomeDelivery = null;
       if (createUser) {
+        if (typeof UserAccessService !== 'undefined' && UserAccessService.ensureColumns) {
+          UserAccessService.ensureColumns();
+        }
         var accessDefaults = (typeof UserAccessService !== 'undefined' && UserAccessService.newUserAccessDefaults)
           ? UserAccessService.newUserAccessDefaults(HRMS.ROLES.EMPLOYEE)
           : {};
-        EmployeeRepository.insertUser(Object.assign({
+        var tgChat = trim_(payload.telegram_chat_id);
+        var userRow = Object.assign({
           google_email: loginEmail,
           employee_id: employeeId,
           role: HRMS.ROLES.EMPLOYEE,
           status: HRMS.USER_STATUS.ACTIVE,
           created_at: now,
           updated_at: now
-        }, accessDefaults));
+        }, accessDefaults);
+        if (tgChat) userRow.telegram_chat_id = tgChat;
+        EmployeeRepository.insertUser(userRow);
       }
 
       var drive = maybeCreateDriveFolder_(employeeId);
@@ -654,12 +661,18 @@ var EmployeeService = (function () {
 
       notifyEmployeeCreated_(session, record, createUser);
       if (createUser && typeof EmployeeWelcomeService !== 'undefined') {
-        EmployeeWelcomeService.sendWelcomeOnCreate(record, loginEmail);
+        welcomeDelivery = EmployeeWelcomeService.sendWelcomeOnCreate(record, loginEmail);
+      }
+
+      var allWarnings = (validated.warnings || []).slice();
+      if (welcomeDelivery && welcomeDelivery.warnings && welcomeDelivery.warnings.length) {
+        welcomeDelivery.warnings.forEach(function (w) { allWarnings.push(w); });
       }
 
       return {
         employee: sanitizeForViewer(EmployeeRepository.findById(employeeId), session),
-        warnings: validated.warnings,
+        warnings: allWarnings,
+        welcome_delivery: welcomeDelivery,
         leave_balances_seeded: leaveSeeded,
         drive_folder_created: drive.created,
         user_created: createUser

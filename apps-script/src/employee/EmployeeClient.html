@@ -462,6 +462,9 @@
         html += fieldGroup('google_login_email', 'Google login email',
           input('google_login_email', 'email', emp.google_login_email) +
           '<p class="form-hint">Required when login is enabled. Can match work email.</p>');
+        html += fieldGroup('telegram_chat_id', 'Telegram chat ID (optional)',
+          '<input class="form-input mono" id="telegram_chat_id" inputmode="numeric" placeholder="After employee taps Start on your bot">' +
+          '<p class="form-hint">Required for Telegram welcome. Employee must message your bot first; then paste their numeric chat ID here.</p>');
       }
       return html;
     }
@@ -507,7 +510,7 @@
         'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
         'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
         'employment_type', 'location', 'pan', 'bank_account_name', 'bank_account_number',
-        'bank_ifsc', 'bank_name', 'notes', 'google_login_email'
+        'bank_ifsc', 'bank_name', 'notes', 'google_login_email', 'telegram_chat_id'
       ];
       var payload = formValues(ids);
       if ($('create_user')) payload.create_user = $('create_user').checked;
@@ -565,6 +568,10 @@
           .then(function (result) {
             (result.warnings || []).forEach(function (w) { showToast(w); });
             invalidateEmpLists_();
+            if (result.welcome_delivery && result.welcome_delivery.telegram && result.welcome_delivery.telegram.ok) {
+              showToast('Welcome sent on Telegram.', 'success');
+            }
+            (result.warnings || []).forEach(function (w) { showToast(w, 'warning'); });
             if (setFlash) setFlash('Created ' + result.employee.employee_id, 'success', 'employee-profile');
             navigate('employee-profile', { employeeId: result.employee.employee_id });
           })

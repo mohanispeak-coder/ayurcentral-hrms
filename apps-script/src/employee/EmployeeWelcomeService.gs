@@ -113,14 +113,53 @@ var EmployeeWelcomeService = (function () {
     };
   }
 
-  function sendTelegram_(content, chatId) {
+  function logTelegramWelcome_(employeeId, chatId, tg) {
+    try {
+      AuditService.log(
+        'EMPLOYEE_WELCOME_TELEGRAM',
+        'Users',
+        'telegram:' + trim_(chatId),
+        (tg && tg.ok ? 'Sent' : (tg ? tg.status : 'FAILED')) + (tg && tg.error ? ' — ' + tg.error : ''),
+        employeeId || ''
+      );
+    } catch (ignore) {}
+  }
+
+  function sendTelegram_(content, chatId, employeeId) {
     if (typeof TelegramService === 'undefined' || !TelegramService.sendMessage) {
       return { ok: false, status: 'UNAVAILABLE', error: 'TelegramService unavailable' };
     }
     if (!TelegramService.isConfigured()) {
       return { ok: false, status: 'NOT_CONFIGURED', error: 'TELEGRAM_BOT_TOKEN not set' };
     }
-    return TelegramService.sendMessage(chatId, content.body, content.webappUrl);
+    var tg = TelegramService.sendMessage(chatId, content.body, content.webappUrl);
+    logTelegramWelcome_(employeeId, chatId, tg);
+    return tg;
+  }
+
+  function welcomeWarnings_(out, autoCreate) {
+    var list = [];
+    if (!out) return list;
+    if (autoCreate && out.telegram && !out.telegram.attempted) {
+      list.push('Telegram: enable “Send welcome on Telegram when login is created” in Settings, or send manually from Login & role.');
+    }
+    if (out.telegram && out.telegram.attempted && !out.telegram.ok) {
+      if (out.telegram.status === 'NOT_CONFIGURED') {
+        list.push('Telegram: add TELEGRAM_BOT_TOKEN in Apps Script → Project settings → Script properties.');
+      } else if (out.telegram.status === 'NO_CHAT') {
+        list.push('Telegram: save the employee chat ID on Login & role (they must tap Start on your bot first).');
+      } else if (out.telegram.status === 'SKIPPED' && !out.telegram.attempted) {
+        list.push('Telegram: enable “Send welcome on Telegram” in Settings.');
+      } else if (out.telegram.status === 'SKIPPED') {
+        list.push('Telegram: not sent (disabled in Settings or not requested).');
+      } else {
+        list.push('Telegram: ' + (out.telegram.error || out.telegram.status || 'failed'));
+      }
+    }
+    if (out.email && out.email.attempted && !out.email.ok && out.email.status !== 'SKIPPED') {
+      list.push('Welcome email: ' + (out.email.error || out.email.status || 'not sent'));
+    }
+    return list;
   }
 
   /**
@@ -163,7 +202,7 @@ var EmployeeWelcomeService = (function () {
       if (!chatId) {
         out.telegram = { attempted: true, ok: false, status: 'NO_CHAT', error: 'No Telegram chat ID on user' };
       } else {
-        var tg = sendTelegram_(content, chatId);
+        var tg = sendTelegram_(content, chatId, employeeId);
         out.telegram = {
           attempted: true,
           ok: !!tg.ok,
@@ -181,14 +220,23 @@ var EmployeeWelcomeService = (function () {
         session.employee_id || ''
       );
     }
+    out.warnings = welcomeWarnings_(out, autoCreate);
     return out;
   }
 
   function sendWelcomeOnCreate(record, loginEmail) {
-    if (!loginEmail) return;
+    if (!loginEmail) return { email: { attempted: false }, telegram: { attempted: false } };
     try {
-      sendWelcome(null, record.employee_id, { autoCreate: true });
-    } catch (ignore) {}
+      var out = sendWelcome(null, record.employee_id, { autoCreate: true });
+      out.warnings = welcomeWarnings_(out, true);
+      return out;
+    } catch (e) {
+      return {
+        email: { attempted: false, ok: false, status: 'ERROR', error: String(e.message || e) },
+        telegram: { attempted: false, ok: false, status: 'ERROR', error: String(e.message || e) },
+        warnings: [String(e.message || e)]
+      };
+    }
   }
 
   function statusForClient_() {

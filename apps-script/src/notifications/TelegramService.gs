@@ -13,7 +13,11 @@ var TelegramService = (function () {
 
   function getBotToken_() {
     try {
-      return trim_(PropertiesService.getScriptProperties().getProperty(PROP_TOKEN_));
+      var props = PropertiesService.getScriptProperties();
+      var key = (typeof HRMS !== 'undefined' && HRMS.PROPS && HRMS.PROPS.TELEGRAM_BOT_TOKEN)
+        ? HRMS.PROPS.TELEGRAM_BOT_TOKEN
+        : PROP_TOKEN_;
+      return trim_(props.getProperty(key) || props.getProperty(PROP_TOKEN_));
     } catch (e) {
       return '';
     }
