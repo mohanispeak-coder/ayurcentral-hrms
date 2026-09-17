@@ -298,6 +298,9 @@ var SchemaService = (function () {
     setupDatabase: setupDatabase,
     getSchemaInfo: getSchemaInfo,
     ensureSheetHeaders: ensureSheetHeaders,
+    seedMissingDefaultSettings: function (ss) {
+      return seedDefaultSettings_(ss || ConfigService.openSpreadsheet());
+    },
     ensureModuleSheets: function () {
       return ensureModuleSheets_(ConfigService.openSpreadsheet());
     }

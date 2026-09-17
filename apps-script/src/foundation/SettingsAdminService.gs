@@ -86,6 +86,13 @@ var AdminSettingsService = (function () {
     return moduleDef.defaultRoles.indexOf(role) >= 0;
   }
 
+  function ensureDefaultSettingsSeeded_() {
+    if (typeof SchemaService !== 'undefined' && SchemaService.seedMissingDefaultSettings) {
+      return SchemaService.seedMissingDefaultSettings();
+    }
+    return { inserted: 0 };
+  }
+
   function ensureRoleModuleSettingsSeeded_() {
     var ss = ConfigService.openSpreadsheet();
     var sheet = ss.getSheetByName(HRMS.SHEETS.SETTINGS);
