@@ -264,8 +264,10 @@
       opts = opts || {};
       var state = atsBulkState[kind];
       state.onCommitted = opts.onCommitted || null;
+      var chooseBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-choose' : 'ats-candidates-bulk-choose');
       var fileInput = $(kind === 'jobs' ? 'ats-jobs-bulk-file' : 'ats-candidates-bulk-file');
       var validateBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-validate' : 'ats-candidates-bulk-validate');
+      if (chooseBtn && fileInput) chooseBtn.addEventListener('click', function () { fileInput.click(); });
       if (fileInput) fileInput.addEventListener('change', function () {
         state.file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (validateBtn) validateBtn.disabled = !state.file;
@@ -533,8 +535,8 @@
         (kind === 'jobs' ? '<p class="hint">Job closing_date must be DD/MM/YYYY or DD-MM-YYYY (e.g. 31/12/2026).</p>' : '') +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-template">Download template</button>' +
-        '<label class="btn btn-secondary" for="ats-' + kind + '-bulk-file">Choose Excel/CSV file</label>' +
-        '<input type="file" id="ats-' + kind + '-bulk-file" accept=".xlsx,.xls,.csv" style="display:none">' +
+        '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-choose">Choose Excel/CSV file</button>' +
+        '<input type="file" id="ats-' + kind + '-bulk-file" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv">' +
         '<button type="button" class="btn btn-primary" id="ats-' + kind + '-bulk-validate" disabled>Validate upload</button>' +
         '</div>' +
         '<p id="ats-' + kind + '-bulk-file-name" class="hint">No file selected.</p>' +

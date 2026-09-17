@@ -784,6 +784,10 @@ var AtsService = (function () {
         } else if (target === ATS.STAGE.SELECTED) {
           NotificationAtsAdapter.notifySelected(packed, recips);
         }
+        if (target === ATS.STAGE.OFFER && typeof AtsOfferLetterService !== 'undefined') {
+          var candOffer = AtsRepository.findCandidate(app.candidate_id);
+          AtsOfferLetterService.maybeSendOnStage(target, updated, job, candOffer);
+        }
       });
       return {
         application: enrichApplicationView_(updated, job, buildCandidateIndex_()),

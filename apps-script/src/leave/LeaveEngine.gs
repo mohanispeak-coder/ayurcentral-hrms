@@ -634,6 +634,7 @@ var LeaveEngine = (function () {
     initialPendingStatus: initialPendingStatus,
     statusAfterApproval: statusAfterApproval,
     isPendingApprovalStatus: isPendingApprovalStatus,
-    statusLabel: statusLabel
+    statusLabel: statusLabel,
+    typeRequiresBalance: typeRequiresBalance_
   };
 })();

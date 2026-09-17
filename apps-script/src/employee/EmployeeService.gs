@@ -435,6 +435,28 @@ var EmployeeService = (function () {
     }
   }
 
+  function ensureLeaveBalancesOnCreate_(employeeId, now) {
+    var leaveSeeded = 0;
+    if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+      try {
+        var granted = LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
+        leaveSeeded = granted ? granted.length : 0;
+      } catch (ignoreGrant) {
+        leaveSeeded = 0;
+      }
+    }
+    if (!leaveSeeded) {
+      leaveSeeded = seedLeaveBalances_(employeeId, now);
+    }
+    if (!leaveSeeded && typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+      try {
+        var retry = LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
+        leaveSeeded = retry ? retry.length : 0;
+      } catch (ignoreRetry) {}
+    }
+    return leaveSeeded;
+  }
+
   function seedLeaveBalances_(employeeId, now) {
     var types;
     try {
@@ -460,8 +482,9 @@ var EmployeeService = (function () {
     var seeded = 0;
     years.forEach(function (year) {
       types.forEach(function (t) {
-        if (typeof LeaveEngine !== 'undefined' && LeaveEngine.isTruthy && t.hasOwnProperty('requires_balance') &&
-            !LeaveEngine.isTruthy(t.requires_balance)) {
+        if (typeof LeaveEngine !== 'undefined' && LeaveEngine.typeRequiresBalance) {
+          if (!LeaveEngine.typeRequiresBalance(t)) return;
+        } else if (t.hasOwnProperty('requires_balance') && !LeaveEngine.isTruthy(t.requires_balance)) {
           return;
         }
         var already = existing.some(function (b) {
@@ -620,17 +643,7 @@ var EmployeeService = (function () {
       };
       EmployeeRepository.insert(record);
 
-      var leaveSeeded = 0;
-      if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-        try {
-          var granted = LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-          leaveSeeded = granted ? granted.length : 0;
-        } catch (ignore) {
-          leaveSeeded = seedLeaveBalances_(employeeId, now);
-        }
-      } else {
-        leaveSeeded = seedLeaveBalances_(employeeId, now);
-      }
+      var leaveSeeded = ensureLeaveBalancesOnCreate_(employeeId, now);
 
       var welcomeDelivery = null;
       if (createUser) {

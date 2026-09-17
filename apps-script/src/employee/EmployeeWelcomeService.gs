@@ -21,6 +21,25 @@ var EmployeeWelcomeService = (function () {
     var webappUrl = ConfigService.getHrmsWebAppUrl();
     var portalLine = webappUrl || '(ask HR for the HRMS portal link)';
     var department = trim_(record.department) || '—';
+    var map = {
+      '{{display_name}}': displayName,
+      '{{company}}': company,
+      '{{portal_url}}': portalLine,
+      '{{login_email}}': loginEmail,
+      '{{employee_id}}': record.employee_id,
+      '{{department}}': department
+    };
+    if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.render) {
+      var rendered = HrmsContentTemplateService.render('employee_welcome', map);
+      return {
+        subject: rendered.subject,
+        body: rendered.body,
+        webappUrl: webappUrl,
+        loginEmail: loginEmail,
+        displayName: displayName,
+        company: company
+      };
+    }
     var subject = company + ' — Welcome — HRMS access for ' + record.employee_id;
     var body = [
       'Dear ' + displayName + ',',

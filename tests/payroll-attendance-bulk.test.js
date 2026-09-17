@@ -51,6 +51,9 @@ check('derive-attendance', /deriveAttendanceDays_/.test(bulkSrc));
 check('csv-supported', /Upload a \.csv or \.xlsx file/.test(bulkSrc));
 check('no-csv-reject', !/CSV is not supported/.test(bulkSrc));
 check('ui-csv-accept', /accept="\.xlsx,\.xls,\.csv/.test(client));
+check('ui-choose-button-not-label', /btn-pr-bulk-choose/.test(client) && !/for="pr-bulk-file"/.test(client));
+check('validate-no-full-repaint', /bindBulkUpload_[\s\S]*apiValidatePayrollUpload[\s\S]*paintBulkPreview_/.test(client) &&
+  !/apiValidatePayrollUpload[\s\S]{0,400}paintUnifiedPayroll_/.test(client));
 check('ui-validate-button', /btn-pr-bulk-validate/.test(client) && /Validate upload/.test(client));
 check('ui-return-draft-attendance', /btn-attendance-gate-draft/.test(client) && /canReturnPayrollToDraft_/.test(client));
 check('ui-attendance-gate-banner', /paintAttendanceGateBanner_/.test(client) && /PAYROLL_CLIENT_BUILD_/.test(client));

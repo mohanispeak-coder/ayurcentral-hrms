@@ -262,7 +262,9 @@ var LeaveService = (function () {
       code: row.code,
       name: row.name,
       is_paid: LeaveEngine.isTruthy(row.is_paid),
-      requires_balance: LeaveEngine.isTruthy(row.requires_balance),
+      requires_balance: (row.requires_balance === '' || row.requires_balance == null)
+        ? true
+        : LeaveEngine.isTruthy(row.requires_balance),
       allow_half_day: LeaveEngine.isTruthy(row.allow_half_day),
       counts_as_lop: LeaveEngine.isTruthy(row.counts_as_lop),
       annual_entitlement_days: LeaveEngine.toNumber(row.annual_entitlement_days),

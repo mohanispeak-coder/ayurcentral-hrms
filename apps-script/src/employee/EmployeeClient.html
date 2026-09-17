@@ -568,12 +568,21 @@
           .then(function (result) {
             (result.warnings || []).forEach(function (w) { showToast(w); });
             invalidateEmpLists_();
+            var empId = result.employee.employee_id;
+            if (empViewCache.extras[empId]) {
+              delete empViewCache.extras[empId].leave;
+            }
+            if (result.leave_balances_seeded > 0) {
+              showToast('Leave balances created (' + result.leave_balances_seeded + ').', 'success');
+            } else {
+              showToast('No leave balances were created — check active leave types in Leave admin.', 'warning');
+            }
             if (result.welcome_delivery && result.welcome_delivery.telegram && result.welcome_delivery.telegram.ok) {
               showToast('Welcome sent on Telegram.', 'success');
             }
             (result.warnings || []).forEach(function (w) { showToast(w, 'warning'); });
-            if (setFlash) setFlash('Created ' + result.employee.employee_id, 'success', 'employee-profile');
-            navigate('employee-profile', { employeeId: result.employee.employee_id });
+            if (setFlash) setFlash('Created ' + empId, 'success', 'employee-profile');
+            navigate('employee-profile', { employeeId: empId, tab: 'leave' });
           })
           .catch(function (err) {
             showFieldErrors(err.details);
@@ -1085,7 +1094,7 @@
       page.innerHTML =
         '<div class="page-header"><div class="page-header-text">' +
         '<h2 class="page-heading">Bulk upload employees</h2>' +
-        '<p class="page-lede">Download the Excel template, fill employee codes and details, then upload for validation before import.</p></div>' +
+        '<p class="page-lede">Use the <strong>new hire</strong> template for joiners with portal login, or the <strong>existing / legacy</strong> template for historical employees (usually create_login NO). Edit wording in Settings → Content templates.</p></div>' +
         '<div class="page-header-actions">' +
         (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-back">Back to directory</button></div></div>' +
@@ -1096,10 +1105,12 @@
         ]) : '') +
         '<p class="form-hint">When create_login is YES, google_login_email is also required.</p>' +
         '<div class="bulk-action-bar">' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">Download Excel template</button>' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">Download CSV template</button>' +
-        '<label class="btn btn-primary" for="bulk-file-input" id="btn-bulk-choose-label">Choose Excel/CSV file</label>' +
-        '<input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" style="display:none">' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">New hire — Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">New hire — CSV</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template">Legacy — Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template-csv">Legacy — CSV</button>' +
+        '<button type="button" class="btn btn-primary" id="btn-bulk-choose">Choose Excel/CSV file</button>' +
+        '<input type="file" id="bulk-file-input" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv">' +
         '<button type="button" class="btn btn-primary" id="btn-bulk-validate" disabled>Validate upload</button>' +
         '</div>' +
         '<p id="bulk-file-name" class="form-hint">No file selected.</p>' +
@@ -1123,7 +1134,24 @@
             showToast((err && err.message) || 'CSV template download failed', 'error');
           });
       });
+      $('btn-bulk-legacy-template').addEventListener('click', function () {
+        var btn = $('btn-bulk-legacy-template');
+        callServer('apiDownloadBulkLegacyEmployeeTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'Legacy Excel template download failed', 'error');
+          });
+      });
+      $('btn-bulk-legacy-template-csv').addEventListener('click', function () {
+        var btn = $('btn-bulk-legacy-template-csv');
+        callServer('apiDownloadBulkLegacyEmployeeCsvTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'Legacy CSV template download failed', 'error');
+          });
+      });
       var selectedFile = null;
+      $('btn-bulk-choose').addEventListener('click', function () { $('bulk-file-input').click(); });
       $('bulk-file-input').addEventListener('change', function () {
         selectedFile = this.files && this.files[0] ? this.files[0] : null;
         $('btn-bulk-validate').disabled = !selectedFile;

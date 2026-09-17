@@ -16,6 +16,20 @@ function apiDownloadBulkEmployeeCsvTemplate(sessionToken) {
   }, sessionToken);
 }
 
+function apiDownloadBulkLegacyEmployeeTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeBulkService.downloadLegacyTemplate(session);
+  }, sessionToken);
+}
+
+function apiDownloadBulkLegacyEmployeeCsvTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeBulkService.downloadLegacyCsvTemplate(session);
+  }, sessionToken);
+}
+
 function apiValidateBulkEmployeeUpload(meta, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

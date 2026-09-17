@@ -23,7 +23,7 @@ var EmployeeBulkService = (function () {
     'department', 'designation', 'location', 'employment_type', 'joining_date', 'create_login'
   ];
 
-  var SAMPLE_ROW_ = {
+  var SAMPLE_ROW_NEW_HIRE_ = {
     employee_id: 'SAPL-0001',
     first_name: 'Ravi',
     last_name: 'Kumar',
@@ -44,10 +44,80 @@ var EmployeeBulkService = (function () {
     bank_account_number: '',
     bank_ifsc: '',
     bank_name: '',
-    notes: '',
+    notes: 'New hire — portal login optional',
     create_login: 'YES',
     google_login_email: 'ravi.kumar@example.com'
   };
+
+  var SAMPLE_ROW_LEGACY_ = {
+    employee_id: 'SAPL-0102',
+    first_name: 'Meena',
+    last_name: 'Shah',
+    display_name: 'Meena Shah',
+    work_email: 'meena.shah@example.com',
+    department: 'Operations',
+    designation: 'Senior Executive',
+    location: 'Bangalore',
+    employment_type: 'PERMANENT',
+    joining_date: '2019-06-01',
+    manager_employee_id: 'SAPL-0005',
+    phone: '9876501234',
+    address: '',
+    date_of_birth: '',
+    gender: '',
+    pan: 'ABCDE1234F',
+    bank_account_name: 'Meena Shah',
+    bank_account_number: '',
+    bank_ifsc: '',
+    bank_name: '',
+    notes: 'Legacy employee — historical record; create_login usually NO',
+    create_login: 'NO',
+    google_login_email: ''
+  };
+
+  function sampleRow_(variant) {
+    return variant === 'legacy' ? SAMPLE_ROW_LEGACY_ : SAMPLE_ROW_NEW_HIRE_;
+  }
+
+  function templateFileBase_(variant) {
+    return variant === 'legacy'
+      ? 'HRMS_Bulk_Existing_Employee_Upload_Template'
+      : 'HRMS_Bulk_Employee_Upload_Template';
+  }
+
+  function instructionLines_(variant) {
+    var custom = '';
+    try {
+      if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.render) {
+        var tplId = variant === 'legacy' ? 'bulk_legacy' : 'bulk_new_hire';
+        custom = HrmsContentTemplateService.render(tplId, {}).body || '';
+      }
+    } catch (ignore) {}
+    var lines = (custom ? custom.split('\n') : []).filter(function (l) { return trim_(l); });
+    if (!lines.length) {
+      lines = variant === 'legacy'
+        ? ['Legacy / existing employees — set create_login to NO unless issuing portal access now.']
+        : ['New hires — use create_login YES when creating Google sign-in.'];
+    }
+    var base = [
+      ['Template version: ' + TEMPLATE_VERSION_],
+      ['Variant: ' + (variant === 'legacy' ? 'Existing / legacy employees' : 'New hires')],
+      ['Required columns are marked with * in the Employees sheet header row.'],
+      ['Employee code format: SAPL-0001, AOPL-0001, AOMS-0001 (provided by HR, not auto-generated).'],
+      ['Dates must be YYYY-MM-DD.'],
+      ['create_login: YES or NO. If YES, google_login_email is required.'],
+      ['System role is always EMPLOYEE on create. Admin assigns HR/Manager/Admin separately.'],
+      ['manager_employee_id must already exist in HRMS (e.g. SAPL-0005).'],
+      ['Maximum ' + MAX_ROWS_ + ' employees per upload.'],
+      ['Do not change header names on the Employees sheet.']
+    ];
+    lines.forEach(function (line) {
+      base.push([line]);
+    });
+    base.push(['']);
+    base.push(['After upload, review validation results before confirming import.']);
+    return base;
+  }
 
   function trim_(v) {
     if (v === null || v === undefined) return '';
@@ -117,7 +187,9 @@ var EmployeeBulkService = (function () {
     }
   }
 
-  function buildTemplateCsv_() {
+  function buildTemplateCsv_(variant) {
+    variant = variant === 'legacy' ? 'legacy' : 'new_hire';
+    var sample = sampleRow_(variant);
     var esc = function (v) {
       v = v == null ? '' : String(v);
       if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
@@ -126,35 +198,26 @@ var EmployeeBulkService = (function () {
       return v;
     };
     var lines = [HEADERS_.join(',')];
-    lines.push(HEADERS_.map(function (h) { return esc(SAMPLE_ROW_[h] || ''); }).join(','));
-    return Utilities.newBlob(lines.join('\n'), 'text/csv', 'HRMS_Bulk_Employee_Upload_Template.csv');
+    lines.push(HEADERS_.map(function (h) { return esc(sample[h] || ''); }).join(','));
+    var name = templateFileBase_(variant) + '.csv';
+    return Utilities.newBlob(lines.join('\n'), 'text/csv', name);
   }
 
-  function buildTemplateSpreadsheet_(refs) {
+  function buildTemplateSpreadsheet_(refs, variant) {
+    variant = variant === 'legacy' ? 'legacy' : 'new_hire';
+    var sample = sampleRow_(variant);
     var ss = SpreadsheetApp.create('HRMS Bulk Employee Upload');
     var fileId = ss.getId();
     var instructions = ss.getSheets()[0];
     instructions.setName('Instructions');
     instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload — Instructions');
-    var instructionLines = [
-      ['Template version: ' + TEMPLATE_VERSION_],
-      ['Required columns are marked with * in the Employees sheet header row.'],
-      ['Employee code format: SAPL-0001, AOPL-0001, AOMS-0001 (provided by HR, not auto-generated).'],
-      ['Dates must be YYYY-MM-DD.'],
-      ['create_login: YES or NO. If YES, google_login_email is required.'],
-      ['System role is always EMPLOYEE on create. Admin assigns HR/Manager/Admin separately.'],
-      ['manager_employee_id must already exist in HRMS (e.g. SAPL-0005).'],
-      ['Maximum ' + MAX_ROWS_ + ' employees per upload.'],
-      ['Do not change header names on the Employees sheet.'],
-      ['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.'],
-      [''],
-      ['Verticals:'],
-      ['SAPL — SAPL-0001, SAPL-0002, ...'],
-      ['AOPL — AOPL-0001, AOPL-0002, ...'],
-      ['AOMS — AOMS-0001, AOMS-0002, ...'],
-      [''],
-      ['After upload, review validation results before confirming import.']
-    ];
+    var instructionLines = instructionLines_(variant);
+    instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
+    instructionLines.push(['']);
+    instructionLines.push(['Verticals:']);
+    instructionLines.push(['SAPL — SAPL-0001, SAPL-0002, ...']);
+    instructionLines.push(['AOPL — AOPL-0001, AOPL-0002, ...']);
+    instructionLines.push(['AOMS — AOMS-0001, AOMS-0002, ...']);
     instructions.getRange(3, 1, 3 + instructionLines.length - 1, 1).setValues(instructionLines);
 
     var lists = ss.insertSheet('Lists');
@@ -182,51 +245,49 @@ var EmployeeBulkService = (function () {
       return REQUIRED_HEADERS_.indexOf(h) >= 0 ? h + '*' : h;
     });
     employees.getRange(1, 1, 1, HEADERS_.length).setValues([headerLabels]);
-    var sample = HEADERS_.map(function (h) { return SAMPLE_ROW_[h] || ''; });
-    employees.getRange(2, 1, 2, HEADERS_.length).setValues([sample]);
+    var sampleRow = HEADERS_.map(function (h) { return sample[h] || ''; });
+    employees.getRange(2, 1, 2, HEADERS_.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
 
     var blob;
+    var xlsxName = templateFileBase_(variant) + '.xlsx';
     try {
-      blob = exportSpreadsheetXlsx_(fileId).setName('HRMS_Bulk_Employee_Upload_Template.xlsx');
+      blob = exportSpreadsheetXlsx_(fileId).setName(xlsxName);
     } finally {
       DriveApp.getFileById(fileId).setTrashed(true);
     }
     return blob;
   }
 
-  function downloadCsvTemplate(session) {
-    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
-    var blob = buildTemplateCsv_();
+  function packDownload_(blob, variant, mimeType) {
+    var ext = mimeType === 'text/csv' ? '.csv' : '.xlsx';
+    var fileName = (blob.getName && blob.getName()) || (templateFileBase_(variant) + ext);
     return {
-      fileName: 'HRMS_Bulk_Employee_Upload_Template.csv',
-      mimeType: 'text/csv',
+      fileName: fileName,
+      mimeType: mimeType || 'application/octet-stream',
       base64: Utilities.base64Encode(blob.getBytes()),
-      templateVersion: TEMPLATE_VERSION_
+      templateVersion: TEMPLATE_VERSION_,
+      variant: variant === 'legacy' ? 'legacy' : 'new_hire'
     };
   }
 
-  function downloadTemplate(session) {
+  function downloadCsvTemplate(session, variant) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
+    variant = variant === 'legacy' ? 'legacy' : 'new_hire';
+    var blob = buildTemplateCsv_(variant);
+    return packDownload_(blob, variant, 'text/csv');
+  }
+
+  function downloadTemplate(session, variant) {
+    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
+    variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     var refs = listReferenceValues_(session);
-    var blob;
-    var fileName;
-    var mimeType;
     try {
-      blob = buildTemplateSpreadsheet_(refs);
-      fileName = 'HRMS_Bulk_Employee_Upload_Template.xlsx';
-      mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      var blob = buildTemplateSpreadsheet_(refs, variant);
+      return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (e) {
-      blob = buildTemplateCsv_();
-      fileName = 'HRMS_Bulk_Employee_Upload_Template.csv';
-      mimeType = 'text/csv';
+      return downloadCsvTemplate(session, variant);
     }
-    return {
-      fileName: fileName,
-      mimeType: mimeType,
-      base64: Utilities.base64Encode(blob.getBytes()),
-      templateVersion: TEMPLATE_VERSION_
-    };
   }
 
   function parseCsvRows_(text) {
@@ -555,6 +616,8 @@ var EmployeeBulkService = (function () {
   return {
     downloadTemplate: downloadTemplate,
     downloadCsvTemplate: downloadCsvTemplate,
+    downloadLegacyTemplate: function (session) { return downloadTemplate(session, 'legacy'); },
+    downloadLegacyCsvTemplate: function (session) { return downloadCsvTemplate(session, 'legacy'); },
     validateUpload: validateUpload,
     commitUpload: commitUpload,
     HEADERS: HEADERS_,

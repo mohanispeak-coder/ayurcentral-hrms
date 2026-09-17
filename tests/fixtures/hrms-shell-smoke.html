@@ -98,6 +98,11 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* Single scroll region: main .content only (avoids nested bars when panels expand). */
+html:has(.app-shell.is-authed),
+html:has(.app-shell.is-authed) body {
+  overflow: hidden;
+}
 button, input, select, textarea { font-family: inherit; }
 
 .hidden { display: none !important; }
@@ -116,6 +121,7 @@ button, input, select, textarea { font-family: inherit; }
   max-height: 100dvh;
   overflow: hidden;
   background: var(--color-bg);
+  max-width: 100vw;
 }
 
 .sidebar,
@@ -345,6 +351,20 @@ button, input, select, textarea { font-family: inherit; }
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
   }
+  .app-shell.is-authed .sidebar,
+  .app-shell.is-authed .app-sidebar {
+    transition: width 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  }
+  .app-shell.is-authed .sidebar:not(.open),
+  .app-shell.is-authed .app-sidebar:not(.open) {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    border-right-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-8px);
+  }
 }
 
 .app-shell:not(.is-authed) .sidebar,
@@ -384,6 +404,7 @@ button, input, select, textarea { font-family: inherit; }
 .page-header-actions {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-shrink: 0;
 }
+.page-header-actions .form-select { min-width: 7.5rem; }
 .page-header-actions:empty { display: none; }
 .module-updated {
   font-size: var(--text-xs);
@@ -547,10 +568,25 @@ button, input, select, textarea { font-family: inherit; }
 
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
   box-shadow: var(--shadow);
+}
+.table-wrap--contain {
+  overscroll-behavior-x: contain;
+}
+.table-wrap--scroll-hint {
+  background:
+    linear-gradient(to right, var(--color-bg-elevated) 30%, rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(255, 255, 255, 0), var(--color-bg-elevated) 70%) 100% 0,
+    radial-gradient(farthest-side at 0 50%, rgba(15, 23, 42, 0.12), transparent),
+    radial-gradient(farthest-side at 100% 50%, rgba(15, 23, 42, 0.12), transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 .table-wrap + .pagination { padding-left: 4px; padding-right: 4px; }
 
@@ -599,6 +635,16 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
 .form-label.is-required::after {
   content: " *"; color: var(--color-danger); font-weight: 700;
 }
+.form-hint {
+  margin: 4px 0 0; font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4;
+}
+.bulk-required-block { margin: 12px 0 4px; }
+.bulk-required-heading { margin-bottom: 8px; }
+.bulk-required-list {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+}
+.bulk-required-label { display: inline; margin: 0; font-size: var(--text-xs); }
 .form-input,
 .form-select {
   width: 100%; max-width: 400px; padding: 9px 11px;
@@ -618,6 +664,12 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
 .form-grid .form-input, .form-grid .form-select, .form-textarea { max-width: none; }
 .form-textarea, textarea.form-input { min-height: 72px; resize: vertical; }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.doc-upload-form { margin-bottom: 20px; padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+.doc-upload-form .section-title { margin-top: 0; }
+.doc-upload-row { align-items: end; margin-bottom: 8px; }
+.doc-upload-actions { gap: 10px; flex-wrap: wrap; align-items: center; }
+.doc-upload-remove-wrap .btn { width: 100%; }
+.btn-add-doc-row { font-weight: 600; }
 .form-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-md); margin-right: 12px; }
 .form-span-2 { grid-column: 1 / -1; }
 .field-error { color: var(--color-danger); font-size: var(--text-xs); margin-top: 4px; min-height: 0; line-height: 1.35; }
@@ -1094,6 +1146,111 @@ body:has(> .careers-shell) {
   background: var(--color-bg);
 }
 
+/* ----- Responsive stack tables (use td[data-label]) ----- */
+
+.hrms-mobile-only { display: none !important; }
+.hrms-desktop-only { display: block; }
+
+.leave-balance-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.leave-balance-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--color-bg-elevated);
+}
+.leave-balance-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+  font-size: var(--text-md);
+}
+.leave-balance-dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+}
+.leave-balance-dl > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.leave-balance-dl dt {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.leave-balance-dl dd {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 767px) {
+  .data-table--stack-md thead { display: none; }
+  .data-table--stack-md tbody tr {
+    display: block;
+    border-bottom: 1px solid var(--color-border);
+    padding: 10px 12px;
+  }
+  .data-table--stack-md tbody tr:last-child { border-bottom: none; }
+  .data-table--stack-md tbody tr:hover td { background: transparent; }
+  .data-table--stack-md td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border: none;
+    text-align: right;
+    font-size: var(--text-md);
+  }
+  .data-table--stack-md td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: left;
+    flex: 1 1 40%;
+    padding-top: 2px;
+  }
+  .data-table--stack-md td.num { justify-content: space-between; }
+  .data-table--stack-md td.col-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px dashed var(--color-border);
+  }
+  .data-table--stack-md td.col-actions::before { content: 'Actions'; }
+  .data-table--stack-md td.col-actions .btn {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+  .data-table--stack-md .table-empty-row td {
+    display: block;
+    text-align: center;
+  }
+  .data-table--stack-md .table-empty-row td::before { content: none; }
+  .data-table--emp-directory td.col-emp-extra { display: none; }
+}
+
 /* ----- Responsive ----- */
 
 @media (max-width: 1100px) {
@@ -1102,40 +1259,259 @@ body:has(> .careers-shell) {
 }
 
 @media (max-width: 768px) {
+  :root {
+    --content-pad-x: 14px;
+    --content-pad-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    --touch-min: 44px;
+  }
+
+  html.hrms-nav-drawer-open .content { overflow: hidden; }
+
   .sidebar, .app-sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
+    width: min(var(--sidebar-width), calc(100vw - 48px));
     height: 100%; max-height: 100dvh;
-    transform: translateX(-100%); transition: transform 0.2s ease;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
   }
   .sidebar.open, .app-sidebar.open { transform: translateX(0); }
   .sidebar-backdrop.open {
     display: block; position: fixed; inset: 0;
     background: rgba(15, 23, 42, 0.45); z-index: 99;
   }
-  .main-wrap { width: 100%; }
+  .main-wrap { width: 100%; max-width: 100%; min-width: 0; }
+  #page-content { max-width: 100%; overflow-x: hidden; }
+
+  .header, .app-header {
+    padding: 0 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: var(--header-height);
+    height: auto;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .header-left { flex: 1 1 auto; min-width: 0; }
+  .header-right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sidebar-toggle {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    font-size: 1.35rem;
+  }
+  .page-title {
+    font-size: 0.9375rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .user-name { max-width: 72px; }
+  .user-chip .badge { display: none; }
+  #btn-sign-out { min-height: var(--touch-min); }
+
+  .content {
+    padding: var(--space-4) var(--content-pad-x) var(--content-pad-bottom);
+  }
+  .card { padding: 14px 16px; margin-bottom: 14px; }
   .emp-form-grid { grid-template-columns: 1fr; }
+  .form-row { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
   .dl-grid { grid-template-columns: 1fr; }
-  .page-header { flex-direction: column; align-items: stretch; }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
   .page-header .page-heading { display: none; }
-  .page-header-actions { width: 100%; }
-  .page-header-actions .btn { flex: 1; }
-  .page-header-actions .js-module-refresh { flex: 0 0 auto; }
-  .page-header-actions .module-updated { width: 100%; }
-  .user-name { max-width: 88px; }
-  .user-chip { padding-right: 6px; }
-  .content { padding: 16px 14px 96px; }
-  .ask-hr-fab { right: 16px; bottom: 16px; }
+  .page-header-actions,
+  .hrms-page-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .page-header-actions .module-updated {
+    width: 100%;
+    white-space: normal;
+    order: -1;
+  }
+  .page-header-actions .form-select,
+  .page-header-actions .form-input {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+  .page-header-actions .btn-row,
+  .leave-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  .page-header-actions .btn:not(.js-module-refresh),
+  .leave-toolbar-actions .btn {
+    flex: 1 1 calc(50% - 4px);
+    min-height: var(--touch-min);
+    white-space: normal;
+  }
+  .page-header-actions .js-module-refresh {
+    width: 100%;
+    min-height: var(--touch-min);
+    flex: 1 1 100%;
+  }
+
+  .page-toolbar,
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .filters .form-group,
+  .filters .form-input,
+  .filters .form-select,
+  .search-input {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .btn:not(.btn-sm):not(.btn-icon) { min-height: var(--touch-min); }
+  .btn-sm { min-height: 38px; padding: 8px 12px; }
+  .btn-row,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .form-actions .btn { width: 100%; }
+  .btn-row--inline-sm {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .btn-row--inline-sm .btn { flex: 1 1 auto; width: auto; }
+
+  .tabs,
+  .emp-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar,
+  .emp-tabs::-webkit-scrollbar { display: none; }
+  .tab, .emp-tab {
+    flex: 0 0 auto;
+    min-height: var(--touch-min);
+    padding: 10px 12px;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal,
+  .modal-dialog {
+    max-width: none;
+    width: 100%;
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 8px));
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    max-height: none;
+  }
+  .modal-actions,
+  .modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .modal-actions .btn { width: 100%; min-height: var(--touch-min); }
+
+  .toast {
+    max-width: calc(100vw - 24px);
+    margin: 0 12px;
+  }
+
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kpi-value { font-size: 1.35rem; }
+  .quick-links .btn { flex: 1 1 calc(50% - 4px); min-height: var(--touch-min); }
+
+  .hrms-mobile-only { display: block !important; }
+  .hrms-desktop-only { display: none !important; }
+
+  .ask-hr-fab {
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    min-height: var(--touch-min);
+    padding: 12px 16px;
+  }
   .ask-hr-panel {
-    right: 8px; left: 8px; bottom: 8px; width: auto;
-    height: min(560px, calc(100vh - 16px)); max-height: none;
+    right: 8px; left: 8px; bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    width: auto;
+    height: min(560px, calc(100dvh - 24px - env(safe-area-inset-bottom, 0px)));
+    max-height: none;
   }
   .ask-hr-panel.is-expanded {
     width: auto; left: 8px; right: 8px;
-    height: calc(100vh - 16px); max-height: none;
+    height: calc(100dvh - 16px - env(safe-area-inset-bottom, 0px));
+    max-height: none;
   }
+  .ask-hr-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
   .cal-grid { font-size: 0.7rem; }
-  .cal-cell { min-height: 56px; padding: 4px; }
-  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cal-cell { min-height: 52px; padding: 4px; }
+
+  .leave-bulk-bar { flex-direction: column; align-items: stretch; }
+  .leave-bulk-bar .btn { width: 100%; min-height: var(--touch-min); }
+
+  th { position: static; }
+  .data-table:not(.data-table--stack-md) { min-width: 520px; }
+
+  .pagination {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+  .pagination .btn { min-height: var(--touch-min); }
+}
+
+@media (max-width: 480px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .leave-balance-dl { grid-template-columns: 1fr 1fr; }
+  .user-name { max-width: 56px; }
+}
+
+@media (max-width: 360px) {
+  .content { padding-left: 12px; padding-right: 12px; }
+  .card { padding: 12px; }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+  .modal,
+  .modal-dialog {
+    max-height: 96dvh;
+    border-radius: var(--radius-md);
+  }
+  .ask-hr-panel.is-expanded {
+    height: calc(100dvh - 12px);
+  }
 }
 
 /* Loading buttons, spinners, inline action feedback */
@@ -1182,6 +1558,129 @@ body:has(> .careers-shell) {
   color: var(--color-text-secondary);
 }
 .skeleton-card[aria-busy="true"] { pointer-events: none; }
+.hrms-global-busy { cursor: progress; }
+.hrms-global-busy button.btn-loading { cursor: wait; }
+
+/* Collapsible sections — click summary to expand (chevron points right when closed, down when open) */
+.collapsible-section { margin-top: 12px; }
+.collapsible-section > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.35;
+  padding: 4px 0 8px;
+  user-select: none;
+}
+.collapsible-section > summary::-webkit-details-marker { display: none; }
+.collapsible-section > summary::marker { content: ''; }
+.collapsible-section > summary::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid currentColor;
+  opacity: 0.65;
+  transition: transform 180ms ease;
+}
+.collapsible-section[open] > summary::before { transform: rotate(90deg); }
+.collapsible-section.bulk-upload-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-bg-elevated);
+}
+.collapsible-section .collapsible-section-body { padding-top: 2px; }
+.bulk-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin: 12px 0 16px;
+  position: relative;
+}
+.bulk-action-bar .hidden-file,
+.bulk-upload-card .hidden-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.bulk-upload-card .bulk-steps {
+  margin: 8px 0 14px 20px;
+}
+.bulk-upload-card .page-lede {
+  margin-bottom: 10px;
+}
+.bulk-upload-card .hint,
+.bulk-upload-card .form-hint,
+.bulk-upload-card #ats-jobs-bulk-file-name,
+.bulk-upload-card #ats-candidates-bulk-file-name,
+.bulk-upload-card #pr-bulk-file-name,
+.bulk-upload-card #comp-bulk-file-name,
+.bulk-upload-card #bulk-file-name {
+  margin: 4px 0 14px;
+}
+.bulk-upload-card #ats-jobs-bulk-preview,
+.bulk-upload-card #ats-candidates-bulk-preview,
+.bulk-upload-card #pr-upload-preview,
+.bulk-upload-card #comp-bulk-preview,
+.bulk-upload-card #bulk-preview {
+  margin-top: 8px;
+}
+.collapsible-section,
+.collapsible-section.bulk-upload-card,
+.collapsible-section.bulk-upload-card[open],
+.collapsible-section .collapsible-section-body,
+details.card.collapsible-section {
+  overflow: visible;
+  max-height: none;
+}
+
+.leave-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+}
+.leave-bulk-bar .leave-bulk-meta {
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #64748b);
+}
+.leave-bulk-select-all {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.data-table .col-check {
+  width: 2.5rem;
+  text-align: center;
+  vertical-align: middle;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1189,6 +1688,7 @@ body:has(> .careers-shell) {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .collapsible-section > summary::before { transition: none !important; }
 }
 </style></head><body>
 <div id="app" class="app-shell">
@@ -1866,7 +2366,11 @@ body:has(> .careers-shell) {
   };
 
   function boot() {
-    if (slotEl()) mount(slotEl());
+    if (!slotEl()) return;
+    var sess = app() && app().getState && app().getState().session;
+    if (sess && sess.authorized) {
+      mount(slotEl(), { skipInitialFetch: true });
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
@@ -1894,7 +2398,6 @@ body:has(> .careers-shell) {
 
   var ROUTES = {
     dashboard: { title: 'Dashboard', render: renderDashboard },
-    settings: { title: 'Settings', render: renderPlaceholder },
     users: { title: 'Users', render: renderPlaceholder }
   };
 
@@ -1921,7 +2424,8 @@ body:has(> .careers-shell) {
     'ats-job-edit': 'ats',
     'ats-candidates': 'ats',
     'ats-candidate': 'ats',
-    notifications: 'notifications'
+    notifications: 'notifications',
+    settings: 'admin'
   };
 
   var ROUTE_TITLES = {
@@ -1946,7 +2450,8 @@ body:has(> .careers-shell) {
     'ats-job-edit': 'Edit job',
     'ats-candidates': 'Candidates',
     'ats-candidate': 'Candidate',
-    notifications: 'Notifications'
+    notifications: 'Notifications',
+    settings: 'Settings'
   };
 
   var ROUTE_LEDES = {
@@ -1973,7 +2478,7 @@ body:has(> .careers-shell) {
     'ats-candidates': 'Applicants for jobs you can access.',
     'ats-candidate': 'Profile, applications, interviews, and notes.',
     notifications: 'Your inbox and, for HR, the email delivery log.',
-    settings: 'Company configuration will be available in a later phase.',
+    settings: 'Organisation email toggles and role-based self-service defaults.',
     users: 'Role assignment will be available in a later phase.'
   };
 
@@ -1992,12 +2497,143 @@ body:has(> .careers-shell) {
 
   var ROUTE_ALIASES = {
     'ats-applications': 'ats-candidates',
-    'ats-interviews': 'ats-candidates'
+    'ats-interviews': 'ats-candidates',
+    'payroll-run': 'payroll',
+    compensation: 'payroll'
   };
+
+  /** When true, navigate() must not push/replace browser history (popstate / hash restore). */
+  var suppressHistoryPush_ = false;
+
+  function isKnownRoute_(route) {
+    if (!route) return false;
+    if (route === 'dashboard') return true;
+    if (ROUTES[route]) return true;
+    if (ROUTE_MODULE[route]) return true;
+    return false;
+  }
+
+  function routeToHash_(route, params) {
+    var base = '#/' + encodeURIComponent(route || 'dashboard');
+    params = params || {};
+    var keys = Object.keys(params).filter(function (k) {
+      return params[k] !== undefined && params[k] !== null && String(params[k]) !== '';
+    });
+    if (!keys.length) return base;
+    var q = keys.map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(String(params[k]));
+    }).join('&');
+    return base + '?' + q;
+  }
+
+  function parseRouteHash_(hash) {
+    var raw = String(hash || window.location.hash || '').replace(/^#/, '').replace(/^\//, '');
+    if (!raw) return { route: '', params: {} };
+    var qIdx = raw.indexOf('?');
+    var routePart = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
+    var route = '';
+    try {
+      route = decodeURIComponent(routePart.split('/')[0] || '');
+    } catch (ignore) {
+      route = routePart.split('/')[0] || '';
+    }
+    var params = {};
+    if (qIdx >= 0) {
+      raw.slice(qIdx + 1).split('&').forEach(function (pair) {
+        if (!pair) return;
+        var eq = pair.indexOf('=');
+        if (eq < 1) return;
+        try {
+          params[decodeURIComponent(pair.slice(0, eq))] = decodeURIComponent(pair.slice(eq + 1));
+        } catch (ignore2) {}
+      });
+    }
+    return { route: route, params: params };
+  }
+
+  function routeParamsEqual_(a, b) {
+    a = a || {};
+    b = b || {};
+    var keysA = Object.keys(a);
+    var keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (var i = 0; i < keysA.length; i++) {
+      var k = keysA[i];
+      if (String(a[k]) !== String(b[k])) return false;
+    }
+    return true;
+  }
+
+  function syncBrowserRoute_(route, params, replace) {
+    if (typeof history === 'undefined' || !history.pushState) return;
+    var hash = routeToHash_(route, params);
+    var base = window.location.pathname + (window.location.search || '');
+    var url = base + hash;
+    var st = { hrmsRoute: route, params: params || {} };
+    suppressHistoryPush_ = true;
+    try {
+      if (replace) history.replaceState(st, '', url);
+      else if (window.location.pathname + window.location.search + window.location.hash !== url) {
+        history.pushState(st, '', url);
+      }
+    } catch (e) {
+      if (window.location.hash !== hash) window.location.hash = hash;
+    } finally {
+      suppressHistoryPush_ = false;
+    }
+  }
+
+  function clearBrowserRoute_() {
+    if (typeof history === 'undefined' || !history.replaceState) {
+      if (window.location.hash) window.location.hash = '';
+      return;
+    }
+    try {
+      history.replaceState(null, '', window.location.pathname + (window.location.search || ''));
+    } catch (ignore) {
+      window.location.hash = '';
+    }
+  }
+
+  function onPopState_(ev) {
+    if (!state.session || !state.session.authorized) return;
+    var parsed;
+    if (ev && ev.state && ev.state.hrmsRoute) {
+      parsed = { route: ev.state.hrmsRoute, params: ev.state.params || {} };
+    } else {
+      parsed = parseRouteHash_(window.location.hash);
+    }
+    if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+    if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
+      return;
+    }
+    suppressHistoryPush_ = true;
+    try {
+      navigate(parsed.route, parsed.params, { fromHistory: true });
+    } finally {
+      suppressHistoryPush_ = false;
+    }
+  }
+
+  function bindBrowserHistory_() {
+    if (window.__hrmsHistoryBound) return;
+    window.__hrmsHistoryBound = true;
+    window.addEventListener('popstate', onPopState_);
+    window.addEventListener('hashchange', function () {
+      if (suppressHistoryPush_) return;
+      var parsed = parseRouteHash_(window.location.hash);
+      if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+      if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
+        return;
+      }
+      onPopState_({ state: history.state });
+    });
+  }
 
   var moduleLoaded_ = {};
   var moduleLoading_ = {};
   var userRpcBusy_ = 0;
+  var globalLoadingButton_ = null;
   var preloadPaused_ = false;
   var preloadQueue_ = [];
   var preloadScheduled_ = false;
@@ -2013,7 +2649,7 @@ body:has(> .careers-shell) {
   var refreshForceKey_ = '';
   var refreshBusy_ = false;
   var refreshWatchdog_ = null;
-  var dashViewCache_ = { payload: null, actions: '', complete: false };
+  var dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
 
   function sessionCacheKey_() {
     var s = state.session || {};
@@ -2096,6 +2732,9 @@ body:has(> .careers-shell) {
     var existing = actions.querySelector('.js-module-refresh');
     var stamp = actions.querySelector('#module-updated-stamp');
     if (existing) {
+      if (globalLoadingButton_ === existing) {
+        try { restoreButton(existing); } catch (ignoreRestore) {}
+      }
       if (stamp) stamp.remove();
       existing.remove();
     }
@@ -2128,6 +2767,7 @@ body:has(> .careers-shell) {
   function markModuleViewLoaded(key, meta) {
     key = key || moduleViewKey(state.currentRoute, state.routeParams);
     if (!key) return;
+    var endingRefresh = refreshBusy_;
     moduleViewCache_[key] = {
       loaded: true,
       lastLoadedAt: Date.now(),
@@ -2140,7 +2780,11 @@ body:has(> .careers-shell) {
     if (refreshForceKey_ === key || refreshForceKey_ === '*') refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
-    scheduleRefreshControls_();
+    if (endingRefresh) {
+      finishModuleRefresh(false);
+    } else {
+      scheduleRefreshControls_();
+    }
     logClientPerf_({ kind: 'module-view-loaded', key: key, route: state.currentRoute });
   }
 
@@ -2149,17 +2793,34 @@ body:has(> .careers-shell) {
     return refreshForceKey_ === key || refreshForceKey_ === '*';
   }
 
+  function clearOrphanGlobalBusy_() {
+    if (!globalLoadingButton_) return;
+    try {
+      if (!document.body.contains(globalLoadingButton_)) {
+        globalLoadingButton_ = null;
+        setGlobalActionBusy_(false);
+        return;
+      }
+      restoreButton(globalLoadingButton_);
+    } catch (ignore) {
+      globalLoadingButton_ = null;
+      setGlobalActionBusy_(false);
+    }
+  }
+
   function finishModuleRefresh(failed) {
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
     var pageBusy = $('page-content');
     if (pageBusy) pageBusy.removeAttribute('aria-busy');
+    clearOrphanGlobalBusy_();
     var btn = $('btn-module-refresh');
     if (btn) {
       try { restoreButton(btn); } catch (ignore) {}
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
+      if (btn.classList) btn.classList.remove('btn-loading');
     }
     scheduleRefreshControls_();
     if (failed) {
@@ -2230,7 +2891,7 @@ body:has(> .careers-shell) {
 
   function clearModuleViewCache() {
     moduleViewCache_ = {};
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
@@ -2257,10 +2918,29 @@ body:has(> .careers-shell) {
     if (keys.length) logClientPerf_({ kind: 'module-view-invalidate-prefix', prefix: prefix, keys: keys });
   }
 
-  function invalidateDashboardView() {
+  function invalidateDashboardView(opts) {
+    opts = opts || {};
+    if (opts.secondaryOnly) {
+      dashViewCache_.secondaryStale = true;
+      dashViewCache_.complete = false;
+      delete moduleViewCache_.dashboard;
+      if (dashViewCache_.payload) {
+        delete dashViewCache_.payload.payroll;
+        delete dashViewCache_.payload.pms;
+        delete dashViewCache_.payload.pms_actions;
+        delete dashViewCache_.payload.ats;
+        delete dashViewCache_.payload.ats_actions;
+      }
+      logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard-secondary'] });
+      return;
+    }
     delete moduleViewCache_.dashboard;
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard'] });
+  }
+
+  function getDashboardViewCache() {
+    return dashViewCache_;
   }
 
   function registerModuleRoutes(extra) {
@@ -2321,6 +3001,9 @@ body:has(> .careers-shell) {
     var fb = obj.feedback || obj.feedbackEl;
     if (fb && fb.nodeType === 1) return true;
     if (obj.background === true) return true;
+    // ATS/payroll rpc() always appends { loadingText } even with no button.
+    // That must not be sent as a google.script.run argument or it steals sessionToken.
+    if (typeof obj.loadingText === 'string' && !obj.button && !obj.loadingButton) return true;
     return false;
   }
 
@@ -2336,10 +3019,37 @@ body:has(> .careers-shell) {
     return !!(button && button.getAttribute && button.getAttribute('data-hrms-loading') === '1');
   }
 
+  function isGlobalActionBusy() {
+    return !!globalLoadingButton_;
+  }
+
+  function setGlobalActionBusy_(busy, activeButton) {
+    var root = document.getElementById('app-root') || document.body;
+    if (!root || !root.querySelectorAll) return;
+    if (busy) {
+      root.classList.add('hrms-global-busy');
+      root.querySelectorAll('button').forEach(function (btn) {
+        if (btn === activeButton || btn.getAttribute('data-hrms-loading') === '1') return;
+        if (btn.disabled) return;
+        btn.setAttribute('data-hrms-busy-disabled', '1');
+        btn.disabled = true;
+      });
+    } else {
+      root.classList.remove('hrms-global-busy');
+      root.querySelectorAll('button[data-hrms-busy-disabled="1"]').forEach(function (btn) {
+        btn.removeAttribute('data-hrms-busy-disabled');
+        btn.disabled = false;
+      });
+    }
+  }
+
   function setButtonLoading(button, loadingText) {
     if (!button || button.nodeType !== 1) return false;
     if (isButtonLoading(button)) return false;
+    if (globalLoadingButton_ && globalLoadingButton_ !== button) return false;
     try {
+      globalLoadingButton_ = button;
+      setGlobalActionBusy_(true, button);
       button.setAttribute('data-hrms-loading', '1');
       button._hrmsBtnSnap = {
         html: button.innerHTML,
@@ -2382,12 +3092,20 @@ body:has(> .careers-shell) {
       }
       button._hrmsBtnSnap = null;
       button._hrmsInflight = null;
+      if (globalLoadingButton_ === button) {
+        globalLoadingButton_ = null;
+        setGlobalActionBusy_(false);
+      }
     } catch (e) {
       try {
         button.disabled = false;
         button.removeAttribute('data-hrms-loading');
         button.removeAttribute('aria-busy');
         if (button.classList) button.classList.remove('btn-loading');
+        if (globalLoadingButton_ === button) {
+          globalLoadingButton_ = null;
+          setGlobalActionBusy_(false);
+        }
       } catch (e2) {}
     }
   }
@@ -2502,12 +3220,28 @@ body:has(> .careers-shell) {
                 return;
               }
               if (result && result.error) {
-                reject(result.error);
+                reject({
+                  message: result.error.message || 'Request failed',
+                  code: result.error.code || ''
+                });
+                return;
+              }
+              // Legacy / unenveloped success payloads (must not become "Request failed").
+              if (Array.isArray(result)) {
+                resolve(result);
+                return;
+              }
+              if (result && typeof result === 'object' && result.employee_id &&
+                  (result.hasOwnProperty('current') || result.hasOwnProperty('history'))) {
+                resolve(result);
                 return;
               }
               if (result && typeof result === 'object') {
                 if (Array.isArray(result.items) || result.hasOwnProperty('unread_count') ||
-                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences')) {
+                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences') ||
+                    result.hasOwnProperty('components') || result.hasOwnProperty('structure') ||
+                    result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
+                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline')) {
                   resolve(result);
                   return;
                 }
@@ -2651,7 +3385,7 @@ body:has(> .careers-shell) {
         '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
         (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
       '</div>' +
-      '<div class="page-header-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+      '<div class="page-header-actions hrms-page-actions">' + refresh + (actionsHtml || '') + '</div></div>';
   }
 
   function navIconSvg(name) {
@@ -2677,7 +3411,7 @@ body:has(> .careers-shell) {
   function isNavRouteActive(itemRoute, current) {
     if (itemRoute === current) return true;
     if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
-    if (itemRoute === 'payroll' && current === 'payroll-run') return true;
+    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
@@ -2727,11 +3461,34 @@ body:has(> .careers-shell) {
     return groups;
   }
 
+  function isMobileSidebar_() {
+    try {
+      return window.matchMedia('(max-width: 768px)').matches;
+    } catch (ignore) {
+      return false;
+    }
+  }
+
   function setSidebarOpen(open) {
     var sidebar = $('sidebar');
     var backdrop = $('sidebar-backdrop');
+    var toggle = $('sidebar-toggle');
     if (sidebar) sidebar.classList.toggle('open', !!open);
     if (backdrop) backdrop.classList.toggle('open', !!open);
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (isMobileSidebar_()) {
+      document.documentElement.classList.toggle('hrms-nav-drawer-open', !!open);
+    } else {
+      document.documentElement.classList.remove('hrms-nav-drawer-open');
+    }
+  }
+
+  function closeSidebarIfMobile_() {
+    if (isMobileSidebar_()) setSidebarOpen(false);
+  }
+
+  function initSidebarState_() {
+    setSidebarOpen(!isMobileSidebar_());
   }
 
   function setAuthedChrome(authed) {
@@ -3167,8 +3924,13 @@ body:has(> .careers-shell) {
     });
   }
 
-  function navigate(route, params) {
+  function navigate(route, params, options) {
     if (!state.session || !state.session.authorized) return;
+    options = options || {};
+    params = params || {};
+    if (route === 'compensation') {
+      params.openSalaryStructure = true;
+    }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
     state.navSeq = (state.navSeq || 0) + 1;
     pauseBackgroundPreload();
@@ -3182,13 +3944,16 @@ body:has(> .careers-shell) {
     }
     $('page-title').textContent = title;
     renderNav();
-    setSidebarOpen(false);
+    closeSidebarIfMobile_();
     if (def && def.render) {
       def.render(state.routeParams);
     } else {
       renderPlaceholder();
     }
     scheduleRefreshControls_();
+    if (!options.fromHistory && !suppressHistoryPush_) {
+      syncBrowserRoute_(route, state.routeParams, !!options.replaceHistory);
+    }
   }
 
   function renderPlaceholder() {
@@ -3270,25 +4035,36 @@ body:has(> .careers-shell) {
     }
 
     var primary = keepPainted ? (dashViewCache_.payload || null) : null;
+    var skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
     callServer('apiGetHomeDashboard')
       .then(function (data) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return null;
         primary = data || {};
         dashViewCache_.actions = actions;
-        dashViewCache_.payload = primary;
-        dashViewCache_.complete = false;
-        paintHomeDashboard(primary, actions, { secondaryPending: true });
+        if (keepPainted && dashViewCache_.payload) {
+          dashViewCache_.payload = mergeDashboardPayload_(primary, dashViewCache_.payload);
+        } else {
+          dashViewCache_.payload = primary;
+        }
+        skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
         if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
           window.HrmsNotificationBell.applyUnreadCount(primary.unread_count);
         }
-        return callServer('apiGetHomeDashboardMore');
+        if (skipSecondary) {
+          paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
+          markModuleViewLoaded(dashKey);
+          return null;
+        }
+        dashViewCache_.complete = false;
+        paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: true });
+        return callServer('apiGetHomeDashboardMore', { background: true });
       })
       .then(function (more) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
-        if (more) {
-          dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
-          dashViewCache_.complete = true;
-        }
+        if (more == null) return;
+        dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
+        dashViewCache_.complete = true;
+        dashViewCache_.secondaryStale = false;
         if (dashViewCache_.payload) {
           paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
         }
@@ -3435,6 +4211,7 @@ body:has(> .careers-shell) {
    */
   function showAuthLogin(sessionHint) {
     clearUserSessionViewState_();
+    clearBrowserRoute_();
     state.navigation = [];
     state.currentRoute = '';
     state.routeParams = {};
@@ -3508,7 +4285,29 @@ body:has(> .careers-shell) {
     return p;
   }
 
+  function bulkRequiredColumnsHtml(columnLabels) {
+    if (!columnLabels || !columnLabels.length) return '';
+    var items = columnLabels.map(function (label) {
+      return '<li><span class="form-label is-required bulk-required-label">' + escapeHtml(label) + '</span></li>';
+    }).join('');
+    return '<div class="bulk-required-block">' +
+      '<p class="form-label bulk-required-heading">Required columns in upload file</p>' +
+      '<ul class="bulk-required-list">' + items + '</ul></div>';
+  }
+
   function bindAuthUi() {
+    function onEnterSubmit(inputEl, btnId) {
+      if (!inputEl) return;
+      inputEl.addEventListener('keydown', function (evt) {
+        if (evt.key !== 'Enter') return;
+        evt.preventDefault();
+        var btn = $(btnId);
+        if (btn && !btn.disabled) btn.click();
+      });
+    }
+    onEnterSubmit($('auth-email'), 'auth-send-btn');
+    onEnterSubmit($('auth-code'), 'auth-verify-btn');
+
     $('auth-send-btn').addEventListener('click', function () {
       var email = ($('auth-email').value || '').trim();
       showAuthError($('auth-email-error'), '');
@@ -3599,9 +4398,21 @@ body:has(> .careers-shell) {
     var toggle = $('sidebar-toggle');
     if (toggle && !toggle.getAttribute('data-bound')) {
       toggle.setAttribute('data-bound', '1');
+      toggle.setAttribute('aria-expanded', 'true');
       toggle.addEventListener('click', function () {
         var sidebar = $('sidebar');
         setSidebarOpen(!(sidebar && sidebar.classList.contains('open')));
+      });
+    }
+    initSidebarState_();
+    if (!window.__hrmsSidebarResizeBound) {
+      window.__hrmsSidebarResizeBound = true;
+      window.addEventListener('resize', function () {
+        if (isMobileSidebar_()) {
+          setSidebarOpen(false);
+        } else {
+          setSidebarOpen(true);
+        }
       });
     }
     var backdrop = $('sidebar-backdrop');
@@ -3621,7 +4432,26 @@ body:has(> .careers-shell) {
     }
   }
 
+  function syncClientAssetsVersion_(app) {
+    var v = (app && app.clientAssetsVersion) || '';
+    if (!v) return;
+    try {
+      var key = 'hrms_client_assets_v';
+      var prev = sessionStorage.getItem(key);
+      if (prev && prev !== v) {
+        moduleLoaded_ = {};
+        moduleLoading_ = {};
+        clearModuleViewCache();
+        moduleDataCacheClearHooks_.forEach(function (fn) {
+          try { fn(); } catch (ignore) {}
+        });
+      }
+      sessionStorage.setItem(key, v);
+    } catch (ignore) {}
+  }
+
   function applyBootstrapSuccess(data) {
+    syncClientAssetsVersion_(data.app);
     clearUserSessionViewState_();
     state.session = data.session;
     state.app = data.app;
@@ -3631,9 +4461,15 @@ body:has(> .careers-shell) {
     setAuthedChrome(true);
     updateUserChip();
     initShell();
+    bindBrowserHistory_();
     bindModuleRefreshUi();
     renderNav();
-    navigate('dashboard');
+    var initial = parseRouteHash_(window.location.hash);
+    if (initial.route && isKnownRoute_(initial.route)) {
+      navigate(initial.route, initial.params || {}, { replaceHistory: true, fromHistory: true });
+    } else {
+      navigate('dashboard', {}, { replaceHistory: true });
+    }
     syncAskHrVisibility();
     if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
       window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
@@ -3649,6 +4485,7 @@ body:has(> .careers-shell) {
   function bootstrap() {
     callServer('apiGetAppBootstrap')
       .then(function (data) {
+        syncClientAssetsVersion_(data.app);
         state.app = data.app;
         if (data.session) state.session = data.session;
         askHrUi.sessionKnown = true;
@@ -4401,6 +5238,7 @@ body:has(> .careers-shell) {
     bindSectionRetry: bindSectionRetry,
     tableShell: tableShell,
     pageHeaderHtml: pageHeaderHtml,
+    bulkRequiredColumnsHtml: bulkRequiredColumnsHtml,
     moduleViewKey: moduleViewKey,
     shouldRestoreModuleView: shouldRestoreModuleView,
     consumeModuleViewRestore: consumeModuleViewRestore,
@@ -4418,9 +5256,11 @@ body:has(> .careers-shell) {
     invalidateModuleViewCache: invalidateModuleViewCache,
     invalidateModuleViewCachePrefix: invalidateModuleViewCachePrefix,
     invalidateDashboardView: invalidateDashboardView,
+    getDashboardViewCache: getDashboardViewCache,
     setButtonLoading: setButtonLoading,
     restoreButton: restoreButton,
     isButtonLoading: isButtonLoading,
+    isGlobalActionBusy: isGlobalActionBusy,
     setActionFeedback: setActionFeedback,
     clearActionFeedback: clearActionFeedback,
     setFlash: setFlash,

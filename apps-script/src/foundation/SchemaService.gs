@@ -198,7 +198,11 @@ var SchemaService = (function () {
     var now = new Date();
     var actor = Session.getActiveUser().getEmail().toLowerCase() || 'system';
     var inserted = 0;
-    DEFAULT_SETTINGS_.forEach(function (row) {
+    var rowsToSeed = DEFAULT_SETTINGS_.slice();
+    if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.defaultSettingsRows) {
+      rowsToSeed = rowsToSeed.concat(HrmsContentTemplateService.defaultSettingsRows());
+    }
+    rowsToSeed.forEach(function (row) {
       if (existing[row[0]]) return;
       sheet.appendRow([
         row[0], row[1], row[2], row[3], row[4], now, actor

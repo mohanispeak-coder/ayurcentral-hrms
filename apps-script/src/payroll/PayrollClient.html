@@ -716,8 +716,8 @@
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-template">Download Excel template</button>' +
         '<button type="button" class="btn btn-secondary" id="btn-comp-dl-csv">Download CSV template</button>' +
-        '<label class="btn btn-secondary" for="comp-bulk-file">Choose Excel/CSV file</label>' +
-        '<input type="file" id="comp-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv">' +
+        '<button type="button" class="btn btn-secondary" id="btn-comp-bulk-choose">Choose Excel/CSV file</button>' +
+        '<input type="file" id="comp-bulk-file" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv">' +
         '<button type="button" class="btn btn-primary" id="btn-comp-validate" disabled>Validate upload</button>' +
         '</div>' +
         '<p id="comp-bulk-file-name" class="hint">No file selected.</p>' +
@@ -742,8 +742,8 @@
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
       }
       if (uploadAllowed && hasRun && runId) {
-        html += '<label class="btn btn-secondary" for="pr-bulk-file">Choose Excel/CSV file</label>' +
-          '<input type="file" id="pr-bulk-file" class="hidden-file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">' +
+        html += '<button type="button" class="btn btn-secondary" id="btn-pr-bulk-choose">Choose Excel/CSV file</button>' +
+          '<input type="file" id="pr-bulk-file" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">' +
           '<button type="button" class="btn btn-primary" id="btn-pr-bulk-validate" disabled>Validate upload</button>';
       } else if (!hasRun || !runId) {
         html += '<span class="hint">Start payroll for this month to enable attendance upload.</span>';
@@ -1187,9 +1187,11 @@
         return;
       }
 
+      var chooseBtn = $('btn-pr-bulk-choose');
       var fileInput = $('pr-bulk-file');
       var validateBtn = $('btn-pr-bulk-validate');
       var nameEl = $('pr-bulk-file-name');
+      if (chooseBtn && fileInput) chooseBtn.addEventListener('click', function () { fileInput.click(); });
       if (fileInput) fileInput.addEventListener('change', function () {
         bulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         bulkState.preview = null;
@@ -1213,14 +1215,10 @@
         }).then(function (preview) {
           bulkState.preview = preview;
           if (nameEl) nameEl.textContent = file.name + ' — ' + preview.readyCount + ' ready, ' + preview.errorCount + ' errors';
-          return callServer('apiGetPayrollRun', runId).then(function (nextDetail) {
-            payrollState.detail = nextDetail;
-            paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
-            bulkState.preview = preview;
-            var mount = $('pr-upload-preview');
-            if (mount) mount.innerHTML = paintBulkPreview_(preview);
-            bindBulkPreviewActions_(runId, page);
-          });
+          restoreButton(validateBtn);
+          var mount = $('pr-upload-preview');
+          if (mount) mount.innerHTML = paintBulkPreview_(preview);
+          bindBulkPreviewActions_(runId, page);
         }).catch(function (err) {
           restoreButton(validateBtn);
           if (nameEl) nameEl.textContent = file.name + ' — validation failed';
@@ -1290,8 +1288,10 @@
     }
 
     function bindCompBulkUpload_(page) {
+      var chooseBtn = $('btn-comp-bulk-choose');
       var fileInput = $('comp-bulk-file');
       var validateBtn = $('btn-comp-validate');
+      if (chooseBtn && fileInput) chooseBtn.addEventListener('click', function () { fileInput.click(); });
       if (fileInput) fileInput.addEventListener('change', function () {
         compBulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (validateBtn) validateBtn.disabled = !compBulkState.selectedFile;

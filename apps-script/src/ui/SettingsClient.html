@@ -122,7 +122,34 @@
       });
       roleHtml += '</tbody></table></div></div>';
 
-      body.innerHTML = welcomeHtml + emailHtml + modHtml + roleHtml +
+      var templates = data.content_templates || [];
+      var tplHtml = '<div class="card" style="margin-top:16px"><h2>Content templates</h2>' +
+        '<p class="hint">Edit welcome email, bulk-upload instruction text, and ATS offer letter wording. ' +
+        'Placeholders are listed per template. Save applies to new emails and newly downloaded bulk templates.</p>';
+      templates.forEach(function (tpl) {
+        tplHtml += '<div class="template-block" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border,#e2e8f0)">' +
+          '<h3 style="margin:0 0 6px;font-size:1rem">' + escapeHtml(tpl.label) + '</h3>' +
+          '<p class="hint" style="margin:0 0 8px">' + escapeHtml(tpl.description || '') + '</p>';
+        if (tpl.placeholders && tpl.placeholders.length) {
+          tplHtml += '<p class="hint" style="margin:0 0 8px">Placeholders: ' +
+            escapeHtml(tpl.placeholders.join(', ')) + '</p>';
+        }
+        var fields = tpl.fields || {};
+        if (fields.subject !== undefined) {
+          tplHtml += '<div class="form-group"><label class="form-label">Subject</label>' +
+            '<input class="form-input" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="subject" type="text" value="' +
+            escapeHtml(fields.subject || '') + '"></div>';
+        }
+        if (fields.body !== undefined) {
+          tplHtml += '<div class="form-group"><label class="form-label">Body</label>' +
+            '<textarea class="form-input" rows="8" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="body">' +
+            escapeHtml(fields.body || '') + '</textarea></div>';
+        }
+        tplHtml += '</div>';
+      });
+      tplHtml += '</div>';
+
+      body.innerHTML = welcomeHtml + emailHtml + tplHtml + modHtml + roleHtml +
         '<div class="form-actions" style="margin-top:16px">' +
         '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
         '<span class="hint" id="settings-save-hint"></span></div>';
@@ -149,7 +176,19 @@
           if (!modPatch[role]) modPatch[role] = {};
           modPatch[role][mid] = el.checked;
         });
-        callServer('apiSaveAdminSettings', { email: emailPatch, role_modules: modPatch, role_access: rolePatch }, {
+        var tplPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-tpl-id][data-tpl-part]'), function (el) {
+          var id = el.getAttribute('data-tpl-id');
+          var part = el.getAttribute('data-tpl-part');
+          if (!tplPatch[id]) tplPatch[id] = {};
+          tplPatch[id][part] = el.value;
+        });
+        callServer('apiSaveAdminSettings', {
+          email: emailPatch,
+          role_modules: modPatch,
+          role_access: rolePatch,
+          content_templates: tplPatch
+        }, {
           button: btn, loadingText: 'Saving…'
         }).then(function (next) {
           settingsState.data = next;

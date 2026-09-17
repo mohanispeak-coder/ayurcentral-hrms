@@ -182,6 +182,11 @@ var AdminSettingsService = (function () {
     ConfigService.clearSettingsCache();
     var row = DbService.findOne(HRMS.SHEETS.SETTINGS, { setting_key: settingKey });
     if (!row) {
+      ensureDefaultSettingsSeeded_();
+      ensureRoleModuleSettingsSeeded_();
+      row = DbService.findOne(HRMS.SHEETS.SETTINGS, { setting_key: settingKey });
+    }
+    if (!row) {
       throw configurationError_('Unknown setting key: ' + settingKey + '. Re-run database setup to seed Settings.');
     }
     var actor = (session && session.email) ? String(session.email).trim().toLowerCase() : 'system';
@@ -225,20 +230,27 @@ var AdminSettingsService = (function () {
 
   function getSettings(session) {
     PermissionService.require(HRMS.ACTIONS.ADMIN_SETTINGS, {}, session);
+    ensureDefaultSettingsSeeded_();
     ensureRoleModuleSettingsSeeded_();
     var welcome = (typeof EmployeeWelcomeService !== 'undefined' && EmployeeWelcomeService.statusForClient)
       ? EmployeeWelcomeService.statusForClient()
       : {};
+    var contentTemplates = (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.listForClient)
+      ? HrmsContentTemplateService.listForClient()
+      : [];
     return {
       email: readEmailSettings_(),
       role_modules: readRoleModuleMatrix_(),
       role_access: readRoleAccessMatrix_(),
-      welcome: welcome
+      welcome: welcome,
+      content_templates: contentTemplates
     };
   }
 
   function saveSettings(session, payload) {
     PermissionService.require(HRMS.ACTIONS.ADMIN_SETTINGS, {}, session);
+    ensureDefaultSettingsSeeded_();
+    ensureRoleModuleSettingsSeeded_();
     payload = payload || {};
     var email = payload.email || {};
     EMAIL_KEYS_.forEach(function (def) {
@@ -270,6 +282,10 @@ var AdminSettingsService = (function () {
         upsertSettingValue_(key, parseBool_(patch[feat.id], true) ? 'true' : 'false', session);
       });
     });
+    if (payload.content_templates && typeof HrmsContentTemplateService !== 'undefined' &&
+        HrmsContentTemplateService.saveTemplates) {
+      HrmsContentTemplateService.saveTemplates(session, payload.content_templates);
+    }
     AuditService.log('ADMIN_SETTINGS_SAVE', 'Settings', 'org', 'Updated organisation settings', session.employee_id || '');
     return getSettings(session);
   }

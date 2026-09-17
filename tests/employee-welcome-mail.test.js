@@ -13,13 +13,14 @@ var start = source.indexOf('function buildWelcomeContent(record, loginEmail)');
 var end = source.indexOf('function telegramEnabled_');
 var fnBlock = source.slice(start, end);
 
+var helpers = source.slice(source.indexOf('function trim_(v)'), start);
 var ctx = {
   ConfigService: {
     getCompanyName: function () { return 'AyurCentral HRMS'; },
     getHrmsWebAppUrl: function () { return 'https://script.google.com/macros/s/example/exec'; }
   }
 };
-vm.runInNewContext(fnBlock + '\nthis.buildWelcomeContent = buildWelcomeContent;', ctx);
+vm.runInNewContext(helpers + fnBlock + '\nthis.buildWelcomeContent = buildWelcomeContent;', ctx);
 
 var mail = ctx.buildWelcomeContent({
   employee_id: 'SAPL-0042',
