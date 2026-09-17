@@ -16,7 +16,6 @@
 
   var ROUTES = {
     dashboard: { title: 'Dashboard', render: renderDashboard },
-    settings: { title: 'Settings', render: renderPlaceholder },
     users: { title: 'Users', render: renderPlaceholder }
   };
 
@@ -43,7 +42,8 @@
     'ats-job-edit': 'ats',
     'ats-candidates': 'ats',
     'ats-candidate': 'ats',
-    notifications: 'notifications'
+    notifications: 'notifications',
+    settings: 'admin'
   };
 
   var ROUTE_TITLES = {
@@ -68,7 +68,8 @@
     'ats-job-edit': 'Edit job',
     'ats-candidates': 'Candidates',
     'ats-candidate': 'Candidate',
-    notifications: 'Notifications'
+    notifications: 'Notifications',
+    settings: 'Settings'
   };
 
   var ROUTE_LEDES = {
@@ -95,7 +96,7 @@
     'ats-candidates': 'Applicants for jobs you can access.',
     'ats-candidate': 'Profile, applications, interviews, and notes.',
     notifications: 'Your inbox and, for HR, the email delivery log.',
-    settings: 'Company configuration will be available in a later phase.',
+    settings: 'Organisation email toggles and role-based self-service defaults.',
     users: 'Role assignment will be available in a later phase.'
   };
 
@@ -2044,7 +2045,26 @@
     }
   }
 
+  function syncClientAssetsVersion_(app) {
+    var v = (app && app.clientAssetsVersion) || '';
+    if (!v) return;
+    try {
+      var key = 'hrms_client_assets_v';
+      var prev = sessionStorage.getItem(key);
+      if (prev && prev !== v) {
+        moduleLoaded_ = {};
+        moduleLoading_ = {};
+        clearModuleViewCache();
+        moduleDataCacheClearHooks_.forEach(function (fn) {
+          try { fn(); } catch (ignore) {}
+        });
+      }
+      sessionStorage.setItem(key, v);
+    } catch (ignore) {}
+  }
+
   function applyBootstrapSuccess(data) {
+    syncClientAssetsVersion_(data.app);
     clearUserSessionViewState_();
     state.session = data.session;
     state.app = data.app;
@@ -2078,6 +2098,7 @@
   function bootstrap() {
     callServer('apiGetAppBootstrap')
       .then(function (data) {
+        syncClientAssetsVersion_(data.app);
         state.app = data.app;
         if (data.session) state.session = data.session;
         askHrUi.sessionKnown = true;

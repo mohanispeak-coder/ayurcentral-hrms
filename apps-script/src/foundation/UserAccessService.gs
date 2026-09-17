@@ -6,6 +6,12 @@ var HRMS = HRMS || {};
 
 var UserAccessService = (function () {
   var ACCESS_COLUMNS_ = ['access_documents', 'access_payslips', 'access_leave'];
+  var ASSIGNABLE_ROLES_ = [
+    HRMS.ROLES.EMPLOYEE,
+    HRMS.ROLES.MANAGER,
+    HRMS.ROLES.HR,
+    HRMS.ROLES.ADMIN
+  ];
 
   function defaultFlags_() {
     return {
@@ -25,8 +31,16 @@ var UserAccessService = (function () {
     return defaultValue;
   }
 
+  function roleDefaults_(role) {
+    if (typeof AdminSettingsService !== 'undefined' && AdminSettingsService.roleAccessDefaultsForRole) {
+      return AdminSettingsService.roleAccessDefaultsForRole(role);
+    }
+    return defaultFlags_();
+  }
+
   function flagsFromUser_(user) {
-    var defaults = defaultFlags_();
+    var role = user && user.role ? String(user.role).toUpperCase() : HRMS.ROLES.EMPLOYEE;
+    var defaults = roleDefaults_(role);
     if (!user) return defaults;
     return {
       access_documents: parseFlag_(user.access_documents, defaults.access_documents),
@@ -88,23 +102,56 @@ var UserAccessService = (function () {
     }
   }
 
-  function getEmployeeAccess(session, employeeId) {
-    PermissionService.require(HRMS.ACTIONS.ADMIN_USERS, {}, session);
-    var emp = EmployeeRepository.findById(employeeId);
-    if (!emp) throw notFoundError_('Employee not found.');
-    var user = EmployeeRepository.findUserByEmployeeId(employeeId);
+  function isOwnerRole_(role) {
+    return String(role || '').trim().toUpperCase() === HRMS.ROLES.OWNER;
+  }
+
+  function requireEmployeeAccessEditor_(session, employeeId) {
+    if (!PermissionService.isHrOrAdmin(session)) {
+      throw authorizationError_('You do not have permission to manage employee login settings.');
+    }
+    if (session.employee_id && String(session.employee_id) === String(employeeId)) {
+      throw authorizationError_('You cannot edit your own login and role settings.');
+    }
+  }
+
+  function canEditRoleForUser_(session, user) {
+    if (!PermissionService.isAdmin(session) || !user) return false;
+    if (isOwnerRole_(user.role)) return false;
+    if (session.employee_id && user.employee_id &&
+        String(session.employee_id) === String(user.employee_id)) {
+      return false;
+    }
+    var sessionEmail = String(session.email || '').trim().toLowerCase();
+    var userEmail = String(user.google_email || '').trim().toLowerCase();
+    if (sessionEmail && userEmail && sessionEmail === userEmail) return false;
+    return true;
+  }
+
+  function employeeAccessDto_(session, employeeId, user) {
     return {
       employee_id: employeeId,
       has_login: !!user,
       google_email: user ? user.google_email : '',
       role: user ? user.role : '',
       access: flagsFromUser_(user),
-      defaults: defaultFlags_()
+      defaults: defaultFlags_(),
+      can_edit_role: canEditRoleForUser_(session, user),
+      assignable_roles: ASSIGNABLE_ROLES_.slice(),
+      role_is_owner: user ? isOwnerRole_(user.role) : false
     };
   }
 
+  function getEmployeeAccess(session, employeeId) {
+    requireEmployeeAccessEditor_(session, employeeId);
+    var emp = EmployeeRepository.findById(employeeId);
+    if (!emp) throw notFoundError_('Employee not found.');
+    var user = EmployeeRepository.findUserByEmployeeId(employeeId);
+    return employeeAccessDto_(session, employeeId, user);
+  }
+
   function saveEmployeeAccess(session, employeeId, payload) {
-    PermissionService.require(HRMS.ACTIONS.ADMIN_USERS, {}, session);
+    requireEmployeeAccessEditor_(session, employeeId);
     payload = payload || {};
     var emp = EmployeeRepository.findById(employeeId);
     if (!emp) throw notFoundError_('Employee not found.');
@@ -114,6 +161,9 @@ var UserAccessService = (function () {
         fields: { google_email: 'No Users row linked to this employee.' }
       });
     }
+    if (isOwnerRole_(user.role)) {
+      throw authorizationError_('Owner login settings cannot be changed here.');
+    }
     ensureColumns_();
     var updates = {
       access_documents: parseFlag_(payload.access_documents, true) ? 'TRUE' : 'FALSE',
@@ -121,9 +171,35 @@ var UserAccessService = (function () {
       access_leave: parseFlag_(payload.access_leave, true) ? 'TRUE' : 'FALSE',
       updated_at: new Date()
     };
+    var previousRole = String(user.role || '').trim().toUpperCase();
+    var roleChanged = false;
+    if (payload.role !== undefined && payload.role !== null && String(payload.role).trim() !== '') {
+      if (PermissionService.isAdmin(session)) {
+        if (!canEditRoleForUser_(session, user)) {
+          throw authorizationError_('You cannot change this user\'s HRMS role.');
+        }
+        var newRole = String(payload.role).trim().toUpperCase();
+        if (ASSIGNABLE_ROLES_.indexOf(newRole) < 0) {
+          throw validationError_('Invalid role.', { fields: { role: 'Choose EMPLOYEE, MANAGER, HR, or ADMIN.' } });
+        }
+        if (newRole !== previousRole) {
+          updates.role = newRole;
+          roleChanged = true;
+        }
+      }
+    }
     EmployeeRepository.updateUser(user.google_email, updates);
     if (typeof AuthService !== 'undefined' && AuthService.invalidateIdentitySnapshots) {
       AuthService.invalidateIdentitySnapshots();
+    }
+    if (roleChanged) {
+      AuditService.log(
+        'USER_ROLE_UPDATE',
+        'Users',
+        user.google_email,
+        'Role changed from ' + previousRole + ' to ' + updates.role + ' for ' + employeeId,
+        employeeId
+      );
     }
     AuditService.log(
       'USER_ACCESS_UPDATE',
@@ -135,11 +211,12 @@ var UserAccessService = (function () {
     return getEmployeeAccess(session, employeeId);
   }
 
-  function newUserAccessDefaults_() {
+  function newUserAccessDefaults_(role) {
+    var flags = roleDefaults_(role || HRMS.ROLES.EMPLOYEE);
     return {
-      access_documents: 'TRUE',
-      access_payslips: 'TRUE',
-      access_leave: 'TRUE'
+      access_documents: flags.access_documents ? 'TRUE' : 'FALSE',
+      access_payslips: flags.access_payslips ? 'TRUE' : 'FALSE',
+      access_leave: flags.access_leave ? 'TRUE' : 'FALSE'
     };
   }
 

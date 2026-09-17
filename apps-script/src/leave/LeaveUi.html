@@ -2,6 +2,8 @@
 (function () {
   'use strict';
 
+  var LEAVE_UI_BUILD_ = '2026.09.16-names-settings-v2';
+
   function ctx() {
     if (window.HrmsApp) {
       return {
@@ -321,7 +323,9 @@
 
   function adminLeaveRowHtml_(r) {
     var c = ctx();
-    return '<tr>' + leaveSelectCellHtml_(r) + '<td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+    return '<tr>' + leaveSelectCellHtml_(r) +
+      '<td class="num mono">' + c.escapeHtml(r.employee_id) + '</td>' +
+      '<td>' + c.escapeHtml(r.employee_name || '—') + '</td><td>' + c.escapeHtml(r.leave_type_code) +
       '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
       '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
       c.escapeHtml(r.status_label || r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
@@ -696,7 +700,7 @@
       var body = (rows || []).map(function (r) {
         return '<tr>' + leaveSelectCellHtml_(r) +
           '<td class="num">' + c.escapeHtml(r.employee_id) + '</td>' +
-          '<td>' + c.escapeHtml(r.employee_name) + '</td>' +
+          '<td>' + c.escapeHtml(r.employee_name || '—') + '</td>' +
           '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
           '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
           '<td class="num">' + fmtDays(r.total_days) + '</td>' +
@@ -743,8 +747,8 @@
         '<button type="button" class="tab" data-tab="types">Leave types</button>' +
       '</div>' +
       '<div id="tab-requests"><div class="card"><h2 class="section-title">Requests</h2>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody>' + u.skRows(6, 6) + '</tbody></table></div></div></div>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + u.skRows(7, 6) + '</tbody></table></div></div></div>' +
       '<div id="tab-types" class="hidden"><div class="card"><h2 class="section-title">Leave types</h2>' +
         (u.skRows ? '<div class="table-wrap"><table class="data-table"><tbody>' + u.skRows(4, 4) + '</tbody></table></div>' : '') +
       '</div></div>';
@@ -806,8 +810,9 @@
           '</div></div>' +
           '<div id="leave-admin-filter-feedback" class="action-feedback hidden" role="status"></div>' +
           leaveBulkToolbarHtml_('leave-admin-bulk') +
-          '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
-          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div></div>' +
+          '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div>' +
+          '<p class="hint" style="margin-top:8px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' — if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
         '<div id="tab-types" class="hidden">' +
           '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements — not hard-coded company policy.</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Balance</th><th>LOP</th><th class="num">Entitlement</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
@@ -1023,7 +1028,10 @@
           var hits = (data.items || []).filter(function (r) {
             return r.start_date <= iso && r.end_date >= iso;
           });
-          var names = hits.map(function (h) { return h.employee_id + ' ' + h.leave_type_code; }).join(', ');
+          var names = hits.map(function (h) {
+            var label = (h.employee_name || h.employee_id) + ' (' + h.employee_id + ') ' + h.leave_type_code;
+            return label;
+          }).join(', ');
           cells.push('<div class="cal-cell' + (hits.length ? ' cal-leave' : '') + '"><div class="cal-day">' + i +
             '</div><div class="cal-items">' + c.escapeHtml(names) + '</div></div>');
         }

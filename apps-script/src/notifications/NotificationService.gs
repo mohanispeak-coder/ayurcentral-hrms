@@ -277,6 +277,13 @@ var NotificationService = (function () {
     } catch (ignore) {}
   }
 
+  function formatBodyWithEmployeeId_(employeeId, body) {
+    body = String(body || '');
+    var id = trim_(employeeId);
+    if (!id || body.indexOf('Employee ID:') >= 0) return body;
+    return 'Employee ID: ' + id + '\n' + body;
+  }
+
   function sendMail_(to, subject, body) {
     if (typeof NotificationService !== 'undefined' && NotificationService._testSendEmail) {
       return NotificationService._testSendEmail(to, subject, body);
@@ -292,6 +299,7 @@ var NotificationService = (function () {
     var to = trim_(record.recipient_email);
     var subject = (normalized && normalized.email_subject) || record.title;
     var body = (normalized && normalized.email_body) || record.message || subject;
+    body = formatBodyWithEmployeeId_(record.recipient_employee_id, body);
     var company = companyName_();
     if (body.indexOf(company) < 0) {
       body = body + '\n\n— ' + company;
@@ -810,6 +818,53 @@ var NotificationService = (function () {
     };
   }
 
+  /**
+   * Send a one-off org email and log to Notifications sheet (leave-style log).
+   * @param {Object} options event_type, to, subject, body, employee_id, related_entity_type, related_entity_id, orgSettingKey
+   */
+  function sendOrgEventEmail(options) {
+    options = options || {};
+    var enabled = true;
+    if (options.orgSettingKey) {
+      enabled = NotificationEngine.isTruthy(ConfigService.getSetting(options.orgSettingKey, true));
+    }
+    var to = trim_(options.to);
+    var subject = String(options.subject || '').trim();
+    var empId = trim_(options.employee_id);
+    var body = formatBodyWithEmployeeId_(empId, String(options.body || subject || '').trim());
+    var status = NotificationEngine.EMAIL_STATUS.PENDING;
+    var errorMessage = '';
+    var sentAt = '';
+    if (!enabled) {
+      status = 'SKIPPED';
+      errorMessage = String(options.orgSettingKey || 'disabled') + ' disabled';
+    } else if (!to) {
+      status = NotificationEngine.EMAIL_STATUS.NO_EMAIL;
+      errorMessage = 'NO_EMAIL';
+    } else {
+      try {
+        sendMail_(to, subject, body);
+        status = NotificationEngine.EMAIL_STATUS.SENT;
+        sentAt = now_();
+      } catch (e) {
+        status = NotificationEngine.EMAIL_STATUS.FAILED;
+        errorMessage = String(e.message || e).substring(0, 300);
+      }
+    }
+    writeEmailLog_({
+      event_type: options.event_type || 'ORG_EMAIL',
+      recipient_email: to,
+      employee_id: empId,
+      subject: subject,
+      status: status,
+      error_message: errorMessage,
+      related_entity_type: options.related_entity_type || '',
+      related_entity_id: options.related_entity_id || '',
+      sent_at: sentAt
+    });
+    return { status: status, error_message: errorMessage };
+  }
+
   return {
     createNotification: createNotification,
     createNotifications: createNotifications,
@@ -829,6 +884,8 @@ var NotificationService = (function () {
     resolveRecipient: resolveRecipient,
     listHrAdminRecipients: listHrAdminRecipients,
     catalogForClient: catalogForClient,
+    sendOrgEventEmail: sendOrgEventEmail,
+    formatBodyWithEmployeeId: formatBodyWithEmployeeId_,
     ensureSchema: ensure_,
     EMAIL_BATCH_LIMIT: EMAIL_BATCH_LIMIT_,
     _testSendEmail: null

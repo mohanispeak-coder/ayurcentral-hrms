@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.16-attendance-fix';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.16-attendance-bulk-v2';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -727,7 +727,8 @@
 
     function paintAttendanceBulkSection_(runId, uploadAllowed, hasRun, st) {
       st = statusKey(st);
-      var openAttr = (hasRun && (uploadAllowed || bulkState.preview)) ? ' open' : '';
+      // Keep bulk upload visible whenever a payroll run exists (upload buttons still respect uploadAllowed).
+      var openAttr = hasRun ? ' open' : '';
       var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">' +
@@ -767,9 +768,16 @@
           escapeHtml(String(paintErr && paintErr.message ? paintErr.message : paintErr)) +
           '</div><button type="button" class="btn btn-secondary" id="btn-pr-sync-employees">Reload employee list</button>';
       }
+      var bulkBar = '';
+      if (editable) {
+        bulkBar = '<div class="bulk-action-bar" id="pr-attendance-bulk-bar" style="margin:12px 0">' +
+          '<button type="button" class="btn btn-secondary" id="btn-pr-bulk-apply-lop">Apply leave LOP to all employees</button> ' +
+          '<button type="button" class="btn btn-primary" id="btn-pr-bulk-save-attendance">Save all attendance</button>' +
+          '<span class="hint">Bulk-apply suggested LOP from approved leave, then save before calculating.</span></div>';
+      }
       return '<div class="card" id="payroll-data-card"><h2>Step 1 — Attendance manual entry</h2>' +
         '<p class="page-lede">Alternatively, enter working days, paid days, and LOP in the table below. Save before calculating.</p>' +
-        tableHtml + '</div>';
+        bulkBar + tableHtml + '</div>';
     }
 
     function paintBulkPreview_(preview) {
@@ -1522,21 +1530,36 @@
           });
       });
 
-      var applyLop = $('btn-apply-lop');
-      if (applyLop) applyLop.addEventListener('click', function () {
-        confirmModal({
-          title: 'Apply leave LOP to payroll days?',
-          body: 'This copies approved leave LOP into LOP days and sets paid days to working days minus LOP. Recalculate after this.',
-          okLabel: 'Apply leave LOP'
-        }).then(function (ok) {
-          if (!ok) return;
-          if (!setButtonLoading(applyLop, 'Applying...')) return;
-          rpc('apiApplyPayrollLeaveLop', [runId], applyLop, 'Applying...', $('pr-action-feedback'))
-            .then(function (next) { afterUpdate(next, 'Leave LOP applied. Calculate to update net pay.'); })
-            .catch(function (err) {
-              showToast(err.message || 'Apply LOP failed', 'error');
-            });
+      function bindApplyLeaveLop_(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          confirmModal({
+            title: 'Apply leave LOP to payroll days?',
+            body: 'This copies approved leave LOP into LOP days and sets paid days to working days minus LOP. Recalculate after this.',
+            okLabel: 'Apply leave LOP'
+          }).then(function (ok) {
+            if (!ok) return;
+            if (!setButtonLoading(btn, 'Applying...')) return;
+            rpc('apiApplyPayrollLeaveLop', [runId], btn, 'Applying...', $('pr-action-feedback'))
+              .then(function (next) { afterUpdate(next, 'Leave LOP applied. Calculate to update net pay.'); })
+              .catch(function (err) {
+                showToast(err.message || 'Apply LOP failed', 'error');
+              });
+          });
         });
+      }
+      bindApplyLeaveLop_($('btn-apply-lop'));
+      bindApplyLeaveLop_($('btn-pr-bulk-apply-lop'));
+
+      var bulkSaveAtt = $('btn-pr-bulk-save-attendance');
+      if (bulkSaveAtt) bulkSaveAtt.addEventListener('click', function () {
+        if (!clientValidateInputs_(page)) return;
+        if (!setButtonLoading(bulkSaveAtt, 'Saving...')) return;
+        rpc('apiSavePayrollInputs', [runId, collectInputs_(page)], bulkSaveAtt, 'Saving...', $('pr-action-feedback'))
+          .then(function (next) { afterUpdate(next, 'Attendance saved for all employees'); })
+          .catch(function (err) {
+            showToast(err.message || 'Save failed', 'error');
+          });
       });
 
       var corr = $('btn-correct');

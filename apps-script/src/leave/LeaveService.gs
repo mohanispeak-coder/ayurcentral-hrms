@@ -146,6 +146,7 @@ var LeaveService = (function () {
     var name = employeeDisplayName_(emp);
     var typeLabel = type ? (type.name || type.code || '') : '';
     var lines = [
+      'Employee ID: ' + String(emp.employee_id || ''),
       'Employee Name: ' + name,
       'Leave Type: ' + typeLabel,
       'Leave Dates: ' + LeaveEngine.formatIsoDate(req.start_date) + ' to ' + LeaveEngine.formatIsoDate(req.end_date),
@@ -187,10 +188,16 @@ var LeaveService = (function () {
       errorMessage = 'NO_EMAIL';
     } else {
       try {
+        var mailBody = body;
+        if (typeof NotificationService !== 'undefined' && NotificationService.formatBodyWithEmployeeId) {
+          mailBody = NotificationService.formatBodyWithEmployeeId(employeeId, body);
+        } else if (employeeId && String(body).indexOf('Employee ID:') < 0) {
+          mailBody = 'Employee ID: ' + employeeId + '\n' + body;
+        }
         MailApp.sendEmail({
           to: String(recipientEmail).trim(),
           subject: subject,
-          body: body
+          body: mailBody
         });
         status = 'SENT';
         sentAt = now_();
@@ -313,13 +320,23 @@ var LeaveService = (function () {
     }
   }
 
+  function resolveEmpFromMap_(empMap, employeeId) {
+    if (!empMap || !employeeId) return null;
+    var key = String(employeeId);
+    return empMap[key] ||
+      empMap[LeaveEngine.normalizeEmployeeId(key)] ||
+      null;
+  }
+
   function serializeRequest_(row, typeMap, empMap) {
     var type = typeMap && typeMap[String(row.leave_type_id)];
-    var emp = empMap && empMap[String(row.employee_id)];
+    var emp = resolveEmpFromMap_(empMap, row.employee_id);
+    var empName = emp ? employeeDisplayName_(emp) : String(row.employee_id || '');
     return {
       leave_request_id: row.leave_request_id,
       employee_id: row.employee_id,
-      employee_name: emp ? (emp.display_name || emp.employee_id) : row.employee_id,
+      employee_name: empName,
+      employee_label: empName + ' (' + row.employee_id + ')',
       leave_type_id: row.leave_type_id,
       leave_type_code: type ? type.code : '',
       leave_type_name: type ? type.name : '',
@@ -676,7 +693,8 @@ var LeaveService = (function () {
     var mailBody = body;
     if (!mailBody) {
       var name = employeeDisplayName_(emp);
-      mailBody = subject + '\n\nOpen HRMS to review this leave request.\nEmployee Name: ' + name;
+      mailBody = subject + '\n\nOpen HRMS to review this leave request.\nEmployee ID: ' +
+        String(employeeId || (emp && emp.employee_id) || '') + '\nEmployee Name: ' + name;
     }
     return sendLeaveDecisionEmail_(eventType, recipientEmail, subject, mailBody, employeeId, entityId);
   }
@@ -1023,7 +1041,6 @@ var LeaveService = (function () {
   }
 
   function cancel(session, leaveRequestId) {
-    PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     var packed = withScriptLock_(function () {
       var balanceIndex = loadBalanceIndex_();
       var row = DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: leaveRequestId });
@@ -1037,6 +1054,12 @@ var LeaveService = (function () {
         throw authorizationError_('You cannot cancel this leave request.');
       }
       var status = String(row.status).toUpperCase();
+      var own = String(session.employee_id || '') === String(row.employee_id || '');
+      if (own && (status === HRMS.LEAVE_STATUS.DRAFT || LeaveEngine.isPendingApprovalStatus(status))) {
+        PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
+      } else {
+        PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
+      }
       var type = coerceType_(getType_(row.leave_type_id));
       var year = LeaveEngine.getLeaveYear(row.start_date, leaveYearStartMonth_());
       var days = LeaveEngine.toNumber(row.total_days);

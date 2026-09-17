@@ -8,7 +8,8 @@ var HRMS_MODULE_UI_FILES_ = {
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
   payroll: ['payroll/PayrollClient'],
   ats: ['ats/AtsClient'],
-  notifications: ['notifications/NotificationClient']
+  notifications: ['notifications/NotificationClient'],
+  admin: ['ui/SettingsClient']
 };
 
 /** @return {Object} */
@@ -80,7 +81,10 @@ function apiGetAppBootstrap(sessionToken) {
         timezone: timezone,
         configured: configured,
         configError: configError,
-        mode: mode
+        mode: mode,
+        clientAssetsVersion: (typeof HRMS !== 'undefined' && HRMS.CLIENT_ASSETS_VERSION)
+          ? HRMS.CLIENT_ASSETS_VERSION
+          : '1'
       },
       navigation: nav,
       phase: 'foundation'
@@ -290,6 +294,22 @@ function apiGetSchemaInfo(sessionToken) {
   return hrmsRun_(function () {
     PermissionService.require(HRMS.ACTIONS.RUN_SETUP);
     return SchemaService.getSchemaInfo();
+  }, sessionToken);
+}
+
+/** @return {Object} */
+function apiGetAdminSettings(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AdminSettingsService.getSettings(session);
+  }, sessionToken);
+}
+
+/** @return {Object} */
+function apiSaveAdminSettings(payload, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AdminSettingsService.saveSettings(session, payload || {});
   }, sessionToken);
 }
 

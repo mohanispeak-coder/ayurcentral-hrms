@@ -184,6 +184,7 @@ var EmployeeService = (function () {
     out.can_change_status = hr;
     out.can_upload_documents = hr;
     out.can_manage_app_access = hr && !isSelf;
+    out.can_manage_user_role = PermissionService.isAdmin(session) && !isSelf;
     if (hr) {
       out.can_view_documents = true;
       out.can_view_leave = true;
@@ -524,6 +525,39 @@ var EmployeeService = (function () {
     return workEmail;
   }
 
+  function notifyEmployeeCreated_(session, record, userCreated) {
+    try {
+      if (typeof NotificationService === 'undefined' || !NotificationService.sendOrgEventEmail) return;
+      if (typeof NotificationService.listHrAdminRecipients !== 'function') return;
+      var recipients = NotificationService.listHrAdminRecipients() || [];
+      if (!recipients.length) return;
+      var name = trim_(record.display_name) || (trim_(record.first_name) + ' ' + trim_(record.last_name));
+      var body = [
+        'A new employee record was created in HRMS.',
+        'Employee ID: ' + record.employee_id,
+        'Name: ' + name,
+        'Department: ' + (record.department || '—'),
+        'Designation: ' + (record.designation || '—'),
+        'Work email: ' + (record.work_email || '—'),
+        'Created by: ' + (session.email || '—'),
+        userCreated ? 'User login: enabled' : 'User login: not created'
+      ].join('\n');
+      var subject = 'New employee: ' + name + ' (' + record.employee_id + ')';
+      recipients.forEach(function (rec) {
+        NotificationService.sendOrgEventEmail({
+          event_type: 'EMPLOYEE_CREATED',
+          to: rec.email,
+          subject: subject,
+          body: body,
+          employee_id: record.employee_id,
+          related_entity_type: 'Employees',
+          related_entity_id: record.employee_id,
+          orgSettingKey: 'notification_employee_create'
+        });
+      });
+    } catch (ignore) {}
+  }
+
   function createEmployee(session, payload, options) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     payload = payload || {};
@@ -600,7 +634,7 @@ var EmployeeService = (function () {
 
       if (createUser) {
         var accessDefaults = (typeof UserAccessService !== 'undefined' && UserAccessService.newUserAccessDefaults)
-          ? UserAccessService.newUserAccessDefaults()
+          ? UserAccessService.newUserAccessDefaults(HRMS.ROLES.EMPLOYEE)
           : {};
         EmployeeRepository.insertUser(Object.assign({
           google_email: loginEmail,
@@ -617,6 +651,8 @@ var EmployeeService = (function () {
         (createUser ? '; user login enabled' : '');
       if (options.source === 'bulk_upload') auditNote += '; source=bulk_upload';
       AuditService.log('EMPLOYEE_CREATE', 'Employees', employeeId, auditNote, employeeId);
+
+      notifyEmployeeCreated_(session, record, createUser);
 
       return {
         employee: sanitizeForViewer(EmployeeRepository.findById(employeeId), session),

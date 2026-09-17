@@ -56,7 +56,7 @@ var PermissionService = (function () {
     { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'notifications', label: 'Notifications', route: 'notifications', icon: 'mail', roles: ['OWNER', 'ADMIN', 'HR'] },
-    { id: 'settings', label: 'Settings', route: 'settings', icon: 'settings', roles: ['OWNER', 'ADMIN'], placeholder: true },
+    { id: 'settings', label: 'Settings', route: 'settings', icon: 'settings', roles: ['OWNER', 'ADMIN'] },
     { id: 'users', label: 'Users', route: 'users', icon: 'admin_panel_settings', roles: ['OWNER', 'ADMIN'], placeholder: true }
   ];
 
@@ -78,6 +78,10 @@ var PermissionService = (function () {
     var allowed = ACTION_ROLES_[action];
     if (!allowed) return false;
     if (!hasRole_(session, allowed)) return false;
+
+    if (typeof AdminSettingsService !== 'undefined' && AdminSettingsService.isActionAllowedForRole) {
+      if (!AdminSettingsService.isActionAllowedForRole(session.role, action)) return false;
+    }
 
     if (action === HRMS.ACTIONS.EMPLOYEE_DIRECTORY &&
         normalizeUserRole_(session.role) === HRMS.ROLES.MANAGER) {
@@ -125,7 +129,11 @@ var PermissionService = (function () {
   function getNavForRole(role) {
     role = normalizeUserRole_(role);
     return NAV_ITEMS_.filter(function (item) {
-      return item.roles.indexOf(role) >= 0;
+      if (item.roles.indexOf(role) < 0) return false;
+      if (typeof AdminSettingsService !== 'undefined' && AdminSettingsService.isNavAllowedForRole) {
+        return AdminSettingsService.isNavAllowedForRole(role, item.id);
+      }
+      return true;
     });
   }
 
