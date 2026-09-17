@@ -558,6 +558,49 @@ var EmployeeService = (function () {
     } catch (ignore) {}
   }
 
+  function buildEmployeeWelcomeEmail_(record, loginEmail) {
+    var company = ConfigService.getCompanyName();
+    var displayName = trim_(record.display_name) || (trim_(record.first_name) + ' ' + trim_(record.last_name));
+    var webappUrl = ConfigService.getHrmsWebAppUrl() || '(ask HR for the HRMS portal link)';
+    var department = trim_(record.department) || '—';
+    var subject = company + ' — HRMS access for ' + record.employee_id;
+    var body = [
+      'Dear ' + displayName + ',',
+      '',
+      'An account has been created for you on the organisation HRMS portal.',
+      '',
+      'Portal: ' + webappUrl,
+      'Login email: ' + loginEmail,
+      'Employee ID: ' + record.employee_id,
+      'Department: ' + department,
+      '',
+      'Please use this portal for self-service HR requests. Do not share your login details.',
+      '',
+      'Regards,',
+      'Human Resources',
+      company
+    ].join('\n');
+    return { subject: subject, body: body };
+  }
+
+  function notifyEmployeeWelcome_(record, loginEmail) {
+    try {
+      if (!loginEmail) return;
+      if (typeof NotificationService === 'undefined' || !NotificationService.sendOrgEventEmail) return;
+      var mail = buildEmployeeWelcomeEmail_(record, loginEmail);
+      NotificationService.sendOrgEventEmail({
+        event_type: 'EMPLOYEE_WELCOME',
+        to: loginEmail,
+        subject: mail.subject,
+        body: mail.body,
+        employee_id: record.employee_id,
+        related_entity_type: 'Employees',
+        related_entity_id: record.employee_id,
+        orgSettingKey: 'notification_employee_welcome'
+      });
+    } catch (ignore) {}
+  }
+
   function createEmployee(session, payload, options) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     payload = payload || {};
@@ -653,6 +696,9 @@ var EmployeeService = (function () {
       AuditService.log('EMPLOYEE_CREATE', 'Employees', employeeId, auditNote, employeeId);
 
       notifyEmployeeCreated_(session, record, createUser);
+      if (createUser) {
+        notifyEmployeeWelcome_(record, loginEmail);
+      }
 
       return {
         employee: sanitizeForViewer(EmployeeRepository.findById(employeeId), session),

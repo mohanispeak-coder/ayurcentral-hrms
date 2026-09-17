@@ -155,6 +155,18 @@ var ConfigService = (function () {
     return getSetting('company_name', 'AyurCentral HRMS');
   }
 
+  function getHrmsWebAppUrl() {
+    var configured = String(getSetting('hrms_webapp_url', '') || '').trim();
+    if (configured) return configured;
+    try {
+      if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
+        var deployed = ScriptApp.getService().getUrl();
+        if (deployed) return String(deployed).trim();
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
   function getTimezone() {
     return getSetting('timezone', 'Asia/Kolkata');
   }
@@ -269,6 +281,7 @@ var ConfigService = (function () {
     clearSettingsCache: clearSettingsCache_,
     getSetting: getSetting,
     getCompanyName: getCompanyName,
+    getHrmsWebAppUrl: getHrmsWebAppUrl,
     getTimezone: getTimezone,
     getCurrency: getCurrency,
     loadSettingsMap: loadSettingsMap_,
