@@ -68,7 +68,14 @@
         'When a welcome email is sent and the employee has a Telegram chat ID, the same message is sent on Telegram automatically.</p>' +
         '<p class="hint">Set <span class="mono">TELEGRAM_BOT_TOKEN</span> in Apps Script → Project settings → Script properties.</p>' +
         '<p class="hint">Telegram bot: ' + (welcome.telegram_configured ? 'configured' : 'not configured') +
-        (welcome.telegram_bot_username ? ' · @' + escapeHtml(String(welcome.telegram_bot_username).replace(/^@/, '')) : '') + '</p></div>';
+        (welcome.telegram_bot_username ? ' · @' + escapeHtml(String(welcome.telegram_bot_username).replace(/^@/, '')) : '') + '</p>';
+      var wh = welcome.telegram_webhook || {};
+      if (welcome.telegram_configured) {
+        welcomeHtml += '<p class="hint">Webhook: ' + (wh.matches_deployment ? 'active on this deployment' :
+          (wh.webhook_url ? 'points elsewhere — reinstall after deploy' : 'not set')) +
+          '</p><button type="button" class="btn btn-secondary" id="btn-install-tg-webhook">Install Telegram webhook</button>';
+      }
+      welcomeHtml += '</div>';
 
       var emailHtml = '<div class="card" style="margin-top:16px"><h2>Email &amp; welcome toggles</h2>' +
         '<p class="hint">When disabled, emails are skipped but rows still appear in Notifications → Email log as SKIPPED where applicable.</p>';
@@ -159,6 +166,25 @@
         '<div class="form-actions" style="margin-top:16px">' +
         '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
         '<span class="hint" id="settings-save-hint"></span></div>';
+
+      var whBtn = $('btn-install-tg-webhook');
+      if (whBtn) {
+        whBtn.addEventListener('click', function () {
+          callServer('apiInstallTelegramWebhook', { button: whBtn, loadingText: 'Installing…' })
+            .then(function (res) {
+              showToast('Telegram webhook installed', 'success');
+              if (res && res.url) showToast(res.url, 'info');
+              return callServer('apiGetAdminSettings');
+            })
+            .then(function (next) {
+              settingsState.data = next;
+              paintSettings(next);
+            })
+            .catch(function (err) {
+              showToast(err.message || 'Webhook install failed', 'error');
+            });
+        });
+      }
 
       $('btn-save-settings').addEventListener('click', function () {
         var btn = $('btn-save-settings');

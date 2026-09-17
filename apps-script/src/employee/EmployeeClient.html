@@ -463,8 +463,9 @@
           input('google_login_email', 'email', emp.google_login_email) +
           '<p class="form-hint">Required when login is enabled. Can match work email.</p>');
         html += fieldGroup('telegram_chat_id', 'Telegram chat ID (optional)',
-          '<input class="form-input mono" id="telegram_chat_id" inputmode="numeric" placeholder="After employee taps Start on your bot">' +
-          '<p class="form-hint">Required for Telegram welcome. Employee must message your bot first; then paste their numeric chat ID here.</p>');
+          '<input class="form-input mono" id="telegram_chat_id" inputmode="numeric" placeholder="Usually auto-filled — see note">' +
+          '<p class="form-hint">Telegram cannot receive messages until the employee taps <strong>Start</strong> on your bot once. ' +
+          'The welcome email includes a personal link — no need to paste a chat ID unless you use a manual workflow.</p>');
       }
       return html;
     }
@@ -1354,12 +1355,19 @@
         var welcome = data.welcome || {};
         var tgHint = '';
         if (welcome.telegram_configured) {
-          tgHint = '<p class="form-hint">Telegram bot is configured. Set the employee chat ID below (they message your bot first; use @userinfobot or bot logs to obtain it).</p>';
+          tgHint = '<p class="form-hint">Share the connect link below (or rely on the welcome email). When the employee taps Start, chat ID is saved automatically.</p>';
         } else {
-          tgHint = '<p class="form-hint">Telegram: add Script Property <span class="mono">TELEGRAM_BOT_TOKEN</span> and enable welcome in Settings.</p>';
+          tgHint = '<p class="form-hint">Telegram: add Script Property <span class="mono">TELEGRAM_BOT_TOKEN</span> and bot @username in Settings.</p>';
         }
         if (welcome.telegram_bot_username) {
           tgHint += '<p class="form-hint">Bot: @' + escapeHtml(String(welcome.telegram_bot_username).replace(/^@/, '')) + '</p>';
+        }
+        if (data.telegram_connect_url) {
+          tgHint += '<p class="form-hint">Connect link: <a href="' + escapeHtml(data.telegram_connect_url) + '" target="_blank" rel="noopener">' +
+            escapeHtml(data.telegram_connect_url) + '</a></p>';
+        }
+        if (welcome.telegram_webhook && welcome.telegram_configured && !welcome.telegram_webhook.matches_deployment) {
+          tgHint += '<p class="form-hint" style="color:var(--color-warning,#b45309)">Telegram webhook is not installed on this web app URL. In Settings, click Install Telegram webhook (or HRMS menu on the spreadsheet).</p>';
         }
         var welcomeActions = '';
         if (data.can_send_welcome) {

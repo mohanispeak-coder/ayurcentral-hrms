@@ -31,9 +31,13 @@ var EmployeeWelcomeService = (function () {
     };
     if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.render) {
       var rendered = HrmsContentTemplateService.render('employee_welcome', map);
+      var bodyRendered = rendered.body;
+      if (typeof TelegramLinkService !== 'undefined' && TelegramLinkService.appendConnectLineToBody) {
+        bodyRendered = TelegramLinkService.appendConnectLineToBody(bodyRendered, record.employee_id);
+      }
       return {
         subject: rendered.subject,
-        body: rendered.body,
+        body: bodyRendered,
         webappUrl: webappUrl,
         loginEmail: loginEmail,
         displayName: displayName,
@@ -59,6 +63,9 @@ var EmployeeWelcomeService = (function () {
       'Human Resources',
       company
     ].join('\n');
+    if (typeof TelegramLinkService !== 'undefined' && TelegramLinkService.appendConnectLineToBody) {
+      body = TelegramLinkService.appendConnectLineToBody(body, record.employee_id);
+    }
     return {
       subject: subject,
       body: body,
@@ -160,7 +167,12 @@ var EmployeeWelcomeService = (function () {
     var list = [];
     if (!out) return list;
     if (out.email && out.email.ok && out.telegram && out.telegram.status === 'NO_CHAT') {
-      list.push('Telegram: welcome email was sent; add Telegram chat ID on Login & role to send the same message on Telegram.');
+      var linkHint = (typeof TelegramLinkService !== 'undefined' && TelegramLinkService.buildConnectUrl)
+        ? TelegramLinkService.buildConnectUrl(out.employee_id || '')
+        : '';
+      list.push(linkHint
+        ? 'Telegram: welcome email includes a one-tap link — when the employee taps Start in Telegram, the same welcome is delivered automatically.'
+        : 'Telegram: set telegram_bot_username in Settings so the welcome email can include a connect link.');
     }
     if (autoCreate && out.telegram && !out.telegram.attempted && !(out.email && out.email.ok)) {
       list.push('Telegram: enable welcome email or set chat ID — when email sends, Telegram mirrors automatically if chat ID is set.');
@@ -169,7 +181,7 @@ var EmployeeWelcomeService = (function () {
       if (out.telegram.status === 'NOT_CONFIGURED') {
         list.push('Telegram: add TELEGRAM_BOT_TOKEN in Apps Script → Project settings → Script properties.');
       } else if (out.telegram.status === 'NO_CHAT') {
-        list.push('Telegram: save the employee chat ID on Login & role (they must tap Start on your bot first).');
+        list.push('Telegram: not linked yet — employee should use the connect link in the welcome email (or copy link from Login & role).');
       } else if (out.telegram.status === 'SKIPPED' && !out.telegram.attempted) {
         list.push('Telegram: enable “Send welcome on Telegram” in Settings.');
       } else if (out.telegram.status === 'SKIPPED') {
@@ -218,6 +230,10 @@ var EmployeeWelcomeService = (function () {
       var emailKey = autoCreate ? 'notification_employee_welcome' : null;
       out.email = sendEmail_(content, employeeId, target.loginEmail, emailKey);
       out.email.attempted = true;
+      if (out.email.ok && !chatId && typeof TelegramLinkService !== 'undefined' &&
+          TelegramLinkService.queueWelcomeForLink) {
+        TelegramLinkService.queueWelcomeForLink(employeeId, content);
+      }
     }
     var sendTelegram = wantTelegram;
     if (!sendTelegram && out.email && out.email.ok && chatId) {
@@ -271,11 +287,15 @@ var EmployeeWelcomeService = (function () {
     try {
       botUser = trim_(ConfigService.getSetting('telegram_bot_username', ''));
     } catch (ignore) {}
+    var webhook = (typeof TelegramLinkService !== 'undefined' && TelegramLinkService.webhookStatus)
+      ? TelegramLinkService.webhookStatus()
+      : {};
     return {
       telegram_configured: typeof TelegramService !== 'undefined' && TelegramService.isConfigured(),
       telegram_welcome_enabled: telegramEnabled_(),
       email_welcome_enabled: emailEnabled_(),
-      telegram_bot_username: botUser
+      telegram_bot_username: botUser,
+      telegram_webhook: webhook
     };
   }
 

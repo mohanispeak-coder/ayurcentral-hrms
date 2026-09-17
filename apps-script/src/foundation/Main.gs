@@ -2,6 +2,22 @@
  * Web app entry point and HTML includes.
  */
 
+/**
+ * Telegram Bot API webhook (same web app /exec URL). Run installTelegramWebhook after deploy.
+ */
+function doPost(e) {
+  try {
+    if (e && e.postData && e.postData.contents && typeof TelegramLinkService !== 'undefined') {
+      var body = JSON.parse(e.postData.contents);
+      if (body && body.update_id != null) {
+        TelegramLinkService.processUpdate(body);
+        return ContentService.createTextOutput('ok');
+      }
+    }
+  } catch (ignore) {}
+  return ContentService.createTextOutput('ok');
+}
+
 function doGet(e) {
   if (typeof AtsWeb !== 'undefined') {
     var atsOut = AtsWeb.tryServe(e);
@@ -36,7 +52,31 @@ function buildHrmsSpreadsheetMenu_(ui) {
     .addItem('Run Drive setup', 'menuRunDriveSetup')
     .addItem('Ensure ATS sheets', 'menuEnsureAtsSchema')
     .addItem('Ensure notification sheets', 'menuEnsureNotificationSchema')
+    .addSeparator()
+    .addItem('Install Telegram webhook', 'menuInstallTelegramWebhook')
     .addToUi();
+}
+
+function menuInstallTelegramWebhook() {
+  try {
+    var session = AuthService.requireAuth();
+    if (!PermissionService.can(HRMS.ACTIONS.ADMIN_SETTINGS, {}, session)) {
+      SpreadsheetApp.getUi().alert('Admin/HR settings permission required.');
+      return;
+    }
+    if (typeof TelegramLinkService === 'undefined') {
+      SpreadsheetApp.getUi().alert('TelegramLinkService not loaded. Push latest script.');
+      return;
+    }
+    var result = TelegramLinkService.installWebhook();
+    SpreadsheetApp.getUi().alert('Telegram webhook installed.\n' + result.url);
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('Webhook install failed:\n' + (err.message || err));
+  }
+}
+
+function installTelegramWebhookFromEditor() {
+  return TelegramLinkService.installWebhook();
 }
 
 /** Bound spreadsheet only — not fired when HRMS uses HRMS_SPREADSHEET_ID + standalone script. */

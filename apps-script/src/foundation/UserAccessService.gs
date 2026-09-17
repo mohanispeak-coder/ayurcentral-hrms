@@ -132,6 +132,10 @@ var UserAccessService = (function () {
     var welcomeMeta = (typeof EmployeeWelcomeService !== 'undefined' && EmployeeWelcomeService.statusForClient)
       ? EmployeeWelcomeService.statusForClient()
       : {};
+    var tgLink = '';
+    if (typeof TelegramLinkService !== 'undefined' && TelegramLinkService.buildConnectUrl) {
+      tgLink = TelegramLinkService.buildConnectUrl(employeeId);
+    }
     return {
       employee_id: employeeId,
       has_login: !!user,
@@ -144,6 +148,7 @@ var UserAccessService = (function () {
       role_is_owner: user ? isOwnerRole_(user.role) : false,
       can_send_welcome: true,
       telegram_chat_id: user && user.telegram_chat_id ? String(user.telegram_chat_id).trim() : '',
+      telegram_connect_url: tgLink,
       welcome: welcomeMeta
     };
   }
