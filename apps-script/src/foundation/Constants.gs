@@ -75,7 +75,9 @@ HRMS.PROPS = {
   /** Knowledge Hub web app URL — Script Properties only, never sent to the browser. */
   KH_WEBAPP_URL: 'KH_WEBAPP_URL',
   /** HMAC secret shared with Knowledge Hub — Script Properties only, never sent to the browser. */
-  KH_HMAC_SECRET: 'KH_HMAC_SECRET'
+  KH_HMAC_SECRET: 'KH_HMAC_SECRET',
+  /** Telegram Bot API token — Script Properties only. */
+  TELEGRAM_BOT_TOKEN: 'TELEGRAM_BOT_TOKEN'
 };
 
 HRMS.SETTINGS_KEYS = {
@@ -203,7 +205,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.09.16.9';
+HRMS.CLIENT_ASSETS_VERSION = '2026.09.16.10';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

@@ -116,6 +116,8 @@ var SchemaService = (function () {
     ['role_access_ADMIN_leave', 'true', 'BOOLEAN', 'Default: admin role leave self-service', false],
     ['notification_employee_welcome', 'true', 'BOOLEAN', 'Welcome email to new employee when login is created', false],
     ['hrms_webapp_url', '', 'STRING', 'HRMS web app /exec URL for employee emails (optional; uses deployment URL if empty)', false],
+    ['notification_telegram_welcome', 'false', 'BOOLEAN', 'Auto-send welcome on Telegram when login is created', false],
+    ['telegram_bot_username', '', 'STRING', 'Telegram bot @username shown to HR (token stays in Script Properties)', false],
     ['drive_root_folder_id', '', 'STRING', 'Drive root folder ID', true],
     ['timezone', 'Asia/Kolkata', 'STRING', 'Application timezone', false],
     ['app_mode', 'PRODUCTION', 'STRING', 'PRODUCTION or DEMO (admin only)', true],

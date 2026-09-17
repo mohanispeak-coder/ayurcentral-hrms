@@ -1304,6 +1304,28 @@
             '<p class="form-hint">Only Admin/Owner can change HRMS role. New employees are created as Employee.</p>';
         }
         var saveLabel = data.can_edit_role ? 'Save role & access' : 'Save access';
+        var welcome = data.welcome || {};
+        var tgHint = '';
+        if (welcome.telegram_configured) {
+          tgHint = '<p class="form-hint">Telegram bot is configured. Set the employee chat ID below (they message your bot first; use @userinfobot or bot logs to obtain it).</p>';
+        } else {
+          tgHint = '<p class="form-hint">Telegram: add Script Property <span class="mono">TELEGRAM_BOT_TOKEN</span> and enable welcome in Settings.</p>';
+        }
+        if (welcome.telegram_bot_username) {
+          tgHint += '<p class="form-hint">Bot: @' + escapeHtml(String(welcome.telegram_bot_username).replace(/^@/, '')) + '</p>';
+        }
+        var welcomeActions = '';
+        if (data.can_send_welcome) {
+          welcomeActions =
+            '<div class="card" style="margin-top:16px"><h3 class="card-title">Welcome message</h3>' +
+            '<p class="hint">Send the standard professional welcome (same text as email) with portal details.</p>' +
+            '<div class="form-actions" style="flex-wrap:wrap;gap:8px">' +
+            '<button type="button" class="btn btn-secondary" id="btn-welcome-email">Send email</button>' +
+            '<button type="button" class="btn btn-secondary" id="btn-welcome-telegram">Send Telegram</button>' +
+            '<button type="button" class="btn btn-primary" id="btn-welcome-both">Send email &amp; Telegram</button>' +
+            '</div>' +
+            '<div id="emp-welcome-feedback" class="action-feedback hidden" role="status"></div></div>';
+        }
         el.innerHTML =
           '<p class="hint">Control what this employee can access in the app. HR and Admin always have full access.</p>' +
           roleHtml +
@@ -1315,13 +1337,18 @@
           '<label class="checkbox-row"><input type="checkbox" id="acc-leave"' +
           (access.access_leave ? ' checked' : '') + '> Leave apply and history</label>' +
           '</div>' +
+          fieldGroup('acc-telegram-chat-id', 'Telegram chat ID',
+            '<input class="form-input mono" id="acc-telegram-chat-id" inputmode="numeric" placeholder="e.g. 123456789" value="' +
+            escapeHtml(data.telegram_chat_id || '') + '">' + tgHint) +
           '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-app-access">' + saveLabel + '</button></div>' +
-          '<div id="emp-app-access-feedback" class="action-feedback hidden" role="status"></div>';
+          '<div id="emp-app-access-feedback" class="action-feedback hidden" role="status"></div>' +
+          welcomeActions;
         if ($('btn-save-app-access')) {
           $('btn-save-app-access').addEventListener('click', function () {
             saveAppAccess(emp);
           });
         }
+        bindWelcomeSend_(emp, data);
       }).catch(function (err) {
         extra.appAccessLoading = false;
         var el = $('app-access-panel');
@@ -1329,12 +1356,38 @@
       });
     }
 
+    function bindWelcomeSend_(emp, data) {
+      function runSend(options) {
+        var feedback = $('emp-welcome-feedback');
+        callServer('apiSendEmployeeWelcome', emp.employee_id, options, {
+          feedback: feedback,
+          loadingText: 'Sending welcome…'
+        }).then(function (result) {
+          var parts = [];
+          if (result.email && result.email.attempted) {
+            parts.push('Email: ' + (result.email.ok ? 'sent' : result.email.status));
+          }
+          if (result.telegram && result.telegram.attempted) {
+            parts.push('Telegram: ' + (result.telegram.ok ? 'sent' : (result.telegram.status || 'failed')));
+          }
+          if (setActionFeedback) setActionFeedback(feedback, parts.join(' · ') || 'Done.', 'success');
+        });
+      }
+      var emailBtn = $('btn-welcome-email');
+      var tgBtn = $('btn-welcome-telegram');
+      var bothBtn = $('btn-welcome-both');
+      if (emailBtn) emailBtn.addEventListener('click', function () { runSend({ email: true, telegram: false }); });
+      if (tgBtn) tgBtn.addEventListener('click', function () { runSend({ email: false, telegram: true }); });
+      if (bothBtn) bothBtn.addEventListener('click', function () { runSend({ email: true, telegram: true }); });
+    }
+
     function saveAppAccess(emp) {
       var feedback = $('emp-app-access-feedback');
       var payload = {
         access_documents: $('acc-documents') && $('acc-documents').checked,
         access_payslips: $('acc-payslips') && $('acc-payslips').checked,
-        access_leave: $('acc-leave') && $('acc-leave').checked
+        access_leave: $('acc-leave') && $('acc-leave').checked,
+        telegram_chat_id: $('acc-telegram-chat-id') ? $('acc-telegram-chat-id').value.trim() : ''
       };
       var roleEl = $('acc-role');
       if (roleEl) payload.role = roleEl.value;

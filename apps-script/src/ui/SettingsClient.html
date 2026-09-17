@@ -62,7 +62,13 @@
       var features = ra.features || [];
       var matrix = ra.matrix || [];
 
-      var emailHtml = '<div class="card"><h2>Email notifications</h2>' +
+      var welcome = data.welcome || {};
+      var welcomeHtml = '<div class="card"><h2>Welcome messaging</h2>' +
+        '<p class="hint">Employee welcome uses the same text for email and Telegram. Set <span class="mono">TELEGRAM_BOT_TOKEN</span> in Apps Script → Project settings → Script properties (not in this sheet).</p>' +
+        '<p class="hint">Telegram bot: ' + (welcome.telegram_configured ? 'configured' : 'not configured') +
+        (welcome.telegram_bot_username ? ' · @' + escapeHtml(String(welcome.telegram_bot_username).replace(/^@/, '')) : '') + '</p></div>';
+
+      var emailHtml = '<div class="card" style="margin-top:16px"><h2>Email &amp; welcome toggles</h2>' +
         '<p class="hint">When disabled, emails are skipped but rows still appear in Notifications → Email log as SKIPPED where applicable.</p>';
       email.forEach(function (row) {
         if (row.type === 'boolean') {
@@ -70,9 +76,10 @@
             '<input type="checkbox" data-email-key="' + escapeHtml(row.key) + '"' + (row.value ? ' checked' : '') + '> ' +
             escapeHtml(row.label) + '</label>';
         } else {
+          var inputType = row.type === 'string' ? 'text' : 'email';
           emailHtml += '<div class="form-group"><label class="form-label" for="set-' + escapeHtml(row.key) + '">' +
             escapeHtml(row.label) + '</label>' +
-            '<input class="form-input" id="set-' + escapeHtml(row.key) + '" data-email-key="' + escapeHtml(row.key) + '" type="email" value="' +
+            '<input class="form-input" id="set-' + escapeHtml(row.key) + '" data-email-key="' + escapeHtml(row.key) + '" type="' + inputType + '" value="' +
             escapeHtml(row.value || '') + '"></div>';
         }
       });
@@ -115,7 +122,7 @@
       });
       roleHtml += '</tbody></table></div></div>';
 
-      body.innerHTML = emailHtml + modHtml + roleHtml +
+      body.innerHTML = welcomeHtml + emailHtml + modHtml + roleHtml +
         '<div class="form-actions" style="margin-top:16px">' +
         '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
         '<span class="hint" id="settings-save-hint"></span></div>';

@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var UserAccessService = (function () {
-  var ACCESS_COLUMNS_ = ['access_documents', 'access_payslips', 'access_leave'];
+  var ACCESS_COLUMNS_ = ['access_documents', 'access_payslips', 'access_leave', 'telegram_chat_id'];
   var ASSIGNABLE_ROLES_ = [
     HRMS.ROLES.EMPLOYEE,
     HRMS.ROLES.MANAGER,
@@ -61,7 +61,7 @@ var UserAccessService = (function () {
       var nextCol = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextCol).setValue(col).setFontWeight('bold');
       var lastRow = sheet.getLastRow();
-      if (lastRow > 1) {
+      if (lastRow > 1 && col !== 'telegram_chat_id') {
         var fill = [];
         for (var r = 2; r <= lastRow; r++) fill.push(['TRUE']);
         sheet.getRange(2, nextCol, lastRow, nextCol).setValues(fill);
@@ -129,6 +129,9 @@ var UserAccessService = (function () {
   }
 
   function employeeAccessDto_(session, employeeId, user) {
+    var welcomeMeta = (typeof EmployeeWelcomeService !== 'undefined' && EmployeeWelcomeService.statusForClient)
+      ? EmployeeWelcomeService.statusForClient()
+      : {};
     return {
       employee_id: employeeId,
       has_login: !!user,
@@ -138,7 +141,10 @@ var UserAccessService = (function () {
       defaults: defaultFlags_(),
       can_edit_role: canEditRoleForUser_(session, user),
       assignable_roles: ASSIGNABLE_ROLES_.slice(),
-      role_is_owner: user ? isOwnerRole_(user.role) : false
+      role_is_owner: user ? isOwnerRole_(user.role) : false,
+      can_send_welcome: true,
+      telegram_chat_id: user && user.telegram_chat_id ? String(user.telegram_chat_id).trim() : '',
+      welcome: welcomeMeta
     };
   }
 
@@ -165,12 +171,23 @@ var UserAccessService = (function () {
       throw authorizationError_('Owner login settings cannot be changed here.');
     }
     ensureColumns_();
+    if (payload.telegram_chat_id !== undefined) {
+      var chatId = String(payload.telegram_chat_id || '').trim();
+      if (chatId && !/^-?\d+$/.test(chatId)) {
+        throw validationError_('Telegram chat ID must be numeric.', {
+          fields: { telegram_chat_id: 'Use the numeric chat id from your bot (e.g. 123456789).' }
+        });
+      }
+    }
     var updates = {
       access_documents: parseFlag_(payload.access_documents, true) ? 'TRUE' : 'FALSE',
       access_payslips: parseFlag_(payload.access_payslips, true) ? 'TRUE' : 'FALSE',
       access_leave: parseFlag_(payload.access_leave, true) ? 'TRUE' : 'FALSE',
       updated_at: new Date()
     };
+    if (payload.telegram_chat_id !== undefined) {
+      updates.telegram_chat_id = String(payload.telegram_chat_id || '').trim();
+    }
     var previousRole = String(user.role || '').trim().toUpperCase();
     var roleChanged = false;
     if (payload.role !== undefined && payload.role !== null && String(payload.role).trim() !== '') {

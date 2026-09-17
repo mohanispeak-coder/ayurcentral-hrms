@@ -22,3 +22,13 @@ function apiEnsureUserAccessSchema(sessionToken) {
     return UserAccessService.ensureColumns();
   }, sessionToken);
 }
+
+function apiSendEmployeeWelcome(employeeId, options, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    if (typeof EmployeeWelcomeService === 'undefined') {
+      throw configurationError_('Welcome messaging is not available.');
+    }
+    return EmployeeWelcomeService.sendWelcome(session, employeeId, options || {});
+  }, sessionToken);
+}

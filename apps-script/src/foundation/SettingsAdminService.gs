@@ -11,6 +11,8 @@ var AdminSettingsService = (function () {
     { key: 'notification_employee_create', label: 'Email when a new employee is created', type: 'boolean' },
     { key: 'notification_employee_welcome', label: 'Welcome email to new employee (when login is created)', type: 'boolean' },
     { key: 'hrms_webapp_url', label: 'HRMS web app URL for welcome emails', type: 'string' },
+    { key: 'notification_telegram_welcome', label: 'Send welcome on Telegram when login is created (if chat ID set)', type: 'boolean' },
+    { key: 'telegram_bot_username', label: 'Telegram bot @username (for staff instructions only)', type: 'string' },
     { key: 'leave_decision_notify_employee', label: 'Leave approve/reject — email employee', type: 'boolean' },
     { key: 'leave_decision_notify_manager', label: 'Leave approve/reject — email manager', type: 'boolean' },
     { key: 'leave_decision_notify_additional_enabled', label: 'Leave approve/reject — extra recipient enabled', type: 'boolean' },
@@ -217,10 +219,14 @@ var AdminSettingsService = (function () {
   function getSettings(session) {
     PermissionService.require(HRMS.ACTIONS.ADMIN_SETTINGS, {}, session);
     ensureRoleModuleSettingsSeeded_();
+    var welcome = (typeof EmployeeWelcomeService !== 'undefined' && EmployeeWelcomeService.statusForClient)
+      ? EmployeeWelcomeService.statusForClient()
+      : {};
     return {
       email: readEmailSettings_(),
       role_modules: readRoleModuleMatrix_(),
-      role_access: readRoleAccessMatrix_()
+      role_access: readRoleAccessMatrix_(),
+      welcome: welcome
     };
   }
 
