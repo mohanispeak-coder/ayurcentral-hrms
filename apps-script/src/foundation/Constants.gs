@@ -205,7 +205,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.09.17.03';
+HRMS.CLIENT_ASSETS_VERSION = '2026.09.17.04';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

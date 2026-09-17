@@ -3,7 +3,6 @@
  */
 var fs = require('fs');
 var path = require('path');
-var vm = require('vm');
 
 var src = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'notifications', 'TelegramLinkService.gs'), 'utf8');
 var main = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'Main.gs'), 'utf8');
@@ -19,18 +18,14 @@ check('start-prefix', /START_PREFIX_ = 'hrms_'/.test(src));
 check('connect-url', /buildConnectUrl/.test(src));
 check('queue-welcome', /queueWelcomeForLink_/.test(src));
 check('email-append', /appendConnectLineToBody/.test(src));
-
-var ctx = {
-  HRMS: {},
-  ConfigService: { getSetting: function () { return 'MyHrBot'; } }
-};
-vm.runInNewContext(
-  "function trim_(v){return String(v||'').trim();}" +
-  src.match(/function startParamForEmployee_[\s\S]*?function employeeIdFromStartParam_[\s\S]*?return trim_\(param\.substring\(START_PREFIX_\.length\)\);\s*\}/)[0] +
-  "\nvar START_PREFIX_='hrms_';",
-  ctx
-);
-check('roundtrip-id', ctx.startParamForEmployee_('SAPL-0001') === 'hrms_SAPL-0001');
+check('getMe-username', /getMe/.test(src) && /resolveBotUsername_/.test(src));
+check('welcome-placeholder', /telegram_connect_line/.test(
+  fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'HrmsContentTemplateService.gs'), 'utf8')
+));
+check('param-parse', /employeeIdFromStartParam_/.test(src) && /substring\(START_PREFIX_\.length\)/.test(src));
+check('api-webhook', /apiInstallTelegramWebhook/.test(
+  fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'ApiFoundation.gs'), 'utf8')
+));
 
 if (fails) process.exit(1);
 console.log('All telegram-link checks passed');

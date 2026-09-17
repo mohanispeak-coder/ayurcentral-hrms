@@ -21,13 +21,21 @@ var EmployeeWelcomeService = (function () {
     var webappUrl = ConfigService.getHrmsWebAppUrl();
     var portalLine = webappUrl || '(ask HR for the HRMS portal link)';
     var department = trim_(record.department) || '—';
+    var tgUrl = '';
+    var tgLine = '';
+    if (typeof TelegramLinkService !== 'undefined') {
+      if (TelegramLinkService.buildConnectUrl) tgUrl = TelegramLinkService.buildConnectUrl(record.employee_id) || '';
+      if (TelegramLinkService.buildConnectLine) tgLine = TelegramLinkService.buildConnectLine(record.employee_id) || '';
+    }
     var map = {
       '{{display_name}}': displayName,
       '{{company}}': company,
       '{{portal_url}}': portalLine,
       '{{login_email}}': loginEmail,
       '{{employee_id}}': record.employee_id,
-      '{{department}}': department
+      '{{department}}': department,
+      '{{telegram_connect_url}}': tgUrl,
+      '{{telegram_connect_line}}': tgLine
     };
     if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.render) {
       var rendered = HrmsContentTemplateService.render('employee_welcome', map);
@@ -119,11 +127,15 @@ var EmployeeWelcomeService = (function () {
     if (typeof NotificationService === 'undefined' || !NotificationService.sendOrgEventEmail) {
       return { ok: false, status: 'UNAVAILABLE', error: 'NotificationService unavailable' };
     }
+    var bodyOut = content.body;
+    if (typeof TelegramLinkService !== 'undefined' && TelegramLinkService.appendConnectLineToBody) {
+      bodyOut = TelegramLinkService.appendConnectLineToBody(bodyOut, employeeId);
+    }
     var mailOpts = {
       event_type: 'EMPLOYEE_WELCOME',
       to: loginEmail,
       subject: content.subject,
-      body: content.body,
+      body: bodyOut,
       employee_id: employeeId,
       related_entity_type: 'Employees',
       related_entity_id: employeeId

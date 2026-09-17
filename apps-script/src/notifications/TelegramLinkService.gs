@@ -14,12 +14,57 @@ var TelegramLinkService = (function () {
     return String(v).trim();
   }
 
-  function botUsername_() {
+  function botUsernameFromSettings_() {
     try {
       return trim_(ConfigService.getSetting('telegram_bot_username', '')).replace(/^@/, '');
     } catch (e) {
       return '';
     }
+  }
+
+  function fetchBotUsernameFromApi_() {
+    if (typeof TelegramService === 'undefined' || !TelegramService.isConfigured()) return '';
+    try {
+      var cache = CacheService.getScriptCache();
+      var cached = cache.get('tg_bot_username');
+      if (cached) return trim_(cached);
+    } catch (ignoreCache) {}
+    var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN');
+    if (!token) return '';
+    try {
+      var response = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/getMe', {
+        muteHttpExceptions: true
+      });
+      var json = JSON.parse(response.getContentText() || '{}');
+      if (json.ok && json.result && json.result.username) {
+        var username = trim_(json.result.username);
+        try {
+          CacheService.getScriptCache().put('tg_bot_username', username, 3600);
+        } catch (ignorePut) {}
+        try {
+          var existing = botUsernameFromSettings_();
+          if (!existing && username && typeof DbService !== 'undefined') {
+            var row = DbService.findOne(HRMS.SHEETS.SETTINGS, { setting_key: 'telegram_bot_username' });
+            if (row) {
+              DbService.updateRecord(HRMS.SHEETS.SETTINGS, 'setting_key', 'telegram_bot_username', {
+                setting_value: username,
+                updated_at: new Date(),
+                updated_by_email: 'system'
+              });
+              ConfigService.clearSettingsCache();
+            }
+          }
+        } catch (ignoreSave) {}
+        return username;
+      }
+    } catch (ignoreApi) {}
+    return '';
+  }
+
+  function resolveBotUsername_() {
+    var fromSettings = botUsernameFromSettings_();
+    if (fromSettings) return fromSettings;
+    return fetchBotUsernameFromApi_();
   }
 
   function startParamForEmployee_(employeeId) {
@@ -37,10 +82,21 @@ var TelegramLinkService = (function () {
   }
 
   function buildConnectUrl(employeeId) {
-    var bot = botUsername_();
+    var bot = resolveBotUsername_();
     var param = startParamForEmployee_(employeeId);
     if (!bot || !param) return '';
     return 'https://t.me/' + bot + '?start=' + encodeURIComponent(param);
+  }
+
+  function buildConnectLine_(employeeId) {
+    var link = buildConnectUrl(employeeId);
+    if (link) {
+      return 'Get HR updates on Telegram (tap Start once — no chat ID needed):\n' + link;
+    }
+    if (typeof TelegramService !== 'undefined' && TelegramService.isConfigured()) {
+      return 'Telegram: your HR team will share a bot link separately. (HR: set telegram_bot_username in Settings or ensure TELEGRAM_BOT_TOKEN is valid.)';
+    }
+    return '';
   }
 
   function queueWelcomeForLink_(employeeId, content) {
@@ -216,14 +272,19 @@ var TelegramLinkService = (function () {
 
   function appendConnectLineToBody_(body, employeeId) {
     body = String(body || '');
+    var line = buildConnectLine_(employeeId);
+    if (!line) return body;
+    if (body.indexOf(line) >= 0) return body;
     var link = buildConnectUrl(employeeId);
-    if (!link) return body;
-    if (body.indexOf(link) >= 0) return body;
-    return body + '\n\n---\nGet HR updates on Telegram (one tap — no chat ID needed):\n' + link;
+    if (link && body.indexOf(link) >= 0) return body;
+    if (body.indexOf('{{telegram_connect') >= 0) return body;
+    return body + '\n\n---\n' + line;
   }
 
   return {
     buildConnectUrl: buildConnectUrl,
+    buildConnectLine: buildConnectLine_,
+    resolveBotUsername: resolveBotUsername_,
     startParamForEmployee: startParamForEmployee_,
     employeeIdFromStartParam: employeeIdFromStartParam_,
     queueWelcomeForLink: queueWelcomeForLink_,
