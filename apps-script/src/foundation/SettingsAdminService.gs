@@ -1,6 +1,6 @@
 /**
  * Admin-editable organisation settings (Notifications sheet + Settings tab).
- * OWNER/ADMIN only — exposed via Settings UI.
+ * OWNER/ADMIN/HR — exposed via Settings UI (Users route remains Admin-only).
  */
 var HRMS = HRMS || {};
 
@@ -9,6 +9,8 @@ var AdminSettingsService = (function () {
     { key: 'notification_leave', label: 'Leave notification emails', type: 'boolean' },
     { key: 'notification_payroll', label: 'Payroll notification emails', type: 'boolean' },
     { key: 'notification_employee_create', label: 'Email when a new employee is created', type: 'boolean' },
+    { key: 'notification_employee_welcome', label: 'Welcome email to new employee (when login is created)', type: 'boolean' },
+    { key: 'hrms_webapp_url', label: 'HRMS web app URL for welcome emails', type: 'string' },
     { key: 'leave_decision_notify_employee', label: 'Leave approve/reject — email employee', type: 'boolean' },
     { key: 'leave_decision_notify_manager', label: 'Leave approve/reject — email manager', type: 'boolean' },
     { key: 'leave_decision_notify_additional_enabled', label: 'Leave approve/reject — extra recipient enabled', type: 'boolean' },
@@ -17,7 +19,7 @@ var AdminSettingsService = (function () {
 
   /** Lazy — AdminSettingsService loads before Constants.gs in Apps Script file order. */
   function roleAccessRoles_() {
-    return ['EMPLOYEE', 'MANAGER'];
+    return ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'];
   }
 
   var ROLE_ACCESS_FEATURES_ = [
@@ -40,7 +42,7 @@ var AdminSettingsService = (function () {
     { id: 'my_payslips', label: 'My payslips', navIds: ['my-payslips'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
     { id: 'ats', label: 'Recruitment (ATS)', navIds: ['ats', 'ats-jobs', 'ats-job', 'ats-job-new', 'ats-job-edit', 'ats-candidates', 'ats-candidate'], defaultRoles: ['MANAGER', 'HR', 'ADMIN'] },
     { id: 'notifications', label: 'Notifications', navIds: ['notifications'], defaultRoles: ['HR', 'ADMIN'] },
-    { id: 'settings', label: 'Settings / users', navIds: ['settings', 'users'], defaultRoles: ['ADMIN'] }
+    { id: 'settings', label: 'Settings / users', navIds: ['settings', 'users'], defaultRoles: ['HR', 'ADMIN'] }
   ];
 
   var ACTION_MODULE_MAP_ = {

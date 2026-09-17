@@ -16,7 +16,7 @@ var PermissionService = (function () {
   ACTION_ROLES_[HRMS.ACTIONS.ACCESS_APP] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR, HRMS.ROLES.MANAGER, HRMS.ROLES.EMPLOYEE];
   ACTION_ROLES_[HRMS.ACTIONS.ASK_HR] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR, HRMS.ROLES.MANAGER, HRMS.ROLES.EMPLOYEE];
   ACTION_ROLES_[HRMS.ACTIONS.RUN_SETUP] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN];
-  ACTION_ROLES_[HRMS.ACTIONS.ADMIN_SETTINGS] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN];
+  ACTION_ROLES_[HRMS.ACTIONS.ADMIN_SETTINGS] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR];
   ACTION_ROLES_[HRMS.ACTIONS.ADMIN_USERS] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN];
   ACTION_ROLES_[HRMS.ACTIONS.VIEW_AUDIT] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR];
   ACTION_ROLES_[HRMS.ACTIONS.EMPLOYEE_DIRECTORY] = [HRMS.ROLES.OWNER, HRMS.ROLES.ADMIN, HRMS.ROLES.HR, HRMS.ROLES.MANAGER];
@@ -56,7 +56,7 @@ var PermissionService = (function () {
     { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'notifications', label: 'Notifications', route: 'notifications', icon: 'mail', roles: ['OWNER', 'ADMIN', 'HR'] },
-    { id: 'settings', label: 'Settings', route: 'settings', icon: 'settings', roles: ['OWNER', 'ADMIN'] },
+    { id: 'settings', label: 'Settings', route: 'settings', icon: 'settings', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'users', label: 'Users', route: 'users', icon: 'admin_panel_settings', roles: ['OWNER', 'ADMIN'], placeholder: true }
   ];
 
