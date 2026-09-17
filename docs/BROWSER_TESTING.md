@@ -26,7 +26,16 @@ npm run test:e2e:install
 | `HRMS_BASE_URL` | **Yes** | Full web app URL, e.g. `https://script.google.com/macros/s/…/exec` |
 | `HRMS_STORAGE_STATE` | For authenticated tests | Path to a JSON file created by Playwright after you sign in manually |
 
-**Do not commit** deployment URLs with secrets, OTPs, passwords, or `storageState` JSON files.
+**Recommended:** create **`Ayurcentral_HRMS-experiment/.env`** (gitignored):
+
+```env
+HRMS_BASE_URL=https://script.google.com/macros/s/YOUR_ID/exec
+HRMS_STORAGE_STATE=tests/browser/.auth/user.json
+```
+
+No quotes, no spaces around `=`. Then run tests from the repo root — `npm run test:e2e:mobile` loads `.env` automatically.
+
+**Do not commit** `.env`, OTPs, passwords, or `storageState` JSON files.
 
 ### PowerShell
 
@@ -50,8 +59,14 @@ HRMS uses **email + one-time verification code** via `google.script.run`. Playwr
 
 ### Capture a session (one-time / when expired)
 
-1. Set `HRMS_BASE_URL`.
-2. Run codegen and sign in manually in the browser:
+1. Put `HRMS_BASE_URL` (and optionally `HRMS_STORAGE_STATE`) in **repo-root `.env`** (see below).
+2. Run codegen (reads `.env` automatically):
+
+```bash
+npm run test:e2e:auth
+```
+
+Or manually:
 
 ```bash
 npx playwright codegen --save-storage=tests/browser/.auth/user.json "%HRMS_BASE_URL%"

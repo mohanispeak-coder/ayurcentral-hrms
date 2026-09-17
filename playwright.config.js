@@ -2,6 +2,9 @@
 const { defineConfig } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { loadRepoEnv } = require('./tests/browser/load-env');
+
+loadRepoEnv(__dirname);
 
 const baseURL = process.env.HRMS_BASE_URL || '';
 if (!baseURL) {
@@ -25,10 +28,6 @@ const VIEWPORTS = [
   { label: '1366', width: 1366, height: 768 }
 ];
 
-const storagePath = process.env.HRMS_STORAGE_STATE || '';
-const storageState =
-  storagePath && fs.existsSync(path.resolve(storagePath)) ? path.resolve(storagePath) : undefined;
-
 module.exports = defineConfig({
   testDir: path.join(__dirname, 'tests', 'browser'),
   timeout: 90_000,
@@ -50,8 +49,7 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure',
     video: 'off',
     actionTimeout: 20_000,
-    navigationTimeout: 60_000,
-    ...(storageState ? { storageState } : {})
+    navigationTimeout: 60_000
   },
   projects: VIEWPORTS.map(function (vp) {
     return {

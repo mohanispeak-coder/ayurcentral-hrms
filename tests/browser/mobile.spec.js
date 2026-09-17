@@ -1,8 +1,10 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
 const {
   hasAuthStorageConfigured,
-  waitForShell,
+  openHrms,
   gotoRoute,
   captureFailureScreenshot,
   assertNoHorizontalOverflow,
@@ -10,6 +12,13 @@ const {
   waitForAuthenticatedWorkspace,
   isAuthenticated
 } = require('./helpers');
+
+const authStoragePath = (function () {
+  var p = process.env.HRMS_STORAGE_STATE;
+  if (!p) return null;
+  var abs = path.resolve(p);
+  return fs.existsSync(abs) ? abs : null;
+})();
 
 test.describe('HRMS browser smoke', function () {
   test.afterEach(async function ({ page }, testInfo) {
@@ -24,8 +33,7 @@ test.describe('HRMS browser smoke', function () {
   });
 
   test('HRMS loads successfully', async function ({ page }) {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await waitForShell(page);
+    await openHrms(page, '/');
     await expect(page.locator('#app')).toBeVisible();
     const authed = await isAuthenticated(page);
     if (authed) {
@@ -36,18 +44,21 @@ test.describe('HRMS browser smoke', function () {
   });
 
   test('no horizontal page overflow on load', async function ({ page }) {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await waitForShell(page);
+    await openHrms(page, '/');
     await page.waitForTimeout(500);
     await assertNoHorizontalOverflow(page);
   });
 
   test.describe('authenticated workspace', function () {
+    if (authStoragePath) {
+      test.use({ storageState: authStoragePath });
+    }
+
     test.beforeEach(async function ({ page }, testInfo) {
       if (!hasAuthStorageConfigured()) {
         testInfo.skip(true, 'Set HRMS_STORAGE_STATE to a Playwright storage file (see docs/BROWSER_TESTING.md).');
       }
-      await page.goto('/#dashboard', { waitUntil: 'domcontentloaded' });
+      await openHrms(page, '/#dashboard');
       const authed = await isAuthenticated(page);
       if (!authed) {
         testInfo.skip(true, 'Storage state missing or expired — re-run auth capture (docs/BROWSER_TESTING.md).');

@@ -7,7 +7,8 @@
     "test:e2e:mobile": "playwright test tests/browser/mobile.spec.js",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:install": "playwright install chromium",
+    "test:e2e:auth": "node tests/browser/run-codegen.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0"

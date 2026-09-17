@@ -16,10 +16,65 @@ function hasAuthStorageConfigured() {
 }
 
 /**
+ * Google Apps Script often shows a redirect / "Continue" page before the app HTML.
+ * @param {import('@playwright/test').Page} page
+ */
+async function settleGasNavigation_(page) {
+  for (var attempt = 0; attempt < 6; attempt++) {
+    if (await page.locator('#app.app-shell').isVisible().catch(function () { return false; })) {
+      return;
+    }
+    var url = page.url();
+    if (/accounts\.google\.com/i.test(url)) {
+      throw new Error(
+        'Browser opened Google Sign-In instead of HRMS. ' +
+          'For basic load tests, temporarily remove HRMS_STORAGE_STATE from .env, or refresh auth with npm run test:e2e:auth. ' +
+          'URL: ' + url
+      );
+    }
+    var gasLink = page.locator('a[href*="googleusercontent.com"], a[href*="/macros/echo"]').first();
+    if (await gasLink.isVisible({ timeout: 2500 }).catch(function () { return false; })) {
+      await gasLink.click();
+      await page.waitForLoadState('domcontentloaded');
+      continue;
+    }
+    var textLink = page.getByRole('link', { name: /continue|open|go to|click here|advanced/i }).first();
+    if (await textLink.isVisible({ timeout: 1500 }).catch(function () { return false; })) {
+      await textLink.click();
+      await page.waitForLoadState('domcontentloaded');
+      continue;
+    }
+    await page.waitForTimeout(1200);
+  }
+}
+
+/**
+ * Open HRMS home (handles GAS redirect interstitial).
+ * @param {import('@playwright/test').Page} page
+ * @param {string=} hashPath e.g. '/' or '/#dashboard'
+ */
+async function openHrms(page, hashPath) {
+  hashPath = hashPath == null ? '/' : hashPath;
+  await page.goto(hashPath, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+  await settleGasNavigation_(page);
+  await waitForShell(page);
+}
+
+/**
  * @param {import('@playwright/test').Page} page
  */
 async function waitForShell(page) {
-  await page.waitForSelector('#app.app-shell', { state: 'visible', timeout: 60_000 });
+  try {
+    await page.waitForSelector('#app.app-shell', { state: 'visible', timeout: 90_000 });
+  } catch (err) {
+    var title = await page.title().catch(function () { return ''; });
+    var url = page.url();
+    var body = await page.locator('body').innerText().catch(function () { return ''; });
+    body = String(body).replace(/\s+/g, ' ').trim().slice(0, 240);
+    throw new Error(
+      'HRMS shell (#app.app-shell) not found.\nURL: ' + url + '\nTitle: ' + title + '\nBody: ' + body
+    );
+  }
 }
 
 /**
@@ -38,8 +93,7 @@ async function isAuthenticated(page) {
  */
 async function gotoRoute(page, route) {
   const r = String(route || 'dashboard').replace(/^#/, '');
-  await page.goto('/#' + r, { waitUntil: 'domcontentloaded' });
-  await waitForShell(page);
+  await openHrms(page, '/#' + r);
 }
 
 /**
@@ -124,6 +178,7 @@ async function waitForAuthenticatedWorkspace(page) {
 
 module.exports = {
   hasAuthStorageConfigured,
+  openHrms,
   waitForShell,
   isAuthenticated,
   gotoRoute,
