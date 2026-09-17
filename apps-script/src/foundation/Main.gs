@@ -28,16 +28,64 @@ function include(filename) {
 }
 
 /**
- * Spreadsheet menu for administrators (optional convenience).
+ * Spreadsheet menu (bound script: onOpen; standalone: installHrmsSpreadsheetOpenTrigger).
  */
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('HRMS')
+function buildHrmsSpreadsheetMenu_(ui) {
+  ui.createMenu('HRMS')
     .addItem('Run database setup', 'menuRunDatabaseSetup')
     .addItem('Run Drive setup', 'menuRunDriveSetup')
     .addItem('Ensure ATS sheets', 'menuEnsureAtsSchema')
     .addItem('Ensure notification sheets', 'menuEnsureNotificationSchema')
     .addToUi();
+}
+
+/** Bound spreadsheet only — not fired when HRMS uses HRMS_SPREADSHEET_ID + standalone script. */
+function onOpen() {
+  buildHrmsSpreadsheetMenu_(SpreadsheetApp.getUi());
+}
+
+/** Installable onOpen for the HRMS database spreadsheet (standalone deployments). */
+function onOpenHrmsSpreadsheet_(e) {
+  try {
+    buildHrmsSpreadsheetMenu_(SpreadsheetApp.getActiveSpreadsheet().getUi());
+  } catch (err) {
+    Logger.log('HRMS spreadsheet menu: ' + (err.message || err));
+  }
+}
+
+/**
+ * Run once from Apps Script editor after clasp push.
+ * Adds HRMS menu every time you open AyurCentral HRMS Database.
+ */
+function installHrmsSpreadsheetOpenTrigger() {
+  var spreadsheetId = ConfigService.getSpreadsheetId();
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    if (trigger.getHandlerFunction() === 'onOpenHrmsSpreadsheet_' &&
+        trigger.getEventType() === ScriptApp.EventType.ON_OPEN) {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  ScriptApp.newTrigger('onOpenHrmsSpreadsheet_')
+    .forSpreadsheet(spreadsheetId)
+    .onOpen()
+    .create();
+  return {
+    ok: true,
+    spreadsheetId: spreadsheetId,
+    message: 'Trigger installed. Close and reopen the HRMS spreadsheet, or run showHrmsSpreadsheetMenuNow.'
+  };
+}
+
+/** Immediate menu on the linked spreadsheet (run from editor while sheet may be open). */
+function showHrmsSpreadsheetMenuNow() {
+  var ss = ConfigService.openSpreadsheet();
+  buildHrmsSpreadsheetMenu_(ss.getUi());
+  return { ok: true, spreadsheetId: ss.getId() };
+}
+
+/** Editor shortcut — same as apiRunDatabaseSetup with no spreadsheet id. */
+function runDatabaseSetupFromEditor() {
+  return apiRunDatabaseSetup('');
 }
 
 function menuRunDatabaseSetup() {

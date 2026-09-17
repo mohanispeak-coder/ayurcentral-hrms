@@ -52,7 +52,19 @@ Add each user to the **Users** sheet with `google_email` set to the **exact emai
 
 ## 2. First-time database setup
 
-In the Apps Script editor, run **`apiRunDatabaseSetup`** with an empty argument (or from the spreadsheet menu after binding):
+In the Apps Script editor, run **`apiRunDatabaseSetup`** with an empty argument, or **`runDatabaseSetupFromEditor`** (same thing).
+
+**Spreadsheet menu (HRMS → Run database setup):** Most deployments use a **standalone** script with `HRMS_SPREADSHEET_ID` (not a script bound inside the sheet). The simple `onOpen` in `Main.gs` does **not** run when you open the database sheet until you install a trigger:
+
+1. `clasp push`, then open the project in [script.google.com](https://script.google.com).
+2. Select function **`installHrmsSpreadsheetOpenTrigger`** → **Run** (authorize if asked).
+3. Close and reopen **AyurCentral HRMS Database** — you should see **HRMS** in the menu bar.
+
+To show the menu once without reopening, run **`showHrmsSpreadsheetMenuNow`** from the editor (with the sheet open in another tab).
+
+If the script is **bound** to the spreadsheet (container-bound project), `onOpen` works without the trigger.
+
+Legacy note (bound script only):
 
 - Creates a new spreadsheet **or** uses `HRMS_SPREADSHEET_ID` if already set in Script Properties.
 - Creates all sheets and headers (idempotent — safe to rerun).
