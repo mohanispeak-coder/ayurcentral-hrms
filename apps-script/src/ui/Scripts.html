@@ -1003,7 +1003,7 @@
         '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
         (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
       '</div>' +
-      '<div class="page-header-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+      '<div class="page-header-actions hrms-page-actions">' + refresh + (actionsHtml || '') + '</div></div>';
   }
 
   function navIconSvg(name) {
@@ -1094,6 +1094,11 @@
     if (sidebar) sidebar.classList.toggle('open', !!open);
     if (backdrop) backdrop.classList.toggle('open', !!open);
     if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (isMobileSidebar_()) {
+      document.documentElement.classList.toggle('hrms-nav-drawer-open', !!open);
+    } else {
+      document.documentElement.classList.remove('hrms-nav-drawer-open');
+    }
   }
 
   function closeSidebarIfMobile_() {

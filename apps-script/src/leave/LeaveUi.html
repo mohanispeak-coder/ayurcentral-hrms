@@ -118,6 +118,29 @@
     return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
   }
 
+  function leaveBalanceCardsHtml(balances, escapeHtml) {
+    if (!balances || !balances.length) return '';
+    return balances.map(function (b) {
+      return '<article class="leave-balance-card">' +
+        '<header><strong>' + escapeHtml(b.name) + '</strong><span class="mono">' + escapeHtml(b.code) + '</span></header>' +
+        '<dl class="leave-balance-dl">' +
+        '<div><dt>Entitled</dt><dd>' + fmtDays(b.entitled_days) + '</dd></div>' +
+        '<div><dt>Carried</dt><dd>' + fmtDays(b.carried_forward_days) + '</dd></div>' +
+        '<div><dt>Used</dt><dd>' + fmtDays(b.used_days) + '</dd></div>' +
+        '<div><dt>Pending</dt><dd>' + fmtDays(b.pending_days) + '</dd></div>' +
+        '<div><dt>Available</dt><dd>' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</dd></div>' +
+        '</dl></article>';
+    }).join('');
+  }
+
+  function leaveMyLeaveActionsHtml(yearSelect) {
+    return (yearSelect ? '<div class="leave-toolbar-year">' + yearSelect + '</div>' : '') +
+      '<div class="btn-row leave-toolbar-actions">' +
+      '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
+      '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>' +
+      '</div>';
+  }
+
   function isLeavePendingActionable_(r) {
     var st = String(r.status || '').toUpperCase();
     return st === 'SUBMITTED' || st.indexOf('PENDING_') === 0;
@@ -580,26 +603,27 @@
       var yearSelect = (data.available_years && data.available_years.length)
         ? '<select class="form-select" id="leave-year-select" aria-label="Leave year">' + yearOpts + '</select>'
         : '';
+      var balCards = leaveBalanceCardsHtml(data.balances || [], c.escapeHtml);
       var balRows = (data.balances || []).map(function (b) {
-        return '<tr><td>' + c.escapeHtml(b.code) + '</td><td>' + c.escapeHtml(b.name) + '</td>' +
-          '<td class="num">' + fmtDays(b.entitled_days) + '</td>' +
-          '<td class="num">' + fmtDays(b.carried_forward_days) + '</td>' +
-          '<td class="num">' + fmtDays(b.used_days) + '</td>' +
-          '<td class="num">' + fmtDays(b.pending_days) + '</td>' +
-          '<td class="num">' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</td></tr>';
+        return '<tr><td data-label="Code">' + c.escapeHtml(b.code) + '</td><td data-label="Type">' + c.escapeHtml(b.name) + '</td>' +
+          '<td class="num" data-label="Entitled">' + fmtDays(b.entitled_days) + '</td>' +
+          '<td class="num" data-label="Carried">' + fmtDays(b.carried_forward_days) + '</td>' +
+          '<td class="num" data-label="Used">' + fmtDays(b.used_days) + '</td>' +
+          '<td class="num" data-label="Pending">' + fmtDays(b.pending_days) + '</td>' +
+          '<td class="num" data-label="Available">' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</td></tr>';
       }).join('');
       var reqRows = (data.requests || []).map(function (r) {
         var st = String(r.status || '').toUpperCase();
         var canCancel = st === 'DRAFT' || st === 'SUBMITTED' || st.indexOf('PENDING_') === 0;
         return '<tr>' +
-          '<td>' + c.escapeHtml(r.leave_request_id) + '</td>' +
-          '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
-          '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
-          '<td class="num">' + fmtDays(r.total_days) + '</td>' +
-          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
-          '<td>' + c.escapeHtml(r.reason) + '</td>' +
-          '<td class="col-actions">' + (canCancel ? '<button type="button" class="btn btn-danger btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
-            (r.status === 'DRAFT' ? ' <button type="button" class="btn btn-secondary btn-sm" data-edit="' + c.escapeHtml(r.leave_request_id) + '">Edit</button>' : '') +
+          '<td data-label="ID">' + c.escapeHtml(r.leave_request_id) + '</td>' +
+          '<td data-label="Type">' + c.escapeHtml(r.leave_type_code) + '</td>' +
+          '<td data-label="Dates">' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
+          '<td class="num" data-label="Days">' + fmtDays(r.total_days) + '</td>' +
+          '<td data-label="Status"><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
+          '<td data-label="Reason">' + c.escapeHtml(r.reason) + '</td>' +
+          '<td class="col-actions" data-label="Actions">' + (canCancel ? '<button type="button" class="btn btn-danger btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
+            (r.status === 'DRAFT' ? '<button type="button" class="btn btn-secondary btn-sm" data-edit="' + c.escapeHtml(r.leave_request_id) + '">Edit</button>' : '') +
           '</td></tr>';
       }).join('');
       page.innerHTML =
@@ -608,14 +632,15 @@
           (data.current_leave_year && String(data.current_leave_year) !== String(data.leave_year)
             ? ' (current year ' + data.current_leave_year + ')'
             : '') + '.',
-          yearSelect +
-          '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
-          '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>') +
+          leaveMyLeaveActionsHtml(yearSelect)) +
         '<div class="card"><h2 class="section-title">Balances</h2>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
-          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div></td></tr>') + '</tbody></table></div></div>' +
+          (balCards ? '<div class="hrms-mobile-only leave-balance-cards">' + balCards + '</div>' : '') +
+          '<div class="table-wrap table-wrap--contain hrms-desktop-only"><table class="data-table data-table--stack-md"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
+          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div></td></tr>') + '</tbody></table></div>' +
+          (!balCards ? '<div class="empty-state empty-state-inline hrms-mobile-only"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div>' : '') +
+        '</div>' +
         '<div class="card"><h2 class="section-title">My requests</h2>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+          '<div class="table-wrap table-wrap--contain"><table class="data-table data-table--stack-md"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
           '<tbody>' + (reqRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave requests yet</p><p class="empty-state-text">Apply leave to create your first request.</p></div></td></tr>') + '</tbody></table></div></div>';
 
       var applyBtn = document.getElementById('btn-apply-leave');
