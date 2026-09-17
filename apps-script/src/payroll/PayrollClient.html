@@ -29,7 +29,7 @@
 .payroll-page .upload-preview { margin-top: 12px; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; }
 .payroll-page .finalize-summary dt { font-weight: 600; margin-top: 8px; }
 .payroll-page .finalize-summary dd { margin: 2px 0 0; }
-.payroll-page .hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.payroll-page .hidden-file { display: none !important; }
 .payroll-page .bulk-upload-card.collapsible-section { margin-top: 12px; }
 .payroll-page details.collapsible-section,
 .payroll-page details.collapsible-section[open],
@@ -1191,15 +1191,27 @@
       var fileInput = $('pr-bulk-file');
       var validateBtn = $('btn-pr-bulk-validate');
       var nameEl = $('pr-bulk-file-name');
-      if (chooseBtn && fileInput) chooseBtn.addEventListener('click', function () { fileInput.click(); });
-      if (fileInput) fileInput.addEventListener('change', function () {
-        bulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-        bulkState.preview = null;
-        if (validateBtn) validateBtn.disabled = !bulkState.selectedFile;
-        if (nameEl) nameEl.textContent = bulkState.selectedFile ? bulkState.selectedFile.name : 'No file selected.';
-        var mount = $('pr-upload-preview');
-        if (mount) mount.innerHTML = '';
-      });
+      if (chooseBtn && fileInput) {
+        chooseBtn.addEventListener('click', function () {
+          var content = page.closest('.content') || document.querySelector('.content');
+          var scrollTop = content ? content.scrollTop : 0;
+          fileInput.click();
+          if (content) {
+            requestAnimationFrame(function () { content.scrollTop = scrollTop; });
+          }
+        });
+      }
+      if (fileInput) {
+        fileInput.addEventListener('focus', function () { try { fileInput.blur(); } catch (ignore) {} });
+        fileInput.addEventListener('change', function () {
+          bulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+          bulkState.preview = null;
+          if (validateBtn) validateBtn.disabled = !bulkState.selectedFile;
+          if (nameEl) nameEl.textContent = bulkState.selectedFile ? bulkState.selectedFile.name : 'No file selected.';
+          var mount = $('pr-upload-preview');
+          if (mount) mount.innerHTML = '';
+        });
+      }
       if (validateBtn) validateBtn.addEventListener('click', function () {
         var file = bulkState.selectedFile;
         if (!file) return;
@@ -1291,8 +1303,19 @@
       var chooseBtn = $('btn-comp-bulk-choose');
       var fileInput = $('comp-bulk-file');
       var validateBtn = $('btn-comp-validate');
-      if (chooseBtn && fileInput) chooseBtn.addEventListener('click', function () { fileInput.click(); });
-      if (fileInput) fileInput.addEventListener('change', function () {
+      if (chooseBtn && fileInput) {
+        chooseBtn.addEventListener('click', function () {
+          var content = page.closest('.content') || document.querySelector('.content');
+          var scrollTop = content ? content.scrollTop : 0;
+          fileInput.click();
+          if (content) {
+            requestAnimationFrame(function () { content.scrollTop = scrollTop; });
+          }
+        });
+      }
+      if (fileInput) {
+        fileInput.addEventListener('focus', function () { try { fileInput.blur(); } catch (ignore) {} });
+        fileInput.addEventListener('change', function () {
         compBulkState.selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (validateBtn) validateBtn.disabled = !compBulkState.selectedFile;
         var nameEl = $('comp-bulk-file-name');
@@ -1300,7 +1323,8 @@
         compBulkState.preview = null;
         var prev = $('comp-bulk-preview');
         if (prev) prev.innerHTML = '';
-      });
+        });
+      }
       var dlBtn = $('btn-comp-dl-template');
       if (dlBtn) dlBtn.addEventListener('click', function () {
         rpc('apiDownloadCompensationBulkTemplate', [], dlBtn, 'Downloading...', $('comp-bulk-feedback'))

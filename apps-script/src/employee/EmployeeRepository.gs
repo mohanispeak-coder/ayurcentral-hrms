@@ -81,6 +81,7 @@ var EmployeeRepository = (function () {
   function listActiveLeaveTypes() {
     return DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES).filter(function (row) {
       var v = row.is_active;
+      if (v === '' || v === null || v === undefined) return true;
       return v === true || v === 1 || String(v).toUpperCase() === 'TRUE';
     });
   }

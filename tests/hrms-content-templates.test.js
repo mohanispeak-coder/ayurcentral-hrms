@@ -41,6 +41,7 @@ check('settings-rows', svc.defaultSettingsRows().length >= 5);
 
 var leave = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'leave', 'LeaveService.gs'), 'utf8');
 check('coerce-balance-default', /requires_balance === '' \|\| row\.requires_balance == null/.test(leave));
+check('coerce-active-default', /is_active === '' \|\| row\.is_active == null/.test(leave));
 
 var ats = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ats', 'AtsService.gs'), 'utf8');
 check('offer-hook', /AtsOfferLetterService\.maybeSendOnStage/.test(ats));

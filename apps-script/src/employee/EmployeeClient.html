@@ -577,8 +577,13 @@
             } else {
               showToast('No leave balances were created — check active leave types in Leave admin.', 'warning');
             }
+            if (result.welcome_delivery && result.welcome_delivery.email && result.welcome_delivery.email.ok) {
+              showToast('Welcome email sent.', 'success');
+            }
             if (result.welcome_delivery && result.welcome_delivery.telegram && result.welcome_delivery.telegram.ok) {
-              showToast('Welcome sent on Telegram.', 'success');
+              showToast(result.welcome_delivery.telegram.mirrored_from_email
+                ? 'Same welcome message sent on Telegram.'
+                : 'Welcome sent on Telegram.', 'success');
             }
             (result.warnings || []).forEach(function (w) { showToast(w, 'warning'); });
             if (setFlash) setFlash('Created ' + empId, 'success', 'employee-profile');
@@ -1151,7 +1156,14 @@
           });
       });
       var selectedFile = null;
-      $('btn-bulk-choose').addEventListener('click', function () { $('bulk-file-input').click(); });
+      $('btn-bulk-choose').addEventListener('click', function () {
+        var content = document.querySelector('.content');
+        var scrollTop = content ? content.scrollTop : 0;
+        $('bulk-file-input').click();
+        if (content) requestAnimationFrame(function () { content.scrollTop = scrollTop; });
+      });
+      var bulkFileInput = $('bulk-file-input');
+      if (bulkFileInput) bulkFileInput.addEventListener('focus', function () { try { bulkFileInput.blur(); } catch (ignore) {} });
       $('bulk-file-input').addEventListener('change', function () {
         selectedFile = this.files && this.files[0] ? this.files[0] : null;
         $('btn-bulk-validate').disabled = !selectedFile;

@@ -159,8 +159,11 @@ var EmployeeWelcomeService = (function () {
   function welcomeWarnings_(out, autoCreate) {
     var list = [];
     if (!out) return list;
-    if (autoCreate && out.telegram && !out.telegram.attempted) {
-      list.push('Telegram: enable “Send welcome on Telegram when login is created” in Settings, or send manually from Login & role.');
+    if (out.email && out.email.ok && out.telegram && out.telegram.status === 'NO_CHAT') {
+      list.push('Telegram: welcome email was sent; add Telegram chat ID on Login & role to send the same message on Telegram.');
+    }
+    if (autoCreate && out.telegram && !out.telegram.attempted && !(out.email && out.email.ok)) {
+      list.push('Telegram: enable welcome email or set chat ID — when email sends, Telegram mirrors automatically if chat ID is set.');
     }
     if (out.telegram && out.telegram.attempted && !out.telegram.ok) {
       if (out.telegram.status === 'NOT_CONFIGURED') {
@@ -210,13 +213,17 @@ var EmployeeWelcomeService = (function () {
       email: { attempted: wantEmail, ok: false, status: 'SKIPPED' },
       telegram: { attempted: wantTelegram, ok: false, status: 'SKIPPED' }
     };
+    var chatId = trim_(target.user.telegram_chat_id);
     if (wantEmail) {
       var emailKey = autoCreate ? 'notification_employee_welcome' : null;
       out.email = sendEmail_(content, employeeId, target.loginEmail, emailKey);
       out.email.attempted = true;
     }
-    if (wantTelegram) {
-      var chatId = trim_(target.user.telegram_chat_id);
+    var sendTelegram = wantTelegram;
+    if (!sendTelegram && out.email && out.email.ok && chatId) {
+      sendTelegram = true;
+    }
+    if (sendTelegram) {
       out.telegram.attempted = true;
       if (!chatId) {
         out.telegram = { attempted: true, ok: false, status: 'NO_CHAT', error: 'No Telegram chat ID on user' };
@@ -226,7 +233,8 @@ var EmployeeWelcomeService = (function () {
           attempted: true,
           ok: !!tg.ok,
           status: tg.status || (tg.ok ? 'SENT' : 'FAILED'),
-          error: tg.error || ''
+          error: tg.error || '',
+          mirrored_from_email: !!(out.email && out.email.ok && !wantTelegram)
         };
       }
     }

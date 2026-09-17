@@ -435,26 +435,31 @@ var EmployeeService = (function () {
     }
   }
 
+  function countLeaveBalances_(employeeId) {
+    try {
+      return EmployeeRepository.listLeaveBalances(employeeId).length;
+    } catch (ignore) {
+      return 0;
+    }
+  }
+
   function ensureLeaveBalancesOnCreate_(employeeId, now) {
-    var leaveSeeded = 0;
+    var before = countLeaveBalances_(employeeId);
     if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
       try {
-        var granted = LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-        leaveSeeded = granted ? granted.length : 0;
-      } catch (ignoreGrant) {
-        leaveSeeded = 0;
-      }
+        LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
+      } catch (ignoreGrant) {}
     }
-    if (!leaveSeeded) {
-      leaveSeeded = seedLeaveBalances_(employeeId, now);
+    if (countLeaveBalances_(employeeId) <= before) {
+      seedLeaveBalances_(employeeId, now);
     }
-    if (!leaveSeeded && typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+    if (countLeaveBalances_(employeeId) <= before &&
+        typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
       try {
-        var retry = LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-        leaveSeeded = retry ? retry.length : 0;
+        LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
       } catch (ignoreRetry) {}
     }
-    return leaveSeeded;
+    return countLeaveBalances_(employeeId) - before;
   }
 
   function seedLeaveBalances_(employeeId, now) {

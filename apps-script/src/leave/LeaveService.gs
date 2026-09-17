@@ -273,7 +273,9 @@ var LeaveService = (function () {
         ? null
         : LeaveEngine.toNumber(row.max_consecutive_days),
       min_service_days: LeaveEngine.toNumber(row.min_service_days),
-      is_active: LeaveEngine.isTruthy(row.is_active),
+      is_active: (row.is_active === '' || row.is_active == null)
+        ? true
+        : LeaveEngine.isTruthy(row.is_active),
       sort_order: LeaveEngine.toNumber(row.sort_order)
     };
   }

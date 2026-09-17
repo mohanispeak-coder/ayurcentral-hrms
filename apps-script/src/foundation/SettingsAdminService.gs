@@ -235,6 +235,9 @@ var AdminSettingsService = (function () {
     var welcome = (typeof EmployeeWelcomeService !== 'undefined' && EmployeeWelcomeService.statusForClient)
       ? EmployeeWelcomeService.statusForClient()
       : {};
+    if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.seedMissingTemplateSettings) {
+      HrmsContentTemplateService.seedMissingTemplateSettings();
+    }
     var contentTemplates = (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.listForClient)
       ? HrmsContentTemplateService.listForClient()
       : [];

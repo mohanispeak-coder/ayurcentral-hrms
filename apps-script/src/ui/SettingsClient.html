@@ -64,7 +64,9 @@
 
       var welcome = data.welcome || {};
       var welcomeHtml = '<div class="card"><h2>Welcome messaging</h2>' +
-        '<p class="hint">Employee welcome uses the same text for email and Telegram. Set <span class="mono">TELEGRAM_BOT_TOKEN</span> in Apps Script → Project settings → Script properties (not in this sheet).</p>' +
+        '<p class="hint">Welcome email and Telegram use the same body (see <strong>Content templates</strong> below). ' +
+        'When a welcome email is sent and the employee has a Telegram chat ID, the same message is sent on Telegram automatically.</p>' +
+        '<p class="hint">Set <span class="mono">TELEGRAM_BOT_TOKEN</span> in Apps Script → Project settings → Script properties.</p>' +
         '<p class="hint">Telegram bot: ' + (welcome.telegram_configured ? 'configured' : 'not configured') +
         (welcome.telegram_bot_username ? ' · @' + escapeHtml(String(welcome.telegram_bot_username).replace(/^@/, '')) : '') + '</p></div>';
 
@@ -126,6 +128,10 @@
       var tplHtml = '<div class="card" style="margin-top:16px"><h2>Content templates</h2>' +
         '<p class="hint">Edit welcome email, bulk-upload instruction text, and ATS offer letter wording. ' +
         'Placeholders are listed per template. Save applies to new emails and newly downloaded bulk templates.</p>';
+      if (!templates.length) {
+        tplHtml += '<p class="alert alert-warning">Template rows are missing from the Settings sheet. ' +
+          'Open the spreadsheet → run <strong>HRMS → Database setup</strong> (or run <span class="mono">runDatabaseSetupFromEditor</span> in Apps Script), then refresh this page.</p>';
+      }
       templates.forEach(function (tpl) {
         tplHtml += '<div class="template-block" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border,#e2e8f0)">' +
           '<h3 style="margin:0 0 6px;font-size:1rem">' + escapeHtml(tpl.label) + '</h3>' +
