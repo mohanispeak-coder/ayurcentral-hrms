@@ -17,8 +17,9 @@ function check(name, cond) {
   }
 }
 
-check('lock-depth-guard', /scriptLockDepth_/.test(src));
-check('nested-skip-acquire', /if \(scriptLockDepth_ > 0\)/.test(src));
+check('lock-haslock-nested', /hasLock/.test(src));
+check('nested-skip-acquire', /alreadyHeld/.test(src));
+check('no-process-wide-depth', !/scriptLockDepth_/.test(src));
 
 if (failures.length) {
   process.exit(1);

@@ -330,6 +330,15 @@ function runAsync() {
       check('plain object with string button is payload', last && last.button === 'not-a-dom-node');
     });
   }).then(function () {
+    ctrl.mode = 'success';
+    ctrl.result = { ok: true, data: 'x' };
+    ctrl.calls = [];
+    App.setSessionToken('otp_session_token_demo');
+    return App.callServer('apiAtsGetDashboard', { loadingText: 'Working…' }).then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('loadingText-only opts are not server args', args && args.length === 1 && args[0] === 'otp_session_token_demo');
+    });
+  }).then(function () {
     ctrl.mode = 'throw';
     var missingBtn = fakeEl('button');
     missingBtn.innerHTML = 'Send';

@@ -71,7 +71,10 @@ function hrmsRun_(fn, sessionToken) {
     if (typeof AuthService !== 'undefined' && AuthService.clearRequestSessionCache) {
       AuthService.clearRequestSessionCache();
     }
-    HRMS_REQUEST_SESSION_TOKEN_ = sessionToken || '';
+    HRMS_REQUEST_SESSION_TOKEN_ = (typeof sessionToken === 'string') ? sessionToken : '';
+    if (typeof AuthService !== 'undefined' && AuthService.resolveSession) {
+      AuthService.resolveSession({ sessionToken: HRMS_REQUEST_SESSION_TOKEN_ });
+    }
     var data = fn();
     var envelope = { ok: true, data: data };
     if (perfOn) {
@@ -111,5 +114,8 @@ function hrmsRun_(fn, sessionToken) {
     return errBody;
   } finally {
     HRMS_REQUEST_SESSION_TOKEN_ = previousToken;
+    if (typeof AuthService !== 'undefined' && AuthService.clearRequestSessionCache) {
+      AuthService.clearRequestSessionCache();
+    }
   }
 }

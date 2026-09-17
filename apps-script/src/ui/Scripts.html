@@ -618,6 +618,9 @@
     var fb = obj.feedback || obj.feedbackEl;
     if (fb && fb.nodeType === 1) return true;
     if (obj.background === true) return true;
+    // ATS/payroll rpc() always appends { loadingText } even with no button.
+    // That must not be sent as a google.script.run argument or it steals sessionToken.
+    if (typeof obj.loadingText === 'string' && !obj.button && !obj.loadingButton) return true;
     return false;
   }
 

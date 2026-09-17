@@ -180,10 +180,14 @@
     }
 
     function rpc(fn, args, btn, loadingText, feedback) {
-      var opts = { loadingText: loadingText || 'Working…' };
-      if (btn) opts.button = btn;
-      if (feedback) opts.feedback = feedback;
-      return callServer.apply(null, [fn].concat(args || []).concat([opts]));
+      var callArgs = [fn].concat(args || []);
+      if (btn || feedback) {
+        var opts = { loadingText: loadingText || 'Working…' };
+        if (btn) opts.button = btn;
+        if (feedback) opts.feedback = feedback;
+        callArgs.push(opts);
+      }
+      return callServer.apply(null, callArgs);
     }
 
     var atsBulkState = { jobs: { file: null, preview: null }, candidates: { file: null, preview: null } };
