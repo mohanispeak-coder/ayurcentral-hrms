@@ -1,0 +1,14 @@
+{
+  "name": "ayurcentral-hrms",
+  "version": "1.0.0",
+  "description": "Ayurcentral HRMS — Google Apps Script web app with a local Node test/verification harness.",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "smoke:build": "node tests/generate-shell-smoke.js",
+    "serve:smoke": "npm run smoke:build && python3 -m http.server 8000 --directory tests/fixtures"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
