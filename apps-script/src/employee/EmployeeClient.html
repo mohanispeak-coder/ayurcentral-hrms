@@ -29,7 +29,8 @@
       lists: {},
       profiles: {},
       extras: {},
-      picker: null
+      picker: null,
+      verticals: null
     };
 
     function listCacheKey(team) {
@@ -74,6 +75,7 @@
         empViewCache.profiles = {};
         empViewCache.extras = {};
         empViewCache.picker = null;
+        empViewCache.verticals = null;
       });
     }
 
@@ -441,6 +443,7 @@
       html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
       html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
       html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
+      html += fieldGroup('vertical_name', 'Vertical', '<select class="form-select" id="vertical_name" name="vertical_name" required><option value="">Select vertical</option></select>');
       html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
       html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
       html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT', true));
@@ -502,10 +505,44 @@
       });
     }
 
+    function fillVerticalSelect_(values, selectedValue) {
+      var sel = $('vertical_name');
+      if (!sel) return;
+      var current = selectedValue || sel.value;
+      var html = '<option value="">Select vertical</option>';
+      (values || []).forEach(function (v) {
+        html += '<option value="' + escapeHtml(v) + '"' + (v === current ? ' selected' : '') + '>' +
+          escapeHtml(v) + '</option>';
+      });
+      sel.innerHTML = html;
+    }
+
+    function loadVerticalOptions(selectedValue) {
+      var sel = $('vertical_name');
+      if (!sel) return;
+      if (empViewCache.verticals && !(App.isModuleRefresh && App.isModuleRefresh('employee-create'))) {
+        fillVerticalSelect_(empViewCache.verticals, selectedValue);
+        return;
+      }
+      sel.innerHTML = '<option value="">Select vertical</option>';
+      callServer('apiGetEmployeeVerticals').then(function (list) {
+        empViewCache.verticals = list || [];
+        fillVerticalSelect_(list, selectedValue);
+      }).catch(function () {
+        if (selectedValue) {
+          var opt = document.createElement('option');
+          opt.value = selectedValue;
+          opt.textContent = selectedValue;
+          opt.selected = true;
+          sel.appendChild(opt);
+        }
+      });
+    }
+
     function collectEmployeePayload() {
       var ids = [
         'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
-        'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
+        'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
         'employment_type', 'location', 'pan', 'bank_account_name', 'bank_account_number',
         'bank_ifsc', 'bank_name', 'notes', 'google_login_email'
       ];
@@ -532,6 +569,7 @@
       } else {
         loadManagerOptions('', '');
       }
+      loadVerticalOptions('');
       markView_(createKey);
       $('btn-emp-cancel').addEventListener('click', function () { navigate('employees'); });
       (function syncGoogleLoginFromWork_() {
@@ -780,8 +818,8 @@
     function employmentPanel(emp) {
       if (emp.view_mode === 'TEAM_WORK' || !emp.can_edit) {
         return dl([
-          ['Employee ID', emp.employee_id], ['Work email', emp.work_email],
-          ['Department', emp.department], ['Designation', emp.designation],
+        ['Employee ID', emp.employee_id], ['Work email', emp.work_email],
+        ['Department', emp.department], ['Designation', emp.designation], ['Vertical', emp.vertical_name],
           ['Manager', emp.manager_employee_id], ['Joining date', emp.joining_date],
           ['Type', emp.employment_type], ['Location', emp.location], ['Status', emp.status]
         ]);
@@ -791,6 +829,7 @@
       html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
       html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
       html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
+      html += fieldGroup('vertical_name', 'Vertical', '<select class="form-select" id="vertical_name" name="vertical_name" required><option value="">Select vertical</option></select>');
       html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
       html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
       html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type, true));
@@ -840,7 +879,7 @@
         clearFieldErrors();
         var payload = {};
         ['first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
-          'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
+          'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
           'employment_type', 'location', 'notes', 'pan', 'bank_account_name', 'bank_account_number',
           'bank_ifsc', 'bank_name'].forEach(function (id) {
           var el = $(id);
@@ -869,6 +908,7 @@
       }
       if ($('btn-save-employment')) {
         loadManagerOptions(emp.manager_employee_id, emp.employee_id);
+        loadVerticalOptions(emp.vertical_name);
         $('btn-save-employment').addEventListener('click', function () {
           save(this, $('emp-save-employment-feedback'));
         });
@@ -1098,7 +1138,7 @@
         '<div class="card">' +
         (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml([
           'employee_id', 'first_name', 'last_name', 'work_email', 'department', 'designation',
-          'location', 'employment_type', 'joining_date', 'create_login'
+          'vertical_name', 'location', 'employment_type', 'joining_date', 'create_login'
         ]) : '') +
         '<p class="form-hint">When create_login is YES, google_login_email is also required.</p>' +
         '<div class="bulk-action-bar">' +
@@ -1210,13 +1250,13 @@
       if (preview.validCount) {
         html += '<h3 class="section-title">Ready to import (' + preview.validCount + ')</h3>';
         html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-          '<th>Row</th><th>Employee code</th><th>Name</th><th>Email</th><th>Department</th><th>Login</th>' +
+          '<th>Row</th><th>Employee code</th><th>Name</th><th>Email</th><th>Department</th><th>Vertical</th><th>Login</th>' +
           '</tr></thead><tbody>';
         preview.valid.forEach(function (row) {
           html += '<tr><td>' + escapeHtml(String(row.rowNumber || '')) + '</td><td class="mono">' +
             escapeHtml(row.employee_id) + '</td><td>' + escapeHtml(row.display_name) + '</td><td>' +
             escapeHtml(row.work_email) + '</td><td>' + escapeHtml(row.department) + '</td><td>' +
-            escapeHtml(row.create_login) + '</td></tr>';
+            escapeHtml(row.vertical_name || '') + '</td><td>' + escapeHtml(row.create_login) + '</td></tr>';
         });
         html += '</tbody></table></div>';
         html += '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-bulk-confirm">Confirm import (' +

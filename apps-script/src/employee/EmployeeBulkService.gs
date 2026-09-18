@@ -5,14 +5,14 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '1';
+  var TEMPLATE_VERSION_ = '2';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
 
   var HEADERS_ = [
     'employee_id', 'first_name', 'last_name', 'display_name', 'work_email',
-    'department', 'designation', 'location', 'employment_type', 'joining_date',
+    'department', 'designation', 'vertical_name', 'location', 'employment_type', 'joining_date',
     'manager_employee_id', 'phone', 'address', 'date_of_birth', 'gender',
     'pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name',
     'notes', 'create_login', 'google_login_email'
@@ -20,7 +20,7 @@ var EmployeeBulkService = (function () {
 
   var REQUIRED_HEADERS_ = [
     'employee_id', 'first_name', 'last_name', 'work_email',
-    'department', 'designation', 'location', 'employment_type', 'joining_date', 'create_login'
+    'department', 'designation', 'vertical_name', 'location', 'employment_type', 'joining_date', 'create_login'
   ];
 
   var SAMPLE_ROW_NEW_HIRE_ = {
@@ -31,6 +31,7 @@ var EmployeeBulkService = (function () {
     work_email: 'ravi.kumar@example.com',
     department: 'Operations',
     designation: 'Executive',
+    vertical_name: 'SAPL',
     location: 'Bangalore',
     employment_type: 'PERMANENT',
     joining_date: '2026-01-15',
@@ -144,7 +145,7 @@ var EmployeeBulkService = (function () {
       designations: uniqueSorted_(EmployeeRepository.listAll().map(function (e) { return e.designation; })),
       locations: uniqueSorted_(directory.locations || []),
       employment_types: ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'],
-      verticals: ['SAPL', 'AOPL', 'AOMS']
+      verticals: EmployeeService.listVerticals(session)
     };
   }
 
@@ -210,15 +211,16 @@ var EmployeeBulkService = (function () {
     var fileId = ss.getId();
     var instructions = ss.getSheets()[0];
     instructions.setName('Instructions');
-    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
+    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload — Instructions');
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
+    instructionLines.push(['vertical_name is required and must be one of the values on the Lists sheet.']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
-    instructionLines.push(['SAPL - SAPL-0001, SAPL-0002, ...']);
-    instructionLines.push(['AOPL - AOPL-0001, AOPL-0002, ...']);
-    instructionLines.push(['AOMS - AOMS-0001, AOMS-0002, ...']);
-    instructions.getRange(3, 1, 3 + instructionLines.length - 1, 1).setValues(instructionLines);
+    instructionLines.push(['AOPL — AOPL-0001, AOPL-0002, ...']);
+    instructionLines.push(['SAPL — SAPL-0001, SAPL-0002, ...']);
+    instructionLines.push(['AOMS — AOMS-0001, AOMS-0002, ...']);
+    instructions.getRange(3, 1, instructionLines.length, 1).setValues(instructionLines);
 
     var lists = ss.insertSheet('Lists');
     lists.getRange(1, 1).setValue('departments');
@@ -246,7 +248,7 @@ var EmployeeBulkService = (function () {
     });
     employees.getRange(1, 1, 1, HEADERS_.length).setValues([headerLabels]);
     var sampleRow = HEADERS_.map(function (h) { return sample[h] || ''; });
-    employees.getRange(2, 1, 2, HEADERS_.length).setValues([sampleRow]);
+    employees.getRange(2, 1, 1, HEADERS_.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
 
     var blob;
@@ -396,6 +398,7 @@ var EmployeeBulkService = (function () {
     var batchLoginEmails = {};
     var valid = [];
     var errors = [];
+    var allowedVerticals = EmployeeService.listVerticals(session);
 
     rows.forEach(function (row) {
       var rowErrors = [];
@@ -427,6 +430,11 @@ var EmployeeBulkService = (function () {
       if (!trim_(payload.last_name)) rowErrors.push({ field: 'last_name', message: 'Last name is required.' });
       if (!trim_(payload.department)) rowErrors.push({ field: 'department', message: 'Department is required.' });
       if (!trim_(payload.designation)) rowErrors.push({ field: 'designation', message: 'Designation is required.' });
+      var verticalName = trim_(payload.vertical_name).toUpperCase();
+      if (!verticalName) rowErrors.push({ field: 'vertical_name', message: 'Vertical is required.' });
+      else if (allowedVerticals.indexOf(verticalName) < 0) {
+        rowErrors.push({ field: 'vertical_name', message: 'Select a valid vertical.' });
+      }
       if (!trim_(payload.joining_date)) rowErrors.push({ field: 'joining_date', message: 'Joining date is required.' });
       var empType = trim_(payload.employment_type).toUpperCase();
       if (!empType) rowErrors.push({ field: 'employment_type', message: 'Employment type is required.' });
@@ -469,6 +477,7 @@ var EmployeeBulkService = (function () {
       } else {
         payload.employment_type = empType;
         payload.work_email = workEmail;
+        payload.vertical_name = verticalName;
         valid.push({
           rowNumber: rowLabel,
           payload: payload,
@@ -479,6 +488,7 @@ var EmployeeBulkService = (function () {
             work_email: workEmail,
             department: trim_(payload.department),
             designation: trim_(payload.designation),
+            vertical_name: verticalName,
             create_login: payload.create_user ? 'YES' : 'NO'
           }
         });

@@ -5,6 +5,7 @@ var HRMS = HRMS || {};
 
 HRMS.SHEETS = {
   EMPLOYEES: 'Employees',
+  VERTICALS: 'Verticals',
   USERS: 'Users',
   LEAVE_TYPES: 'LeaveTypes',
   LEAVE_BALANCES: 'LeaveBalances',
@@ -44,6 +45,8 @@ HRMS.EMPLOYMENT_TYPES = {
   INTERN: 'INTERN',
   CONSULTANT: 'CONSULTANT'
 };
+
+HRMS.VERTICALS = ['AOPL', 'SAPL', 'AOMS'];
 
 HRMS.DOCUMENT_CATEGORY = {
   EMPLOYEE_FILE: 'EMPLOYEE_FILE',
@@ -203,7 +206,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.09.18.03';
+HRMS.CLIENT_ASSETS_VERSION = '2026.09.18.04';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

@@ -8,9 +8,12 @@ var SchemaService = (function () {
   SHEET_HEADERS_[HRMS.SHEETS.EMPLOYEES] = [
     'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender',
     'phone', 'address', 'work_email', 'department', 'designation', 'manager_employee_id',
-    'joining_date', 'employment_type', 'location', 'status', 'pan', 'bank_account_name',
+    'vertical_name', 'joining_date', 'employment_type', 'location', 'status', 'pan', 'bank_account_name',
     'bank_account_number', 'bank_ifsc', 'bank_name', 'notes',
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
+  ];
+  SHEET_HEADERS_[HRMS.SHEETS.VERTICALS] = [
+    'vertical_name'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
     'google_email', 'employee_id', 'role', 'status',
@@ -124,6 +127,26 @@ var SchemaService = (function () {
     ['demo_roles', '', 'STRING', 'DEMO only: email:ROLE overrides (comma-separated)', true]
   ];
 
+  function seedVerticals_(sheet) {
+    if (!sheet) return 0;
+    var existing = {};
+    if (sheet.getLastRow() >= 2) {
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var name = String(data[i][0] || '').trim().toUpperCase();
+        if (name) existing[name] = true;
+      }
+    }
+    var inserted = 0;
+    (HRMS.VERTICALS || []).forEach(function (name) {
+      var vertical = String(name || '').trim().toUpperCase();
+      if (!vertical || existing[vertical]) return;
+      sheet.appendRow([vertical]);
+      inserted++;
+    });
+    return inserted;
+  }
+
   function applyUsersValidations_(sheet) {
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var roleCol = headers.indexOf('role') + 1;
@@ -234,6 +257,9 @@ var SchemaService = (function () {
     Object.keys(SHEET_HEADERS_).forEach(function (name) {
       var result = ensureSheet_(ss, name, SHEET_HEADERS_[name]);
       sheetResults.push({ name: name, created: result.created });
+      if (name === HRMS.SHEETS.VERTICALS) {
+        seedVerticals_(result.sheet);
+      }
     });
 
     var settingsSeed = seedDefaultSettings_(ss);

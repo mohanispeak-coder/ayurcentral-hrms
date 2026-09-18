@@ -32,6 +32,27 @@ var EmployeeRepository = (function () {
     return DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
   }
 
+  function listVerticals() {
+    var rows;
+    try {
+      rows = DbService.getAllRecords(HRMS.SHEETS.VERTICALS);
+    } catch (e) {
+      rows = [];
+    }
+    var seen = {};
+    var out = [];
+    rows.forEach(function (row) {
+      var name = String(row.vertical_name || row.name || row.value || '').trim().toUpperCase();
+      if (!name || seen[name]) return;
+      seen[name] = true;
+      out.push(name);
+    });
+    if (!out.length) {
+      return (HRMS.VERTICALS || []).slice();
+    }
+    return out;
+  }
+
   function insert(record) {
     return DbService.insertRecord(HRMS.SHEETS.EMPLOYEES, record);
   }
@@ -110,6 +131,7 @@ var EmployeeRepository = (function () {
     findById: findById,
     findByWorkEmail: findByWorkEmail,
     listAll: listAll,
+    listVerticals: listVerticals,
     insert: insert,
     update: update,
     findUserByEmployeeId: findUserByEmployeeId,

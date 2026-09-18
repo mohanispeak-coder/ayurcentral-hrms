@@ -20,6 +20,7 @@ function testEmployee_All() {
       manager_employee_id: 'EMP002',
       department: 'Sales',
       designation: 'AE',
+      vertical_name: 'SAPL',
       location: 'HQ',
       employment_type: 'PERMANENT',
       status: 'ACTIVE',
@@ -33,7 +34,8 @@ function testEmployee_All() {
     var view = EmployeeService.sanitizeForViewer(row, session);
     return view.pan === undefined && view.bank_account_number === undefined &&
       view.bank_ifsc === undefined && view.notes === undefined &&
-      view.can_view_payroll_ids === false && view.view_mode === 'TEAM_WORK';
+      view.can_view_payroll_ids === false && view.view_mode === 'TEAM_WORK' &&
+      view.vertical_name === 'SAPL';
   })(), 'EMP-08');
 
   record('sanitizeEmployeeOtherDenied', (function () {
@@ -91,6 +93,7 @@ function testEmployee_All() {
       work_email: email1,
       department: 'QA',
       designation: 'Tester',
+      vertical_name: 'SAPL',
       joining_date: '2026-01-15',
       employment_type: 'PERMANENT',
       location: 'Head Office',
@@ -122,6 +125,7 @@ function testEmployee_All() {
       work_email: email1,
       department: 'QA',
       designation: 'Tester',
+      vertical_name: 'SAPL',
       joining_date: '2026-01-15',
       employment_type: 'CONTRACT',
       location: 'Head Office',
@@ -135,8 +139,9 @@ function testEmployee_All() {
   try {
     var updated = EmployeeService.updateEmployee(session, newId, { department: 'Operations' });
     record('EMP-02 edit department',
-      updated.employee.department === 'Operations' && updated.employee.employee_id === newId,
-      updated.employee.department + ' / ' + updated.employee.employee_id);
+      updated.employee.department === 'Operations' && updated.employee.employee_id === newId &&
+      updated.employee.vertical_name === 'SAPL',
+      updated.employee.department + ' / ' + updated.employee.employee_id + ' / ' + updated.employee.vertical_name);
   } catch (e) {
     record('EMP-02 edit department', false, e.message);
   }

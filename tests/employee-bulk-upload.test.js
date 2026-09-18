@@ -18,6 +18,7 @@ function loadBulkService() {
       listDirectory: function () {
         return { departments: ['Ops'], locations: ['HQ'] };
       },
+      listVerticals: function () { return ['AOPL', 'SAPL', 'AOMS']; },
       normalizeEmployeeId: function (id) { return String(id || '').trim().toUpperCase(); },
       isValidEmployeeIdFormat: function (id) { return /^(SAPL|AOPL|AOMS)-\d{4}$/.test(id); },
       parseCreateUserFlag: function (v) { return String(v).toUpperCase() === 'YES'; }
@@ -74,11 +75,12 @@ function check(name, ok, detail) {
   }
 }
 
-var csv = 'employee_id,first_name,last_name,work_email,department,designation,location,employment_type,joining_date,create_login\n' +
-  'SAPL-0002,Ana,Shah,ana@example.com,Ops,Exec,HQ,PERMANENT,2026-01-01,NO\n';
+var csv = 'employee_id,first_name,last_name,work_email,department,designation,vertical_name,location,employment_type,joining_date,create_login\n' +
+  'SAPL-0002,Ana,Shah,ana@example.com,Ops,Exec,SAPL,HQ,PERMANENT,2026-01-01,NO\n';
 var rows = Bulk.parseCsvRows(csv);
 check('parse csv row count', rows.length === 1);
 check('parse csv employee id', rows[0].employee_id === 'SAPL-0002');
+check('parse csv vertical name', rows[0].vertical_name === 'SAPL');
 
 var session = { email: 'hr@test', role: 'HR' };
 var result = Bulk.validateRows(rows, session);
@@ -89,7 +91,9 @@ var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
 
 var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
+var decodedTpl = Buffer.from(csvTpl.base64, 'base64').toString('utf8');
 check('csv template has base64', csvTpl.fileName.indexOf('.csv') >= 0 && csvTpl.base64.length > 10);
+check('csv template has vertical column', decodedTpl.indexOf('vertical_name') >= 0);
 
 if (fails) {
   console.error(fails + ' test(s) failed');

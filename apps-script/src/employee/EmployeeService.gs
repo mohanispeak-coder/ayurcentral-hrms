@@ -7,7 +7,7 @@ var EmployeeService = (function () {
   var NAME_MAX_ = 80;
   var DIRECTORY_FIELDS_ = [
     'employee_id', 'first_name', 'last_name', 'display_name', 'department',
-    'designation', 'location', 'employment_type', 'status', 'manager_employee_id', 'work_email'
+    'designation', 'vertical_name', 'location', 'employment_type', 'status', 'manager_employee_id', 'work_email'
   ];
   var WORK_FIELDS_ = DIRECTORY_FIELDS_.concat(['joining_date']);
   var PERSONAL_FIELDS_ = [
@@ -16,7 +16,7 @@ var EmployeeService = (function () {
   var SENSITIVE_FIELDS_ = ['pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name'];
   var EMPLOYMENT_EDIT_FIELDS_ = [
     'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
-    'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
+    'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
     'employment_type', 'location', 'notes'
   ].concat(SENSITIVE_FIELDS_);
   var SELF_EDIT_FIELDS_ = ['phone', 'address'];
@@ -30,6 +30,10 @@ var EmployeeService = (function () {
 
   function normalizeEmail_(email) {
     return trim_(email).toLowerCase();
+  }
+
+  function normalizeVerticalName_(vertical) {
+    return trim_(vertical).toUpperCase();
   }
 
   function isValidEmail_(email) {
@@ -220,6 +224,7 @@ var EmployeeService = (function () {
       emp.work_email,
       emp.department,
       emp.designation,
+      emp.vertical_name,
       emp.location
     ].map(function (v) { return trim_(v); }).filter(Boolean).join(' ').toLowerCase();
   }
@@ -243,6 +248,7 @@ var EmployeeService = (function () {
       display_name: employeeDisplayName_(emp) || emp.employee_id,
       department: emp.department || '',
       designation: emp.designation || '',
+      vertical_name: emp.vertical_name || '',
       location: emp.location || '',
       employment_type: emp.employment_type || '',
       status: emp.status || '',
@@ -358,6 +364,14 @@ var EmployeeService = (function () {
       .sort(function (a, b) { return a.employee_id.localeCompare(b.employee_id); });
   }
 
+  function listVerticals(session) {
+    AuthService.requireAuth();
+    if (!PermissionService.isHrOrAdmin(session)) {
+      throw authorizationError_();
+    }
+    return EmployeeRepository.listVerticals();
+  }
+
   function normalizeEmployeeId_(value) {
     return trim_(value).toUpperCase();
   }
@@ -392,6 +406,13 @@ var EmployeeService = (function () {
 
     if (!trim_(payload.department)) errors.department = 'Department is required.';
     if (!trim_(payload.designation)) errors.designation = 'Designation is required.';
+    var verticalName = normalizeVerticalName_(payload.vertical_name);
+    if (!verticalName && !isCreate && employeeIdForSelfCheck) {
+      verticalName = normalizeVerticalName_(String(employeeIdForSelfCheck).split('-')[0]);
+    }
+    var allowedVerticals = EmployeeRepository.listVerticals();
+    if (!verticalName) errors.vertical_name = 'Vertical is required.';
+    else if (allowedVerticals.indexOf(verticalName) < 0) errors.vertical_name = 'Select a valid vertical.';
     if (!trim_(payload.joining_date)) errors.joining_date = 'Joining date is required.';
     var empType = trim_(payload.employment_type).toUpperCase();
     if (!empType) errors.employment_type = 'Employment type is required.';
@@ -423,7 +444,7 @@ var EmployeeService = (function () {
     if (Object.keys(errors).length) {
       throw validationError_('Please correct the highlighted fields.', { fields: errors, warnings: warnings });
     }
-    return { warnings: warnings, employment_type: empType, work_email: email };
+    return { warnings: warnings, employment_type: empType, work_email: email, vertical_name: verticalName };
   }
 
   function ensureUniqueEmail_(email, exceptEmployeeId) {
@@ -630,6 +651,7 @@ var EmployeeService = (function () {
         work_email: validated.work_email,
         department: trim_(payload.department),
         designation: trim_(payload.designation),
+        vertical_name: validated.vertical_name,
         manager_employee_id: trim_(payload.manager_employee_id),
         joining_date: toIsoDate_(trim_(payload.joining_date)) || trim_(payload.joining_date),
         employment_type: validated.employment_type,
@@ -742,7 +764,9 @@ var EmployeeService = (function () {
     var updates = {};
     EMPLOYMENT_EDIT_FIELDS_.forEach(function (k) {
       if (payload.hasOwnProperty(k)) {
-        updates[k] = (k === 'pan' || k === 'bank_ifsc') ? trim_(payload[k]).toUpperCase() : trim_(payload[k]);
+        updates[k] = (k === 'pan' || k === 'bank_ifsc' || k === 'vertical_name')
+          ? trim_(payload[k]).toUpperCase()
+          : trim_(payload[k]);
       }
     });
     if (updates.work_email) updates.work_email = normalizeEmail_(updates.work_email);
@@ -794,6 +818,9 @@ var EmployeeService = (function () {
       validated = validatePayload_(merged, id, false);
       updates = applyHrUpdates_(payload);
       if (!updates.work_email) updates.work_email = normalizeEmail_(row.work_email);
+      if (!updates.hasOwnProperty('vertical_name') && !trim_(row.vertical_name) && validated.vertical_name) {
+        updates.vertical_name = validated.vertical_name;
+      }
     } else {
       updates = applySelfContact_(payload);
     }
@@ -1129,6 +1156,7 @@ var EmployeeService = (function () {
     sanitizeForViewer: sanitizeForViewer,
     matchesDirectoryFilter: matchesDirectoryFilter,
     normalizeEmployeeId: normalizeEmployeeId_,
+    listVerticals: listVerticals,
     isValidEmployeeIdFormat: isValidEmployeeIdFormat_,
     parseCreateUserFlag: parseCreateUserFlag_
   };

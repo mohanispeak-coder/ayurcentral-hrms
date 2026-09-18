@@ -23,6 +23,13 @@ function apiGetEmployeePicker(sessionToken) {
   }, sessionToken);
 }
 
+function apiGetEmployeeVerticals(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listVerticals(session);
+  }, sessionToken);
+}
+
 function apiGetEmployee(employeeId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
