@@ -13,6 +13,10 @@ var lockSrc = fs.readFileSync(
   path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'LockUtil.gs'),
   'utf8'
 );
+var errorsSrc = fs.readFileSync(
+  path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'Errors.gs'),
+  'utf8'
+);
 var failures = [];
 
 function check(name, cond, detail) {
@@ -31,6 +35,14 @@ check('invalidate-removes-durable', /hrmsAuthSessionRemoveDurable_\(sessionKey\)
 check('rehydrate-cache', /hrmsAuthSessionRehydrateCache_/.test(src));
 check('lock-uses-hasLock', /lock\.hasLock/.test(lockSrc));
 check('lock-no-global-depth', !/scriptLockDepth_/.test(lockSrc));
+check('coerce-session-token-fn', /function hrmsCoerceSessionToken_/.test(errorsSrc));
+check('hrmsRun-uses-coerce', /hrmsCoerceSessionToken_\(sessionToken\)/.test(errorsSrc));
+
+eval(errorsSrc.match(/function hrmsCoerceSessionToken_\([\s\S]*?\n\}/)[0]);
+check('coerce-ignores-module-id', hrmsCoerceSessionToken_('ats') === '');
+check('coerce-ignores-employee-id', hrmsCoerceSessionToken_('EMP001') === '');
+check('coerce-ignores-object', hrmsCoerceSessionToken_({ loadingText: 'Working…' }) === '');
+check('coerce-keeps-otp-token', hrmsCoerceSessionToken_('a'.repeat(32)) === 'a'.repeat(32));
 
 if (failures.length) {
   console.log('\nFailed: ' + failures.join(', '));

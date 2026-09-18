@@ -88,7 +88,8 @@
       var modHtml = '<div class="card" style="margin-top:16px"><h2>HRMS module access by role</h2>' +
         '<p class="hint">Control which sidebar areas each role can see and use (Employee, Manager, HR, Admin). ' +
         'OWNER always has full access. Users should refresh after you save. This cannot grant modules outside a role’s built-in scope.</p>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th>';
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
       modFeatures.forEach(function (f) {
         modHtml += '<th title="' + escapeHtml(f.id) + '">' + escapeHtml(f.label) + '</th>';
       });
@@ -106,7 +107,8 @@
 
       var roleHtml = '<div class="card" style="margin-top:16px"><h2>New login defaults (self-service)</h2>' +
         '<p class="hint">Default document / payslip / leave checkboxes when creating a user login. Per-employee overrides remain on the employee profile.</p>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th>';
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
       features.forEach(function (f) {
         roleHtml += '<th>' + escapeHtml(f.label) + '</th>';
       });

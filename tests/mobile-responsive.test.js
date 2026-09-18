@@ -42,6 +42,8 @@ check('leave-toolbar-actions', /leave-toolbar-actions/.test(leave));
 check('employee-directory-stack', /data-table--stack-md/.test(emp) && /data-label="Name"/.test(emp));
 check('nav-drawer-class', /hrms-nav-drawer-open/.test(scripts) && /hrms-nav-drawer-open/.test(styles));
 check('page-actions-stack', /hrms-page-actions/.test(scripts));
+check('page-header-meta', /page-header-meta/.test(styles) && /page-header-meta/.test(scripts));
+check('settings-matrix-scroll', /settings-matrix-table/.test(styles) && /table-wrap--scroll-hint/.test(read('ui/SettingsClient.html')));
 check('filters-stack-mobile', /@media \(max-width: 768px\)[\s\S]*\.filters[\s\S]*flex-direction: column/.test(styles));
 check('tabs-scroll-mobile', /@media \(max-width: 768px\)[\s\S]*\.tabs[\s\S]*overflow-x: auto/.test(styles));
 check('landscape-modal', /orientation: landscape/.test(styles));

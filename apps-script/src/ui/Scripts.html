@@ -333,13 +333,13 @@
       stamp = '<span class="module-updated" id="module-updated-stamp">' +
         escapeHtml(formatModuleUpdatedAt_(rec.lastLoadedAt)) + '</span>';
     }
-    return stamp +
+    return '<div class="page-header-meta">' + stamp +
       '<button type="button" class="btn btn-secondary btn-sm js-module-refresh" id="btn-module-refresh"' +
       (loading ? ' disabled aria-busy="true"' : '') + '>' +
       (loading
         ? '<span class="spinner-sm" aria-hidden="true"></span> Refreshing…'
         : '<span class="module-refresh-icon" aria-hidden="true">↻</span> Refresh') +
-      '</button>';
+      '</button></div>';
   }
 
   function ensureModuleRefreshControls() {
@@ -353,19 +353,18 @@
       actions.className = 'page-header-actions';
       header.appendChild(actions);
     }
-    var existing = actions.querySelector('.js-module-refresh');
-    var stamp = actions.querySelector('#module-updated-stamp');
-    if (existing) {
-      if (globalLoadingButton_ === existing) {
+    var existingMeta = actions.querySelector('.page-header-meta');
+    if (existingMeta) {
+      var existing = existingMeta.querySelector('.js-module-refresh');
+      if (existing && globalLoadingButton_ === existing) {
         try { restoreButton(existing); } catch (ignoreRestore) {}
       }
-      if (stamp) stamp.remove();
-      existing.remove();
+      existingMeta.remove();
     }
     var hold = document.createElement('div');
     hold.innerHTML = moduleRefreshControlsHtml();
     while (hold.lastChild) {
-      actions.insertBefore(hold.lastChild, actions.firstChild);
+      actions.appendChild(hold.lastChild);
     }
   }
 
@@ -644,11 +643,65 @@
   }
 
   function extractActionOpts_(args) {
-    if (!args.length) return null;
-    var last = args[args.length - 1];
-    if (!isActionOpts_(last)) return null;
-    args.pop();
-    return last;
+    var action = null;
+    while (args.length) {
+      var last = args[args.length - 1];
+      if (!isActionOpts_(last)) break;
+      action = last;
+      args.pop();
+    }
+    return action;
+  }
+
+  /** Plain objects that only carry callServer UI metadata (must never be google.script.run args). */
+  function isClientRpcMeta_(obj) {
+    if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
+    if (Object.prototype.toString.call(obj) === '[object Array]') return false;
+    if (isActionOpts_(obj)) return true;
+    var btn = obj.button || obj.loadingButton;
+    if (btn && btn.nodeType !== 1) return false;
+    var keys = Object.keys(obj);
+    if (!keys.length) return false;
+    var clientOnly = {
+      button: 1, loadingButton: 1, feedback: 1, feedbackEl: 1,
+      loadingText: 1, background: 1, successMessage: 1, silent: 1
+    };
+    for (var i = 0; i < keys.length; i++) {
+      if (!clientOnly.hasOwnProperty(keys[i])) return false;
+    }
+    if (obj.background === true) return true;
+    if (typeof obj.loadingText === 'string') return true;
+    if (typeof obj.successMessage === 'string') return true;
+    if (obj.silent === true) return true;
+    if (btn && btn.nodeType === 1) return true;
+    var fb = obj.feedback || obj.feedbackEl;
+    if (fb && fb.nodeType === 1) return true;
+    return false;
+  }
+
+  /**
+   * google.script.run maps arguments by position. sessionToken must be appended last.
+   * Strip leaked UI objects only — never treat business strings (module ids, EMP001, run ids)
+   * as the OTP token or every lazy-loaded module fails for non-deployers.
+   */
+  function prepareGoogleScriptArgs_(args) {
+    while (args.length && isClientRpcMeta_(args[args.length - 1])) {
+      args.pop();
+    }
+    var token = getSessionToken();
+    if (token && args.length && args[args.length - 1] === token) return;
+    args.push(token);
+  }
+
+  function moduleRpc(fnName, args, btn, loadingText, feedback) {
+    var callArgs = [fnName].concat(args || []);
+    if (btn || feedback) {
+      var opts = { loadingText: loadingText || 'Working…' };
+      if (btn) opts.button = btn;
+      if (feedback) opts.feedback = feedback;
+      callArgs.push(opts);
+    }
+    return callServer.apply(null, callArgs);
   }
 
   function isButtonLoading(button) {
@@ -842,6 +895,7 @@
   }
 
   function invokeRpc_(fnName, args, onPerf) {
+    prepareGoogleScriptArgs_(args);
     return new Promise(function (resolve, reject) {
       try {
         google.script.run
@@ -926,7 +980,7 @@
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
     var action = extractActionOpts_(args);
-    args.push(getSessionToken());
+    prepareGoogleScriptArgs_(args);
 
     var button = action && (action.button || action.loadingButton);
     var feedback = action && (action.feedback || action.feedbackEl);
@@ -1021,7 +1075,7 @@
         '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
         (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
       '</div>' +
-      '<div class="page-header-actions hrms-page-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+      '<div class="page-header-actions hrms-page-actions">' + (actionsHtml || '') + refresh + '</div></div>';
   }
 
   function navIconSvg(name) {
@@ -2868,6 +2922,7 @@
     registerModuleRoutes: registerModuleRoutes,
     navigate: navigate,
     callServer: callServer,
+    moduleRpc: moduleRpc,
     showToast: showToast,
     routeStill: routeStill,
     setHtml: setHtml,

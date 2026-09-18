@@ -33,7 +33,11 @@ HRMS_BASE_URL=https://script.google.com/macros/s/YOUR_ID/exec
 HRMS_STORAGE_STATE=tests/browser/.auth/user.json
 ```
 
-No quotes, no spaces around `=`. Then run tests from the repo root — `npm run test:e2e:mobile` loads `.env` automatically.
+No quotes, no spaces around `=`. The URL **must** end with **`/exec`** (Web app deployment), not `/dev`, not the script editor, not `script.google.com/home`.
+
+Then run tests from the repo root — `npm run test:e2e:mobile` loads `.env` automatically.
+
+**Verify in normal Chrome first:** paste `HRMS_BASE_URL` in the address bar — you should see HRMS sign-in or dashboard, not the generic Google Apps Script home page.
 
 **Do not commit** `.env`, OTPs, passwords, or `storageState` JSON files.
 
@@ -60,23 +64,33 @@ HRMS uses **email + one-time verification code** via `google.script.run`. Playwr
 ### Capture a session (one-time / when expired)
 
 1. Put `HRMS_BASE_URL` (and optionally `HRMS_STORAGE_STATE`) in **repo-root `.env`** (see below).
-2. Run codegen (reads `.env` automatically):
+2. **Recommended** — save storage after login (works better with Google Apps Script redirects):
+
+```bash
+npm run test:e2e:auth:save
+```
+
+- Browser opens → complete **email + OTP** → wait for **dashboard**.
+- Return to the terminal and **press Enter**.
+- Script scans **every browser frame** for `hrms_session_token` (GAS often hosts `#app` in an iframe, not the top page).
+
+3. If auth save lists a **`googleusercontent.com`** iframe origin, keep `HRMS_BASE_URL` as your normal **`/exec`** deploy URL; Playwright restores session storage per origin when that iframe loads again.
+
+Alternative (less reliable for GAS):
 
 ```bash
 npm run test:e2e:auth
 ```
 
-Or manually:
+4. Verify storage:
 
 ```bash
-npx playwright codegen --save-storage=tests/browser/.auth/user.json "%HRMS_BASE_URL%"
+npm run test:e2e:check-storage
 ```
 
-On macOS/Linux, use `$HRMS_BASE_URL` instead of `%HRMS_BASE_URL%`.
+You should see `hrms_session_token: present` for at least one origin.
 
-3. Complete email + OTP in the opened browser.
-4. Close codegen when the HRMS dashboard is visible.
-5. Point `HRMS_STORAGE_STATE` at `tests/browser/.auth/user.json` for test runs.
+7. Point `HRMS_STORAGE_STATE` at `tests/browser/.auth/user.json` for test runs.
 
 The storage file may contain session cookies/local storage entries for the deployment origin. Treat it like a credential: keep it local, `.gitignore`d.
 
@@ -88,7 +102,8 @@ If storage is missing or expired, authenticated tests are **skipped** with a cle
 |---------|---------|
 | `npm run test:e2e` | All Playwright tests, all configured viewports |
 | `npm run test:e2e:mobile` | `tests/browser/mobile.spec.js` only |
-| `npm run test:e2e:headed` | Run with visible browser |
+| `npm run test:e2e:headed` | Run with visible browser (1 worker — avoids 8 windows) |
+| `npm run test:e2e:debug` | Single viewport (390px), headed, one browser — best for troubleshooting |
 | `npm run test:e2e:report` | Open the HTML report from the last run |
 
 ## Viewports
@@ -115,6 +130,6 @@ These folders are gitignored.
 ## Limitations
 
 - No OTP automation; manual storage capture required for signed-in tests.
-- Google Apps Script iframes/redirects may require using the exact deployment URL Google provides.
+- Google Apps Script serves the HRMS UI in an **iframe**; session token and test locators target that frame, not the outer `script.google.com` wrapper.
 - Role-dependent routes (e.g. Employees) skip when the session lacks access.
 - Does not replace Node contract tests under `tests/*.test.js`.

@@ -3001,18 +3001,20 @@ details.card.collapsible-section {
     var fb = obj.feedback || obj.feedbackEl;
     if (fb && fb.nodeType === 1) return true;
     if (obj.background === true) return true;
-    // ATS/payroll rpc() always appends { loadingText } even with no button.
-    // That must not be sent as a google.script.run argument or it steals sessionToken.
+    // Module rpc() may append { loadingText } without a button - never send as sessionToken.
     if (typeof obj.loadingText === 'string' && !obj.button && !obj.loadingButton) return true;
     return false;
   }
 
   function extractActionOpts_(args) {
-    if (!args.length) return null;
-    var last = args[args.length - 1];
-    if (!isActionOpts_(last)) return null;
-    args.pop();
-    return last;
+    var action = null;
+    while (args.length) {
+      var last = args[args.length - 1];
+      if (!isActionOpts_(last)) break;
+      action = last;
+      args.pop();
+    }
+    return action;
   }
 
   function isButtonLoading(button) {

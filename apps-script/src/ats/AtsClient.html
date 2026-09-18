@@ -23,6 +23,27 @@
 .ats-page .candidates-table-section .section-title { font-size: 1rem; font-weight: 600; }
 .ats-page .pipeline-board-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; }
 .ats-page .pipeline-board-terminal { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; max-width: 520px; }
+@media (max-width: 768px) {
+  .ats-page .pipeline-board,
+  .ats-page .pipeline-board-main,
+  .ats-page .pipeline-board-terminal {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .ats-page .pipeline-col {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+  .ats-page .pipeline-col h3 { margin: 0; flex: 1 1 auto; }
+  .ats-page .pipeline-count { font-size: 1.125rem; flex-shrink: 0; }
+  .ats-page .quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ats-page .quick-links .btn { width: 100%; min-height: 44px; }
+}
 .ats-page .ats-app-card strong { display: block; font-size: 0.875rem; line-height: 1.35; }
 .ats-page .ats-app-card .muted { font-size: 0.75rem; margin-top: 4px; word-break: break-word; }
 .ats-page .ats-interview-card { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; }
@@ -179,7 +200,7 @@
       return spinner('Loading recruitment…');
     }
 
-    function rpc(fn, args, btn, loadingText, feedback) {
+    var rpc = App.moduleRpc || function (fn, args, btn, loadingText, feedback) {
       var callArgs = [fn].concat(args || []);
       if (btn || feedback) {
         var opts = { loadingText: loadingText || 'Working…' };
@@ -188,7 +209,7 @@
         callArgs.push(opts);
       }
       return callServer.apply(null, callArgs);
-    }
+    };
 
     var atsBulkState = { jobs: { file: null, preview: null }, candidates: { file: null, preview: null } };
 
@@ -703,7 +724,7 @@
             '<option value="">All</option><option value="DRAFT">Draft</option><option value="PUBLISHED">Published</option>' +
             '<option value="PAUSED">Paused</option><option value="CLOSED">Closed</option></select></div>' +
         '</div></div>' +
-        '<div class="table-wrap" id="ats-job-wrap"><table class="data-table"><thead><tr>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint" id="ats-job-wrap"><table class="data-table"><thead><tr>' +
           '<th>Job ID</th><th>Title</th><th>Department</th><th>Location</th><th>Status</th><th class="num">Apps</th><th>Manager</th>' +
         '</tr></thead><tbody id="ats-job-body"></tbody></table></div>';
       if ($('ats-new-job')) $('ats-new-job').addEventListener('click', function () { App.navigate('ats-job-new'); });
@@ -1090,7 +1111,7 @@
           '<input class="form-input search-input" id="ats-cand-q" type="search" placeholder="Name, email, candidate ID">' +
         '</div></div></div>' +
         '<div class="candidates-table-section"><h2 class="section-title" style="margin:0 0 12px">All candidates</h2>' +
-        '<div class="table-wrap" id="ats-cand-wrap"><table class="data-table"><thead><tr>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint" id="ats-cand-wrap"><table class="data-table"><thead><tr>' +
           '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Source</th><th>Location</th><th>Apps</th><th>Resume</th>' +
         '</tr></thead><tbody id="ats-cand-body">' +
           ((restoreCands || keepRefresh) ? '' : skRows(8, 8)) +

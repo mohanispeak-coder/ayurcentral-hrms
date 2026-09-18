@@ -306,10 +306,18 @@ var EmployeeService = (function () {
     var status = trim_(query.status).toUpperCase();
     var department = trim_(query.department);
     var location = trim_(query.location);
+    var vertical = normalizeVerticalName_(query.vertical_name || query.vertical);
     var filtered = all.filter(function (e) {
       if (status && String(e.status || '').toUpperCase() !== status) return false;
       if (department && String(e.department || '') !== department) return false;
       if (location && String(e.location || '') !== location) return false;
+      if (vertical) {
+        var empVertical = normalizeVerticalName_(e.vertical_name);
+        if (!empVertical) {
+          empVertical = normalizeVerticalName_(String(e.employee_id || '').split('-')[0]);
+        }
+        if (empVertical !== vertical) return false;
+      }
       if (q && !matchesEmployeeSearch_(e, q)) return false;
       return true;
     });
@@ -331,7 +339,12 @@ var EmployeeService = (function () {
       page: page,
       pageSize: pageSize,
       departments: uniqueSorted_(all.map(function (e) { return e.department; })),
-      locations: uniqueSorted_(all.map(function (e) { return e.location; }))
+      locations: uniqueSorted_(all.map(function (e) { return e.location; })),
+      verticals: uniqueSorted_(all.map(function (e) {
+        var v = normalizeVerticalName_(e.vertical_name);
+        if (!v) v = normalizeVerticalName_(String(e.employee_id || '').split('-')[0]);
+        return v;
+      }))
     };
   }
 

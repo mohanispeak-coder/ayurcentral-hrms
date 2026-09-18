@@ -50,6 +50,19 @@ function systemError_(message) {
 }
 
 /**
+ * OTP session tokens are 64 hex chars. Module ids ("ats"), employee ids, and UI objects
+ * must never be bound as the request session or non-deployer RPCs look unauthenticated.
+ * @param {*} value
+ * @return {string}
+ */
+function hrmsCoerceSessionToken_(value) {
+  if (typeof value !== 'string') return '';
+  var t = String(value).trim();
+  if (t.length < 32) return '';
+  return t;
+}
+
+/**
  * Wrap server functions for google.script.run - returns { ok, data } or { ok, error }.
  * Clears request-scoped sheet caches at entry so warm containers cannot reuse stale rows.
  * @param {Function} fn
@@ -71,7 +84,7 @@ function hrmsRun_(fn, sessionToken) {
     if (typeof AuthService !== 'undefined' && AuthService.clearRequestSessionCache) {
       AuthService.clearRequestSessionCache();
     }
-    HRMS_REQUEST_SESSION_TOKEN_ = (typeof sessionToken === 'string') ? sessionToken : '';
+    HRMS_REQUEST_SESSION_TOKEN_ = hrmsCoerceSessionToken_(sessionToken);
     if (typeof AuthService !== 'undefined' && AuthService.resolveSession) {
       AuthService.resolveSession({ sessionToken: HRMS_REQUEST_SESSION_TOKEN_ });
     }

@@ -130,10 +130,12 @@
         '<select class="form-select" id="emp-filter-dept"><option value="">All</option></select></div>' +
         '<div class="form-group"><label class="form-label" for="emp-filter-loc">Location</label>' +
         '<select class="form-select" id="emp-filter-loc"><option value="">All</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="emp-filter-vertical">Vertical</label>' +
+        '<select class="form-select" id="emp-filter-vertical"><option value="">All</option></select></div>' +
         '</div></div>' +
         '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md"><thead><tr>' +
         '<th>Employee ID</th><th>Name</th><th>Department</th><th>Designation</th>' +
-        '<th>Location</th><th>Type</th><th>Status</th><th>Manager</th>' +
+        '<th>Vertical</th><th>Location</th><th>Type</th><th>Status</th><th>Manager</th>' +
         '</tr></thead><tbody id="emp-table-body"></tbody></table></div>' +
         '<div class="pagination" id="emp-pagination"></div>';
     }
@@ -232,7 +234,7 @@
       if (actions) actions.innerHTML = refreshHtml + addHtml;
       if ($('btn-emp-add')) $('btn-emp-add').addEventListener('click', function () { navigate('employee-create'); });
       if ($('btn-emp-bulk')) $('btn-emp-bulk').addEventListener('click', function () { navigate('employee-bulk-upload'); });
-      ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc'].forEach(function (id) {
+      ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc', 'emp-filter-vertical'].forEach(function (id) {
         var el = $(id);
         if (!el) return;
         el.addEventListener(id === 'emp-search' ? 'input' : 'change', function () {
@@ -259,6 +261,7 @@
       if ($('emp-filter-status')) $('emp-filter-status').value = query.status || '';
       if ($('emp-filter-dept') && query.department) $('emp-filter-dept').value = query.department;
       if ($('emp-filter-loc') && query.location) $('emp-filter-loc').value = query.location;
+      if ($('emp-filter-vertical') && query.vertical_name) $('emp-filter-vertical').value = query.vertical_name;
       listState.ignoreFilter = false;
     }
 
@@ -277,6 +280,7 @@
         if (cached.data) {
           fillSelectOptions('emp-filter-dept', cached.data.departments || [], cached.query && cached.query.department);
           fillSelectOptions('emp-filter-loc', cached.data.locations || [], cached.query && cached.query.location);
+          fillSelectOptions('emp-filter-vertical', cached.data.verticals || [], cached.query && cached.query.vertical_name);
           renderTable(cached.data);
         }
         return;
@@ -291,10 +295,11 @@
       if (cached && cached.query) applyListQuery_(cached.query);
       var tbody = $('emp-table-body');
       if (tbody && !(App.isModuleRefresh && App.isModuleRefresh(key) && cached && cached.data)) {
-        tbody.innerHTML = skRows(8, 6);
+        tbody.innerHTML = skRows(9, 6);
       } else if (cached && cached.data) {
         fillSelectOptions('emp-filter-dept', cached.data.departments || [], cached.query && cached.query.department);
         fillSelectOptions('emp-filter-loc', cached.data.locations || [], cached.query && cached.query.location);
+        fillSelectOptions('emp-filter-vertical', cached.data.verticals || [], cached.query && cached.query.vertical_name);
         renderTable(cached.data);
       }
       loadList();
@@ -312,13 +317,14 @@
       var key = listCacheKey(listState.team);
       var tbody = $('emp-table-body');
       if (tbody && !(App.isModuleRefresh && App.isModuleRefresh(key) && empViewCache.lists[key])) {
-        tbody.innerHTML = skRows(8, 6);
+        tbody.innerHTML = skRows(9, 6);
       }
       var query = {
         q: $('emp-search') ? $('emp-search').value : '',
         status: $('emp-filter-status') ? $('emp-filter-status').value : '',
         department: $('emp-filter-dept') ? $('emp-filter-dept').value : '',
         location: $('emp-filter-loc') ? $('emp-filter-loc').value : '',
+        vertical_name: $('emp-filter-vertical') ? $('emp-filter-vertical').value : '',
         page: listState.page,
         pageSize: 25
       };
@@ -336,6 +342,7 @@
           empViewCache.lists[key] = { data: data, query: query };
           fillSelectOptions('emp-filter-dept', data.departments || [], query.department);
           fillSelectOptions('emp-filter-loc', data.locations || [], query.location);
+          fillSelectOptions('emp-filter-vertical', data.verticals || [], query.vertical_name);
           renderTable(data);
           markView_(key);
         })
@@ -344,7 +351,7 @@
           failRefresh_();
           var body = $('emp-table-body');
           if (body) {
-            body.innerHTML = '<tr><td colspan="8"></td></tr>';
+            body.innerHTML = '<tr><td colspan="9"></td></tr>';
             var cell = body.querySelector('td');
             if (cell) {
               paintErr(cell, err.message || 'Failed to load directory', function () { loadList(); });
@@ -372,7 +379,7 @@
       var tbody = $('emp-table-body');
       if (!tbody) return;
       if (!data.rows || !data.rows.length) {
-        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline">' +
+        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="9"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p>' +
           '<p class="empty-state-text">Try a different search or clear a filter.</p></div></td></tr>';
       } else {
@@ -382,6 +389,7 @@
             '<td data-label="Name">' + escapeHtml(r.display_name) + '</td>' +
             '<td data-label="Department">' + escapeHtml(r.department) + '</td>' +
             '<td data-label="Designation" class="col-emp-extra">' + escapeHtml(r.designation) + '</td>' +
+            '<td data-label="Vertical" class="col-emp-extra">' + escapeHtml(r.vertical_name || '') + '</td>' +
             '<td data-label="Location" class="col-emp-extra">' + escapeHtml(r.location) + '</td>' +
             '<td data-label="Type" class="col-emp-extra">' + escapeHtml(r.employment_type) + '</td>' +
             '<td data-label="Status">' + statusBadge(r.status) + '</td>' +

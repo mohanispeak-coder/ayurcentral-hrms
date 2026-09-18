@@ -14,6 +14,8 @@
 .ntf-page .announce-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 720px) {
   .ntf-page .ntf-pref-row, .ntf-page .announce-form .form-row { grid-template-columns: 1fr; }
+  .ntf-page .ntf-toolbar { flex-direction: row; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .ntf-page .ntf-toolbar .btn { flex: 1 1 calc(50% - 4px); min-height: 44px; white-space: normal; }
 }
 </style>
 <script>
@@ -265,7 +267,8 @@
       });
       html += '</div><div class="card" style="margin-top:16px"><h2>Role-based self-service access</h2>' +
         '<p class="hint">Default checkboxes for new logins (Employee / Manager). Per-person overrides stay on the employee profile.</p>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Role</th>';
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
       features.forEach(function (f) {
         html += '<th>' + escapeHtml(f.label) + '</th>';
       });

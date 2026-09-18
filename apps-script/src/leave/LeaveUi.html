@@ -134,9 +134,9 @@
   }
 
   function leaveMyLeaveActionsHtml(yearSelect) {
-    return (yearSelect ? '<div class="leave-toolbar-year">' + yearSelect + '</div>' : '') +
+    return '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
       '<div class="btn-row leave-toolbar-actions">' +
-      '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
+      (yearSelect ? yearSelect : '') +
       '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>' +
       '</div>';
   }
