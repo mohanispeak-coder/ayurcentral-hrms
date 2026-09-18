@@ -658,7 +658,6 @@ var EmployeeService = (function () {
         var accessDefaults = (typeof UserAccessService !== 'undefined' && UserAccessService.newUserAccessDefaults)
           ? UserAccessService.newUserAccessDefaults(HRMS.ROLES.EMPLOYEE)
           : {};
-        var tgChat = trim_(payload.telegram_chat_id);
         var userRow = Object.assign({
           google_email: loginEmail,
           employee_id: employeeId,
@@ -667,7 +666,6 @@ var EmployeeService = (function () {
           created_at: now,
           updated_at: now
         }, accessDefaults);
-        if (tgChat) userRow.telegram_chat_id = tgChat;
         EmployeeRepository.insertUser(userRow);
       }
 

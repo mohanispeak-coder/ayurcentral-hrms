@@ -10,7 +10,7 @@ var source = fs.readFileSync(
   'utf8'
 );
 var start = source.indexOf('function buildWelcomeContent(record, loginEmail)');
-var end = source.indexOf('function telegramEnabled_');
+var end = source.indexOf('function emailEnabled_');
 var fnBlock = source.slice(start, end);
 
 var helpers = source.slice(source.indexOf('function trim_(v)'), start);

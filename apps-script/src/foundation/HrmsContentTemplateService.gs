@@ -30,16 +30,13 @@ var HrmsContentTemplateService = (function () {
           '',
           'Please use this portal for self-service HR requests. Do not share your login details.',
           '',
-          '{{telegram_connect_line}}',
-          '',
           'Regards,',
           'Human Resources',
           '{{company}}'
         ].join('\n')
       },
       placeholders: [
-        '{{display_name}}', '{{company}}', '{{portal_url}}', '{{login_email}}', '{{employee_id}}', '{{department}}',
-        '{{telegram_connect_url}}', '{{telegram_connect_line}}'
+        '{{display_name}}', '{{company}}', '{{portal_url}}', '{{login_email}}', '{{employee_id}}', '{{department}}'
       ]
     },
     {

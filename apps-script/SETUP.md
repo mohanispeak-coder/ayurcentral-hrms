@@ -184,12 +184,3 @@ Clears OTP and rate-limit cache keys for that email only. Does **not** grant a s
 
 In **PRODUCTION**, `demo_emails` has **no effect** — only the Users → employee_id → role → status chain grants access.
 
-## 8. Telegram welcome messages (optional)
-
-1. Create a bot with [@BotFather](https://t.me/BotFather) and copy the **bot token**.
-2. In Apps Script → **Project settings** → **Script properties**, add `TELEGRAM_BOT_TOKEN` = your token (never commit or paste into Settings sheet).
-3. In HRMS **Settings**, set **Telegram bot @username** (for HR instructions) and enable **Send welcome on Telegram** if you want auto-send on login create.
-4. Each employee must **start a chat** with your bot (Send `/start`). Obtain their numeric **chat id** (e.g. forward a message to [@userinfobot](https://t.me/userinfobot) or read Bot API `getUpdates` while testing).
-5. On the employee profile → **Login & role**, save **Telegram chat ID**, then use **Send email & Telegram** (or send channels separately).
-
-Telegram uses the same welcome text as email, with an **Open HRMS portal** button when `hrms_webapp_url` (or deployment URL) is HTTPS.

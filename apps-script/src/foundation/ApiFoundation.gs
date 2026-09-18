@@ -313,17 +313,6 @@ function apiSaveAdminSettings(payload, sessionToken) {
   }, sessionToken);
 }
 
-function apiInstallTelegramWebhook(sessionToken) {
-  return hrmsRun_(function () {
-    var session = AuthService.requireAuth();
-    PermissionService.require(HRMS.ACTIONS.ADMIN_SETTINGS, {}, session);
-    if (typeof TelegramLinkService === 'undefined') {
-      throw configurationError_('Telegram link service is not available.');
-    }
-    return TelegramLinkService.installWebhook();
-  }, sessionToken);
-}
-
 /** Foundation self-test — run from Apps Script editor. */
 function runFoundationSelfTest() {
   var results = [];
