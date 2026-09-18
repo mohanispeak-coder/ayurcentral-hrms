@@ -1568,6 +1568,16 @@
     if (!state.session || !state.session.authorized) return;
     options = options || {};
     params = params || {};
+    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'salary-structure' || route === 'compensation') {
+      if (window.HrmsApp && window.HrmsApp.getPayrollPeriodParams) {
+        var pp = window.HrmsApp.getPayrollPeriodParams();
+        if (pp) {
+          if (pp.year && params.year == null) params.year = pp.year;
+          if (pp.month && params.month == null) params.month = pp.month;
+          if (pp.runId && params.runId == null) params.runId = pp.runId;
+        }
+      }
+    }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
     state.navSeq = (state.navSeq || 0) + 1;
     pauseBackgroundPreload();

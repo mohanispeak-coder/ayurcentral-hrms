@@ -75,6 +75,8 @@ check('comp-bulk-api', /apiDownloadCompensationBulkTemplate/.test(api) && /apiCo
 check('generate-all-payslips', /Generate all payslips/i.test(client));
 check('no-run-id-in-previous-payrolls', !/paintPreviousPayrolls_[\s\S]{0,600}payroll_run_id/.test(client));
 check('salary-structure-route', /renderSalaryStructure/.test(client) && /registerRoute\('salary-structure'/.test(client));
+check('payroll-pipeline-interconnected', /paintPayrollPipelineNav_/.test(client) && /loadPayrollContext_/.test(client) &&
+  /getPayrollPeriodParams/.test(client));
 check('payroll-run-delegates', /renderPayrollRun[\s\S]*renderPayrollHome/.test(client));
 
 check('compensation-removed-nav', !/route:\s*'compensation'/.test(perm));

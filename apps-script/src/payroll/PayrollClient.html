@@ -45,12 +45,26 @@
 .payroll-page .workflow-step.current { border-color: var(--color-primary); background: var(--color-primary-muted); }
 .payroll-page .payroll-attendance-gate { margin-bottom: 12px; }
 .payroll-page .payroll-ui-build { font-size: 0.7rem; color: var(--color-text-muted); text-align: right; margin-top: 16px; }
+.payroll-page .payroll-pipeline-nav { margin-bottom: 12px; padding: 14px 16px; }
+.payroll-page .payroll-pipeline-title { margin: 0 0 10px; font-size: 0.875rem; color: var(--color-text-muted); }
+.payroll-page .payroll-pipeline-steps { display: flex; flex-wrap: wrap; gap: 8px; }
+.payroll-page .payroll-pipeline-step {
+  flex: 1; min-width: 140px; text-align: left; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--color-border); background: var(--color-bg); cursor: pointer; font: inherit;
+}
+.payroll-page .payroll-pipeline-step:hover { border-color: var(--color-primary); }
+.payroll-page .payroll-pipeline-step.current { border-color: var(--color-primary); background: var(--color-primary-muted); }
+.payroll-page .payroll-pipeline-step.done { border-color: var(--color-success-border); background: var(--color-success-bg); }
+.payroll-page .payroll-pipeline-label { display: block; font-weight: 600; font-size: 0.875rem; }
+.payroll-page .payroll-pipeline-hint { display: block; font-size: 0.75rem; color: var(--color-text-muted); margin-top: 2px; }
+.payroll-page .payroll-flow-footer { margin: 16px 0; }
+.payroll-page .payroll-period-card { margin-bottom: 12px; }
 </style>
 <script>
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.18-nav-split-v1';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.18-payroll-flow-v2';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -115,6 +129,161 @@
 
     function invalidateAttendanceBulk_() {
       shellInv_('attendance-bulk-upload');
+    }
+
+    function invalidateAllPayrollViews_() {
+      invalidatePayrollHome_();
+      invalidateAttendanceBulk_();
+      invalidateCompensation_();
+    }
+
+    function payrollAreaRoutes_() {
+      return ['payroll', 'payroll-run', 'salary-structure', 'attendance-bulk-upload', 'compensation'];
+    }
+
+    function stillOnPayrollArea_(seq) {
+      return stillOnRoute_(seq, payrollAreaRoutes_());
+    }
+
+    function applyPayrollRouteParams_(params) {
+      params = params || {};
+      var now = new Date();
+      if (params.year) homeState.year = Number(params.year);
+      if (params.month) homeState.month = Number(params.month);
+      if (!homeState.year) homeState.year = now.getFullYear();
+      if (!homeState.month) homeState.month = now.getMonth() + 1;
+    }
+
+    function payrollPeriodNavParams_() {
+      var run = payrollState.detail && payrollState.detail.run ? payrollState.detail.run : null;
+      if (!run && homeState.runs && homeState.runs.length) {
+        run = latestRunForPeriod(homeState.runs, homeState.year, homeState.month);
+      }
+      var p = { year: homeState.year, month: homeState.month };
+      if (run && run.payroll_run_id) p.runId = run.payroll_run_id;
+      return p;
+    }
+
+    function rerenderCurrentPayrollRoute_() {
+      var route = App.getState().currentRoute;
+      var p = payrollPeriodNavParams_();
+      if (route === 'salary-structure' || route === 'compensation') renderSalaryStructure(p);
+      else if (route === 'attendance-bulk-upload') renderAttendanceBulkUpload(p);
+      else renderPayrollHome(p);
+    }
+
+    function loadPayrollContext_(seq, params, routeGuard, callback) {
+      applyPayrollRouteParams_(params);
+      return callServer('apiListPayrollRuns').then(function (runs) {
+        if (!routeGuard()) return;
+        homeState.runs = runs || [];
+        var targetRun = null;
+        if (params.runId) {
+          targetRun = (runs || []).filter(function (r) { return r.payroll_run_id === params.runId; })[0];
+          if (targetRun) {
+            homeState.year = Number(targetRun.period_year);
+            homeState.month = Number(targetRun.period_month);
+          }
+        }
+        if (!targetRun) targetRun = latestRunForPeriod(runs, homeState.year, homeState.month);
+        if (!targetRun) {
+          payrollState.detail = null;
+          callback(null, null);
+          return;
+        }
+        return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
+          if (!routeGuard()) return;
+          payrollState.detail = detail;
+          homeState.overview = detail;
+          callback(detail, targetRun);
+        });
+      });
+    }
+
+    function paintPayrollPeriodCard_(year, month) {
+      return '<div class="card payroll-period-card"><h2>Payroll period</h2>' +
+        '<p class="page-lede">This month applies to all payroll steps below — change it here on any screen.</p>' +
+        '<div class="period-selects">' +
+        '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
+        '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
+        '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
+    }
+
+    function bindPayrollPeriodCard_(page, seq) {
+      function syncPeriodFromInputs() {
+        var p = readPeriodInputs_();
+        if (!p) return;
+        if (p.year === homeState.year && p.month === homeState.month) return;
+        homeState.year = p.year;
+        homeState.month = p.month;
+        payrollState.detail = null;
+        homeState.overview = null;
+        bulkState.preview = null;
+        invalidateAllPayrollViews_();
+        rerenderCurrentPayrollRoute_();
+      }
+      if ($('pr-month')) $('pr-month').addEventListener('change', syncPeriodFromInputs);
+      if ($('pr-year')) $('pr-year').addEventListener('change', syncPeriodFromInputs);
+    }
+
+    function paintPayrollPipelineNav_(activeStep, detail, year, month) {
+      var run = detail && detail.run ? detail.run : latestRunForPeriod(homeState.runs || [], year, month);
+      var st = run ? statusKey(run.status) : '';
+      var att = detail ? attendanceStats_(detail) : { total: 0, ready: 0 };
+      var attDone = att.total > 0 && att.ready === att.total;
+      var calcDone = st === 'CALCULATED' || st === 'UNDER_REVIEW' || st === 'APPROVED' || st === 'LOCKED';
+      var finDone = st === 'LOCKED';
+      var steps = [
+        { id: 'salary', route: 'salary-structure', label: '1. Salary structure', hint: 'Bulk or per employee' },
+        { id: 'attendance', route: 'attendance-bulk-upload', label: '2. Attendance', hint: attDone ? 'Ready for payroll' : (att.total ? (att.ready + ' of ' + att.total + ' ready') : 'Import or enter days') },
+        { id: 'payroll', route: 'payroll', label: '3. Payroll', hint: finDone ? 'Finalized' : (calcDone ? 'Review & lock' : 'Calculate net pay') }
+      ];
+      var html = '<nav class="card payroll-pipeline-nav" aria-label="Connected payroll flow">' +
+        '<p class="payroll-pipeline-title">Payroll flow for <strong>' + escapeHtml(fmtPeriod(year, month)) + '</strong></p>' +
+        '<div class="payroll-pipeline-steps">';
+      steps.forEach(function (step) {
+        var cls = 'payroll-pipeline-step';
+        if (step.id === activeStep) cls += ' current';
+        if (step.id === 'attendance' && attDone) cls += ' done';
+        if (step.id === 'payroll' && (calcDone || finDone)) cls += ' done';
+        html += '<button type="button" class="' + cls + '" data-payroll-pipeline-route="' + step.route + '">' +
+          '<span class="payroll-pipeline-label">' + escapeHtml(step.label) + '</span>' +
+          '<span class="payroll-pipeline-hint">' + escapeHtml(step.hint) + '</span></button>';
+      });
+      html += '</div></nav>';
+      return html;
+    }
+
+    function bindPayrollPipelineNav_(page) {
+      page.querySelectorAll('[data-payroll-pipeline-route]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var route = btn.getAttribute('data-payroll-pipeline-route');
+          if (!route || !App.navigate) return;
+          App.navigate(route, payrollPeriodNavParams_());
+        });
+      });
+      page.querySelectorAll('[data-payroll-flow-route]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var route = btn.getAttribute('data-payroll-flow-route');
+          if (!route || !App.navigate) return;
+          App.navigate(route, payrollPeriodNavParams_());
+        });
+      });
+    }
+
+    function paintPayrollFlowFooter_(step) {
+      var html = '<div class="payroll-flow-footer primary-next">';
+      if (step === 'salary') {
+        html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="attendance-bulk-upload">Next: Attendance upload →</button>';
+      } else if (step === 'attendance') {
+        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="salary-structure">← Salary structure</button>';
+        html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="payroll">Continue to Payroll →</button>';
+      } else if (step === 'payroll') {
+        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="attendance-bulk-upload">← Attendance upload</button>';
+        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="salary-structure">Salary structure</button>';
+      }
+      html += '</div>';
+      return html;
     }
 
     function invalidatePayslipViews_() {
@@ -328,9 +497,9 @@
       st = statusKey(st);
       if (canUploadAttendance_(st)) {
         return '<div class="card payroll-attendance-gate alert-success" style="padding:12px 16px">' +
-          '<strong>Attendance upload is ready.</strong> Use <em>Attendance bulk upload</em> in the sidebar (or the button below): ' +
-          'download template → fill working days &amp; attendance → validate → import → return here to calculate payroll.' +
-          '<div class="primary-next" style="margin-top:10px"><button type="button" class="btn btn-secondary btn-sm" id="btn-go-attendance-bulk">Open attendance bulk upload</button></div></div>';
+          '<strong>Attendance upload is ready.</strong> Go to step <strong>2. Attendance</strong> in the flow above: ' +
+          'download template → fill working days &amp; attendance → validate → import → step <strong>3. Payroll</strong> to calculate.' +
+          '<div class="primary-next" style="margin-top:10px"><button type="button" class="btn btn-secondary btn-sm" data-payroll-flow-route="attendance-bulk-upload">Open attendance upload</button></div></div>';
       }
       var html = '<div class="card payroll-attendance-gate" style="padding:14px 16px;border:2px solid var(--color-warning-border);background:var(--color-warning-bg)">' +
         '<p style="margin:0 0 10px"><strong>Attendance upload is locked.</strong> This payroll is <strong>' +
@@ -538,13 +707,9 @@
       params = params || {};
       var page = pageEl();
       if (!page) return;
-      var now = new Date();
-      if (params.year) homeState.year = Number(params.year);
-      if (params.month) homeState.month = Number(params.month);
-      var year = homeState.year || now.getFullYear();
-      var month = homeState.month || (now.getMonth() + 1);
-      homeState.year = year;
-      homeState.month = month;
+      applyPayrollRouteParams_(params);
+      var year = homeState.year;
+      var month = homeState.month;
       var seq = App.getState().navSeq;
       var cachedDetail = payrollState.detail;
       if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('payroll') &&
@@ -556,34 +721,14 @@
       }
       if (!(App.isModuleRefresh && App.isModuleRefresh('payroll') && homeState.runs && homeState.runs.length)) {
         page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Payroll</h2>' +
-          '<p class="page-lede">Select a month, enter payroll data, calculate, review, and finalize.</p></div>' +
+          '<p class="page-lede">Follow the connected flow: salary → attendance → calculate and finalize here.</p></div>' +
           spinner('Loading payroll…') + '</div>';
       }
 
-      callServer('apiListPayrollRuns').then(function (runs) {
+      loadPayrollContext_(seq, params, function () { return stillOnPayrollModule_(seq); }, function (detail) {
         if (!stillOnPayrollModule_(seq)) return;
-        homeState.runs = runs || [];
-        var targetRun = null;
-        if (params.runId) {
-          targetRun = (runs || []).filter(function (r) { return r.payroll_run_id === params.runId; })[0];
-          if (targetRun) {
-            homeState.year = Number(targetRun.period_year);
-            homeState.month = Number(targetRun.period_month);
-          }
-        }
-        if (!targetRun) targetRun = latestRunForPeriod(runs, homeState.year, homeState.month);
-        if (!targetRun) {
-          if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
-          paintUnifiedPayroll_(page, seq, null);
-          return;
-        }
-        return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
-          if (!stillOnPayrollModule_(seq)) return;
-          payrollState.detail = detail;
-          homeState.overview = detail;
-          if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
-          paintUnifiedPayroll_(page, seq, detail);
-        });
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
+        paintUnifiedPayroll_(page, seq, detail);
       }).catch(function (err) {
         if (!stillOnPayrollModule_(seq)) return;
         if (App.finishModuleRefresh) App.finishModuleRefresh(true);
@@ -604,22 +749,37 @@
         compState.employeeId = String(params.employeeId);
         compState._editorLoadedFor = '';
       }
+      applyPayrollRouteParams_(params);
       page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
-        '<p class="page-lede">Set up structures in bulk or per employee before running monthly payroll.</p></div>' +
+        '<p class="page-lede">Step 1 of the payroll flow — same month as attendance and payroll run.</p></div>' +
         spinner('Loading…') + '</div>';
-      paintSalaryStructurePage_(page, seq);
+
+      loadPayrollContext_(seq, params, function () { return stillOnSalaryStructure_(seq); }, function (detail) {
+        if (!stillOnSalaryStructure_(seq)) return;
+        paintSalaryStructurePage_(page, seq, detail);
+      }).catch(function (err) {
+        if (!stillOnSalaryStructure_(seq)) return;
+        paintErr(page, err.message || 'Failed to load salary structure', function () { renderSalaryStructure(params); });
+      });
     }
 
-    function paintSalaryStructurePage_(page, seq) {
+    function paintSalaryStructurePage_(page, seq, detail) {
+      var year = homeState.year;
+      var month = homeState.month;
       var html = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
         '<p class="page-lede">Bulk upload is fastest for many employees; use the editor below for one-off changes and revisions.</p></div>' +
+        paintPayrollPipelineNav_('salary', detail, year, month) +
+        paintPayrollPeriodCard_(year, month) +
         paintCompensationBulkCard_() +
         '<div class="card"><h2>Employee salary structures</h2>' +
         '<p class="page-lede">Search an employee to view or edit their salary structure. Revisions create history.</p>' +
         '<div id="salary-structure-mount">' + spinner('Loading employees…') + '</div></div>' +
+        paintPayrollFlowFooter_('salary') +
         '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
       page.innerHTML = html;
       if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
+      bindPayrollPipelineNav_(page);
+      bindPayrollPeriodCard_(page, seq);
       bindSalaryStructurePage_(page, seq);
       ensureCompEmployeesLoaded_(page, seq);
     }
@@ -632,39 +792,15 @@
       params = params || {};
       var page = pageEl();
       if (!page) return;
-      var now = new Date();
-      if (params.year) homeState.year = Number(params.year);
-      if (params.month) homeState.month = Number(params.month);
-      var year = homeState.year || now.getFullYear();
-      var month = homeState.month || (now.getMonth() + 1);
-      homeState.year = year;
-      homeState.month = month;
+      applyPayrollRouteParams_(params);
       var seq = App.getState().navSeq;
       page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload</h2>' +
-        '<p class="page-lede">Choose the payroll month, then import working days and attendance before you calculate payroll.</p></div>' +
+        '<p class="page-lede">Step 2 of the payroll flow — import days for the same month as salary and payroll.</p></div>' +
         spinner('Loading…') + '</div>';
 
-      callServer('apiListPayrollRuns').then(function (runs) {
+      loadPayrollContext_(seq, params, function () { return stillOnAttendanceBulk_(seq); }, function (detail, currentRun) {
         if (!stillOnAttendanceBulk_(seq)) return;
-        homeState.runs = runs || [];
-        var targetRun = null;
-        if (params.runId) {
-          targetRun = (runs || []).filter(function (r) { return r.payroll_run_id === params.runId; })[0];
-          if (targetRun) {
-            homeState.year = Number(targetRun.period_year);
-            homeState.month = Number(targetRun.period_month);
-          }
-        }
-        if (!targetRun) targetRun = latestRunForPeriod(runs, homeState.year, homeState.month);
-        if (!targetRun) {
-          paintAttendanceBulkPage_(page, seq, null, null);
-          return;
-        }
-        return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
-          if (!stillOnAttendanceBulk_(seq)) return;
-          payrollState.detail = detail;
-          paintAttendanceBulkPage_(page, seq, detail, targetRun);
-        });
+        paintAttendanceBulkPage_(page, seq, detail, currentRun);
       }).catch(function (err) {
         if (!stillOnAttendanceBulk_(seq)) return;
         paintErr(page, err.message || 'Failed to load attendance upload', function () { renderAttendanceBulkUpload(params); });
@@ -675,14 +811,10 @@
       var year = homeState.year;
       var month = homeState.month;
       var st = currentRun ? statusKey(currentRun.status) : '';
-      var html = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload — ' +
-        escapeHtml(fmtPeriod(year, month)) + '</h2>' +
-        '<p class="page-lede">Download the template, fill attendance columns, validate, and confirm import. Then open <strong>Payroll</strong> to calculate.</p></div>';
-      html += '<div class="card"><h2>Payroll period</h2>' +
-        '<div class="period-selects">' +
-        '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
-        '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
-        '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
+      var html = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload</h2>' +
+        '<p class="page-lede">Download the template, fill attendance columns, validate, and confirm import — then continue to Payroll to calculate.</p></div>';
+      html += paintPayrollPipelineNav_('attendance', detail, year, month);
+      html += paintPayrollPeriodCard_(year, month);
       if (!currentRun) {
         html += '<div class="card"><h2>Start the month</h2>' +
           '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start payroll, then upload attendance.</p>' +
@@ -692,6 +824,7 @@
         html += paintAttendanceGateBanner_(st);
         html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st, true);
       }
+      html += paintPayrollFlowFooter_('attendance');
       html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
       page.innerHTML = html;
       if (App.markModuleViewLoaded) App.markModuleViewLoaded('attendance-bulk-upload');
@@ -699,18 +832,8 @@
     }
 
     function bindAttendanceBulkPage_(page, seq, detail, currentRun) {
-      function syncPeriodFromInputs() {
-        var p = readPeriodInputs_();
-        if (!p) return;
-        if (p.year === homeState.year && p.month === homeState.month) return;
-        homeState.year = p.year;
-        homeState.month = p.month;
-        payrollState.detail = null;
-        bulkState.preview = null;
-        renderAttendanceBulkUpload({ year: p.year, month: p.month });
-      }
-      if ($('pr-month')) $('pr-month').addEventListener('change', syncPeriodFromInputs);
-      if ($('pr-year')) $('pr-year').addEventListener('change', syncPeriodFromInputs);
+      bindPayrollPipelineNav_(page);
+      bindPayrollPeriodCard_(page, seq);
 
       var createBtn = $('btn-create-run');
       if (createBtn) createBtn.addEventListener('click', function () {
@@ -719,8 +842,7 @@
         if (!setButtonLoading(createBtn, 'Starting...')) return;
         rpc('apiCreatePayrollRun', [p.year, p.month, ''], createBtn, 'Starting...', $('pr-home-feedback'))
           .then(function (nextDetail) {
-            invalidatePayrollHome_();
-            invalidateAttendanceBulk_();
+            invalidateAllPayrollViews_();
             payrollState.detail = nextDetail;
             if (setFlash) setFlash('Payroll started for ' + fmtPeriod(p.year, p.month), 'success', 'attendance-bulk-upload');
             renderAttendanceBulkUpload({ year: p.year, month: p.month, runId: nextDetail.run.payroll_run_id });
@@ -732,10 +854,6 @@
         var editableRun = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
         bindBulkUpload_(currentRun.payroll_run_id, page, detail, editableRun);
         if (detail) bindUnifiedActions_(currentRun.payroll_run_id, page, detail);
-      }
-      var goBulk = $('btn-go-attendance-bulk');
-      if (goBulk && App.navigate) {
-        goBulk.addEventListener('click', function () { App.navigate('attendance-bulk-upload'); });
       }
     }
 
@@ -766,7 +884,10 @@
       if (flashBannerHtml && homeFlash) html += flashBannerHtml(homeFlash);
       html += '<div class="page-header"><h2>Payroll — ' + escapeHtml(fmtPeriod(year, month)) +
         (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
-        '<p class="page-lede">Import attendance (sidebar → Attendance bulk upload), then calculate payroll, review exceptions, and finalize.</p></div>';
+        '<p class="page-lede">Step 3 — calculate, review exceptions, and finalize after salary and attendance are complete.</p></div>';
+
+      html += paintPayrollPipelineNav_('payroll', detail, year, month);
+      html += paintPayrollPeriodCard_(year, month);
 
       if (detail) html += hrPhaseStepper(detail);
 
@@ -780,12 +901,6 @@
         kpiCard('LOP impact', detail ? ((summary.lop_days || 0) + ' days') : '—',
           detail ? ((summary.lop_employees || 0) + ' employee' + ((summary.lop_employees || 0) === 1 ? '' : 's')) : '') +
         '</div>';
-
-      html += '<div class="card"><h2>Payroll period</h2>' +
-        '<div class="period-selects">' +
-        '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
-        '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
-        '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
 
       if (!currentRun) {
         html += '<div class="card"><h2>Get started</h2>' +
@@ -807,18 +922,17 @@
         html += '<div class="card"><p class="page-lede">Loading payroll data…</p></div>';
       }
 
+      html += paintPayrollFlowFooter_('payroll');
       html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p>';
       html += paintPreviousPayrolls_(runs, year, month);
       if (detail && currentRun) html += paintAdvancedSection_(detail, editable, st);
       html += '</div>';
 
       page.innerHTML = html;
+      bindPayrollPipelineNav_(page);
+      bindPayrollPeriodCard_(page, seq);
       bindUnifiedPayroll_(page, seq, detail, currentRun, openRun, lockedRun);
       bindPayrollFixActions_(page);
-      var goBulk = $('btn-go-attendance-bulk');
-      if (goBulk && App.navigate) {
-        goBulk.addEventListener('click', function () { App.navigate('attendance-bulk-upload'); });
-      }
     }
 
     function repaintCurrentPayrollView_(page, seq, detail) {
@@ -856,9 +970,9 @@
       return '<div class="card" id="payroll-workflow-card"><h2>Monthly payroll steps</h2>' +
         '<p class="page-lede">Attendance must be entered or imported before you calculate payroll for this month.</p>' +
         '<div class="workflow-steps">' +
-        '<div class="workflow-step ' + step1 + '"><strong>Step 1 — Attendance</strong>' +
+        '<div class="workflow-step ' + step1 + '"><strong>Attendance</strong>' +
         escapeHtml(att.ready + ' of ' + att.total + ' employees ready') +
-        (step1 !== 'done' ? ' · use Attendance bulk upload in the sidebar' : '') + '</div>' +
+        (step1 !== 'done' ? ' · complete step 2 in the flow above' : '') + '</div>' +
         '<div class="workflow-step ' + step2 + '"><strong>Step 2 — Calculate</strong>' +
         (calculated ? 'Payroll calculated' : 'Run after attendance is complete') + '</div>' +
         '<div class="workflow-step ' + step3 + '"><strong>Step 3 — Finalize</strong>' +
@@ -1255,20 +1369,6 @@
     }
 
     function bindUnifiedPayroll_(page, seq, detail, currentRun, openRun, lockedRun) {
-      function syncPeriodFromInputs() {
-        var p = readPeriodInputs_();
-        if (!p) return;
-        if (p.year === homeState.year && p.month === homeState.month) return;
-        homeState.year = p.year;
-        homeState.month = p.month;
-        homeState.overview = null;
-        payrollState.detail = null;
-        bulkState.preview = null;
-        renderPayrollHome({ year: p.year, month: p.month });
-      }
-      if ($('pr-month')) $('pr-month').addEventListener('change', syncPeriodFromInputs);
-      if ($('pr-year')) $('pr-year').addEventListener('change', syncPeriodFromInputs);
-
       var createBtn = $('btn-create-run');
       if (createBtn) createBtn.addEventListener('click', function () {
         var p = readPeriodInputs_();
@@ -1276,7 +1376,7 @@
         if (!setButtonLoading(createBtn, 'Starting...')) return;
         rpc('apiCreatePayrollRun', [p.year, p.month, ''], createBtn, 'Starting...', $('pr-home-feedback'))
           .then(function (nextDetail) {
-            invalidatePayrollHome_();
+            invalidateAllPayrollViews_();
             payrollState.detail = nextDetail;
             if (setFlash) setFlash('Payroll started for ' + fmtPeriod(p.year, p.month), 'success', 'payroll');
             renderPayrollHome({ year: p.year, month: p.month, runId: nextDetail.run.payroll_run_id });
@@ -2558,6 +2658,8 @@
           });
         }
     }
+
+    App.getPayrollPeriodParams = payrollPeriodNavParams_;
   });
 })();
 </script>
