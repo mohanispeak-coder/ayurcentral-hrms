@@ -1,5 +1,5 @@
 /**
- * Payslip HTML redesign — A4 print-friendly layout.
+ * Payslip HTML redesign - A4 print-friendly layout.
  * One canonical generation path for Payroll, Employee Management, and My Payslips.
  */
 var PayslipService = (function () {
@@ -35,7 +35,7 @@ var PayslipService = (function () {
         docUpdates.push({
           pk: documentId,
           updates: {
-            title: 'Payslip — ' + periodLabel,
+            title: 'Payslip - ' + periodLabel,
             drive_file_id: file.getId(),
             drive_folder_id: folder.getId(),
             uploaded_at: now,
@@ -48,7 +48,7 @@ var PayslipService = (function () {
           document_id: documentId,
           employee_id: rec.employee_id,
           category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
-          title: 'Payslip — ' + periodLabel,
+          title: 'Payslip - ' + periodLabel,
           drive_file_id: file.getId(),
           drive_folder_id: folder.getId(),
           payroll_run_id: run.payroll_run_id,
@@ -233,7 +233,7 @@ var PayslipService = (function () {
   }
 
   function formatDate_(value) {
-    if (!value) return '—';
+    if (!value) return '-';
     var d = toDate_(value);
     if (!d) return String(value);
     return Utilities.formatDate(d, ConfigService.getTimezone(), 'dd MMM yyyy');
@@ -338,7 +338,7 @@ var PayslipService = (function () {
     var generated = Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'dd MMM yyyy HH:mm');
     var netPay = Number(rec.net_pay) || 0;
 
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payslip — ' + esc_(period) +
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payslip - ' + esc_(period) +
       '</title><style>' +
       '@page{size:A4;margin:16mm}' +
       'body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:24px;background:#fff}' +
@@ -387,17 +387,17 @@ var PayslipService = (function () {
       '<div class="net-box"><div class="net-label">Net pay</div><div class="net-value">₹ ' + moneyDisplay_(netPay) + '</div>' +
       '<div class="words">' + esc_(amountInWords_(netPay)) + '</div></div>' +
       '<div class="statutory"><strong>Bank &amp; statutory details</strong><br>' +
-      'Bank: ' + esc_(bankName || '—') + ' · Account: ' + esc_(bankMasked || '—') + '<br>' +
-      'PAN: ' + esc_(pan || '—') + ' · PF: ' + esc_(pfNumber || '—') + ' · UAN: ' + esc_(uan || '—') +
+      'Bank: ' + esc_(bankName || '-') + ' · Account: ' + esc_(bankMasked || '-') + '<br>' +
+      'PAN: ' + esc_(pan || '-') + ' · PF: ' + esc_(pfNumber || '-') + ' · UAN: ' + esc_(uan || '-') +
       (esi ? ' · ESI: ₹ ' + esc_(esi) : '') +
       '</div>' +
       '<div class="footer">This is a system-generated payslip. Generated on ' + esc_(generated) +
-      '. Confidential — for the intended recipient only.</div>' +
+      '. Confidential - for the intended recipient only.</div>' +
       '</div></body></html>';
   }
 
   function field_(label, value) {
-    return '<div class="field"><label>' + esc_(label) + '</label><div>' + esc_(value == null || value === '' ? '—' : value) + '</div></div>';
+    return '<div class="field"><label>' + esc_(label) + '</label><div>' + esc_(value == null || value === '' ? '-' : value) + '</div></div>';
   }
 
   function moneyDisplay_(n) {

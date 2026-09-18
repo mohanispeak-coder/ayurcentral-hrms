@@ -1,5 +1,5 @@
 /**
- * Module adapters — existing Leave/Payroll (and ATS) call these
+ * Module adapters - existing Leave/Payroll (and ATS) call these
  * AFTER business commits succeed. Do not call from inside LockService.
  * Leave/Payroll files are not modified in this stream; wire later using
  * docs/NOTIFICATIONS_INTEGRATION_NOTES.md.
@@ -239,7 +239,7 @@ var NotificationPayrollAdapter = (function () {
         var payload = NotificationEngine.payloads.payslipAvailable(row, emp, run);
         if (NotificationEngine.payslipContainsNet(payload.title) ||
             NotificationEngine.payslipContainsNet(payload.email_subject)) {
-          Logger.log('Skipped payslip notification — subject contained net pay');
+          Logger.log('Skipped payslip notification - subject contained net pay');
           return;
         }
         inputs.push(payload);

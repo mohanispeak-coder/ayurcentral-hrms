@@ -1,5 +1,5 @@
 /**
- * OTP authentication tests — pure logic with in-memory store (no MailApp/Session).
+ * OTP authentication tests - pure logic with in-memory store (no MailApp/Session).
  */
 
 function testAuthOtp_All() {

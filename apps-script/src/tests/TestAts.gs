@@ -1,5 +1,5 @@
 /**
- * ATS tests — engine/RBAC always; live sheet cases when HRMS_SPREADSHEET_ID is set
+ * ATS tests - engine/RBAC always; live sheet cases when HRMS_SPREADSHEET_ID is set
  * and the current user is HR/ADMIN.
  *
  * Run `testAts_All` from the Apps Script editor. Do not treat this as a Node run.

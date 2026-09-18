@@ -1,5 +1,5 @@
 /**
- * Shared constants — sheet names, roles, property keys, permission actions.
+ * Shared constants - sheet names, roles, property keys, permission actions.
  */
 var HRMS = HRMS || {};
 
@@ -51,7 +51,7 @@ HRMS.DOCUMENT_CATEGORY = {
 };
 
 HRMS.WEBAPP = {
-  /** Must match appsscript.json webapp.executeAs — owner-mediated Sheets/Drive access. */
+  /** Must match appsscript.json webapp.executeAs - owner-mediated Sheets/Drive access. */
   EXECUTE_AS: 'USER_DEPLOYING',
   /**
    * Must match appsscript.json webapp.access.
@@ -72,9 +72,9 @@ HRMS.PROPS = {
   DRIVE_ROOT_FOLDER_ID: 'HRMS_DRIVE_ROOT_FOLDER_ID',
   /** Set to '1' to log/return startup timings (dev/test only). */
   PERF_TIMING: 'HRMS_PERF_TIMING',
-  /** Knowledge Hub web app URL — Script Properties only, never sent to the browser. */
+  /** Knowledge Hub web app URL - Script Properties only, never sent to the browser. */
   KH_WEBAPP_URL: 'KH_WEBAPP_URL',
-  /** HMAC secret shared with Knowledge Hub — Script Properties only, never sent to the browser. */
+  /** HMAC secret shared with Knowledge Hub - Script Properties only, never sent to the browser. */
   KH_HMAC_SECRET: 'KH_HMAC_SECRET',
 };
 
@@ -91,7 +91,7 @@ HRMS.DRIVE = {
   PAYSLIPS: 'Payslips'
 };
 
-/** Permission actions — extend as modules are added. */
+/** Permission actions - extend as modules are added. */
 HRMS.ACTIONS = {
   ACCESS_APP: 'ACCESS_APP',
   /** Native Ask HR chatbot. v1: same roles as ACCESS_APP; can later be disabled per role. */
@@ -178,7 +178,7 @@ HRMS.CACHE = {
   IDENTITY_TTL_SEC: 15
 };
 
-/** Ask HR chatbot — server-side only. */
+/** Ask HR chatbot - server-side only. */
 HRMS.ASK_HR = {
   VERSION: '1',
   MIN_QUESTION_LEN: 3,
@@ -203,7 +203,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.09.18.02';
+HRMS.CLIENT_ASSETS_VERSION = '2026.09.18.03';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

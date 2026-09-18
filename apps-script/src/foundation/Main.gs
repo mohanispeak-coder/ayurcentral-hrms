@@ -8,7 +8,7 @@ function doGet(e) {
     if (atsOut) return atsOut;
   }
   var t0 = Date.now();
-  // Shell only — module UI is lazy-loaded via apiGetModuleUi after first paint.
+  // Shell only - module UI is lazy-loaded via apiGetModuleUi after first paint.
   var template = HtmlService.createTemplateFromFile('ui/Index');
   var output = template
     .evaluate()
@@ -39,7 +39,7 @@ function buildHrmsSpreadsheetMenu_(ui) {
     .addToUi();
 }
 
-/** Bound spreadsheet only — not fired when HRMS uses HRMS_SPREADSHEET_ID + standalone script. */
+/** Bound spreadsheet only - not fired when HRMS uses HRMS_SPREADSHEET_ID + standalone script. */
 function onOpen() {
   buildHrmsSpreadsheetMenu_(SpreadsheetApp.getUi());
 }
@@ -83,7 +83,7 @@ function showHrmsSpreadsheetMenuNow() {
   return { ok: true, spreadsheetId: ss.getId() };
 }
 
-/** Editor shortcut — same as apiRunDatabaseSetup with no spreadsheet id. */
+/** Editor shortcut - same as apiRunDatabaseSetup with no spreadsheet id. */
 function runDatabaseSetupFromEditor() {
   return apiRunDatabaseSetup('');
 }

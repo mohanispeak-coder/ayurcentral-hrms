@@ -28,7 +28,7 @@ var AtsOfferLetterService = (function () {
       return HrmsContentTemplateService.render('ats_offer', map);
     }
     return {
-      subject: 'Offer of employment — ' + map['{{job_title}}'],
+      subject: 'Offer of employment - ' + map['{{job_title}}'],
       body: [
         'Dear ' + map['{{candidate_name}}'] + ',',
         '',

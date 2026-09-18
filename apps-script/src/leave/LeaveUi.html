@@ -114,7 +114,7 @@
   }
 
   function fmtDays(n) {
-    if (n === null || n === undefined || n === '') return '—';
+    if (n === null || n === undefined || n === '') return '-';
     return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
   }
 
@@ -192,7 +192,7 @@
       if (btnRe) btnRe.disabled = n === 0;
       if (meta) {
         meta.textContent = total
-          ? (n ? n + ' of ' + total + ' selected' : total + ' in queue — select rows or use Select all')
+          ? (n ? n + ' of ' + total + ' selected' : total + ' in queue - select rows or use Select all')
           : '';
       }
       if (selectAll) selectAll.checked = total > 0 && n === total;
@@ -300,7 +300,7 @@
               invalidateLeaveAfterRequestMutation_();
               var final = res && String(res.status || '').toUpperCase() === 'APPROVED';
               setFlash(
-                final ? 'Leave fully approved.' : 'Stage approved — forwarded for the next approver.',
+                final ? 'Leave fully approved.' : 'Stage approved - forwarded for the next approver.',
                 'success',
                 flashKey
               );
@@ -348,7 +348,7 @@
     var c = ctx();
     return '<tr>' + leaveSelectCellHtml_(r) +
       '<td class="num mono">' + c.escapeHtml(r.employee_id) + '</td>' +
-      '<td>' + c.escapeHtml(r.employee_name || '—') + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+      '<td>' + c.escapeHtml(r.employee_name || '-') + '</td><td>' + c.escapeHtml(r.leave_type_code) +
       '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
       '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
       c.escapeHtml(r.status_label || r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
@@ -419,12 +419,12 @@
       var typeOpts = types.map(function (t) {
         return '<option value="' + c.escapeHtml(t.leave_type_id) + '"' +
           (prefill.leave_type_id === t.leave_type_id ? ' selected' : '') + '>' +
-          c.escapeHtml(t.code + ' — ' + t.name) + '</option>';
+          c.escapeHtml(t.code + ' - ' + t.name) + '</option>';
       }).join('');
       var empOpts = employees.map(function (e) {
         var selected = (prefill.employee_id || c.state.session.employee_id) === e.employee_id;
         return '<option value="' + c.escapeHtml(e.employee_id) + '"' + (selected ? ' selected' : '') + '>' +
-          c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
+          c.escapeHtml(e.employee_id + ' - ' + e.display_name) + '</option>';
       }).join('');
 
       page.innerHTML =
@@ -449,7 +449,7 @@
               '<div class="form-group"><label class="form-check"><input type="checkbox" id="leave-half" name="is_half_day"' + (prefill.is_half_day ? ' checked' : '') + '> Half day</label></div>' +
               '<div class="form-group"><label class="form-label" for="leave-session">Session</label>' +
                 '<select class="form-select" id="leave-session" name="half_day_session">' +
-                  '<option value="">—</option><option value="AM"' + (prefill.half_day_session === 'AM' ? ' selected' : '') + '>AM</option>' +
+                  '<option value="">-</option><option value="AM"' + (prefill.half_day_session === 'AM' ? ' selected' : '') + '>AM</option>' +
                   '<option value="PM"' + (prefill.half_day_session === 'PM' ? ' selected' : '') + '>PM</option>' +
                 '</select></div>' +
             '</div>' +
@@ -725,7 +725,7 @@
       var body = (rows || []).map(function (r) {
         return '<tr>' + leaveSelectCellHtml_(r) +
           '<td class="num">' + c.escapeHtml(r.employee_id) + '</td>' +
-          '<td>' + c.escapeHtml(r.employee_name || '—') + '</td>' +
+          '<td>' + c.escapeHtml(r.employee_name || '-') + '</td>' +
           '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
           '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
           '<td class="num">' + fmtDays(r.total_days) + '</td>' +
@@ -808,7 +808,7 @@
       }).join('');
       var reqRows = (data.requests || []).map(adminLeaveRowHtml_).join('');
       var empFilter = employees.map(function (e) {
-        return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
+        return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' - ' + e.display_name) + '</option>';
       }).join('');
 
       page.innerHTML =
@@ -837,9 +837,9 @@
           leaveBulkToolbarHtml_('leave-admin-bulk') +
           '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
           '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div>' +
-          '<p class="hint" style="margin-top:8px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' — if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
+          '<p class="hint" style="margin-top:8px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' - if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
         '<div id="tab-types" class="hidden">' +
-          '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements — not hard-coded company policy.</p>' +
+          '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements - not hard-coded company policy.</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Balance</th><th>LOP</th><th class="num">Entitlement</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
           '<tbody>' + (typeRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No types yet</p></div></td></tr>') + '</tbody></table></div>' +
           '<form id="leave-type-form" class="form-grid" style="margin-top:20px">' +

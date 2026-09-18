@@ -1,5 +1,5 @@
 /**
- * Bulk employee upload — template download, validate, preview, commit.
+ * Bulk employee upload - template download, validate, preview, commit.
  * HR/Admin only. Employee codes are provided manually (SAPL-0001, AOPL-0001, AOMS-0001).
  */
 var HRMS = HRMS || {};
@@ -44,7 +44,7 @@ var EmployeeBulkService = (function () {
     bank_account_number: '',
     bank_ifsc: '',
     bank_name: '',
-    notes: 'New hire — portal login optional',
+    notes: 'New hire - portal login optional',
     create_login: 'YES',
     google_login_email: 'ravi.kumar@example.com'
   };
@@ -70,7 +70,7 @@ var EmployeeBulkService = (function () {
     bank_account_number: '',
     bank_ifsc: '',
     bank_name: '',
-    notes: 'Legacy employee — historical record; create_login usually NO',
+    notes: 'Legacy employee - historical record; create_login usually NO',
     create_login: 'NO',
     google_login_email: ''
   };
@@ -96,8 +96,8 @@ var EmployeeBulkService = (function () {
     var lines = (custom ? custom.split('\n') : []).filter(function (l) { return trim_(l); });
     if (!lines.length) {
       lines = variant === 'legacy'
-        ? ['Legacy / existing employees — set create_login to NO unless issuing portal access now.']
-        : ['New hires — use create_login YES when creating Google sign-in.'];
+        ? ['Legacy / existing employees - set create_login to NO unless issuing portal access now.']
+        : ['New hires - use create_login YES when creating Google sign-in.'];
     }
     var base = [
       ['Template version: ' + TEMPLATE_VERSION_],
@@ -210,14 +210,14 @@ var EmployeeBulkService = (function () {
     var fileId = ss.getId();
     var instructions = ss.getSheets()[0];
     instructions.setName('Instructions');
-    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload — Instructions');
+    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
-    instructionLines.push(['SAPL — SAPL-0001, SAPL-0002, ...']);
-    instructionLines.push(['AOPL — AOPL-0001, AOPL-0002, ...']);
-    instructionLines.push(['AOMS — AOMS-0001, AOMS-0002, ...']);
+    instructionLines.push(['SAPL - SAPL-0001, SAPL-0002, ...']);
+    instructionLines.push(['AOPL - AOPL-0001, AOPL-0002, ...']);
+    instructionLines.push(['AOMS - AOMS-0001, AOMS-0002, ...']);
     instructions.getRange(3, 1, 3 + instructionLines.length - 1, 1).setValues(instructionLines);
 
     var lists = ss.insertSheet('Lists');

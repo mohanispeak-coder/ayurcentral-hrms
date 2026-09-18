@@ -15,7 +15,7 @@ var HrmsContentTemplateService = (function () {
         body: 'template_employee_welcome_body'
       },
       defaults: {
-        subject: '{{company}} — Welcome — HRMS access for {{employee_id}}',
+        subject: '{{company}} - Welcome - HRMS access for {{employee_id}}',
         body: [
           'Dear {{display_name}},',
           '',
@@ -41,7 +41,7 @@ var HrmsContentTemplateService = (function () {
     },
     {
       id: 'bulk_new_hire',
-      label: 'Bulk upload — new hires (Excel instructions)',
+      label: 'Bulk upload - new hires (Excel instructions)',
       description: 'Shown on the Instructions sheet of the new-hire bulk template.',
       keys: { body: 'template_bulk_new_hire_instructions' },
       defaults: {
@@ -56,7 +56,7 @@ var HrmsContentTemplateService = (function () {
     },
     {
       id: 'bulk_legacy',
-      label: 'Bulk upload — existing / legacy employees',
+      label: 'Bulk upload - existing / legacy employees',
       description: 'Shown on the Instructions sheet of the legacy employee bulk template.',
       keys: { body: 'template_bulk_legacy_instructions' },
       defaults: {
@@ -72,14 +72,14 @@ var HrmsContentTemplateService = (function () {
     },
     {
       id: 'ats_offer',
-      label: 'Recruitment — offer letter email',
+      label: 'Recruitment - offer letter email',
       description: 'Sent to the candidate when the application reaches the OFFER stage (email + PDF attachment).',
       keys: {
         subject: 'template_ats_offer_subject',
         body: 'template_ats_offer_body'
       },
       defaults: {
-        subject: 'Offer of employment — {{job_title}} — {{company}}',
+        subject: 'Offer of employment - {{job_title}} - {{company}}',
         body: [
           'Dear {{candidate_name}},',
           '',

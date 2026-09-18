@@ -131,7 +131,7 @@ function testLeave_SheetFixtures() {
   }
 
   if (!ConfigService.getScriptProperty(HRMS.PROPS.SPREADSHEET_ID)) {
-    record('sheet-configured', true, 'skipped — no spreadsheet');
+    record('sheet-configured', true, 'skipped - no spreadsheet');
     return { results: results, allPassed: true, skipped: true };
   }
 
@@ -279,7 +279,7 @@ function testLeave_SheetFixtures() {
       var computed = LeaveLopService.computeLopFromLeave(empId, 2026, 8);
       record('LV-07-compute-fn', typeof computed === 'number', String(computed));
     } else {
-      record('LV-02-approve', true, 'current user cannot approve others — engine tests cover approve math');
+      record('LV-02-approve', true, 'current user cannot approve others - engine tests cover approve math');
       var computed2 = LeaveLopService.computeLopFromLeave(empId, 2026, 8);
       record('LV-07-compute-fn', typeof computed2 === 'number', String(computed2));
     }

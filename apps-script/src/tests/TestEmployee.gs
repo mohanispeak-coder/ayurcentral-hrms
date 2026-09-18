@@ -1,5 +1,5 @@
 /**
- * Employee module tests — run `testEmployee_All` from the Apps Script editor.
+ * Employee module tests - run `testEmployee_All` from the Apps Script editor.
  * Covers 11_TEST_PLAN.md EMP P0 cases (and EMP-03 P1 search helper).
  */
 
@@ -69,7 +69,7 @@ function testEmployee_All() {
 
   var isHr = PermissionService.isHrOrAdmin(session);
   if (!isHr) {
-    record('EMP-01 create', true, 'Skipped — current user is not HR/ADMIN (' + session.role + ')', true);
+    record('EMP-01 create', true, 'Skipped - current user is not HR/ADMIN (' + session.role + ')', true);
     try {
       EmployeeService.listDirectory(session, { q: 'zzz-no-match' });
       record('EMPLOYEE_directoryDenied', session.role !== 'EMPLOYEE', 'directory allowed for ' + session.role);

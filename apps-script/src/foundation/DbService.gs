@@ -342,7 +342,7 @@ var DbService = (function () {
   }
 
   /**
-   * Batch insert — required for payroll calculate (avoid per-row append).
+   * Batch insert - required for payroll calculate (avoid per-row append).
    * @param {string} sheetName
    * @param {Array.<Object>} records
    * @return {number}
@@ -388,7 +388,7 @@ var DbService = (function () {
 
   /**
    * Rewrite a sheet from an in-memory header + data rows. One setValues plus
-   * one clear of leftover rows — never a per-row row-shift delete loop.
+   * one clear of leftover rows - never a per-row row-shift delete loop.
    * @param {string} sheetName
    * @param {Array.<*>} headers
    * @param {Array.<Array.<*>>} dataRows
@@ -559,7 +559,7 @@ var DbService = (function () {
 
   /**
    * Batch-update rows by primary key. One sheet read (or cache) and one setValues
-   * per contiguous row block — not per cell and not a full reread after each row.
+   * per contiguous row block - not per cell and not a full reread after each row.
    * @param {string} sheetName
    * @param {string} pkColumn
    * @param {Array.<{pk: *, updates: Object}>} items

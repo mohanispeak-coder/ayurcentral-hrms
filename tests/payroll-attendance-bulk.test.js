@@ -56,7 +56,10 @@ check('validate-no-full-repaint', /bindBulkUpload_[\s\S]*apiValidatePayrollUploa
   !/apiValidatePayrollUpload[\s\S]{0,400}paintUnifiedPayroll_/.test(client));
 check('ui-validate-button', /btn-pr-bulk-validate/.test(client) && /Validate upload/.test(client));
 check('ui-return-draft-attendance', /btn-attendance-gate-draft/.test(client) && /canReturnPayrollToDraft_/.test(client));
-check('ui-attendance-gate-banner', /paintAttendanceGateBanner_/.test(client) && /PAYROLL_CLIENT_BUILD_/.test(client));
+check('ui-attendance-locked-banner', /paintAttendanceLockedBanner_/.test(client) && !/Attendance upload is ready/.test(client));
+check('manual-entry-on-attendance', /paintAttendanceBulkPage_[\s\S]*paintPayrollDataSection_/.test(client));
+check('no-manual-entry-on-payroll-main', !/else if \(detail\)[\s\S]{0,500}paintPayrollDataSection_/.test(
+  client.match(/function paintUnifiedPayroll_[\s\S]*?function repaintCurrentPayrollView_/)?.[0] || ''));
 check('ui-can-upload-attendance', /canUploadAttendance_/.test(client));
 
 var derived = Bulk.deriveAttendanceDays({ days_present: '24', days_absent: '1', leave_days: '1' }, 26);

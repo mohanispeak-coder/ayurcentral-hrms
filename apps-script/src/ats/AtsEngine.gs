@@ -1,5 +1,5 @@
 /**
- * Pure ATS rules — job lifecycle, pipeline, RBAC helpers, public sanitization.
+ * Pure ATS rules - job lifecycle, pipeline, RBAC helpers, public sanitization.
  * No SpreadsheetApp / AuthService calls. Safe for Node unit tests.
  */
 var ATS = ATS || {};

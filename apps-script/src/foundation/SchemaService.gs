@@ -1,5 +1,5 @@
 /**
- * Database schema bootstrap — creates sheets and headers without destroying data.
+ * Database schema bootstrap - creates sheets and headers without destroying data.
  */
 var HRMS = HRMS || {};
 

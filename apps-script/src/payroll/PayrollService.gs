@@ -107,7 +107,7 @@ var PayrollService = (function () {
     return serializeSheetRow_(run, PAYROLL_RUN_DATE_FIELDS_);
   }
 
-  /** Client payroll table uses amounts/flags/payslip id — not the full breakdown JSON. */
+  /** Client payroll table uses amounts/flags/payslip id - not the full breakdown JSON. */
   function serializeRecordForClient_(rec) {
     if (!rec) return null;
     var out = serializeSheetRow_(rec, PAYROLL_RECORD_DATE_FIELDS_);

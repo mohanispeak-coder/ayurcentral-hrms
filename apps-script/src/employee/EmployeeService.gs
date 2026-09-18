@@ -1,5 +1,5 @@
 /**
- * Employee master — create, edit, status, directory, documents, profile views.
+ * Employee master - create, edit, status, directory, documents, profile views.
  */
 var HRMS = HRMS || {};
 
@@ -564,10 +564,10 @@ var EmployeeService = (function () {
         'A new employee record was created in HRMS.',
         'Employee ID: ' + record.employee_id,
         'Name: ' + name,
-        'Department: ' + (record.department || '—'),
-        'Designation: ' + (record.designation || '—'),
-        'Work email: ' + (record.work_email || '—'),
-        'Created by: ' + (session.email || '—'),
+        'Department: ' + (record.department || '-'),
+        'Designation: ' + (record.designation || '-'),
+        'Work email: ' + (record.work_email || '-'),
+        'Created by: ' + (session.email || '-'),
         userCreated ? 'User login: enabled' : 'User login: not created'
       ].join('\n');
       var subject = 'New employee: ' + name + ' (' + record.employee_id + ')';

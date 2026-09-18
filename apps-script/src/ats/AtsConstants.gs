@@ -1,5 +1,5 @@
 /**
- * ATS module constants. Candidates are not employees — never reuse employee_id.
+ * ATS module constants. Candidates are not employees - never reuse employee_id.
  * Sheet names live here (not in foundation Constants) so ATS can ship independently.
  */
 var ATS = ATS || {};
@@ -128,7 +128,7 @@ ATS.PUBLIC_JOB_FIELDS = [
   'requirements', 'skills', 'openings', 'closing_date', 'published_at'
 ];
 
-/** Reserved job columns for future job-board APIs — do not remove. */
+/** Reserved job columns for future job-board APIs - do not remove. */
 ATS.SHARE_CHANNELS = [
   { id: 'copy_link', label: 'Copy link', enabled: true, provider: 'manual' },
   { id: 'open_apply', label: 'Open application', enabled: true, provider: 'manual' },

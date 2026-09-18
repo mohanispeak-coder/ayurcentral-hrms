@@ -1,5 +1,5 @@
 /**
- * Pure leave math and rules — no spreadsheet I/O.
+ * Pure leave math and rules - no spreadsheet I/O.
  * Payroll consumes LOP day counts via LeaveLopService (this file computes the split).
  */
 var HRMS = HRMS || {};

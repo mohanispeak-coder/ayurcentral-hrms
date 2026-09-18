@@ -2,7 +2,7 @@
  * Salary structures and components (compensation history on SalaryStructures).
  */
 var CompensationService = (function () {
-  /** Default salary lines — all required on save/bulk; empty numeric cells become 0. */
+  /** Default salary lines - all required on save/bulk; empty numeric cells become 0. */
   var REQUIRED_COMPONENT_SPECS_ = [
     { component_code: 'BASIC', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'FIXED', sort_order: 1 },
     { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', sort_order: 2 },

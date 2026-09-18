@@ -383,7 +383,7 @@
             '<td data-label="Location" class="col-emp-extra">' + escapeHtml(r.location) + '</td>' +
             '<td data-label="Type" class="col-emp-extra">' + escapeHtml(r.employment_type) + '</td>' +
             '<td data-label="Status">' + statusBadge(r.status) + '</td>' +
-            '<td data-label="Manager" class="col-emp-extra">' + escapeHtml(r.manager_name || r.manager_employee_id || '—') + '</td>' +
+            '<td data-label="Manager" class="col-emp-extra">' + escapeHtml(r.manager_name || r.manager_employee_id || '-') + '</td>' +
             '</tr>';
         }).join('');
         var rows = tbody.querySelectorAll('tr.table-row-click');
@@ -416,7 +416,7 @@
         { value: 'CONSULTANT', label: 'Consultant' }
       ];
       var genders = [
-        { value: '', label: '—' },
+        { value: '', label: '-' },
         { value: 'Female', label: 'Female' },
         { value: 'Male', label: 'Male' },
         { value: 'Other', label: 'Other' },
@@ -474,7 +474,7 @@
         if (excludeId && p.employee_id === excludeId) return;
         var opt = document.createElement('option');
         opt.value = p.employee_id;
-        opt.textContent = p.employee_id + ' — ' + p.display_name;
+        opt.textContent = p.employee_id + ' - ' + p.display_name;
         if (p.employee_id === selectedId) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -572,7 +572,7 @@
             if (result.leave_balances_seeded > 0) {
               showToast('Leave balances created (' + result.leave_balances_seeded + ').', 'success');
             } else {
-              showToast('No leave balances were created — check active leave types in Leave admin.', 'warning');
+              showToast('No leave balances were created - check active leave types in Leave admin.', 'warning');
             }
             if (result.welcome_delivery && result.welcome_delivery.email && result.welcome_delivery.email.ok) {
               showToast('Welcome email sent.', 'success');
@@ -741,7 +741,7 @@
 
     function dl(items) {
       return '<dl class="dl-grid">' + items.map(function (it) {
-        return '<dt>' + escapeHtml(it[0]) + '</dt><dd>' + (it[2] || escapeHtml(it[1] == null || it[1] === '' ? '—' : String(it[1]))) + '</dd>';
+        return '<dt>' + escapeHtml(it[0]) + '</dt><dd>' + (it[2] || escapeHtml(it[1] == null || it[1] === '' ? '-' : String(it[1]))) + '</dd>';
       }).join('') + '</dl>';
     }
 
@@ -1040,7 +1040,7 @@
           el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Net pay</th><th>Generated</th><th class="col-actions"></th></tr></thead><tbody>' +
             rows.map(function (d) {
               var period = d.period_label || d.title || 'Payslip';
-              var net = d.net_pay != null && d.net_pay !== '' ? ('₹' + Number(d.net_pay).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '—';
+              var net = d.net_pay != null && d.net_pay !== '' ? ('₹' + Number(d.net_pay).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '-';
               return '<tr><td>' + escapeHtml(period) + '</td><td class="num">' + escapeHtml(net) + '</td><td>' +
                 escapeHtml(String(d.generated_at || d.uploaded_at || '')) + '</td><td class="col-actions">' +
                 '<button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">View</button> ' +
@@ -1102,10 +1102,10 @@
         ]) : '') +
         '<p class="form-hint">When create_login is YES, google_login_email is also required.</p>' +
         '<div class="bulk-action-bar">' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">New hire — Excel</button>' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">New hire — CSV</button>' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template">Legacy — Excel</button>' +
-        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template-csv">Legacy — CSV</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">New hire - Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">New hire - CSV</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template">Legacy - Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template-csv">Legacy - CSV</button>' +
         '<button type="button" class="btn btn-primary" id="btn-bulk-choose">Choose Excel/CSV file</button>' +
         '<input type="file" id="bulk-file-input" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv">' +
         '<button type="button" class="btn btn-primary" id="btn-bulk-validate" disabled>Validate upload</button>' +

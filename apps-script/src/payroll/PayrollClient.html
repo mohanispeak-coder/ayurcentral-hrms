@@ -64,7 +64,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.18-payroll-flow-v2';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.18-attendance-v3';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -202,7 +202,7 @@
 
     function paintPayrollPeriodCard_(year, month) {
       return '<div class="card payroll-period-card"><h2>Payroll period</h2>' +
-        '<p class="page-lede">This month applies to all payroll steps below — change it here on any screen.</p>' +
+        '<p class="page-lede">This month applies to all payroll steps below - change it here on any screen.</p>' +
         '<div class="period-selects">' +
         '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
         '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
@@ -274,12 +274,12 @@
     function paintPayrollFlowFooter_(step) {
       var html = '<div class="payroll-flow-footer primary-next">';
       if (step === 'salary') {
-        html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="attendance-bulk-upload">Next: Attendance upload →</button>';
+        html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="attendance-bulk-upload">Next: Attendance →</button>';
       } else if (step === 'attendance') {
         html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="salary-structure">← Salary structure</button>';
         html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="payroll">Continue to Payroll →</button>';
       } else if (step === 'payroll') {
-        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="attendance-bulk-upload">← Attendance upload</button>';
+        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="attendance-bulk-upload">← Attendance</button>';
         html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="salary-structure">Salary structure</button>';
       }
       html += '</div>';
@@ -322,7 +322,7 @@
     App.registerRoute('payroll', { title: 'Payroll', render: renderPayrollHome });
     App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollHome({ runId: params && params.runId }); } });
     App.registerRoute('salary-structure', { title: 'Salary structure', render: renderSalaryStructure });
-    App.registerRoute('attendance-bulk-upload', { title: 'Attendance bulk upload', render: renderAttendanceBulkUpload });
+    App.registerRoute('attendance-bulk-upload', { title: 'Attendance', render: renderAttendanceBulkUpload });
     App.registerRoute('compensation', { title: 'Salary structure', render: renderSalaryStructure });
     App.registerRoute('my-payslips', { title: 'My Payslips', render: renderMyPayslips });
 
@@ -381,7 +381,7 @@
 
     function fmtMoneyInr(n) {
       var m = fmtMoney(n);
-      return m === '—' ? m : ('₹ ' + m);
+      return m === '-' ? m : ('₹ ' + m);
     }
 
     function employeeSearchHay_(emp) {
@@ -406,7 +406,7 @@
     }
 
     function fmtWhen(v) {
-      if (!v) return '—';
+      if (!v) return '-';
       var d = new Date(v);
       if (isNaN(d.getTime())) return String(v);
       return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -423,7 +423,7 @@
 
     function fmtMoney(n) {
       var x = Number(n);
-      if (!isFinite(x)) return '—';
+      if (!isFinite(x)) return '-';
       return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
@@ -480,7 +480,7 @@
       if (s === 'APPROVED') return 'Approved';
       if (s === 'LOCKED') return 'Locked';
       if (s === 'DRAFT') return 'Draft';
-      return s || '—';
+      return s || '-';
     }
 
     function canUploadAttendance_(st) {
@@ -493,14 +493,9 @@
       return st === 'UNDER_REVIEW' || st === 'CALCULATED' || (st === 'APPROVED' && isAdmin());
     }
 
-    function paintAttendanceGateBanner_(st) {
+    function paintAttendanceLockedBanner_(st) {
       st = statusKey(st);
-      if (canUploadAttendance_(st)) {
-        return '<div class="card payroll-attendance-gate alert-success" style="padding:12px 16px">' +
-          '<strong>Attendance upload is ready.</strong> Go to step <strong>2. Attendance</strong> in the flow above: ' +
-          'download template → fill working days &amp; attendance → validate → import → step <strong>3. Payroll</strong> to calculate.' +
-          '<div class="primary-next" style="margin-top:10px"><button type="button" class="btn btn-secondary btn-sm" data-payroll-flow-route="attendance-bulk-upload">Open attendance upload</button></div></div>';
-      }
+      if (canUploadAttendance_(st)) return '';
       var html = '<div class="card payroll-attendance-gate" style="padding:14px 16px;border:2px solid var(--color-warning-border);background:var(--color-warning-bg)">' +
         '<p style="margin:0 0 10px"><strong>Attendance upload is locked.</strong> This payroll is <strong>' +
         escapeHtml(statusLabel(st)) + '</strong>. Click below to unlock, then upload attendance and calculate.</p>' +
@@ -656,9 +651,9 @@
         kpiCard('Employees', String(summary.employee_count || 0),
           (summary.calculated_count || 0) + ' calculated' +
           (summary.skipped_count ? ', ' + summary.skipped_count + ' skipped' : '')) +
-        kpiCard('Gross', has ? fmtMoney(summary.gross_earnings) : '—', st === 'DRAFT' ? 'After calculate' : '') +
-        kpiCard('Deductions', has ? fmtMoney(summary.total_deductions) : '—', '') +
-        kpiCard('Net pay', has ? fmtMoney(summary.net_pay) : '—', '') +
+        kpiCard('Gross', has ? fmtMoney(summary.gross_earnings) : '-', st === 'DRAFT' ? 'After calculate' : '') +
+        kpiCard('Deductions', has ? fmtMoney(summary.total_deductions) : '-', '') +
+        kpiCard('Net pay', has ? fmtMoney(summary.net_pay) : '-', '') +
         kpiCard('LOP impact', (summary.lop_days || 0) + ' days',
           (summary.lop_employees || 0) + ' employee' + ((summary.lop_employees || 0) === 1 ? '' : 's') +
           (summary.lop_mismatch_count ? ' · ' + summary.lop_mismatch_count + ' differ from leave' : '')) +
@@ -751,7 +746,7 @@
       }
       applyPayrollRouteParams_(params);
       page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
-        '<p class="page-lede">Step 1 of the payroll flow — same month as attendance and payroll run.</p></div>' +
+        '<p class="page-lede">Step 1 of the payroll flow - same month as attendance and payroll run.</p></div>' +
         spinner('Loading…') + '</div>';
 
       loadPayrollContext_(seq, params, function () { return stillOnSalaryStructure_(seq); }, function (detail) {
@@ -794,8 +789,8 @@
       if (!page) return;
       applyPayrollRouteParams_(params);
       var seq = App.getState().navSeq;
-      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload</h2>' +
-        '<p class="page-lede">Step 2 of the payroll flow — import days for the same month as salary and payroll.</p></div>' +
+      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Attendance</h2>' +
+        '<p class="page-lede">Step 2 of the payroll flow - bulk import or manual entry for the same month as salary and payroll.</p></div>' +
         spinner('Loading…') + '</div>';
 
       loadPayrollContext_(seq, params, function () { return stillOnAttendanceBulk_(seq); }, function (detail, currentRun) {
@@ -811,8 +806,9 @@
       var year = homeState.year;
       var month = homeState.month;
       var st = currentRun ? statusKey(currentRun.status) : '';
-      var html = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload</h2>' +
-        '<p class="page-lede">Download the template, fill attendance columns, validate, and confirm import — then continue to Payroll to calculate.</p></div>';
+      var editableAtt = currentRun && (statusKey(st) === 'DRAFT' || statusKey(st) === 'CALCULATED');
+      var html = '<div class="payroll-page"><div class="page-header"><h2>Attendance</h2>' +
+        '<p class="page-lede">Bulk upload or enter working days and LOP below, then continue to Payroll to calculate.</p></div>';
       html += paintPayrollPipelineNav_('attendance', detail, year, month);
       html += paintPayrollPeriodCard_(year, month);
       if (!currentRun) {
@@ -821,8 +817,9 @@
           '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
           escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
       } else {
-        html += paintAttendanceGateBanner_(st);
+        html += paintAttendanceLockedBanner_(st);
         html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st, true);
+        if (detail) html += paintPayrollDataSection_(detail, editableAtt);
       }
       html += paintPayrollFlowFooter_('attendance');
       html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
@@ -850,10 +847,11 @@
           .catch(function () {});
       });
 
-      if (currentRun) {
+      if (currentRun && detail) {
         var editableRun = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
         bindBulkUpload_(currentRun.payroll_run_id, page, detail, editableRun);
-        if (detail) bindUnifiedActions_(currentRun.payroll_run_id, page, detail);
+        bindRunTable_(page, detail, editableRun);
+        bindUnifiedActions_(currentRun.payroll_run_id, page, detail);
       }
     }
 
@@ -882,9 +880,9 @@
       var html = '<div class="payroll-page">';
       var homeFlash = consumeFlash ? (consumeFlash('payroll') || consumeFlash('payroll-run')) : null;
       if (flashBannerHtml && homeFlash) html += flashBannerHtml(homeFlash);
-      html += '<div class="page-header"><h2>Payroll — ' + escapeHtml(fmtPeriod(year, month)) +
+      html += '<div class="page-header"><h2>Payroll - ' + escapeHtml(fmtPeriod(year, month)) +
         (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
-        '<p class="page-lede">Step 3 — calculate, review exceptions, and finalize after salary and attendance are complete.</p></div>';
+        '<p class="page-lede">Step 3 - calculate, review exceptions, and finalize after salary and attendance are complete.</p></div>';
 
       html += paintPayrollPipelineNav_('payroll', detail, year, month);
       html += paintPayrollPeriodCard_(year, month);
@@ -894,31 +892,28 @@
       html += '<div class="kpi-row">' +
         kpiCard('Employees', String(summary.employee_count || 0),
           detail ? ((summary.calculated_count || 0) + ' calculated' +
-            (summary.skipped_count ? ', ' + summary.skipped_count + ' skipped' : '')) : '—') +
-        kpiCard('Gross', summary.has_totals ? fmtMoneyInr(summary.gross_earnings) : '—', st === 'DRAFT' ? 'After calculate' : '') +
-        kpiCard('Deductions', summary.has_totals ? fmtMoneyInr(summary.total_deductions) : '—', '') +
-        kpiCard('Net pay', summary.has_totals ? fmtMoneyInr(summary.net_pay) : '—', '') +
-        kpiCard('LOP impact', detail ? ((summary.lop_days || 0) + ' days') : '—',
+            (summary.skipped_count ? ', ' + summary.skipped_count + ' skipped' : '')) : '-') +
+        kpiCard('Gross', summary.has_totals ? fmtMoneyInr(summary.gross_earnings) : '-', st === 'DRAFT' ? 'After calculate' : '') +
+        kpiCard('Deductions', summary.has_totals ? fmtMoneyInr(summary.total_deductions) : '-', '') +
+        kpiCard('Net pay', summary.has_totals ? fmtMoneyInr(summary.net_pay) : '-', '') +
+        kpiCard('LOP impact', detail ? ((summary.lop_days || 0) + ' days') : '-',
           detail ? ((summary.lop_employees || 0) + ' employee' + ((summary.lop_employees || 0) === 1 ? '' : 's')) : '') +
         '</div>';
 
       if (!currentRun) {
         html += '<div class="card"><h2>Get started</h2>' +
-          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start the month, import attendance under <strong>Attendance bulk upload</strong>, then calculate here.</p>' +
+          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start the month, complete <strong>Attendance</strong>, then calculate here.</p>' +
           '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
           escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
       } else if (detail) {
         resetPayrollTableView_(currentRun.payroll_run_id);
-        html += paintAttendanceGateBanner_(st);
         html += paintPayrollWorkflowCard_(detail, st);
-        html += paintPayrollDataSection_(detail, editable);
         html += paintCalculateSection_(detail, editable, st);
         html += paintPayrollCheck_(detail);
         html += paintReviewSection_(detail, st);
         html += paintFinalizeSection_(detail, st);
         html += paintPayslipsCard_(detail);
       } else {
-        html += paintAttendanceGateBanner_(st);
         html += '<div class="card"><p class="page-lede">Loading payroll data…</p></div>';
       }
 
@@ -973,9 +968,9 @@
         '<div class="workflow-step ' + step1 + '"><strong>Attendance</strong>' +
         escapeHtml(att.ready + ' of ' + att.total + ' employees ready') +
         (step1 !== 'done' ? ' · complete step 2 in the flow above' : '') + '</div>' +
-        '<div class="workflow-step ' + step2 + '"><strong>Step 2 — Calculate</strong>' +
+        '<div class="workflow-step ' + step2 + '"><strong>Step 2 - Calculate</strong>' +
         (calculated ? 'Payroll calculated' : 'Run after attendance is complete') + '</div>' +
-        '<div class="workflow-step ' + step3 + '"><strong>Step 3 — Finalize</strong>' +
+        '<div class="workflow-step ' + step3 + '"><strong>Step 3 - Finalize</strong>' +
         (finalized ? 'Payroll finalized' : 'Lock amounts after review') + '</div>' +
         '</div></div>';
     }
@@ -984,7 +979,7 @@
       var previewHtml = compBulkState.preview ? paintCompBulkPreview_(compBulkState.preview) : '';
       return '<details class="card section-details collapsible-section bulk-upload-card" id="comp-bulk-card">' +
         '<summary>Bulk upload salary structures (one-time setup)</summary>' +
-        '<div class="collapsible-section-body"><p class="page-lede">Set up or update salary structures in bulk — do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
+        '<div class="collapsible-section-body"><p class="page-lede">Set up or update salary structures in bulk - do this before the monthly payroll run if employees are new. All component columns are required; empty numeric cells use 0.</p>' +
         (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(['employee_id', 'effective_from', 'ctc_monthly']) : '') +
         '<p class="form-hint">Salary component columns in the template are all required (use 0 when not applicable).</p>' +
         '<ol class="bulk-steps"><li>Download Excel or CSV template</li><li>Choose file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
@@ -1006,14 +1001,14 @@
       var innerStart = standalone
         ? '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Attendance bulk upload</h2><div class="collapsible-section-body">'
         : '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
-        '<summary>Step 1 — Attendance bulk upload</summary>' +
+        '<summary>Attendance bulk upload</summary>' +
         '<div class="collapsible-section-body">';
       var html = innerStart +
-        '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only — you fill working days and attendance columns, then upload.</p>' +
+        '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only - you fill working days and attendance columns, then upload.</p>' +
         (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(
           ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days']
         ) : '') +
-        '<ol class="bulk-steps"><li>Download template (ID, name, email pre-filled — attendance columns blank)</li><li>Fill working_days, days_present, days_absent, leave_days</li><li>Choose Excel/CSV file and validate</li><li>Confirm import</li></ol>';
+        '<ol class="bulk-steps"><li>Download template (ID, name, email pre-filled - attendance columns blank)</li><li>Fill working_days, days_present, days_absent, leave_days</li><li>Choose Excel/CSV file and validate</li><li>Confirm import</li></ol>';
       html += '<div class="bulk-action-bar">';
       if (hasRun && runId) {
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
@@ -1025,7 +1020,7 @@
       } else if (!hasRun || !runId) {
         html += '<span class="hint">Start payroll for this month to enable attendance upload.</span>';
       } else {
-        html += '<span class="hint">Use the yellow banner above — <strong>Return to Draft</strong> — to unlock upload.</span>';
+        html += '<span class="hint">Use the yellow banner above - <strong>Return to Draft</strong> - to unlock upload.</span>';
       }
       html += '</div>';
       if (uploadAllowed && hasRun) {
@@ -1054,7 +1049,7 @@
           '<span class="hint">Bulk-apply suggested LOP from approved leave, then save before calculating.</span></div>';
       }
       return '<div class="card" id="payroll-data-card"><h2>Attendance manual entry</h2>' +
-        '<p class="page-lede">Alternatively, enter working days, paid days, and LOP in the table below. Save before calculating.</p>' +
+        '<p class="page-lede">Enter working days, paid days, and LOP in the table below. Save before opening Payroll to calculate.</p>' +
         bulkBar + tableHtml + '</div>';
     }
 
@@ -1085,7 +1080,7 @@
       if (!detail) return '';
       var att = attendanceStats_(detail);
       var attendanceComplete = att.total > 0 && att.ready === att.total;
-      var html = '<div class="card" id="calculate-card"><h2>Step 2 — Calculate payroll</h2>' +
+      var html = '<div class="card" id="calculate-card"><h2>Step 2 - Calculate payroll</h2>' +
         '<p class="page-lede">After attendance is entered for every employee, calculate basic, allowances, deductions, and net pay on the server.</p>';
       if (!attendanceComplete) {
         html += '<div class="alert alert-warning" style="margin-top:12px">Attendance incomplete: ' +
@@ -1330,9 +1325,9 @@
       }
       if (!selected && filtered.length) selected = filtered[0].employee_id;
       var opts = filtered.map(function (e) {
-        var miss = e.has_current_structure ? '' : ' — no structure';
+        var miss = e.has_current_structure ? '' : ' - no structure';
         return '<option value="' + escapeHtml(e.employee_id) + '"' + (e.employee_id === selected ? ' selected' : '') + '>' +
-          escapeHtml(e.employee_id + ' — ' + e.display_name) + escapeHtml(miss) + '</option>';
+          escapeHtml(e.employee_id + ' - ' + e.display_name) + escapeHtml(miss) + '</option>';
       }).join('');
       mount.innerHTML = '<p class="hint" style="margin-bottom:12px">For Excel/CSV import, use the <strong>Bulk upload salary structures</strong> card above.</p>' +
         '<div class="page-toolbar"><div class="filters">' +
@@ -1466,14 +1461,14 @@
           return rpc('apiValidatePayrollUpload', [runId, meta], validateBtn, 'Validating...', $('pr-upload-feedback'));
         }).then(function (preview) {
           bulkState.preview = preview;
-          if (nameEl) nameEl.textContent = file.name + ' — ' + preview.readyCount + ' ready, ' + preview.errorCount + ' errors';
+          if (nameEl) nameEl.textContent = file.name + ' - ' + preview.readyCount + ' ready, ' + preview.errorCount + ' errors';
           restoreButton(validateBtn);
           var mount = $('pr-upload-preview');
           if (mount) mount.innerHTML = paintBulkPreview_(preview);
           bindBulkPreviewActions_(runId, page);
         }).catch(function (err) {
           restoreButton(validateBtn);
-          if (nameEl) nameEl.textContent = file.name + ' — validation failed';
+          if (nameEl) nameEl.textContent = file.name + ' - validation failed';
           showToast((err && err.message) || 'Validation failed', 'error');
         });
       });
@@ -1967,7 +1962,7 @@
 
     function payslipActionHtml_(row, runId) {
       var rec = row.record;
-      if (!rec) return '<td>—</td>';
+      if (!rec) return '<td>-</td>';
       var ready = !!(rec.payslip_document_id);
       var html = '<td class="payslip-actions">';
       if (ready) {
@@ -2006,7 +2001,7 @@
         '</select></label></div></div>';
 
       if (!allRows.length) {
-        var elig = detail.eligibleCount != null ? detail.eligibleCount : '—';
+        var elig = detail.eligibleCount != null ? detail.eligibleCount : '-';
         var syncNote = detail.syncMeta && detail.syncMeta.error
           ? ('<p class="hint" style="margin-top:8px">Sync note: ' + escapeHtml(detail.syncMeta.error) + '</p>')
           : '';
@@ -2039,7 +2034,7 @@
       pageRows.forEach(function (row) {
         var inp = row.input || {};
         var rec = row.record;
-        var emp = row.employee || { employee_id: '', display_name: '—' };
+        var emp = row.employee || { employee_id: '', display_name: '-' };
         var amt = row.amounts || {};
         var warnings = row.warnings || [];
         var cls = '';
@@ -2051,16 +2046,16 @@
             escapeHtml(inp.payroll_input_id) + '" data-field="' + name + '" value="' + escapeHtml(val) + '"></td>';
         }
         html += '<tr class="' + cls + '">' +
-          '<td><div>' + escapeHtml(emp.display_name || emp.employee_id || '—') + '</div><div class="hint mono">' +
+          '<td><div>' + escapeHtml(emp.display_name || emp.employee_id || '-') + '</div><div class="hint mono">' +
           escapeHtml(emp.employee_id || '') + '</div></td>' +
-          '<td class="num">' + (rec ? fmtMoney(amt.basic) : '—') + '</td>' +
-          '<td class="num">' + (rec ? fmtMoney(amt.allowances) : '—') + '</td>' +
-          '<td class="num">' + (rec ? fmtMoney(amt.deductions) : '—') + '</td>' +
+          '<td class="num">' + (rec ? fmtMoney(amt.basic) : '-') + '</td>' +
+          '<td class="num">' + (rec ? fmtMoney(amt.allowances) : '-') + '</td>' +
+          '<td class="num">' + (rec ? fmtMoney(amt.deductions) : '-') + '</td>' +
           cell('working_days', inputValue_(inp, 'working_days'), '0.5') +
           cell('paid_days', inputValue_(inp, 'paid_days'), '0.5') +
           cell('lop_days', inputValue_(inp, 'lop_days'), '0.5') +
           '<td class="num">' + escapeHtml(inp.lop_from_leave || 0) + '</td>' +
-          '<td class="num">' + (rec ? fmtMoney(rec.net_pay) : '—') + '</td>' +
+          '<td class="num">' + (rec ? fmtMoney(rec.net_pay) : '-') + '</td>' +
           '<td>' + escapeHtml(exceptionMessagesForRow_(detail, row)) + extrasHint_(inp) + '</td>' +
           (isLocked ? payslipActionHtml_(row, runId) : '') + '</tr>';
       });
@@ -2388,7 +2383,7 @@
       }
       html += '<div class="card"><h2>' + (current ? 'Current structure' : 'New structure') + '</h2>';
       if (current && !canEdit) {
-        html += '<div class="alert alert-info">This structure was used in locked payroll. Do not overwrite it — create a revision with a new effective date and reason.</div>';
+        html += '<div class="alert alert-info">This structure was used in locked payroll. Do not overwrite it - create a revision with a new effective date and reason.</div>';
       }
       html += '<div class="form-row">' +
         '<label class="form-label">Effective from <input class="form-input" id="comp-from" type="date" value="' + escapeHtml(fromVal) + '"></label>' +
@@ -2413,7 +2408,7 @@
         }
       }
       html += '</div>' +
-        '<p class="hint">All standard components (Basic, HRA, SA, PF, ESI, PT, Employer PF) are required — use 0 where not applicable. TDS is entered on the payroll run. After saving, recalculate payroll to clear finalize blockers.</p></div>';
+        '<p class="hint">All standard components (Basic, HRA, SA, PF, ESI, PT, Employer PF) are required - use 0 where not applicable. TDS is entered on the payroll run. After saving, recalculate payroll to clear finalize blockers.</p></div>';
 
       html += '<div class="card"><h2>History</h2>';
       if (!history.length) {
@@ -2425,7 +2420,7 @@
             return '<tr><td class="mono">' + escapeHtml(h.salary_structure_id) + '</td><td>' +
               '<span class="badge ' + (hs === 'CURRENT' ? 'badge-approved' : 'badge-draft') + '">' + escapeHtml(hs) + '</span></td><td>' +
               escapeHtml(String(h.effective_from || '').substring(0, 10)) + '</td><td>' +
-              escapeHtml(String(h.effective_to || '').substring(0, 10) || '—') +
+              escapeHtml(String(h.effective_to || '').substring(0, 10) || '-') +
               '</td><td>' + escapeHtml(h.revision_reason || '') + '</td></tr>';
           }).join('') + '</tbody></table></div>';
       }
@@ -2639,7 +2634,7 @@
           html += '<div class="card"><h2>Payslips</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Net pay</th><th></th></tr></thead><tbody>' +
             slips.map(function (d) {
               var period = d.period_label || d.title || 'Payslip';
-              var net = d.net_pay != null && d.net_pay !== '' ? fmtMoneyInr(d.net_pay) : '—';
+              var net = d.net_pay != null && d.net_pay !== '' ? fmtMoneyInr(d.net_pay) : '-';
               return '<tr><td>' + escapeHtml(period) + '</td><td class="num">' + escapeHtml(net) + '</td><td>' +
                 '<button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">View payslip</button> ' +
                 '<button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">Download PDF</button></td></tr>';

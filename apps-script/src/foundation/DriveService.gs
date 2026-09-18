@@ -1,5 +1,5 @@
 /**
- * Drive folder abstraction — no public links.
+ * Drive folder abstraction - no public links.
  */
 var HRMS = HRMS || {};
 
@@ -13,7 +13,7 @@ var DriveService = (function () {
 
   /**
    * Returns HRMS Drive root, auto-creating folder structure when missing or stale.
-   * Web app runs as script owner — no manual Drive setup required for HR uploads.
+   * Web app runs as script owner - no manual Drive setup required for HR uploads.
    */
   function getRootFolder() {
     var id = getRootFolderId_();
@@ -21,7 +21,7 @@ var DriveService = (function () {
       try {
         return DriveApp.getFolderById(id);
       } catch (ignore) {
-        // Configured folder was deleted or is inaccessible — recreate below.
+        // Configured folder was deleted or is inaccessible - recreate below.
       }
     }
     var result = setupRootStructure();
@@ -41,7 +41,7 @@ var DriveService = (function () {
 
   /**
    * Create HRMS Root with Employee Documents and Payslips subfolders.
-   * Idempotent — reuses existing root when configured and accessible.
+   * Idempotent - reuses existing root when configured and accessible.
    * @return {Object}
    */
   function setupRootStructure() {
@@ -59,7 +59,7 @@ var DriveService = (function () {
             reusedExisting: true
           };
         } catch (ignore) {
-          // Configured ID invalid — create a new root below.
+          // Configured ID invalid - create a new root below.
         }
       }
 

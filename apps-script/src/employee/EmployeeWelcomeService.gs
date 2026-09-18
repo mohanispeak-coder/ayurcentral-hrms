@@ -20,7 +20,7 @@ var EmployeeWelcomeService = (function () {
     var displayName = displayName_(record) || 'Colleague';
     var webappUrl = ConfigService.getHrmsWebAppUrl();
     var portalLine = webappUrl || '(ask HR for the HRMS portal link)';
-    var department = trim_(record.department) || '—';
+    var department = trim_(record.department) || '-';
     var map = {
       '{{display_name}}': displayName,
       '{{company}}': company,
@@ -40,7 +40,7 @@ var EmployeeWelcomeService = (function () {
         company: company
       };
     }
-    var subject = company + ' — Welcome — HRMS access for ' + record.employee_id;
+    var subject = company + ' - Welcome - HRMS access for ' + record.employee_id;
     var body = [
       'Dear ' + displayName + ',',
       '',

@@ -1,6 +1,6 @@
 /**
  * Admin-editable organisation settings (Notifications sheet + Settings tab).
- * OWNER/ADMIN/HR — exposed via Settings UI (Users route remains Admin-only).
+ * OWNER/ADMIN/HR - exposed via Settings UI (Users route remains Admin-only).
  */
 var HRMS = HRMS || {};
 
@@ -11,13 +11,13 @@ var AdminSettingsService = (function () {
     { key: 'notification_employee_create', label: 'Email when a new employee is created', type: 'boolean' },
     { key: 'notification_employee_welcome', label: 'Welcome email to new employee (when login is created)', type: 'boolean' },
     { key: 'hrms_webapp_url', label: 'HRMS web app URL for welcome emails', type: 'string' },
-    { key: 'leave_decision_notify_employee', label: 'Leave approve/reject — email employee', type: 'boolean' },
-    { key: 'leave_decision_notify_manager', label: 'Leave approve/reject — email manager', type: 'boolean' },
-    { key: 'leave_decision_notify_additional_enabled', label: 'Leave approve/reject — extra recipient enabled', type: 'boolean' },
-    { key: 'leave_decision_notify_additional_email', label: 'Leave approve/reject — extra recipient email', type: 'string' }
+    { key: 'leave_decision_notify_employee', label: 'Leave approve/reject - email employee', type: 'boolean' },
+    { key: 'leave_decision_notify_manager', label: 'Leave approve/reject - email manager', type: 'boolean' },
+    { key: 'leave_decision_notify_additional_enabled', label: 'Leave approve/reject - extra recipient enabled', type: 'boolean' },
+    { key: 'leave_decision_notify_additional_email', label: 'Leave approve/reject - extra recipient email', type: 'string' }
   ];
 
-  /** Lazy — AdminSettingsService loads before Constants.gs in Apps Script file order. */
+  /** Lazy - AdminSettingsService loads before Constants.gs in Apps Script file order. */
   function roleAccessRoles_() {
     return ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'];
   }

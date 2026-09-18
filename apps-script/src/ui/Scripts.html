@@ -62,7 +62,7 @@
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
     'salary-structure': 'Salary structure',
-    'attendance-bulk-upload': 'Attendance bulk upload',
+    'attendance-bulk-upload': 'Attendance',
     compensation: 'Salary structure',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
@@ -1141,7 +1141,7 @@
     });
   }
 
-  /* —— Shared perceived-loading helpers —— */
+  /* -- Shared perceived-loading helpers -- */
 
   function skeletonLine(widthClass) {
     return '<div class="skeleton skeleton-line hrms-skeleton-line ' + (widthClass || 'w80') + '" aria-hidden="true"></div>';
@@ -1172,8 +1172,8 @@
 
   /**
    * Preferred data-loading placeholder. Replaces plain "Loading…" text.
-   * opts.lines — number of text lines (default 3)
-   * opts.variant — 'block' | 'card' | 'detail' | 'list'
+   * opts.lines - number of text lines (default 3)
+   * opts.variant - 'block' | 'card' | 'detail' | 'list'
    */
   function sectionSkeleton(opts) {
     opts = opts || {};
@@ -1213,7 +1213,7 @@
     return html;
   }
 
-  /** @deprecated Prefer sectionSkeleton — kept as alias for existing call sites. */
+  /** @deprecated Prefer sectionSkeleton - kept as alias for existing call sites. */
   function sectionSpinner(label) {
     return sectionSkeleton({ label: label || 'Loading', variant: 'block', lines: 3 });
   }
@@ -1305,7 +1305,7 @@
       html = sectionSkeleton({ variant: 'card', label: 'Loading salary structure' }) + '<div id="comp-editor"></div>';
     } else if (route === 'attendance-bulk-upload') {
       html = skeletonKpiRow(['Period', 'Status', 'Employees']) +
-        '<div class="card"><h2>Attendance bulk upload</h2>' + sectionSkeleton({ lines: 3 }) + '</div>';
+        '<div class="card"><h2>Attendance</h2>' + sectionSkeleton({ lines: 3 }) + '</div>';
     } else if (route === 'my-payslips') {
       html = '<div class="card">' + tableShell(['Title', 'Run', 'Date', ''], 'shell-ps', 4) + '</div>';
     } else if (route === 'ats-jobs') {
@@ -1466,7 +1466,7 @@
               });
             return;
           }
-          // Paint layout immediately — never wait for module RPC.
+          // Paint layout immediately - never wait for module RPC.
           paintPendingModuleShell(route);
           logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
           ensureModule(moduleId, { userInitiated: true })
@@ -1620,7 +1620,7 @@
 
   function dashCard(label, value, hint) {
     return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
-      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</div>' +
+      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '-' : String(value)) + '</div>' +
       (hint ? '<div class="kpi-hint">' + escapeHtml(hint) + '</div>' : '') + '</div>';
   }
 
@@ -1754,7 +1754,7 @@
     if (!page) return;
     var s = state.session || {};
     var kpis = '';
-    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '—', 'In-app notifications');
+    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '-', 'In-app notifications');
     if (data.leave_approvals_count != null) {
       kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
     }
@@ -1763,11 +1763,11 @@
       kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
     }
     if (data.ats) {
-      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '—');
-      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '—');
+      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '-');
+      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '-');
     }
     if (!kpis) {
-      kpis = dashCard('Employee ID', s.employee_id || '—') + dashCard('Role', s.role || '—');
+      kpis = dashCard('Employee ID', s.employee_id || '-') + dashCard('Role', s.role || '-');
     }
 
     var sections = '';
@@ -1789,7 +1789,7 @@
     if (!sections) {
       sections = '<div class="card dash-welcome">' +
         '<h2>Welcome to AyurCentral HRMS</h2>' +
-        '<p>Use the sidebar for people, time off, pay, and — if your role allows — recruitment.</p></div>';
+        '<p>Use the sidebar for people, time off, pay, and - if your role allows - recruitment.</p></div>';
     }
     if (state.app && !state.app.configured) {
       sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
@@ -2121,7 +2121,7 @@
     if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
       window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
     }
-    // Idle, one-at-a-time preload — never compete with the first dashboard RPCs.
+    // Idle, one-at-a-time preload - never compete with the first dashboard RPCs.
     if (typeof window.requestIdleCallback === 'function') {
       window.requestIdleCallback(function () { preloadModulesFromNav(); }, { timeout: 12000 });
     } else {
@@ -2591,7 +2591,7 @@
         safePoints.push(String(keyPoints[i]));
       }
     }
-    // Structured answers already include lists/sections — avoid duplicating as Key points.
+    // Structured answers already include lists/sections - avoid duplicating as Key points.
     if (!notFound && safePoints.length && !askHrAnswerLooksStructured(answerText)) {
       var keyLabel = document.createElement('div');
       keyLabel.className = 'ask-hr-key-label';

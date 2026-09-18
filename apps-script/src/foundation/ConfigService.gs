@@ -1,12 +1,12 @@
 /**
- * Configuration — PropertiesService + Settings sheet.
+ * Configuration - PropertiesService + Settings sheet.
  */
 var HRMS = HRMS || {};
 
 var ConfigService = (function () {
   var scriptProps_ = PropertiesService.getScriptProperties();
 
-  /** Request-scoped spreadsheet handle — cleared when ID changes. */
+  /** Request-scoped spreadsheet handle - cleared when ID changes. */
   var spreadsheetCache_ = null;
   var spreadsheetCacheId_ = '';
   var openByIdCount_ = 0;
@@ -220,7 +220,7 @@ var ConfigService = (function () {
   }
 
   /**
-   * Application mode — defaults to PRODUCTION when unset or unreadable.
+   * Application mode - defaults to PRODUCTION when unset or unreadable.
    * @return {string} HRMS.APP_MODE value
    */
   function getAppMode() {
@@ -291,7 +291,7 @@ var ConfigService = (function () {
     getDemoRoleForEmail: getDemoRoleForEmail,
     parseDemoEmailList: parseDemoEmailList_,
     parseDemoRoleMap: parseDemoRoleMap_,
-    /** Test helper — openById calls this execution. */
+    /** Test helper - openById calls this execution. */
     getOpenByIdCountForTests: function () { return openByIdCount_; },
     resetOpenByIdCountForTests: function () { openByIdCount_ = 0; }
   };

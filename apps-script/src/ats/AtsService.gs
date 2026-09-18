@@ -1,5 +1,5 @@
 /**
- * ATS business service — requisitions, candidates, pipeline, interviews.
+ * ATS business service - requisitions, candidates, pipeline, interviews.
  * Does not create Employees or Users. Public apply is unauthenticated by design.
  */
 var ATS = ATS || {};

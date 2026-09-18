@@ -216,7 +216,7 @@ var AuthService = (function () {
   }
 
   /**
-   * Diagnostics only — HRMS auth uses activeEmail, never effectiveEmail.
+   * Diagnostics only - HRMS auth uses activeEmail, never effectiveEmail.
    * Under USER_DEPLOYING, effectiveEmail is the script owner; activeEmail is the visitor.
    * @return {{activeEmail: string, effectiveEmail: string}}
    */
@@ -340,7 +340,7 @@ var AuthService = (function () {
       };
     } else {
       session = hrmsResolveAuthAccess_(buildAccessInput_(resolvedEmail));
-      // Wrong/unauthorized Google identity must not block the login shell — OTP remains available.
+      // Wrong/unauthorized Google identity must not block the login shell - OTP remains available.
       session.authRequired = hrmsAuthRequiredForSession_(session);
     }
     requestSession_ = session;
@@ -364,7 +364,7 @@ var AuthService = (function () {
 
   /**
    * First-run helper: when Users sheet is empty, register the running user as ADMIN.
-   * Does not hard-code any email — uses Session only.
+   * Does not hard-code any email - uses Session only.
    * @param {Object=} options { alreadyLocked: true } when caller holds script lock
    * @return {Object|null}
    */

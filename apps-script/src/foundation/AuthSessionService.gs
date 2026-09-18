@@ -420,7 +420,7 @@ var AuthSessionService = (function () {
     } catch (ignore) {}
     MailApp.sendEmail({
       to: email,
-      subject: company + ' — sign-in verification code',
+      subject: company + ' - sign-in verification code',
       body: 'Your HRMS verification code is: ' + otp + '\n\nThis code expires in 10 minutes and can be used once.\n\nIf you did not request this code, ignore this email.'
     });
   }

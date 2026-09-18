@@ -135,7 +135,7 @@
     }
 
     function fmtWhen(v) {
-      if (!v) return '—';
+      if (!v) return '-';
       var d = new Date(v);
       if (isNaN(d.getTime())) return String(v);
       return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -298,7 +298,7 @@
 
     function formatSource_(value) {
       var s = String(value || '').trim();
-      if (!s) return '—';
+      if (!s) return '-';
       return s.replace(/_/g, ' ');
     }
 
@@ -350,7 +350,7 @@
         var cards = (byStage[st] || []).map(function (a) {
           return '<div class="ats-app-card" data-cand="' + escapeHtml(a.candidate_id) + '">' +
             '<strong>' + escapeHtml(candidateDisplayName_(a)) + '</strong>' +
-            '<div class="muted">' + escapeHtml(a.candidate_email || '—') + '</div></div>';
+            '<div class="muted">' + escapeHtml(a.candidate_email || '-') + '</div></div>';
         }).join('');
         return '<div class="pipeline-col"><h3>' + escapeHtml(st.replace(/_/g, ' ')) +
           ' · ' + (byStage[st] || []).length + '</h3>' + (cards || '<p class="muted">None</p>') + '</div>';
@@ -388,10 +388,10 @@
           '</div>' + badge(statusLabel) + '</div>' +
           (done
             ? ('<p class="muted">Internal feedback (not shared with candidate)</p>' +
-              '<p>Rating: ' + escapeHtml(String(iv.rating || '—')) + ' · Recommendation: ' +
-              escapeHtml(iv.recommendation || '—') + '</p>' +
+              '<p>Rating: ' + escapeHtml(String(iv.rating || '-')) + ' · Recommendation: ' +
+              escapeHtml(iv.recommendation || '-') + '</p>' +
               (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : ''))
-            : ('<p class="muted">' + (upcoming ? 'Scheduled interview' : 'Interview time has passed — submit feedback when done.') + '</p>' +
+            : ('<p class="muted">' + (upcoming ? 'Scheduled interview' : 'Interview time has passed - submit feedback when done.') + '</p>' +
               (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : '') +
               (!upcoming
                 ? ('<div class="ats-interview-feedback">' +
@@ -402,7 +402,7 @@
                   '<div class="form-group"><label class="form-label">Recommendation</label>' +
                   '<select class="form-select" data-iv-rec="' + escapeHtml(iv.interview_id) + '">' +
                   IV_REC_OPTIONS_.map(function (r) {
-                    return '<option value="' + r + '">' + (r ? r.replace(/_/g, ' ') : '—') + '</option>';
+                    return '<option value="' + r + '">' + (r ? r.replace(/_/g, ' ') : '-') + '</option>';
                   }).join('') + '</select></div></div>' +
                   '<div class="form-group"><label class="form-label">Feedback notes</label>' +
                   '<textarea class="form-input" rows="3" data-iv-notes="' + escapeHtml(iv.interview_id) + '"></textarea></div>' +
@@ -608,7 +608,7 @@
 
     function kpiCard(label, value) {
       return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
-        '<div class="kpi-value">' + escapeHtml(String(value == null ? '—' : value)) + '</div></div>';
+        '<div class="kpi-value">' + escapeHtml(String(value == null ? '-' : value)) + '</div></div>';
     }
 
     function paintAtsHomeKpis_(kpis) {
@@ -735,11 +735,11 @@
           return '<tr class="table-row-click" data-job="' + escapeHtml(j.job_id) + '">' +
             '<td class="mono">' + escapeHtml(j.job_id) + '</td>' +
             '<td>' + escapeHtml(j.title) + '</td>' +
-            '<td>' + escapeHtml(j.department || '—') + '</td>' +
-            '<td>' + escapeHtml(j.location || '—') + '</td>' +
+            '<td>' + escapeHtml(j.department || '-') + '</td>' +
+            '<td>' + escapeHtml(j.location || '-') + '</td>' +
             '<td>' + badge(j.status) + '</td>' +
             '<td class="num">' + escapeHtml(String(j.application_count || 0)) + '</td>' +
-            '<td>' + escapeHtml(j.hiring_manager_name || j.hiring_manager_employee_id || '—') + '</td></tr>';
+            '<td>' + escapeHtml(j.hiring_manager_name || j.hiring_manager_employee_id || '-') + '</td></tr>';
         }).join('');
         Array.prototype.forEach.call(body.querySelectorAll('tr[data-job]'), function (tr) {
           tr.addEventListener('click', function () {
@@ -852,7 +852,7 @@
         var managers = pack[0] || [];
         var job = pack[1] && pack[1].job ? pack[1].job : {};
         jobFormState.jobId = job.job_id || '';
-        var mgrOpts = [{ value: '', label: '—' }].concat(managers.map(function (m) {
+        var mgrOpts = [{ value: '', label: '-' }].concat(managers.map(function (m) {
           return { value: m.employee_id, label: (m.employee_id + ' · ' + (m.display_name || '')) };
         }));
         var types = (atsMeta.types || []).map(function (t) { return { value: t, label: t.replace(/_/g, ' ') }; });
@@ -979,7 +979,7 @@
         var rows = apps.map(function (a) {
           return '<tr>' +
             '<td><a href="#" data-cand="' + escapeHtml(a.candidate_id) + '">' + escapeHtml(candidateDisplayName_(a)) + '</a></td>' +
-            '<td>' + escapeHtml(a.candidate_email || '—') + '</td>' +
+            '<td>' + escapeHtml(a.candidate_email || '-') + '</td>' +
             '<td>' + badge(a.stage) + '</td>' +
             '<td>' + escapeHtml(fmtWhen(a.applied_at)) + '</td>' +
             '<td class="col-actions">' + stageMoveSelectHtml_(a.application_id, a.stage, stages) + '</td></tr>';
@@ -1001,7 +1001,7 @@
             '</div>' +
             '<p class="action-feedback hidden" id="ats-share-fb"></p>' +
             '<p class="muted" id="ats-share-text">' + escapeHtml(share.copy_text || 'Publish the job to generate a public link.') + '</p></div>' +
-          '<div class="card"><h2>Description</h2><div class="prose">' + escapeHtml(job.description || '—') + '</div></div>' +
+          '<div class="card"><h2>Description</h2><div class="prose">' + escapeHtml(job.description || '-') + '</div></div>' +
           '<div class="card"><h2>Pipeline</h2>' + buildPipelineBoardHtml_(apps, stages) + '</div>' +
           '<div class="card"><h2>Applications</h2>' +
             (rows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Candidate</th><th>Email</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -1120,11 +1120,11 @@
             '<td class="mono">' + escapeHtml(c.candidate_id) + '</td>' +
             '<td>' + escapeHtml(c.full_name) + '</td>' +
             '<td>' + escapeHtml(c.email) + '</td>' +
-            '<td>' + escapeHtml(c.phone || '—') + '</td>' +
+            '<td>' + escapeHtml(c.phone || '-') + '</td>' +
             '<td>' + escapeHtml(formatSource_(c.source)) + '</td>' +
-            '<td>' + escapeHtml(c.location || '—') + '</td>' +
+            '<td>' + escapeHtml(c.location || '-') + '</td>' +
             '<td>' + escapeHtml(String(c.application_count || 0)) + '</td>' +
-            '<td>' + (c.has_resume ? 'Yes' : '—') + '</td></tr>';
+            '<td>' + (c.has_resume ? 'Yes' : '-') + '</td></tr>';
         }).join('');
         Array.prototype.forEach.call(body.querySelectorAll('tr[data-cand]'), function (tr) {
           tr.addEventListener('click', function () {
@@ -1217,13 +1217,13 @@
           '</div>' +
           '<dl class="dl-grid">' +
             '<dt>Email</dt><dd>' + escapeHtml(c.email) + '</dd>' +
-            '<dt>Phone</dt><dd>' + escapeHtml(c.phone || '—') + '</dd>' +
-            '<dt>Location</dt><dd>' + escapeHtml(c.location || '—') + '</dd>' +
-            '<dt>Source</dt><dd>' + escapeHtml(c.source || '—') + '</dd>' +
-            '<dt>Education</dt><dd>' + escapeHtml(c.education || '—') + '</dd>' +
-            '<dt>Experience</dt><dd>' + escapeHtml(c.experience_summary || '—') + '</dd>' +
-            '<dt>Skills</dt><dd>' + escapeHtml(c.skills || '—') + '</dd>' +
-            '<dt>Linked employee</dt><dd>' + escapeHtml(c.hired_employee_id || 'None — hiring does not create an employee') + '</dd>' +
+            '<dt>Phone</dt><dd>' + escapeHtml(c.phone || '-') + '</dd>' +
+            '<dt>Location</dt><dd>' + escapeHtml(c.location || '-') + '</dd>' +
+            '<dt>Source</dt><dd>' + escapeHtml(c.source || '-') + '</dd>' +
+            '<dt>Education</dt><dd>' + escapeHtml(c.education || '-') + '</dd>' +
+            '<dt>Experience</dt><dd>' + escapeHtml(c.experience_summary || '-') + '</dd>' +
+            '<dt>Skills</dt><dd>' + escapeHtml(c.skills || '-') + '</dd>' +
+            '<dt>Linked employee</dt><dd>' + escapeHtml(c.hired_employee_id || 'None - hiring does not create an employee') + '</dd>' +
           '</dl></div>' +
           '<div class="card"><h2>Applications</h2>' +
             (appRows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job</th><th>Title</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody id="ats-cand-apps-body">' + appRows + '</tbody></table></div>' : '<p class="muted">None</p>') +

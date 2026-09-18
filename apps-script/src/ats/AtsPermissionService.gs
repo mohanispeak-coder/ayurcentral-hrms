@@ -75,7 +75,7 @@ var AtsPermissionService = (function () {
   }
 
   /**
-   * Optional integrator hook — call from apiGetAppBootstrap after getNavForRole.
+   * Optional integrator hook - call from apiGetAppBootstrap after getNavForRole.
    * Safe no-op if PermissionService is missing.
    */
   function mergeNav(existing, role) {

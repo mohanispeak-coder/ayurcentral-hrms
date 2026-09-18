@@ -1,5 +1,5 @@
 /**
- * Performance investigation helpers — no optimizations.
+ * Performance investigation helpers - no optimizations.
  * Enable Script Property HRMS_PERF_TIMING=1 then run from the Apps Script editor:
  *   testPerfInvestigation_Smoke()
  *   testPerfInvestigation_MarkAsRead()   (authorized editor session)
@@ -11,7 +11,7 @@ function testPerfInvestigation_ExpectedCounts() {
   return {
     markAsRead: {
       googleScriptRun: 1,
-      followUpRpc: 'none — client applies unread_count / status / read_at from the same response',
+      followUpRpc: 'none - client applies unread_count / status / read_at from the same response',
       appsScriptExecutions: '1',
       openById: 1,
       resolveSession: 1,
@@ -19,7 +19,7 @@ function testPerfInvestigation_ExpectedCounts() {
       employeesFullRead: '0 on identity-cache hit; else 1 targeted Employees column+row',
       settings: 'CacheService hit (typical) or Settings getDataRange miss',
       ensureSheets: '0 on normal mark-read (schema repair is setup-only)',
-      notificationInboxGetDataRange: '0 — notification_id column + one row + one row setValues',
+      notificationInboxGetDataRange: '0 - notification_id column + one row + one row setValues',
       setValues: 1,
       notes: [
         'store.find uses DbService.findOne (column index, not getDataRange)',
@@ -66,7 +66,7 @@ function testPerfInvestigation_Smoke() {
 
 /**
  * Live mark-as-read probe. Uses the first inbox row if present.
- * Does not change status unless a row exists and is unread — then it marks that row read.
+ * Does not change status unless a row exists and is unread - then it marks that row read.
  * Prefer running against a copy / after enabling timing only.
  */
 function testPerfInvestigation_MarkAsRead() {

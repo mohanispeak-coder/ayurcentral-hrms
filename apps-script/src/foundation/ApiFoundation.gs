@@ -1,5 +1,5 @@
 /**
- * Client-callable API — foundation endpoints only.
+ * Client-callable API - foundation endpoints only.
  */
 
 /** Allowlisted module UI partials for lazy load (shell stays lean). */
@@ -33,7 +33,7 @@ function apiGetAppBootstrap(sessionToken) {
 
     var nav = [];
     if (session.authorized) {
-      // Reuse resolved session — do not call requireAuth()/resolveSession again.
+      // Reuse resolved session - do not call requireAuth()/resolveSession again.
       PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
       nav = PermissionService.getNavForSession(session);
     }
@@ -213,7 +213,7 @@ function apiRunDatabaseSetup(spreadsheetId, sessionToken) {
   }, sessionToken);
 }
 
-/** Role-scoped home dashboard — immediate cards only (unread + leave). */
+/** Role-scoped home dashboard - immediate cards only (unread + leave). */
 function apiGetHomeDashboard(sessionToken) {
   return hrmsRun_(function () {
     var session = PermissionService.require(HRMS.ACTIONS.ACCESS_APP);
@@ -313,7 +313,7 @@ function apiSaveAdminSettings(payload, sessionToken) {
   }, sessionToken);
 }
 
-/** Foundation self-test — run from Apps Script editor. */
+/** Foundation self-test - run from Apps Script editor. */
 function runFoundationSelfTest() {
   var results = [];
   function check(name, fn) {

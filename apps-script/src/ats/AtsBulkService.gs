@@ -1,5 +1,5 @@
 /**
- * ATS bulk upload — jobs and candidates (.xlsx or .csv).
+ * ATS bulk upload - jobs and candidates (.xlsx or .csv).
  * Candidate source is required for reverse tracking. Duplicate rows are rejected.
  */
 var ATS = ATS || {};
@@ -83,7 +83,7 @@ var AtsBulkService = (function () {
   }
 
   /**
-   * Bulk upload: accept DD/MM/YYYY, DD-MM-YYYY, ISO, Date, or Excel serial — return yyyy-MM-dd for storage.
+   * Bulk upload: accept DD/MM/YYYY, DD-MM-YYYY, ISO, Date, or Excel serial - return yyyy-MM-dd for storage.
    * @return {string|null} ISO date, empty string if blank, null if invalid
    */
   function closingDateToIso_(value) {
@@ -261,7 +261,7 @@ var AtsBulkService = (function () {
     try {
       var info = ss.getSheets()[0];
       info.setName('Instructions');
-      info.getRange(1, 1).setValue(title + ' — Instructions');
+      info.getRange(1, 1).setValue(title + ' - Instructions');
       var lines = instructions.map(function (line) { return [line]; });
       info.getRange(3, 1, 3 + lines.length - 1, 1).setValues(lines);
       var sheet = ss.insertSheet(sheetName);

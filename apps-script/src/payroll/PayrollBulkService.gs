@@ -1,5 +1,5 @@
 /**
- * Payroll bulk upload — .xlsx or .csv. Validate → preview → commit.
+ * Payroll bulk upload - .xlsx or .csv. Validate → preview → commit.
  * Attendance columns (days_present, days_absent, leave_days) are segregated;
  * paid_days and lop_days are derived for payroll calculation.
  */
@@ -39,7 +39,7 @@ var PayrollBulkService = (function () {
     return name || trim_(emp.employee_id);
   }
 
-  /** All active employees in HRMS — refreshed on every template download. */
+  /** All active employees in HRMS - refreshed on every template download. */
   function listTemplateEmployees_() {
     var rows = typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll
       ? EmployeeRepository.listAll()
@@ -55,7 +55,7 @@ var PayrollBulkService = (function () {
     return HEADERS_.map(function () { return ''; });
   }
 
-  /** Pre-fill only employee_id, display_name, work_email — attendance and amounts stay blank. */
+  /** Pre-fill only employee_id, display_name, work_email - attendance and amounts stay blank. */
   function templateDataRows_(runId) {
     PayrollService.syncEligibleEmployees(runId);
     var employees = listTemplateEmployees_();
@@ -204,12 +204,12 @@ var PayrollBulkService = (function () {
       fileId = ss.getId();
       var instructions = ss.getSheets()[0];
       instructions.setName('Instructions');
-      instructions.getRange(1, 1).setValue('HRMS Payroll Upload — Instructions');
+      instructions.getRange(1, 1).setValue('HRMS Payroll Upload - Instructions');
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Upload .xlsx or .csv. Do not change header names on the PayrollInputs sheet.'],
         ['Template lists all ACTIVE employees with ID, name, and email only. Attendance columns are blank.'],
-        ['display_name and work_email are for reference only — do not edit employee_id.'],
+        ['display_name and work_email are for reference only - do not edit employee_id.'],
         ['Fill working_days, days_present, days_absent, and leave_days before upload.'],
         ['employee_id must match an active employee eligible for this payroll month.'],
         ['New employees are synced into the payroll run when you download the template or upload.'],

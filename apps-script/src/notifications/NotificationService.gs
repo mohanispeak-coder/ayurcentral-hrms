@@ -1,5 +1,5 @@
 /**
- * Notification Center service — inbox, preferences, optional MailApp.
+ * Notification Center service - inbox, preferences, optional MailApp.
  * Does not use LockService. Duplicate prevention is dedupe_key on insert.
  * Email failure never rolls back inbox rows.
  */
@@ -302,7 +302,7 @@ var NotificationService = (function () {
     body = formatBodyWithEmployeeId_(record.recipient_employee_id, body);
     var company = companyName_();
     if (body.indexOf(company) < 0) {
-      body = body + '\n\n— ' + company;
+      body = body + '\n\n- ' + company;
     }
     var log = writeEmailLog_({
       event_type: record.type,

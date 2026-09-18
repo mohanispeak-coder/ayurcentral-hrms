@@ -1,5 +1,5 @@
 /**
- * ATS sheet bootstrap — independent of SchemaService.setupDatabase.
+ * ATS sheet bootstrap - independent of SchemaService.setupDatabase.
  * Creates missing sheets/headers and seeds ATS settings only. Never drops data.
  */
 var ATS = ATS || {};

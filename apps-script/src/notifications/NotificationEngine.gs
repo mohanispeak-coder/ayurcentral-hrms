@@ -1,5 +1,5 @@
 /**
- * Pure notification logic — no spreadsheet, MailApp, or LockService.
+ * Pure notification logic - no spreadsheet, MailApp, or LockService.
  * NotificationService persists; adapters build typed payloads.
  */
 var HRMS = HRMS || {};
@@ -210,7 +210,7 @@ var NotificationEngine = (function () {
   }
 
   function payslipSubject(year, month) {
-    return 'Payslip available — ' + periodLabel(year, month);
+    return 'Payslip available - ' + periodLabel(year, month);
   }
 
   function payslipContainsNet_(text) {
@@ -963,27 +963,27 @@ var NotificationEngine = (function () {
   function buildPayrollReadyReview(run, recipient) {
     var period = periodLabel(run.period_year, run.period_month);
     return payloadBase_(TYPE.PAYROLL_READY_REVIEW, recipient, run.payroll_run_id, { period: period }, {
-      title: 'Payroll ready for review — ' + period,
+      title: 'Payroll ready for review - ' + period,
       message: 'The ' + period + ' payroll run is under review.',
-      email_subject: 'Payroll ready for review — ' + period
+      email_subject: 'Payroll ready for review - ' + period
     });
   }
 
   function buildPayrollApproved(run, recipient) {
     var period = periodLabel(run.period_year, run.period_month);
     return payloadBase_(TYPE.PAYROLL_APPROVED, recipient, run.payroll_run_id, { period: period }, {
-      title: 'Payroll approved — ' + period,
+      title: 'Payroll approved - ' + period,
       message: 'The ' + period + ' payroll run was approved.',
-      email_subject: 'Payroll approved — ' + period
+      email_subject: 'Payroll approved - ' + period
     });
   }
 
   function buildPayrollLocked(run, recipient) {
     var period = periodLabel(run.period_year, run.period_month);
     return payloadBase_(TYPE.PAYROLL_LOCKED, recipient, run.payroll_run_id, { period: period }, {
-      title: 'Payroll locked — ' + period,
+      title: 'Payroll locked - ' + period,
       message: 'The ' + period + ' payroll run is locked. Amounts will not change.',
-      email_subject: 'Payroll locked — ' + period
+      email_subject: 'Payroll locked - ' + period
     });
   }
 
@@ -995,8 +995,8 @@ var NotificationEngine = (function () {
     var titles = {};
     titles[TYPE.ATS_NEW_APPLICATION] = 'New application received';
     titles[TYPE.ATS_SHORTLISTED] = name + ' shortlisted';
-    titles[TYPE.ATS_INTERVIEW_SCHEDULED] = 'Interview scheduled — ' + name;
-    titles[TYPE.ATS_FEEDBACK_PENDING] = 'Interview feedback pending — ' + name;
+    titles[TYPE.ATS_INTERVIEW_SCHEDULED] = 'Interview scheduled - ' + name;
+    titles[TYPE.ATS_FEEDBACK_PENDING] = 'Interview feedback pending - ' + name;
     titles[TYPE.ATS_SELECTED] = name + ' selected';
     var messages = {};
     messages[TYPE.ATS_NEW_APPLICATION] = name + ' applied for ' + role + '.';
@@ -1010,9 +1010,9 @@ var NotificationEngine = (function () {
     messages[TYPE.ATS_SELECTED] = name + ' was selected for ' + role + '. Complete offer steps in ATS.';
     var subject = titles[type] || 'ATS update';
     if (type === TYPE.ATS_INTERVIEW_SCHEDULED && when) {
-      subject = 'Interview scheduled — ' + name + ' on ' + when;
+      subject = 'Interview scheduled - ' + name + ' on ' + when;
     } else if (type === TYPE.ATS_FEEDBACK_PENDING && when) {
-      subject = 'Interview feedback pending — ' + name + ' (' + when + ')';
+      subject = 'Interview feedback pending - ' + name + ' (' + when + ')';
     }
     var message = messages[type] || '';
     return payloadBase_(type, recipient, application.application_id, {}, {
@@ -1071,7 +1071,7 @@ var NotificationEngine = (function () {
     var name = employee.display_name || employee.employee_id;
     var y = Number(years) || 0;
     return payloadBase_(TYPE.WORK_ANNIVERSARY, employee, employee.employee_id, {}, {
-      title: 'Work anniversary — ' + name,
+      title: 'Work anniversary - ' + name,
       message: name + ' completes ' + y + ' year' + (y === 1 ? '' : 's') + ' with AyurCentral.',
       dedupe_bucket: String(year || '')
     });

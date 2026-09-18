@@ -1,5 +1,5 @@
 /**
- * ATS bulk upload APIs — jobs and candidates.
+ * ATS bulk upload APIs - jobs and candidates.
  */
 
 function apiAtsDownloadJobsBulkTemplate(sessionToken) {

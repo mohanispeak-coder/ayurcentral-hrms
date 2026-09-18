@@ -111,7 +111,7 @@
     }
 
     function relTime(value) {
-      if (!value) return '—';
+      if (!value) return '-';
       var d = value instanceof Date ? value : new Date(value);
       if (isNaN(d.getTime())) return escapeHtml(String(value));
       return d.toLocaleString();
@@ -345,7 +345,7 @@
           '<td>' + escapeHtml(relTime(item.created_at)) + '</td>' +
           '<td>' + (item.action_route
             ? '<button type="button" class="btn btn-secondary btn-sm ntf-open">Open</button>'
-            : '—') + '</td>' +
+            : '-') + '</td>' +
           '</tr>';
       }).join('');
       body.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
@@ -507,7 +507,7 @@
             escapeHtml(row.notification_id) + '">Retry</button>'
           : '';
         return '<tr>' +
-          '<td><span class="badge ' + badge + '">' + escapeHtml(st || '—') + '</span></td>' +
+          '<td><span class="badge ' + badge + '">' + escapeHtml(st || '-') + '</span></td>' +
           '<td>' + escapeHtml(row.event_type || '') + '</td>' +
           '<td>' + escapeHtml(row.recipient_email || '') + '</td>' +
           '<td>' + escapeHtml(row.employee_id || '') + '</td>' +

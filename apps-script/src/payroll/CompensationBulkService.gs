@@ -1,5 +1,5 @@
 /**
- * Bulk salary structure upload — template, validate, preview, commit.
+ * Bulk salary structure upload - template, validate, preview, commit.
  * All default component columns are required; empty numeric cells are treated as 0.
  */
 var HRMS = HRMS || {};
@@ -118,7 +118,7 @@ var CompensationBulkService = (function () {
     try {
       var instructions = ss.getSheets()[0];
       instructions.setName('Instructions');
-      instructions.getRange(1, 1).setValue('HRMS Salary Structure Upload — Instructions');
+      instructions.getRange(1, 1).setValue('HRMS Salary Structure Upload - Instructions');
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Upload .xlsx or .csv. Do not change header names on the SalaryStructures sheet.'],
@@ -126,7 +126,7 @@ var CompensationBulkService = (function () {
         ['employee_id must match an active employee in HRMS.'],
         ['effective_from must be YYYY-MM-DD.'],
         ['Duplicate employee rows in one file are rejected.'],
-        ['Employees with structures locked in finalized payroll cannot be overwritten — create a revision manually.'],
+        ['Employees with structures locked in finalized payroll cannot be overwritten - create a revision manually.'],
         ['Maximum ' + MAX_ROWS_ + ' rows per upload.']
       ];
       instructions.getRange(3, 1, 3 + lines.length - 1, 1).setValues(lines);

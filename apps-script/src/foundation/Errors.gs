@@ -1,5 +1,5 @@
 /**
- * Centralized error types for Apps Script — safe client responses.
+ * Centralized error types for Apps Script - safe client responses.
  */
 var HRMS = HRMS || {};
 
@@ -50,7 +50,7 @@ function systemError_(message) {
 }
 
 /**
- * Wrap server functions for google.script.run — returns { ok, data } or { ok, error }.
+ * Wrap server functions for google.script.run - returns { ok, data } or { ok, error }.
  * Clears request-scoped sheet caches at entry so warm containers cannot reuse stale rows.
  * @param {Function} fn
  * @param {string=} sessionToken Optional application session from OTP login.

@@ -1,5 +1,5 @@
 /**
- * Leave business service — types, balances, workflow, grants.
+ * Leave business service - types, balances, workflow, grants.
  * Employee master is read-only via employee_id. Does not own Employees CRUD.
  */
 var HRMS = HRMS || {};
@@ -1134,7 +1134,7 @@ var LeaveService = (function () {
         HRMS.LEAVE_AUDIT.REVOKE,
         'LeaveRequest',
         leaveRequestId,
-        'Revoked rejection — restored to ' + restored,
+        'Revoked rejection - restored to ' + restored,
         row.employee_id
       );
       return serializeRequest_(updated, typeMap_(), empMap_());

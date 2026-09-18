@@ -1,5 +1,5 @@
 /**
- * Web app execution model — owner-mediated backend + Session identity + RBAC.
+ * Web app execution model - owner-mediated backend + Session identity + RBAC.
  * Does not require employees to hold Spreadsheet/Drive ACLs.
  */
 
@@ -77,7 +77,7 @@ function testWebAppExecution_All() {
     record('employeeNoDriveAclRequired', true, 'Spreadsheet not configured', true);
   }
 
-  // Session identity — active user for auth; effective user is owner under USER_DEPLOYING.
+  // Session identity - active user for auth; effective user is owner under USER_DEPLOYING.
   var identity = AuthService.getIdentityDiagnostics();
   record('identityDiagnosticsShape',
     identity && identity.hasOwnProperty('activeEmail') && identity.hasOwnProperty('effectiveEmail'),

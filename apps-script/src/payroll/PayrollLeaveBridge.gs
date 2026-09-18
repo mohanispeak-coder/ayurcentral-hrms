@@ -1,7 +1,7 @@
 /**
  * Leave → Payroll LOP integration point.
  *
- * Preferred contract (Leave module — `12_BUILD_PLAN.md`):
+ * Preferred contract (Leave module - `12_BUILD_PLAN.md`):
  *   LeaveLopService.computeLopFromLeave(employeeId, periodYear, periodMonth)
  * Also accepts LeaveService.getApprovedLopForPayroll if that alias exists.
  *
