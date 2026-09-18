@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.16-attendance-bulk-v2';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.18-nav-split-v1';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -109,7 +109,12 @@
       compState.employees = [];
       compState._loaded = false;
       compState._editorLoadedFor = '';
+      shellInv_('salary-structure');
       shellInv_('compensation');
+    }
+
+    function invalidateAttendanceBulk_() {
+      shellInv_('attendance-bulk-upload');
     }
 
     function invalidatePayslipViews_() {
@@ -147,7 +152,9 @@
 
     App.registerRoute('payroll', { title: 'Payroll', render: renderPayrollHome });
     App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollHome({ runId: params && params.runId }); } });
-    App.registerRoute('compensation', { title: 'Compensation', render: renderCompensation });
+    App.registerRoute('salary-structure', { title: 'Salary structure', render: renderSalaryStructure });
+    App.registerRoute('attendance-bulk-upload', { title: 'Attendance bulk upload', render: renderAttendanceBulkUpload });
+    App.registerRoute('compensation', { title: 'Salary structure', render: renderSalaryStructure });
     App.registerRoute('my-payslips', { title: 'My Payslips', render: renderMyPayslips });
 
     function pageEl() {
@@ -173,10 +180,21 @@
       return r === 'ADMIN' || r === 'OWNER';
     }
 
-    function stillOnPayrollModule_(seq) {
+    function stillOnRoute_(seq, routes) {
       var s = App.getState();
-      var route = s.currentRoute;
-      return seq === s.navSeq && (route === 'payroll' || route === 'payroll-run' || route === 'compensation');
+      return seq === s.navSeq && routes.indexOf(s.currentRoute) >= 0;
+    }
+
+    function stillOnPayrollModule_(seq) {
+      return stillOnRoute_(seq, ['payroll', 'payroll-run']);
+    }
+
+    function stillOnSalaryStructure_(seq) {
+      return stillOnRoute_(seq, ['salary-structure', 'compensation']);
+    }
+
+    function stillOnAttendanceBulk_(seq) {
+      return stillOnRoute_(seq, ['attendance-bulk-upload']);
     }
 
     function refreshPayrollPage_(opts) {
@@ -189,7 +207,6 @@
         year: opts.year != null ? opts.year : homeState.year,
         month: opts.month != null ? opts.month : homeState.month,
         runId: opts.runId,
-        openSalaryStructure: !!opts.openSalaryStructure
       });
     }
 
@@ -311,8 +328,9 @@
       st = statusKey(st);
       if (canUploadAttendance_(st)) {
         return '<div class="card payroll-attendance-gate alert-success" style="padding:12px 16px">' +
-          '<strong>Attendance upload is ready.</strong> Expand <em>Step 1 — Attendance bulk upload</em> below: ' +
-          'download template → fill working days &amp; attendance → choose file → validate → confirm import → calculate payroll.</div>';
+          '<strong>Attendance upload is ready.</strong> Use <em>Attendance bulk upload</em> in the sidebar (or the button below): ' +
+          'download template → fill working days &amp; attendance → validate → import → return here to calculate payroll.' +
+          '<div class="primary-next" style="margin-top:10px"><button type="button" class="btn btn-secondary btn-sm" id="btn-go-attendance-bulk">Open attendance bulk upload</button></div></div>';
       }
       var html = '<div class="card payroll-attendance-gate" style="padding:14px 16px;border:2px solid var(--color-warning-border);background:var(--color-warning-bg)">' +
         '<p style="margin:0 0 10px"><strong>Attendance upload is locked.</strong> This payroll is <strong>' +
@@ -523,7 +541,6 @@
       var now = new Date();
       if (params.year) homeState.year = Number(params.year);
       if (params.month) homeState.month = Number(params.month);
-      if (params.openSalaryStructure) homeState.salaryStructureOpen = true;
       var year = homeState.year || now.getFullYear();
       var month = homeState.month || (now.getMonth() + 1);
       homeState.year = year;
@@ -566,7 +583,6 @@
           homeState.overview = detail;
           if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll');
           paintUnifiedPayroll_(page, seq, detail);
-          prefetchCompEmployees_(seq);
         });
       }).catch(function (err) {
         if (!stillOnPayrollModule_(seq)) return;
@@ -579,8 +595,148 @@
       renderPayrollHome({ runId: params && (params.runId || params) });
     }
 
-    function renderCompensation() {
-      renderPayrollHome({ openSalaryStructure: true });
+    function renderSalaryStructure(params) {
+      params = params || {};
+      var page = pageEl();
+      if (!page) return;
+      var seq = App.getState().navSeq;
+      if (params.employeeId) {
+        compState.employeeId = String(params.employeeId);
+        compState._editorLoadedFor = '';
+      }
+      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
+        '<p class="page-lede">Set up structures in bulk or per employee before running monthly payroll.</p></div>' +
+        spinner('Loading…') + '</div>';
+      paintSalaryStructurePage_(page, seq);
+    }
+
+    function paintSalaryStructurePage_(page, seq) {
+      var html = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
+        '<p class="page-lede">Bulk upload is fastest for many employees; use the editor below for one-off changes and revisions.</p></div>' +
+        paintCompensationBulkCard_() +
+        '<div class="card"><h2>Employee salary structures</h2>' +
+        '<p class="page-lede">Search an employee to view or edit their salary structure. Revisions create history.</p>' +
+        '<div id="salary-structure-mount">' + spinner('Loading employees…') + '</div></div>' +
+        '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
+      page.innerHTML = html;
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
+      bindSalaryStructurePage_(page, seq);
+      ensureCompEmployeesLoaded_(page, seq);
+    }
+
+    function bindSalaryStructurePage_(page, seq) {
+      bindCompBulkUpload_(page);
+    }
+
+    function renderAttendanceBulkUpload(params) {
+      params = params || {};
+      var page = pageEl();
+      if (!page) return;
+      var now = new Date();
+      if (params.year) homeState.year = Number(params.year);
+      if (params.month) homeState.month = Number(params.month);
+      var year = homeState.year || now.getFullYear();
+      var month = homeState.month || (now.getMonth() + 1);
+      homeState.year = year;
+      homeState.month = month;
+      var seq = App.getState().navSeq;
+      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload</h2>' +
+        '<p class="page-lede">Choose the payroll month, then import working days and attendance before you calculate payroll.</p></div>' +
+        spinner('Loading…') + '</div>';
+
+      callServer('apiListPayrollRuns').then(function (runs) {
+        if (!stillOnAttendanceBulk_(seq)) return;
+        homeState.runs = runs || [];
+        var targetRun = null;
+        if (params.runId) {
+          targetRun = (runs || []).filter(function (r) { return r.payroll_run_id === params.runId; })[0];
+          if (targetRun) {
+            homeState.year = Number(targetRun.period_year);
+            homeState.month = Number(targetRun.period_month);
+          }
+        }
+        if (!targetRun) targetRun = latestRunForPeriod(runs, homeState.year, homeState.month);
+        if (!targetRun) {
+          paintAttendanceBulkPage_(page, seq, null, null);
+          return;
+        }
+        return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
+          if (!stillOnAttendanceBulk_(seq)) return;
+          payrollState.detail = detail;
+          paintAttendanceBulkPage_(page, seq, detail, targetRun);
+        });
+      }).catch(function (err) {
+        if (!stillOnAttendanceBulk_(seq)) return;
+        paintErr(page, err.message || 'Failed to load attendance upload', function () { renderAttendanceBulkUpload(params); });
+      });
+    }
+
+    function paintAttendanceBulkPage_(page, seq, detail, currentRun) {
+      var year = homeState.year;
+      var month = homeState.month;
+      var st = currentRun ? statusKey(currentRun.status) : '';
+      var html = '<div class="payroll-page"><div class="page-header"><h2>Attendance bulk upload — ' +
+        escapeHtml(fmtPeriod(year, month)) + '</h2>' +
+        '<p class="page-lede">Download the template, fill attendance columns, validate, and confirm import. Then open <strong>Payroll</strong> to calculate.</p></div>';
+      html += '<div class="card"><h2>Payroll period</h2>' +
+        '<div class="period-selects">' +
+        '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
+        '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
+        '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
+      if (!currentRun) {
+        html += '<div class="card"><h2>Start the month</h2>' +
+          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start payroll, then upload attendance.</p>' +
+          '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
+          escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
+      } else {
+        html += paintAttendanceGateBanner_(st);
+        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st, true);
+      }
+      html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
+      page.innerHTML = html;
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('attendance-bulk-upload');
+      bindAttendanceBulkPage_(page, seq, detail, currentRun);
+    }
+
+    function bindAttendanceBulkPage_(page, seq, detail, currentRun) {
+      function syncPeriodFromInputs() {
+        var p = readPeriodInputs_();
+        if (!p) return;
+        if (p.year === homeState.year && p.month === homeState.month) return;
+        homeState.year = p.year;
+        homeState.month = p.month;
+        payrollState.detail = null;
+        bulkState.preview = null;
+        renderAttendanceBulkUpload({ year: p.year, month: p.month });
+      }
+      if ($('pr-month')) $('pr-month').addEventListener('change', syncPeriodFromInputs);
+      if ($('pr-year')) $('pr-year').addEventListener('change', syncPeriodFromInputs);
+
+      var createBtn = $('btn-create-run');
+      if (createBtn) createBtn.addEventListener('click', function () {
+        var p = readPeriodInputs_();
+        if (!p) return;
+        if (!setButtonLoading(createBtn, 'Starting...')) return;
+        rpc('apiCreatePayrollRun', [p.year, p.month, ''], createBtn, 'Starting...', $('pr-home-feedback'))
+          .then(function (nextDetail) {
+            invalidatePayrollHome_();
+            invalidateAttendanceBulk_();
+            payrollState.detail = nextDetail;
+            if (setFlash) setFlash('Payroll started for ' + fmtPeriod(p.year, p.month), 'success', 'attendance-bulk-upload');
+            renderAttendanceBulkUpload({ year: p.year, month: p.month, runId: nextDetail.run.payroll_run_id });
+          })
+          .catch(function () {});
+      });
+
+      if (currentRun) {
+        var editableRun = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
+        bindBulkUpload_(currentRun.payroll_run_id, page, detail, editableRun);
+        if (detail) bindUnifiedActions_(currentRun.payroll_run_id, page, detail);
+      }
+      var goBulk = $('btn-go-attendance-bulk');
+      if (goBulk && App.navigate) {
+        goBulk.addEventListener('click', function () { App.navigate('attendance-bulk-upload'); });
+      }
     }
 
     function resetPayrollTableView_(runId) {
@@ -610,7 +766,7 @@
       if (flashBannerHtml && homeFlash) html += flashBannerHtml(homeFlash);
       html += '<div class="page-header"><h2>Payroll — ' + escapeHtml(fmtPeriod(year, month)) +
         (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
-        '<p class="page-lede">Upload or enter attendance first, then calculate payroll, review exceptions, and finalize.</p></div>';
+        '<p class="page-lede">Import attendance (sidebar → Attendance bulk upload), then calculate payroll, review exceptions, and finalize.</p></div>';
 
       if (detail) html += hrPhaseStepper(detail);
 
@@ -632,30 +788,22 @@
         '</div><div id="pr-home-feedback" class="action-feedback hidden" role="status"></div></div>';
 
       if (!currentRun) {
-        if (homeState.salaryStructureOpen) {
-          html += paintSalaryStructureCollapsible_();
-        }
         html += '<div class="card"><h2>Get started</h2>' +
-          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start the month, then upload attendance before calculating.</p>' +
+          '<p class="page-lede">No payroll exists for ' + escapeHtml(fmtPeriod(year, month)) + ' yet. Start the month, import attendance under <strong>Attendance bulk upload</strong>, then calculate here.</p>' +
           '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-create-run">Start payroll for ' +
           escapeHtml(fmtPeriod(year, month)) + '</button></div></div>';
-        html += paintCompensationBulkCard_();
       } else if (detail) {
         resetPayrollTableView_(currentRun.payroll_run_id);
         html += paintAttendanceGateBanner_(st);
         html += paintPayrollWorkflowCard_(detail, st);
-        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st);
         html += paintPayrollDataSection_(detail, editable);
         html += paintCalculateSection_(detail, editable, st);
         html += paintPayrollCheck_(detail);
-        html += paintSalaryStructureCollapsible_();
-        html += paintCompensationBulkCard_();
         html += paintReviewSection_(detail, st);
         html += paintFinalizeSection_(detail, st);
         html += paintPayslipsCard_(detail);
       } else {
         html += paintAttendanceGateBanner_(st);
-        html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st);
         html += '<div class="card"><p class="page-lede">Loading payroll data…</p></div>';
       }
 
@@ -667,8 +815,20 @@
       page.innerHTML = html;
       bindUnifiedPayroll_(page, seq, detail, currentRun, openRun, lockedRun);
       bindPayrollFixActions_(page);
-      if (homeState.salaryStructureOpen) ensureCompEmployeesLoaded_(page, seq);
-      else prefetchCompEmployees_(seq);
+      var goBulk = $('btn-go-attendance-bulk');
+      if (goBulk && App.navigate) {
+        goBulk.addEventListener('click', function () { App.navigate('attendance-bulk-upload'); });
+      }
+    }
+
+    function repaintCurrentPayrollView_(page, seq, detail) {
+      var route = App.getState().currentRoute;
+      if (route === 'attendance-bulk-upload') {
+        var run = detail && detail.run ? detail.run : latestRunForPeriod(homeState.runs || [], homeState.year, homeState.month);
+        paintAttendanceBulkPage_(page, seq, detail, run);
+        return;
+      }
+      paintUnifiedPayroll_(page, seq, detail);
     }
 
     function attendanceStats_(detail) {
@@ -697,7 +857,8 @@
         '<p class="page-lede">Attendance must be entered or imported before you calculate payroll for this month.</p>' +
         '<div class="workflow-steps">' +
         '<div class="workflow-step ' + step1 + '"><strong>Step 1 — Attendance</strong>' +
-        escapeHtml(att.ready + ' of ' + att.total + ' employees ready') + '</div>' +
+        escapeHtml(att.ready + ' of ' + att.total + ' employees ready') +
+        (step1 !== 'done' ? ' · use Attendance bulk upload in the sidebar' : '') + '</div>' +
         '<div class="workflow-step ' + step2 + '"><strong>Step 2 — Calculate</strong>' +
         (calculated ? 'Payroll calculated' : 'Run after attendance is complete') + '</div>' +
         '<div class="workflow-step ' + step3 + '"><strong>Step 3 — Finalize</strong>' +
@@ -725,13 +886,15 @@
         '<div id="comp-bulk-feedback" class="action-feedback hidden" role="status"></div></div></details>';
     }
 
-    function paintAttendanceBulkSection_(runId, uploadAllowed, hasRun, st) {
+    function paintAttendanceBulkSection_(runId, uploadAllowed, hasRun, st, standalone) {
       st = statusKey(st);
-      // Keep bulk upload visible whenever a payroll run exists (upload buttons still respect uploadAllowed).
       var openAttr = hasRun ? ' open' : '';
-      var html = '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
+      var innerStart = standalone
+        ? '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Attendance bulk upload</h2><div class="collapsible-section-body">'
+        : '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
         '<summary>Step 1 — Attendance bulk upload</summary>' +
-        '<div class="collapsible-section-body">' +
+        '<div class="collapsible-section-body">';
+      var html = innerStart +
         '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only — you fill working days and attendance columns, then upload.</p>' +
         (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(
           ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days']
@@ -755,7 +918,8 @@
         html += '<p id="pr-bulk-file-name" class="hint">No file selected.</p>';
       }
       html += '<div id="pr-upload-preview">' + paintBulkPreview_(bulkState.preview) + '</div>' +
-        '<div id="pr-upload-feedback" class="action-feedback hidden" role="status"></div></div></details>';
+        '<div id="pr-upload-feedback" class="action-feedback hidden" role="status"></div></div>';
+      html += standalone ? '</div>' : '</details>';
       return html;
     }
 
@@ -775,7 +939,7 @@
           '<button type="button" class="btn btn-primary" id="btn-pr-bulk-save-attendance">Save all attendance</button>' +
           '<span class="hint">Bulk-apply suggested LOP from approved leave, then save before calculating.</span></div>';
       }
-      return '<div class="card" id="payroll-data-card"><h2>Step 1 — Attendance manual entry</h2>' +
+      return '<div class="card" id="payroll-data-card"><h2>Attendance manual entry</h2>' +
         '<p class="page-lede">Alternatively, enter working days, paid days, and LOP in the table below. Save before calculating.</p>' +
         bulkBar + tableHtml + '</div>';
     }
@@ -971,17 +1135,13 @@
     function openSalaryStructureForEmployee_(page, employeeId) {
       employeeId = String(employeeId || '').trim();
       if (!employeeId) return;
+      if (App.navigate) {
+        App.navigate('salary-structure', { employeeId: employeeId });
+        return;
+      }
       compState.employeeId = employeeId;
       compState._editorLoadedFor = '';
-      compState.onlyMissing = false;
-      compState.empQuery = '';
-      homeState.salaryStructureOpen = true;
-      var details = $('salary-structure-details');
-      if (details) details.open = true;
       ensureCompEmployeesLoaded_(page, App.getState().navSeq);
-      if (details && details.scrollIntoView) {
-        try { details.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (ignore) {}
-      }
     }
 
     function bindPayrollFixActions_(page) {
@@ -1007,13 +1167,11 @@
     function prefetchCompEmployees_(seq) {
       if (compState._loaded && compState.employees.length) return;
       callServer('apiListCompensationEmployees', { background: true }).then(function (emps) {
-        if (!stillOnPayrollModule_(seq)) return;
+        if (!stillOnSalaryStructure_(seq)) return;
         compState.employees = emps || [];
         compState._loaded = true;
-        if (homeState.salaryStructureOpen) {
-          var page = document.querySelector('.payroll-page');
-          if (page) paintSalaryStructureMount_(page);
-        }
+        var page = document.querySelector('.payroll-page');
+        if (page) paintSalaryStructureMount_(page);
       }).catch(function () { /* Prefetch is optional; section load will retry. */ });
     }
 
@@ -1026,7 +1184,7 @@
       }
       mount.innerHTML = spinner('Loading employees…');
       callServer('apiListCompensationEmployees').then(function (emps) {
-        if (!stillOnPayrollModule_(seq)) return;
+        if (!stillOnSalaryStructure_(seq)) return;
         compState.employees = emps || [];
         compState._loaded = true;
         paintSalaryStructureMount_(page);
@@ -1062,7 +1220,7 @@
         return '<option value="' + escapeHtml(e.employee_id) + '"' + (e.employee_id === selected ? ' selected' : '') + '>' +
           escapeHtml(e.employee_id + ' — ' + e.display_name) + escapeHtml(miss) + '</option>';
       }).join('');
-      mount.innerHTML = '<p class="hint" style="margin-bottom:12px">For Excel/CSV import, use the <strong>Bulk upload salary structures</strong> card at the top of this page.</p>' +
+      mount.innerHTML = '<p class="hint" style="margin-bottom:12px">For Excel/CSV import, use the <strong>Bulk upload salary structures</strong> card above.</p>' +
         '<div class="page-toolbar"><div class="filters">' +
         '<label class="form-label" style="margin:0">Search <input class="form-input search-input" id="comp-search" placeholder="Name or ID" value="' + escapeHtml(compState.empQuery || '') + '"></label>' +
         '<label class="form-check"><input type="checkbox" id="comp-active"' + (onlyActive ? ' checked' : '') + '> Active only</label>' +
@@ -1130,19 +1288,6 @@
       if (prevDetails) prevDetails.addEventListener('toggle', function () {
         homeState.prevPayrollsOpen = prevDetails.open;
       });
-      var ssDetails = $('salary-structure-details');
-      if (ssDetails) {
-        ssDetails.addEventListener('toggle', function () {
-          homeState.salaryStructureOpen = ssDetails.open;
-          if (ssDetails.open) {
-            var mount = $('salary-structure-mount');
-            if (mount && !compState._loaded) mount.innerHTML = spinner('Loading employees…');
-            ensureCompEmployeesLoaded_(page, seq);
-          }
-        });
-        if (ssDetails.open) ensureCompEmployeesLoaded_(page, seq);
-      }
-
       var viewers = page.querySelectorAll('.js-view-period');
       for (var vi = 0; vi < viewers.length; vi++) {
         viewers[vi].addEventListener('click', function () {
@@ -1152,11 +1297,6 @@
         });
       }
 
-      bindCompBulkUpload_(page);
-      if (currentRun) {
-        var editableRun = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
-        bindBulkUpload_(currentRun.payroll_run_id, page, detail, editableRun);
-      }
       if (detail && currentRun) {
         var editable = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
         bindRunTable_(page, detail, editable);
@@ -1361,7 +1501,7 @@
           .then(function (nextDetail) {
             payrollState.detail = nextDetail;
             homeState.overview = nextDetail;
-            paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
+            repaintCurrentPayrollView_(page, App.getState().navSeq, nextDetail);
             showToast('Imported payroll data.', 'success');
           })
           .catch(function (err) {
@@ -1410,7 +1550,7 @@
         payrollState.dirty = false;
         payrollState.inputDraft = {};
         invalidatePayrollRunPeers_(runId);
-        paintUnifiedPayroll_(page, App.getState().navSeq, nextDetail);
+        repaintCurrentPayrollView_(page, App.getState().navSeq, nextDetail);
         if (message && setActionFeedback && $('pr-action-feedback')) {
           setActionFeedback($('pr-action-feedback'), message, 'success');
         } else if (message) {

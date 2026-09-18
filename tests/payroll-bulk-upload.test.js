@@ -55,9 +55,8 @@ check('api-bulk-commit', /apiCommitPayrollUpload/.test(api));
 
 check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
-check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client) &&
-  /<details[^>]*attendance-bulk-card[\s\S]*<summary>/.test(client));
-check('attendance-bulk-open-when-upload', /hasRun && \(uploadAllowed \|\| bulkState\.preview\)\) \? ' open'/.test(client));
+check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client));
+check('attendance-bulk-standalone-route', /renderAttendanceBulkUpload/.test(client) && /registerRoute\('attendance-bulk-upload'/.test(client));
 check('payroll-sync-employees-api', /apiSyncPayrollEmployees/.test(api));
 check('payroll-table-reset-on-run', /resetPayrollTableView_/.test(client) && /tableRunId/.test(client));
 check('payroll-load-eligible-button', /btn-pr-sync-employees/.test(client));
@@ -75,12 +74,12 @@ check('comp-bulk-ui', /apiValidateCompensationBulkUpload/.test(client) && /comp-
 check('comp-bulk-api', /apiDownloadCompensationBulkTemplate/.test(api) && /apiCommitCompensationBulkUpload/.test(api));
 check('generate-all-payslips', /Generate all payslips/i.test(client));
 check('no-run-id-in-previous-payrolls', !/paintPreviousPayrolls_[\s\S]{0,600}payroll_run_id/.test(client));
-check('compensation-delegates', /renderCompensation[\s\S]*openSalaryStructure: true/.test(client));
+check('salary-structure-route', /renderSalaryStructure/.test(client) && /registerRoute\('salary-structure'/.test(client));
 check('payroll-run-delegates', /renderPayrollRun[\s\S]*renderPayrollHome/.test(client));
 
 check('compensation-removed-nav', !/route:\s*'compensation'/.test(perm));
-check('payroll-route-alias', /'payroll-run':\s*'payroll'/.test(scripts) && /compensation:\s*'payroll'/.test(scripts));
-check('compensation-open-param', /openSalaryStructure = true/.test(scripts));
+check('payroll-route-alias', /'payroll-run':\s*'payroll'/.test(scripts) && /compensation:\s*'salary-structure'/.test(scripts));
+check('session-localstorage', /localStorage\.getItem\(SESSION_STORAGE_KEY\)/.test(scripts));
 
 check('employee-payslip-copy', /No payslips available yet/.test(employee) && !/after payroll is locked/.test(employee));
 check('my-payslips-copy', /No payslips available yet/.test(client) && /View payslip/.test(client));

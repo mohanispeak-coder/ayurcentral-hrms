@@ -107,12 +107,26 @@
 
   function $(id) { return document.getElementById(id); }
   function getSessionToken() {
-    try { return sessionStorage.getItem(SESSION_STORAGE_KEY) || ''; } catch (e) { return ''; }
+    try {
+      var token = localStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) return token;
+      token = sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+      return token;
+    } catch (e) { return ''; }
   }
   function setSessionToken(token) {
     try {
-      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
-      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      } else {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
     } catch (ignore) {}
   }
   function escapeHtml(str) {
