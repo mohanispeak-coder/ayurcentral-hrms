@@ -1,12 +1,12 @@
 /**
- * Configuration — PropertiesService + Settings sheet.
+ * Configuration - PropertiesService + Settings sheet.
  */
 var HRMS = HRMS || {};
 
 var ConfigService = (function () {
   var scriptProps_ = PropertiesService.getScriptProperties();
 
-  /** Request-scoped spreadsheet handle — cleared when ID changes. */
+  /** Request-scoped spreadsheet handle - cleared when ID changes. */
   var spreadsheetCache_ = null;
   var spreadsheetCacheId_ = '';
   var openByIdCount_ = 0;
@@ -155,6 +155,18 @@ var ConfigService = (function () {
     return getSetting('company_name', 'AyurCentral HRMS');
   }
 
+  function getHrmsWebAppUrl() {
+    var configured = String(getSetting('hrms_webapp_url', '') || '').trim();
+    if (configured) return configured;
+    try {
+      if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
+        var deployed = ScriptApp.getService().getUrl();
+        if (deployed) return String(deployed).trim();
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
   function getTimezone() {
     return getSetting('timezone', 'Asia/Kolkata');
   }
@@ -200,14 +212,15 @@ var ConfigService = (function () {
   }
 
   function isValidRole_(role) {
-    return role === HRMS.ROLES.ADMIN ||
+    return role === HRMS.ROLES.OWNER ||
+      role === HRMS.ROLES.ADMIN ||
       role === HRMS.ROLES.HR ||
       role === HRMS.ROLES.MANAGER ||
       role === HRMS.ROLES.EMPLOYEE;
   }
 
   /**
-   * Application mode — defaults to PRODUCTION when unset or unreadable.
+   * Application mode - defaults to PRODUCTION when unset or unreadable.
    * @return {string} HRMS.APP_MODE value
    */
   function getAppMode() {
@@ -268,6 +281,7 @@ var ConfigService = (function () {
     clearSettingsCache: clearSettingsCache_,
     getSetting: getSetting,
     getCompanyName: getCompanyName,
+    getHrmsWebAppUrl: getHrmsWebAppUrl,
     getTimezone: getTimezone,
     getCurrency: getCurrency,
     loadSettingsMap: loadSettingsMap_,
@@ -277,7 +291,7 @@ var ConfigService = (function () {
     getDemoRoleForEmail: getDemoRoleForEmail,
     parseDemoEmailList: parseDemoEmailList_,
     parseDemoRoleMap: parseDemoRoleMap_,
-    /** Test helper — openById calls this execution. */
+    /** Test helper - openById calls this execution. */
     getOpenByIdCountForTests: function () { return openByIdCount_; },
     resetOpenByIdCountForTests: function () { openByIdCount_ = 0; }
   };

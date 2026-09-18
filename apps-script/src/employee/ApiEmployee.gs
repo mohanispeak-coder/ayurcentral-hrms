@@ -23,6 +23,13 @@ function apiGetEmployeePicker(sessionToken) {
   }, sessionToken);
 }
 
+function apiGetEmployeeVerticals(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listVerticals(session);
+  }, sessionToken);
+}
+
 function apiGetEmployee(employeeId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
@@ -76,6 +83,13 @@ function apiUploadEmployeeDocument(employeeId, meta, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return EmployeeService.uploadDocument(session, employeeId, meta || {});
+  }, sessionToken);
+}
+
+function apiUploadEmployeeDocuments(employeeId, files, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.uploadDocuments(session, employeeId, files || []);
   }, sessionToken);
 }
 

@@ -1,7 +1,7 @@
 /**
  * Time-driven birthday/anniversary + pending-email drain.
  * Do not add to Index.html. Register from the Apps Script editor or a future
- * Main.gs menu — see docs/NOTIFICATIONS_INTEGRATION_NOTES.md.
+ * Main.gs menu - see docs/NOTIFICATIONS_INTEGRATION_NOTES.md.
  *
  * Trigger handler name must stay: runNotificationDailyJob
  */

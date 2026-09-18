@@ -7,7 +7,7 @@
  *   { ok: false, version, requestId, error: { code, message } }
  *
  * Single on-demand RPC. Knowledge retrieval runs on Ayurveda-AI (Drive + Gemini).
- * Not called at startup — only when the employee sends a question.
+ * Not called at startup - only when the employee sends a question.
  */
 
 function apiAskHr(question, sessionToken) {

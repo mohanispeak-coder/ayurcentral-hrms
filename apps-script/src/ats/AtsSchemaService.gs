@@ -1,5 +1,5 @@
 /**
- * ATS sheet bootstrap — independent of SchemaService.setupDatabase.
+ * ATS sheet bootstrap - independent of SchemaService.setupDatabase.
  * Creates missing sheets/headers and seeds ATS settings only. Never drops data.
  */
 var ATS = ATS || {};
@@ -27,7 +27,7 @@ var AtsSchemaService = (function () {
   SHEET_HEADERS_[ATS.SHEETS.INTERVIEWS] = [
     'interview_id', 'application_id', 'candidate_id', 'job_id', 'stage',
     'scheduled_at', 'interviewer_employee_id', 'interviewer_name', 'interviewer_email',
-    'notes', 'rating', 'recommendation',
+    'notes', 'rating', 'recommendation', 'status',
     'created_at', 'created_by_email', 'updated_at'
   ];
   SHEET_HEADERS_[ATS.SHEETS.ACTIVITY] = [

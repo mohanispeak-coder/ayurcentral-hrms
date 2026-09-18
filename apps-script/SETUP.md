@@ -52,7 +52,19 @@ Add each user to the **Users** sheet with `google_email` set to the **exact emai
 
 ## 2. First-time database setup
 
-In the Apps Script editor, run **`apiRunDatabaseSetup`** with an empty argument (or from the spreadsheet menu after binding):
+In the Apps Script editor, run **`apiRunDatabaseSetup`** with an empty argument, or **`runDatabaseSetupFromEditor`** (same thing).
+
+**Spreadsheet menu (HRMS → Run database setup):** Most deployments use a **standalone** script with `HRMS_SPREADSHEET_ID` (not a script bound inside the sheet). The simple `onOpen` in `Main.gs` does **not** run when you open the database sheet until you install a trigger:
+
+1. `clasp push`, then open the project in [script.google.com](https://script.google.com).
+2. Select function **`installHrmsSpreadsheetOpenTrigger`** → **Run** (authorize if asked).
+3. Close and reopen **AyurCentral HRMS Database** — you should see **HRMS** in the menu bar.
+
+To show the menu once without reopening, run **`showHrmsSpreadsheetMenuNow`** from the editor (with the sheet open in another tab).
+
+If the script is **bound** to the spreadsheet (container-bound project), `onOpen` works without the trigger.
+
+Legacy note (bound script only):
 
 - Creates a new spreadsheet **or** uses `HRMS_SPREADSHEET_ID` if already set in Script Properties.
 - Creates all sheets and headers (idempotent — safe to rerun).
@@ -77,6 +89,45 @@ HRMS Root/
 | --- | --- |
 | `HRMS_SPREADSHEET_ID` | Google Sheets database ID |
 | `HRMS_DRIVE_ROOT_FOLDER_ID` | Drive root folder ID |
+
+## 4.1 Google Drive API (required for bulk Excel uploads)
+
+Bulk upload for **employees**, **payroll attendance**, **salary structures**, and **ATS jobs/candidates** needs the **Google Drive API** advanced service (`Drive` symbol).
+
+### Automatic (recommended)
+
+The service is declared in `src/appsscript.json`. After you push code, it should appear under **Services** in the Apps Script editor:
+
+```bash
+cd apps-script
+npx clasp push
+npx clasp open
+```
+
+In the editor, confirm **Services** lists **Google Drive API** with identifier **`Drive`**.
+
+### Manual (if missing after push)
+
+1. Open the Apps Script project (`npx clasp open`).
+2. Click **Services** (+ icon on the left sidebar).
+3. Find **Google Drive API** → **Add**.
+4. Set identifier to **`Drive`** (must match `appsscript.json`).
+5. Click **Save**.
+
+### Verify
+
+Run in the Apps Script editor:
+
+```javascript
+function verifyDriveApi() {
+  if (typeof Drive === 'undefined' || !Drive.Files) {
+    throw new Error('Drive advanced service is not enabled. See SETUP.md §4.1');
+  }
+  Logger.log('Google Drive API is enabled.');
+}
+```
+
+**Redeploy** the web app after enabling (Deploy → Manage deployments → New version).
 
 ## 5. Foundation self-test
 
@@ -132,3 +183,4 @@ Clears OTP and rate-limit cache keys for that email only. Does **not** grant a s
 5. Run all auth tests from §5.
 
 In **PRODUCTION**, `demo_emails` has **no effect** — only the Users → employee_id → role → status chain grants access.
+

@@ -1,5 +1,5 @@
 /**
- * Pure payroll calculation — no spreadsheet I/O.
+ * Pure payroll calculation - no spreadsheet I/O.
  * Frontend net_pay is never read.
  */
 var PayrollEngine = (function () {

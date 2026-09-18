@@ -150,9 +150,25 @@ const managerRec = { employee_id: 'EMP002', display_name: 'Mo Manager', email: '
 {
   const cancelledEmp = E.payloads.leaveCancelled(Object.assign({ display_name: 'Ada Employee' }, leaveReq), employeeRec, 'HR');
   check('NTF-leave-cancel-emp', cancelledEmp.type === 'LEAVE_CANCELLED' && cancelledEmp.recipient_employee_id === 'EMP003');
+  check('NTF-leave-cancel-emp-route', cancelledEmp.action_route === 'my-leave');
   const cancelledMgr = E.payloads.leaveCancelled(Object.assign({ display_name: 'Ada Employee' }, leaveReq), managerRec, 'HR');
   check('NTF-leave-cancel-mgr', cancelledMgr.recipient_employee_id === 'EMP002');
-  check('NTF-leave-submit-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, managerRec).action_route === 'leave-approvals');
+  check('NTF-leave-cancel-mgr-route', cancelledMgr.action_route === 'leave-approvals');
+  check('NTF-leave-submit-mgr-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, managerRec).action_route === 'leave-approvals');
+  check('NTF-leave-submit-hr-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, hr, { audience: 'hr' }).action_route === 'leave-admin');
+  check('NTF-leave-submit-emp-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, employeeRec).action_route === 'my-leave');
+  check('NTF-leave-approved-route', E.payloads.leaveApproved(leaveReq, employeeRec).action_route === 'my-leave');
+  check('NTF-leave-rejected-route', E.payloads.leaveRejected(leaveReq, employeeRec).action_route === 'my-leave');
+  check('NTF-leave-approved-interim-route', E.payloads.leaveApproved(leaveReq, employeeRec, {
+    title: 'Pending manager approval',
+    message: 'Your leave has been approved by HR and is awaiting Reporting Manager approval.'
+  }).action_route === 'my-leave');
+  check('NTF-leave-manager-pending-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, managerRec, {
+    audience: 'manager',
+    title: 'Leave awaiting your approval',
+    message: 'Leave request from Ada Employee is awaiting your approval.'
+  }).action_route === 'leave-approvals');
+  check('NTF-leave-my-leave-params', E.payloads.leaveApproved(leaveReq, employeeRec).action_params.leaveRequestId === 'LR-100');
 }
 
 // --- payroll / payslip no net ---

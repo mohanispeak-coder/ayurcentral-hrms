@@ -101,6 +101,47 @@ function hrmsAuthSessionKey_(token) {
   return HRMS.AUTH_CACHE.SESSION_PREFIX + String(token || '');
 }
 
+function hrmsAuthSessionReadDurable_(key) {
+  try {
+    if (typeof PropertiesService === 'undefined' || !PropertiesService.getScriptProperties) return null;
+    var raw = PropertiesService.getScriptProperties().getProperty(key);
+    if (!raw) return null;
+    var data = hrmsAuthParseJson_(raw);
+    if (!data || !data.email) return null;
+    if (data.expiresAt && Date.now() > Number(data.expiresAt)) {
+      try {
+        PropertiesService.getScriptProperties().deleteProperty(key);
+      } catch (ignoreDel) {}
+      return null;
+    }
+    return raw;
+  } catch (e) {
+    return null;
+  }
+}
+
+function hrmsAuthSessionWriteDurable_(key, payload, ttlSec) {
+  try {
+    if (typeof PropertiesService === 'undefined' || !PropertiesService.getScriptProperties) return;
+    var copy = payload && typeof payload === 'object' ? payload : {};
+    copy.expiresAt = Date.now() + Math.max(60, Number(ttlSec) || HRMS.AUTH_LIMITS.SESSION_TTL_SEC) * 1000;
+    PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(copy));
+  } catch (ignore) {}
+}
+
+function hrmsAuthSessionRemoveDurable_(key) {
+  try {
+    if (typeof PropertiesService === 'undefined' || !PropertiesService.getScriptProperties) return;
+    PropertiesService.getScriptProperties().deleteProperty(key);
+  } catch (ignore) {}
+}
+
+function hrmsAuthSessionRehydrateCache_(key, raw, ttlSec) {
+  try {
+    CacheService.getScriptCache().put(key, raw, Math.max(60, Number(ttlSec) || HRMS.AUTH_LIMITS.SESSION_TTL_SEC));
+  } catch (ignore) {}
+}
+
 function hrmsAuthGenerateOtp_() {
   var raw = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
@@ -308,7 +349,11 @@ function hrmsAuthOtpVerify_(email, code, context) {
 
   var token = hrmsAuthGenerateToken_();
   var sessionPayload = { email: email, createdAt: now };
-  store.put(hrmsAuthSessionKey_(token), JSON.stringify(sessionPayload), HRMS.AUTH_LIMITS.SESSION_TTL_SEC);
+  var sessionKey = hrmsAuthSessionKey_(token);
+  store.put(sessionKey, JSON.stringify(sessionPayload), HRMS.AUTH_LIMITS.SESSION_TTL_SEC);
+  if (context.memoryOnly !== true) {
+    hrmsAuthSessionWriteDurable_(sessionKey, sessionPayload, HRMS.AUTH_LIMITS.SESSION_TTL_SEC);
+  }
 
   return {
     ok: true,
@@ -326,10 +371,18 @@ function hrmsAuthOtpVerify_(email, code, context) {
 function hrmsAuthSessionGetEmail_(token, store, memoryOnly) {
   token = String(token || '').trim();
   if (!token) return '';
+  var sessionKey = hrmsAuthSessionKey_(token);
   store = hrmsAuthCreateStoreAdapter_(store, memoryOnly === true);
-  var raw = store.get(hrmsAuthSessionKey_(token));
+  var raw = store.get(sessionKey);
+  if (!raw && memoryOnly !== true) {
+    raw = hrmsAuthSessionReadDurable_(sessionKey);
+    if (raw) hrmsAuthSessionRehydrateCache_(sessionKey, raw, HRMS.AUTH_LIMITS.SESSION_TTL_SEC);
+  }
   var data = hrmsAuthParseJson_(raw);
   if (!data || !data.email) return '';
+  if (memoryOnly !== true && raw) {
+    hrmsAuthSessionRehydrateCache_(sessionKey, raw, HRMS.AUTH_LIMITS.SESSION_TTL_SEC);
+  }
   return hrmsAuthNormalizeEmail_(data.email);
 }
 
@@ -341,8 +394,12 @@ function hrmsAuthSessionGetEmail_(token, store, memoryOnly) {
 function hrmsAuthSessionInvalidate_(token, store, memoryOnly) {
   token = String(token || '').trim();
   if (!token) return false;
+  var sessionKey = hrmsAuthSessionKey_(token);
   store = hrmsAuthCreateStoreAdapter_(store, memoryOnly === true);
-  store.remove(hrmsAuthSessionKey_(token));
+  store.remove(sessionKey);
+  if (memoryOnly !== true) {
+    hrmsAuthSessionRemoveDurable_(sessionKey);
+  }
   return true;
 }
 
@@ -363,7 +420,7 @@ var AuthSessionService = (function () {
     } catch (ignore) {}
     MailApp.sendEmail({
       to: email,
-      subject: company + ' — sign-in verification code',
+      subject: company + ' - sign-in verification code',
       body: 'Your HRMS verification code is: ' + otp + '\n\nThis code expires in 10 minutes and can be used once.\n\nIf you did not request this code, ignore this email.'
     });
   }

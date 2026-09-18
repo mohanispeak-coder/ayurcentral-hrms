@@ -2,10 +2,18 @@
  * Client-callable Leave APIs. AuthZ on every entry.
  */
 
-function apiLeaveGetMyLeave(employeeId, sessionToken) {
+function apiLeaveGetMyLeave(employeeIdOrQuery, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return LeaveService.getMyLeave(session, employeeId || '');
+    var employeeId = '';
+    var leaveYear = '';
+    if (employeeIdOrQuery && typeof employeeIdOrQuery === 'object') {
+      employeeId = employeeIdOrQuery.employee_id || '';
+      leaveYear = employeeIdOrQuery.leave_year || '';
+    } else {
+      employeeId = employeeIdOrQuery || '';
+    }
+    return LeaveService.getMyLeave(session, employeeId, leaveYear);
   }, sessionToken);
 }
 
@@ -43,6 +51,13 @@ function apiLeaveCancel(leaveRequestId, sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveRevokeRejection(leaveRequestId, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.revokeRejection(session, leaveRequestId, comment || '');
+  }, sessionToken);
+}
+
 function apiLeaveGetApprovals(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
@@ -61,6 +76,20 @@ function apiLeaveReject(leaveRequestId, comment, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return LeaveService.reject(session, leaveRequestId, comment || '');
+  }, sessionToken);
+}
+
+function apiLeaveApproveMany(leaveRequestIds, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.approveMany(session, leaveRequestIds || [], comment || '');
+  }, sessionToken);
+}
+
+function apiLeaveRejectMany(leaveRequestIds, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.rejectMany(session, leaveRequestIds || [], comment || '');
   }, sessionToken);
 }
 
@@ -94,7 +123,7 @@ function apiLeaveGrantBalances(employeeId, leaveYear, sessionToken) {
     if (!PermissionService.isHrOrAdmin(session)) {
       throw authorizationError_('Only HR or Admin can grant leave balances.');
     }
-    return LeaveService.grantBalancesForEmployee(employeeId, leaveYear);
+    return LeaveService.grantBalancesForEmployee(employeeId, leaveYear, { includeInactive: true });
   }, sessionToken);
 }
 
@@ -109,6 +138,13 @@ function apiLeaveListEmployees(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return LeaveService.listEmployeeOptions(session);
+  }, sessionToken);
+}
+
+function apiLeaveGetApplyBundle(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.getApplyBootstrap(session);
   }, sessionToken);
 }
 

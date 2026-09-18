@@ -17,6 +17,39 @@
 .ats-page .activity-meta { color: var(--color-text-muted); font-size: var(--text-xs); margin-top: 4px; }
 .ats-page .prose { white-space: pre-wrap; color: var(--color-text); line-height: 1.5; }
 .ats-page .muted { color: var(--color-text-muted); }
+.ats-page .bulk-upload-card.collapsible-section { margin-bottom: 20px; }
+.ats-page .bulk-steps { margin: 8px 0 12px 20px; color: var(--color-text-muted); font-size: 0.875rem; }
+.ats-page .candidates-table-section { margin-top: 4px; }
+.ats-page .candidates-table-section .section-title { font-size: 1rem; font-weight: 600; }
+.ats-page .pipeline-board-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; }
+.ats-page .pipeline-board-terminal { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 12px; max-width: 520px; }
+@media (max-width: 768px) {
+  .ats-page .pipeline-board,
+  .ats-page .pipeline-board-main,
+  .ats-page .pipeline-board-terminal {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .ats-page .pipeline-col {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+  .ats-page .pipeline-col h3 { margin: 0; flex: 1 1 auto; }
+  .ats-page .pipeline-count { font-size: 1.125rem; flex-shrink: 0; }
+  .ats-page .quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ats-page .quick-links .btn { width: 100%; min-height: 44px; }
+}
+.ats-page .ats-app-card strong { display: block; font-size: 0.875rem; line-height: 1.35; }
+.ats-page .ats-app-card .muted { font-size: 0.75rem; margin-top: 4px; word-break: break-word; }
+.ats-page .ats-interview-card { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; }
+.ats-page .ats-interview-card.is-upcoming { border-left: 3px solid var(--color-primary); }
+.ats-page .ats-interview-card.is-done { border-left: 3px solid var(--color-success); }
+.ats-page .ats-interview-feedback { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--color-border); }
 </style>
 <script>
 (function () {
@@ -47,7 +80,7 @@
       atsView.jobs = null;
       atsView.candidates = null;
       if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(['ats', 'ats-jobs', 'ats-candidates']);
-      if (App.invalidateDashboardView) App.invalidateDashboardView();
+      if (App.invalidateDashboardView) App.invalidateDashboardView({ secondaryOnly: true });
     }
 
     function invalidateAtsJob_(jobId) {
@@ -109,7 +142,8 @@
     }
 
     function canManage() {
-      return !!atsMeta.canManage || sessionRole() === 'ADMIN' || sessionRole() === 'HR';
+      var r = sessionRole();
+      return !!atsMeta.canManage || r === 'OWNER' || r === 'ADMIN' || r === 'HR';
     }
 
     function header(title, lede, actions) {
@@ -122,7 +156,7 @@
     }
 
     function fmtWhen(v) {
-      if (!v) return '—';
+      if (!v) return '-';
       var d = new Date(v);
       if (isNaN(d.getTime())) return String(v);
       return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -166,16 +200,393 @@
       return spinner('Loading recruitment…');
     }
 
-    function rpc(fn, args, btn, loadingText, feedback) {
-      var opts = { loadingText: loadingText || 'Working…' };
-      if (btn) opts.button = btn;
-      if (feedback) opts.feedback = feedback;
-      return callServer.apply(null, [fn].concat(args || []).concat([opts]));
+    var rpc = App.moduleRpc || function (fn, args, btn, loadingText, feedback) {
+      var callArgs = [fn].concat(args || []);
+      if (btn || feedback) {
+        var opts = { loadingText: loadingText || 'Working…' };
+        if (btn) opts.button = btn;
+        if (feedback) opts.feedback = feedback;
+        callArgs.push(opts);
+      }
+      return callServer.apply(null, callArgs);
+    };
+
+    var atsBulkState = { jobs: { file: null, preview: null }, candidates: { file: null, preview: null } };
+
+    function readAtsFileBase64_(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read file.')); };
+        reader.onload = function () {
+          resolve({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(reader.result || '').split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
     }
 
-    function ensureMeta(force) {
+    function downloadAtsBlob_(file) {
+      if (!file || !file.base64) throw new Error('File was empty.');
+      var bytes = atob(file.base64);
+      var arr = new Uint8Array(bytes.length);
+      for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      var blob = new Blob([arr], { type: file.mimeType || 'application/octet-stream' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = file.fileName || 'download';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function paintAtsBulkPreview_(kind, preview) {
+      var el = $(kind === 'jobs' ? 'ats-jobs-bulk-preview' : 'ats-candidates-bulk-preview');
+      if (!el || !preview) return;
+      var html = '<div class="upload-preview"><p><strong>' + preview.validCount + '</strong> ready · ' +
+        '<strong>' + preview.errorCount + '</strong> need attention</p>';
+      if (preview.errors && preview.errors.length) {
+        html += '<ul class="problem-list">';
+        preview.errors.forEach(function (err) {
+          var msgs = (err.messages || []).map(function (m) { return m.message || m; }).join('; ');
+          html += '<li>Row ' + escapeHtml(String(err.rowNumber)) + ': ' + escapeHtml(msgs) + '</li>';
+        });
+        html += '</ul>';
+      }
+      if (preview.validCount > 0) {
+        html += '<button type="button" class="btn btn-primary" id="ats-bulk-commit-' + kind + '">Confirm import (' +
+          preview.validCount + ')</button>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+      var commitBtn = $('ats-bulk-commit-' + kind);
+      if (!commitBtn) return;
+      commitBtn.addEventListener('click', function () {
+        var state = atsBulkState[kind];
+        if (!state.preview || !state.preview.uploadId) return;
+        var api = kind === 'jobs' ? 'apiAtsCommitJobsBulkUpload' : 'apiAtsCommitCandidatesBulkUpload';
+        rpc(api, [state.preview.uploadId], commitBtn, 'Importing…').then(function (result) {
+          state.preview = null;
+          state.file = null;
+          var prev = $(kind === 'jobs' ? 'ats-jobs-bulk-preview' : 'ats-candidates-bulk-preview');
+          if (prev) prev.innerHTML = '';
+          invalidateAtsPipeline_();
+          showToast('Imported ' + (result.createdCount || 0) + ' row(s).', 'success');
+          if (state.onCommitted) state.onCommitted();
+        }).catch(function (err) {
+          showToast((err && err.message) || 'Import failed', 'error');
+        });
+      });
+    }
+
+    function bindAtsBulkPanel_(kind, opts) {
+      opts = opts || {};
+      var state = atsBulkState[kind];
+      state.onCommitted = opts.onCommitted || null;
+      var chooseBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-choose' : 'ats-candidates-bulk-choose');
+      var fileInput = $(kind === 'jobs' ? 'ats-jobs-bulk-file' : 'ats-candidates-bulk-file');
+      var validateBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-validate' : 'ats-candidates-bulk-validate');
+      if (chooseBtn && fileInput) chooseBtn.addEventListener('click', function () { fileInput.click(); });
+      if (fileInput) fileInput.addEventListener('change', function () {
+        state.file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if (validateBtn) validateBtn.disabled = !state.file;
+        var nameEl = $(kind === 'jobs' ? 'ats-jobs-bulk-file-name' : 'ats-candidates-bulk-file-name');
+        if (nameEl) nameEl.textContent = state.file ? state.file.name : 'No file selected.';
+        state.preview = null;
+        var prev = $(kind === 'jobs' ? 'ats-jobs-bulk-preview' : 'ats-candidates-bulk-preview');
+        if (prev) prev.innerHTML = '';
+      });
+      var dlBtn = $(kind === 'jobs' ? 'ats-jobs-bulk-template' : 'ats-candidates-bulk-template');
+      if (dlBtn) dlBtn.addEventListener('click', function () {
+        var api = kind === 'jobs' ? 'apiAtsDownloadJobsBulkTemplate' : 'apiAtsDownloadCandidatesBulkTemplate';
+        rpc(api, [], dlBtn, 'Downloading…').then(downloadAtsBlob_).catch(function (err) {
+          showToast((err && err.message) || 'Download failed', 'error');
+        });
+      });
+      if (validateBtn) validateBtn.addEventListener('click', function () {
+        if (!state.file) return;
+        var api = kind === 'jobs' ? 'apiAtsValidateJobsBulkUpload' : 'apiAtsValidateCandidatesBulkUpload';
+        readAtsFileBase64_(state.file).then(function (meta) {
+          return rpc(api, [meta], validateBtn, 'Validating…');
+        }).then(function (preview) {
+          state.preview = preview;
+          paintAtsBulkPreview_(kind, preview);
+        });
+      });
+    }
+
+    function formatSource_(value) {
+      var s = String(value || '').trim();
+      if (!s) return '-';
+      return s.replace(/_/g, ' ');
+    }
+
+    function forwardStageOptions_(currentStage, pipeline) {
+      pipeline = pipeline || [];
+      var cur = String(currentStage || 'APPLIED').toUpperCase();
+      var idx = -1;
+      for (var i = 0; i < pipeline.length; i++) {
+        if (String(pipeline[i] || '').toUpperCase() === cur) { idx = i; break; }
+      }
+      var out = [];
+      if (idx >= 0) {
+        for (var j = idx + 1; j < pipeline.length; j++) out.push(pipeline[j]);
+      }
+      ['REJECTED', 'WITHDRAWN'].forEach(function (t) {
+        if (t !== cur && out.indexOf(t) < 0) out.push(t);
+      });
+      return out;
+    }
+
+    function stageMoveSelectHtml_(applicationId, currentStage, pipeline) {
+      var opts = forwardStageOptions_(currentStage, pipeline);
+      if (!opts.length) {
+        return '<span class="muted">No moves</span>';
+      }
+      return '<select class="form-select" data-move="' + escapeHtml(applicationId) + '" style="min-width:9rem">' +
+        '<option value="">Move to…</option>' +
+        opts.map(function (s) {
+          return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s.replace(/_/g, ' ')) + '</option>';
+        }).join('') + '</select>';
+    }
+
+    function candidateDisplayName_(app) {
+      var name = app && app.candidate_name ? String(app.candidate_name).trim() : '';
+      return name || 'Unknown candidate';
+    }
+
+    function buildPipelineBoardHtml_(apps, stages) {
+      var mainStages = (stages || []).slice();
+      var terminalStages = ['REJECTED', 'WITHDRAWN'];
+      var byStage = {};
+      mainStages.concat(terminalStages).forEach(function (s) { byStage[s] = []; });
+      (apps || []).forEach(function (a) {
+        var st = String(a.stage || 'APPLIED').toUpperCase();
+        if (!byStage[st]) byStage[st] = [];
+        byStage[st].push(a);
+      });
+      function colHtml(st) {
+        var cards = (byStage[st] || []).map(function (a) {
+          return '<div class="ats-app-card" data-cand="' + escapeHtml(a.candidate_id) + '">' +
+            '<strong>' + escapeHtml(candidateDisplayName_(a)) + '</strong>' +
+            '<div class="muted">' + escapeHtml(a.candidate_email || '-') + '</div></div>';
+        }).join('');
+        return '<div class="pipeline-col"><h3>' + escapeHtml(st.replace(/_/g, ' ')) +
+          ' · ' + (byStage[st] || []).length + '</h3>' + (cards || '<p class="muted">None</p>') + '</div>';
+      }
+      return '<div class="pipeline-board-main">' + mainStages.map(colHtml).join('') + '</div>' +
+        '<div class="pipeline-board-terminal">' + terminalStages.map(colHtml).join('') + '</div>';
+    }
+
+    var IV_REC_OPTIONS_ = ['', 'STRONG_HIRE', 'HIRE', 'HOLD', 'NO_HIRE'];
+
+    function candidateActivityHtml_(act) {
+      act = act || [];
+      return act.length ? '<ul class="activity-list">' + act.map(function (row) {
+        return '<li><div>' + escapeHtml(row.summary) + '</div><div class="activity-meta">' +
+          escapeHtml(row.action) + ' · ' + escapeHtml(row.actor_email || '') + ' · ' + escapeHtml(fmtWhen(row.created_at)) + '</div></li>';
+      }).join('') + '</ul>' : '<p class="muted">No activity yet.</p>';
+    }
+
+    function candidateInterviewListHtml_(ivs) {
+      ivs = ivs || [];
+      if (!ivs.length) {
+        return emptyState('No interviews', 'Schedule an interview from an application.');
+      }
+      var nowMs = Date.now();
+      return ivs.map(function (iv) {
+        var status = String(iv.status || 'SCHEDULED').toUpperCase();
+        var done = status === 'COMPLETED';
+        var whenMs = iv.scheduled_at ? new Date(iv.scheduled_at).getTime() : 0;
+        var upcoming = !done && whenMs > nowMs;
+        var cardClass = 'ats-interview-card' + (done ? ' is-done' : (upcoming ? ' is-upcoming' : ''));
+        var statusLabel = done ? 'Completed' : (upcoming ? 'Upcoming' : 'Awaiting feedback');
+        var body = '<div class="' + cardClass + '" data-iv="' + escapeHtml(iv.interview_id) + '">' +
+          '<div class="profile-header"><div><strong>' + escapeHtml(fmtWhen(iv.scheduled_at)) +
+          '</strong> · ' + escapeHtml(iv.interviewer_name || iv.interviewer_employee_id || 'Interviewer') +
+          '</div>' + badge(statusLabel) + '</div>' +
+          (done
+            ? ('<p class="muted">Internal feedback (not shared with candidate)</p>' +
+              '<p>Rating: ' + escapeHtml(String(iv.rating || '-')) + ' · Recommendation: ' +
+              escapeHtml(iv.recommendation || '-') + '</p>' +
+              (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : ''))
+            : ('<p class="muted">' + (upcoming ? 'Scheduled interview' : 'Interview time has passed - submit feedback when done.') + '</p>' +
+              (iv.notes ? '<div class="prose">' + escapeHtml(iv.notes) + '</div>' : '') +
+              (!upcoming
+                ? ('<div class="ats-interview-feedback">' +
+                  '<p class="hint">Feedback and ratings are internal only.</p>' +
+                  '<div class="form-row">' +
+                  '<div class="form-group"><label class="form-label">Rating (1–5)</label>' +
+                  '<input class="form-input" type="number" min="1" max="5" data-iv-rate="' + escapeHtml(iv.interview_id) + '"></div>' +
+                  '<div class="form-group"><label class="form-label">Recommendation</label>' +
+                  '<select class="form-select" data-iv-rec="' + escapeHtml(iv.interview_id) + '">' +
+                  IV_REC_OPTIONS_.map(function (r) {
+                    return '<option value="' + r + '">' + (r ? r.replace(/_/g, ' ') : '-') + '</option>';
+                  }).join('') + '</select></div></div>' +
+                  '<div class="form-group"><label class="form-label">Feedback notes</label>' +
+                  '<textarea class="form-input" rows="3" data-iv-notes="' + escapeHtml(iv.interview_id) + '"></textarea></div>' +
+                  '<button type="button" class="btn btn-primary btn-sm" data-iv-complete="' + escapeHtml(iv.interview_id) + '">' +
+                  'Save feedback & mark complete</button></div>')
+                : '')));
+        return body + '</div>';
+      }).join('');
+    }
+
+    function candidateApplicationsBodyHtml_(apps, stages) {
+      return (apps || []).map(function (a) {
+        return '<tr><td class="mono">' + escapeHtml(a.job_id) + '</td><td>' + escapeHtml(a.job_title || '') +
+          '</td><td>' + badge(a.stage) + '</td><td>' + escapeHtml(fmtWhen(a.applied_at)) + '</td>' +
+          '<td>' + stageMoveSelectHtml_(a.application_id, a.stage, stages) + '</td></tr>';
+      }).join('');
+    }
+
+    function syncScheduleAppSelect_(apps) {
+      var sel = $('ats-iv-app');
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = (apps || []).map(function (a) {
+        return '<option value="' + escapeHtml(a.application_id) + '">' + escapeHtml(a.job_title || a.job_id) +
+          ' · ' + escapeHtml(a.stage) + '</option>';
+      }).join('');
+      if (prev && sel.querySelector('option[value="' + prev.replace(/"/g, '') + '"]')) sel.value = prev;
+    }
+
+    function bindCandidateInterviewCompleteHandlers_(page, candidateId, seq) {
+      if (!page) return;
+      Array.prototype.forEach.call(page.querySelectorAll('[data-iv-complete]'), function (btn) {
+        btn.addEventListener('click', function () {
+          var ivId = btn.getAttribute('data-iv-complete');
+          var rateEl = page.querySelector('[data-iv-rate="' + ivId + '"]');
+          var recEl = page.querySelector('[data-iv-rec="' + ivId + '"]');
+          var notesEl = page.querySelector('[data-iv-notes="' + ivId + '"]');
+          rpc('apiAtsUpdateInterview', [ivId, {
+            complete: true,
+            rating: rateEl ? rateEl.value : '',
+            recommendation: recEl ? recEl.value : '',
+            notes: notesEl ? notesEl.value : ''
+          }], btn, 'Saving…')
+            .then(function (res) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              var cached = atsView.candidate[candidateId];
+              if (cached && res && res.interview) {
+                cached.interviews = (cached.interviews || []).map(function (iv) {
+                  return iv.interview_id === res.interview.interview_id ? res.interview : iv;
+                });
+                var ivList = $('ats-cand-iv-list');
+                if (ivList) ivList.innerHTML = candidateInterviewListHtml_(cached.interviews);
+                bindCandidateInterviewCompleteHandlers_(page, candidateId, seq);
+              }
+              showToast('Interview feedback saved.');
+            })
+            .catch(function (err) { showToast((err && err.message) || 'Save failed', 'error'); });
+        });
+      });
+    }
+
+    function patchCandidateAfterSchedule_(candidateId, res, stages, seq) {
+      res = res || {};
+      var cached = atsView.candidate[candidateId] || {};
+      if (res.interview) {
+        cached.interviews = cached.interviews || [];
+        cached.interviews.unshift(res.interview);
+      }
+      if (res.application) {
+        cached.applications = (cached.applications || []).map(function (a) {
+          return a.application_id === res.application.application_id ? Object.assign({}, a, res.application) : a;
+        });
+      }
+      atsView.candidate[candidateId] = cached;
+      var tbody = $('ats-cand-apps-body');
+      if (tbody) tbody.innerHTML = candidateApplicationsBodyHtml_(cached.applications, stages);
+      var ivList = $('ats-cand-iv-list');
+      if (ivList) ivList.innerHTML = candidateInterviewListHtml_(cached.interviews);
+      syncScheduleAppSelect_(cached.applications);
+      var page = pageEl();
+      bindCandidateApplicationMoveHandlers_(page, candidateId, cached.applications, stages, seq);
+      bindCandidateInterviewCompleteHandlers_(page, candidateId, seq);
+      if ($('ats-iv-when')) $('ats-iv-when').value = '';
+      if ($('ats-iv-notes')) $('ats-iv-notes').value = '';
+      callServer('apiAtsGetCandidate', candidateId, { background: true }).then(function (fresh) {
+        if (!stillOn(seq, 'ats-candidate')) return;
+        atsView.candidate[candidateId] = fresh;
+        var actEl = $('ats-cand-activity');
+        if (actEl) actEl.innerHTML = candidateActivityHtml_(fresh.activity);
+      }).catch(function () {});
+    }
+
+    function bindCandidateApplicationMoveHandlers_(page, candidateId, apps, stages, seq) {
+      if (!page) return;
+      Array.prototype.forEach.call(page.querySelectorAll('[data-move]'), function (sel) {
+        sel.addEventListener('change', function () {
+          var stage = sel.value;
+          if (!stage) return;
+          rpc('apiAtsMoveApplicationStage', [sel.getAttribute('data-move'), stage, ''], sel, 'Moving…')
+            .then(function (moveRes) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              var cached = atsView.candidate[candidateId];
+              if (cached && moveRes && moveRes.application) {
+                cached.applications = (cached.applications || []).map(function (a) {
+                  return a.application_id === moveRes.application.application_id
+                    ? Object.assign({}, a, moveRes.application) : a;
+                });
+                atsView.candidate[candidateId] = cached;
+                var tbody = $('ats-cand-apps-body');
+                if (tbody) tbody.innerHTML = candidateApplicationsBodyHtml_(cached.applications, stages);
+                syncScheduleAppSelect_(cached.applications);
+                bindCandidateApplicationMoveHandlers_(page, candidateId, cached.applications, stages, seq);
+              }
+              invalidateAtsCandidate_(candidateId, (apps || []).map(function (a) { return a.job_id; }));
+              sel.value = '';
+            })
+            .catch(function (err) { showToast((err && err.message) || 'Move failed', 'error'); sel.value = ''; });
+        });
+      });
+    }
+
+    function atsBulkPanelHtml_(kind, title, hint, requiredColumns) {
+      var reqHtml = App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(requiredColumns || []) : '';
+      return '<details class="card collapsible-section bulk-upload-card" id="ats-' + kind + '-bulk-card">' +
+        '<summary>' + escapeHtml(title) + '</summary>' +
+        '<div class="collapsible-section-body">' +
+        '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
+        reqHtml +
+        '<ol class="bulk-steps"><li>Download template</li><li>Choose Excel/CSV file</li><li>Validate upload</li><li>Confirm import</li></ol>' +
+        (kind === 'jobs' ? '<p class="hint">Job closing_date must be DD/MM/YYYY or DD-MM-YYYY (e.g. 31/12/2026).</p>' : '') +
+        '<div class="bulk-action-bar">' +
+        '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-template">Download template</button>' +
+        '<button type="button" class="btn btn-secondary" id="ats-' + kind + '-bulk-choose">Choose Excel/CSV file</button>' +
+        '<input type="file" id="ats-' + kind + '-bulk-file" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv">' +
+        '<button type="button" class="btn btn-primary" id="ats-' + kind + '-bulk-validate" disabled>Validate upload</button>' +
+        '</div>' +
+        '<p id="ats-' + kind + '-bulk-file-name" class="hint">No file selected.</p>' +
+        '<div id="ats-' + kind + '-bulk-preview"></div></div></details>';
+    }
+
+    function bindBulkWhenOpen_(kind, opts) {
+      if (!canManage()) return;
+      var card = $('ats-' + kind + '-bulk-card');
+      if (!card) return;
+      var bound = false;
+      function bindOnce() {
+        if (bound) return;
+        bound = true;
+        ensureMeta(false, { includeDashboard: false }).then(function () {
+          bindAtsBulkPanel_(kind, opts);
+        });
+      }
+      card.addEventListener('toggle', function () {
+        if (card.open) bindOnce();
+      });
+      if (card.open) bindOnce();
+    }
+
+    function ensureMeta(force, options) {
+      options = options || {};
       if (atsMeta.loaded && !force) return Promise.resolve(atsMeta.boot);
-      return rpc('apiAtsGetBootstrap', []).then(function (data) {
+      var payload = { includeDashboard: options.includeDashboard !== false };
+      return rpc('apiAtsGetBootstrap', [payload]).then(function (data) {
         atsMeta.canManage = !!(data && data.can_manage);
         atsMeta.pipeline = (data && data.pipeline) || [];
         atsMeta.schemaReady = !!(data && data.schema_ready);
@@ -218,7 +629,7 @@
 
     function kpiCard(label, value) {
       return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
-        '<div class="kpi-value">' + escapeHtml(String(value == null ? '—' : value)) + '</div></div>';
+        '<div class="kpi-value">' + escapeHtml(String(value == null ? '-' : value)) + '</div></div>';
     }
 
     function paintAtsHomeKpis_(kpis) {
@@ -302,6 +713,9 @@
       var restoreJobs = App.consumeModuleViewRestore && App.consumeModuleViewRestore('ats-jobs') && atsView.jobs;
       var keepRefresh = !!(App.isModuleRefresh && App.isModuleRefresh('ats-jobs') && atsView.jobs);
       page.innerHTML = header('Jobs', 'Requisitions you can work. Publish a job to get a public application link.', actions) +
+        (canManage() ? atsBulkPanelHtml_('jobs', 'Bulk upload jobs',
+          'Duplicate job titles in one file are rejected. Set publish to YES to publish immediately.',
+          ['title']) : '') +
         '<div class="page-toolbar"><div class="filters">' +
           '<div class="form-group"><label class="form-label" for="ats-job-q">Search</label>' +
           '<input class="form-input search-input" id="ats-job-q" type="search" placeholder="Title, department, ID"></div>' +
@@ -310,10 +724,20 @@
             '<option value="">All</option><option value="DRAFT">Draft</option><option value="PUBLISHED">Published</option>' +
             '<option value="PAUSED">Paused</option><option value="CLOSED">Closed</option></select></div>' +
         '</div></div>' +
-        '<div class="table-wrap" id="ats-job-wrap"><table class="data-table"><thead><tr>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint" id="ats-job-wrap"><table class="data-table"><thead><tr>' +
           '<th>Job ID</th><th>Title</th><th>Department</th><th>Location</th><th>Status</th><th class="num">Apps</th><th>Manager</th>' +
         '</tr></thead><tbody id="ats-job-body"></tbody></table></div>';
       if ($('ats-new-job')) $('ats-new-job').addEventListener('click', function () { App.navigate('ats-job-new'); });
+      bindBulkWhenOpen_('jobs', {
+        onCommitted: function () {
+          atsView.jobs = null;
+          var body = $('ats-job-body');
+          var wrap = $('ats-job-wrap');
+          if (body) body.innerHTML = skRows(7, 4);
+          if (wrap) wrap.setAttribute('aria-busy', 'true');
+          load();
+        }
+      });
       if (atsView.jobQuery) {
         if ($('ats-job-q')) $('ats-job-q').value = atsView.jobQuery.q || '';
         if ($('ats-job-status')) $('ats-job-status').value = atsView.jobQuery.status || '';
@@ -332,11 +756,11 @@
           return '<tr class="table-row-click" data-job="' + escapeHtml(j.job_id) + '">' +
             '<td class="mono">' + escapeHtml(j.job_id) + '</td>' +
             '<td>' + escapeHtml(j.title) + '</td>' +
-            '<td>' + escapeHtml(j.department || '—') + '</td>' +
-            '<td>' + escapeHtml(j.location || '—') + '</td>' +
+            '<td>' + escapeHtml(j.department || '-') + '</td>' +
+            '<td>' + escapeHtml(j.location || '-') + '</td>' +
             '<td>' + badge(j.status) + '</td>' +
             '<td class="num">' + escapeHtml(String(j.application_count || 0)) + '</td>' +
-            '<td>' + escapeHtml(j.hiring_manager_name || j.hiring_manager_employee_id || '—') + '</td></tr>';
+            '<td>' + escapeHtml(j.hiring_manager_name || j.hiring_manager_employee_id || '-') + '</td></tr>';
         }).join('');
         Array.prototype.forEach.call(body.querySelectorAll('tr[data-job]'), function (tr) {
           tr.addEventListener('click', function () {
@@ -357,7 +781,16 @@
         }).catch(function (err) {
           if (!stillOn(seq, 'ats-jobs')) return;
           if (App.finishModuleRefresh) App.finishModuleRefresh(true);
-          paintErr($('ats-job-body').parentNode.parentNode, (err && err.message) || 'Failed to load jobs.', load);
+          var body = $('ats-job-body');
+          if (body) {
+            body.innerHTML = '<tr class="table-empty-row"><td colspan="7">' +
+              escapeHtml((err && err.message) || 'Failed to load jobs.') + '</td></tr>';
+          }
+          showToast((err && err.message) || 'Failed to load jobs', 'error');
+        }).finally(function () {
+          if (!stillOn(seq, 'ats-jobs')) return;
+          var wrap = $('ats-job-wrap');
+          if (wrap) wrap.removeAttribute('aria-busy');
         });
       }
       if (restoreJobs) {
@@ -440,7 +873,7 @@
         var managers = pack[0] || [];
         var job = pack[1] && pack[1].job ? pack[1].job : {};
         jobFormState.jobId = job.job_id || '';
-        var mgrOpts = [{ value: '', label: '—' }].concat(managers.map(function (m) {
+        var mgrOpts = [{ value: '', label: '-' }].concat(managers.map(function (m) {
           return { value: m.employee_id, label: (m.employee_id + ' · ' + (m.display_name || '')) };
         }));
         var types = (atsMeta.types || []).map(function (t) { return { value: t, label: t.replace(/_/g, ' ') }; });
@@ -506,6 +939,23 @@
       return html;
     }
 
+    function patchJobDetailAfterMove_(jobId, res, sel) {
+      var cached = atsView.jobDetail[jobId];
+      if (!cached || !res || !res.application) return false;
+      cached.pipeline = res.pipeline || cached.pipeline;
+      cached.applications = (cached.applications || []).map(function (app) {
+        if (app.application_id !== res.application.application_id) return app;
+        var merged = Object.assign({}, app, res.application);
+        if (!merged.candidate_name && app.candidate_name) merged.candidate_name = app.candidate_name;
+        if (!merged.candidate_email && app.candidate_email) merged.candidate_email = app.candidate_email;
+        return merged;
+      });
+      var seq = App.getState().navSeq;
+      paintJobDetailData_(cached, seq, true);
+      if (sel) sel.value = '';
+      return true;
+    }
+
     function renderJobDetail(jobId) {
       var page = pageEl();
       if (!page) return;
@@ -521,9 +971,7 @@
       ensureMeta();
       if (restoreJob) {
         paintJobDetailData_(cachedJob, seq, false);
-        return;
-      }
-      if (keepRefresh) {
+      } else if (keepRefresh) {
         paintJobDetailData_(cachedJob, seq, true);
       }
       rpc('apiAtsGetJob', [jobId]).then(function (data) {
@@ -549,34 +997,13 @@
         var apps = data.applications || [];
         var share = job.share || {};
         var stages = data.pipeline || atsMeta.pipeline || [];
-        var byStage = {};
-        stages.forEach(function (s) { byStage[s] = []; });
-        byStage.REJECTED = [];
-        apps.forEach(function (a) {
-          var st = a.stage || 'APPLIED';
-          if (!byStage[st]) byStage[st] = [];
-          byStage[st].push(a);
-        });
-        var board = Object.keys(byStage).map(function (st) {
-          var cards = byStage[st].map(function (a) {
-            return '<div class="ats-app-card" data-cand="' + escapeHtml(a.candidate_id) + '">' +
-              '<strong>' + escapeHtml(a.candidate_name || a.candidate_id) + '</strong>' +
-              '<div class="muted">' + escapeHtml(a.candidate_email || '') + '</div></div>';
-          }).join('');
-          return '<div class="pipeline-col"><h3>' + escapeHtml(st.replace(/_/g, ' ')) +
-            ' · ' + byStage[st].length + '</h3>' + (cards || '<p class="muted">None</p>') + '</div>';
-        }).join('');
         var rows = apps.map(function (a) {
           return '<tr>' +
-            '<td><a href="#" data-cand="' + escapeHtml(a.candidate_id) + '">' + escapeHtml(a.candidate_name || a.candidate_id) + '</a></td>' +
-            '<td>' + escapeHtml(a.candidate_email || '') + '</td>' +
+            '<td><a href="#" data-cand="' + escapeHtml(a.candidate_id) + '">' + escapeHtml(candidateDisplayName_(a)) + '</a></td>' +
+            '<td>' + escapeHtml(a.candidate_email || '-') + '</td>' +
             '<td>' + badge(a.stage) + '</td>' +
             '<td>' + escapeHtml(fmtWhen(a.applied_at)) + '</td>' +
-            '<td class="col-actions"><select class="form-select" data-move="' + escapeHtml(a.application_id) + '" style="min-width:9rem">' +
-              '<option value="">Move to…</option>' +
-              stages.concat(['REJECTED', 'WITHDRAWN']).map(function (s) {
-                return '<option value="' + s + '"' + (s === a.stage ? ' disabled' : '') + '>' + s.replace(/_/g, ' ') + '</option>';
-              }).join('') + '</select></td></tr>';
+            '<td class="col-actions">' + stageMoveSelectHtml_(a.application_id, a.stage, stages) + '</td></tr>';
         }).join('');
         $('ats-job-detail').innerHTML =
           '<div class="page-header"><div class="page-header-text">' +
@@ -595,8 +1022,8 @@
             '</div>' +
             '<p class="action-feedback hidden" id="ats-share-fb"></p>' +
             '<p class="muted" id="ats-share-text">' + escapeHtml(share.copy_text || 'Publish the job to generate a public link.') + '</p></div>' +
-          '<div class="card"><h2>Description</h2><div class="prose">' + escapeHtml(job.description || '—') + '</div></div>' +
-          '<div class="card"><h2>Pipeline</h2><div class="pipeline-board">' + board + '</div></div>' +
+          '<div class="card"><h2>Description</h2><div class="prose">' + escapeHtml(job.description || '-') + '</div></div>' +
+          '<div class="card"><h2>Pipeline</h2>' + buildPipelineBoardHtml_(apps, stages) + '</div>' +
           '<div class="card"><h2>Applications</h2>' +
             (rows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Candidate</th><th>Email</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
               : emptyState('No applications yet', 'Share the public link when the job is published.')) +
@@ -652,9 +1079,11 @@
             var stage = sel.value;
             if (!stage) return;
             rpc('apiAtsMoveApplicationStage', [sel.getAttribute('data-move'), stage, ''], sel, 'Moving…')
-              .then(function () {
-                invalidateAtsJob_(job.job_id);
-                renderJobDetail(job.job_id);
+              .then(function (res) {
+                if (!patchJobDetailAfterMove_(job.job_id, res, sel)) {
+                  invalidateAtsJob_(job.job_id);
+                  renderJobDetail(job.job_id);
+                }
               })
               .catch(function (err) {
                 showToast((err && err.message) || 'Move failed', 'error');
@@ -673,21 +1102,38 @@
       var restoreCands = App.consumeModuleViewRestore && App.consumeModuleViewRestore('ats-candidates') && atsView.candidates;
       var keepRefresh = !!(App.isModuleRefresh && App.isModuleRefresh('ats-candidates') && atsView.candidates);
       page.innerHTML = header('Candidates', 'Applicant records are separate from employees. Applying never creates an employee ID.', '') +
+        (canManage() ? atsBulkPanelHtml_('candidates', 'Bulk upload candidates',
+          'Duplicate applications and existing applications are rejected. Valid source values: ' +
+          (atsMeta.sources.length ? atsMeta.sources.join(', ') : 'see template') + '.',
+          ['job_id', 'full_name', 'email', 'phone', 'source']) : '') +
         '<div class="page-toolbar"><div class="filters"><div class="form-group">' +
           '<label class="form-label" for="ats-cand-q">Search</label>' +
           '<input class="form-input search-input" id="ats-cand-q" type="search" placeholder="Name, email, candidate ID">' +
         '</div></div></div>' +
-        '<div class="table-wrap" id="ats-cand-wrap"><table class="data-table"><thead><tr>' +
-          '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Location</th><th>Apps</th><th>Resume</th>' +
-        '</tr></thead><tbody id="ats-cand-body"></tbody></table></div>';
+        '<div class="candidates-table-section"><h2 class="section-title" style="margin:0 0 12px">All candidates</h2>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint" id="ats-cand-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Candidate ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Source</th><th>Location</th><th>Apps</th><th>Resume</th>' +
+        '</tr></thead><tbody id="ats-cand-body">' +
+          ((restoreCands || keepRefresh) ? '' : skRows(8, 8)) +
+        '</tbody></table></div></div>';
       if (atsView.candQuery && $('ats-cand-q')) $('ats-cand-q').value = atsView.candQuery;
+      bindBulkWhenOpen_('candidates', {
+        onCommitted: function () {
+          atsView.candidates = null;
+          var body = $('ats-cand-body');
+          var wrap = $('ats-cand-wrap');
+          if (body) body.innerHTML = skRows(8, 4);
+          if (wrap) wrap.setAttribute('aria-busy', 'true');
+          loadCands();
+        }
+      });
       function paintCandRows(rows) {
         var body = $('ats-cand-body');
         var wrap = $('ats-cand-wrap');
         if (!body) return;
         if (wrap) wrap.removeAttribute('aria-busy');
         if (!rows || !rows.length) {
-          body.innerHTML = '<tr class="table-empty-row"><td colspan="7">No candidates yet.</td></tr>';
+          body.innerHTML = '<tr class="table-empty-row"><td colspan="8">No candidates yet.</td></tr>';
           return;
         }
         body.innerHTML = rows.map(function (c) {
@@ -695,10 +1141,11 @@
             '<td class="mono">' + escapeHtml(c.candidate_id) + '</td>' +
             '<td>' + escapeHtml(c.full_name) + '</td>' +
             '<td>' + escapeHtml(c.email) + '</td>' +
-            '<td>' + escapeHtml(c.phone || '—') + '</td>' +
-            '<td>' + escapeHtml(c.location || '—') + '</td>' +
+            '<td>' + escapeHtml(c.phone || '-') + '</td>' +
+            '<td>' + escapeHtml(formatSource_(c.source)) + '</td>' +
+            '<td>' + escapeHtml(c.location || '-') + '</td>' +
             '<td>' + escapeHtml(String(c.application_count || 0)) + '</td>' +
-            '<td>' + (c.has_resume ? 'Yes' : '—') + '</td></tr>';
+            '<td>' + (c.has_resume ? 'Yes' : '-') + '</td></tr>';
         }).join('');
         Array.prototype.forEach.call(body.querySelectorAll('tr[data-cand]'), function (tr) {
           tr.addEventListener('click', function () {
@@ -706,7 +1153,7 @@
           });
         });
       }
-      function load() {
+      function loadCands() {
         atsView.candQuery = $('ats-cand-q') ? $('ats-cand-q').value : '';
         rpc('apiAtsListCandidates', [{ q: atsView.candQuery }]).then(function (rows) {
           if (!stillOn(seq, 'ats-candidates')) return;
@@ -714,23 +1161,34 @@
           if (App.markModuleViewLoaded) App.markModuleViewLoaded('ats-candidates');
           paintCandRows(atsView.candidates);
         }).catch(function (err) {
+          if (!stillOn(seq, 'ats-candidates')) return;
           if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+          var body = $('ats-cand-body');
+          if (body) {
+            body.innerHTML = '<tr class="table-empty-row"><td colspan="8">' +
+              escapeHtml((err && err.message) || 'Failed to load candidates.') + '</td></tr>';
+          }
           showToast((err && err.message) || 'Failed to load candidates', 'error');
+        }).finally(function () {
+          if (!stillOn(seq, 'ats-candidates')) return;
+          var wrap = $('ats-cand-wrap');
+          if (wrap) wrap.removeAttribute('aria-busy');
         });
       }
-      if ($('ats-cand-q')) $('ats-cand-q').addEventListener('change', load);
-      if (restoreCands) {
-        paintCandRows(atsView.candidates);
-      } else if (keepRefresh) {
-        paintCandRows(atsView.candidates);
-        load();
-      } else {
-        var body = $('ats-cand-body');
-        var wrap = $('ats-cand-wrap');
-        if (wrap) wrap.setAttribute('aria-busy', 'true');
-        if (body) body.innerHTML = skRows(7, 7);
-        load();
+      if ($('ats-cand-q')) $('ats-cand-q').addEventListener('change', loadCands);
+      function bootCandidates_() {
+        if (restoreCands) {
+          paintCandRows(atsView.candidates);
+        } else if (keepRefresh) {
+          paintCandRows(atsView.candidates);
+          loadCands();
+        } else {
+          var wrap = $('ats-cand-wrap');
+          if (wrap) wrap.setAttribute('aria-busy', 'true');
+          loadCands();
+        }
       }
+      ensureMeta().then(bootCandidates_).catch(function () { bootCandidates_(); });
     }
 
     function downloadBlob(file) {
@@ -769,26 +1227,9 @@
         var ivs = data.interviews || [];
         var act = data.activity || [];
         var stages = data.pipeline || atsMeta.pipeline || [];
-        var recs = ['', 'STRONG_HIRE', 'HIRE', 'HOLD', 'NO_HIRE'];
-        var appRows = apps.map(function (a) {
-          return '<tr><td class="mono">' + escapeHtml(a.job_id) + '</td><td>' + escapeHtml(a.job_title || '') +
-            '</td><td>' + badge(a.stage) + '</td><td>' + escapeHtml(fmtWhen(a.applied_at)) + '</td>' +
-            '<td><select class="form-select" data-move="' + escapeHtml(a.application_id) + '" style="min-width:9rem"><option value="">Move to…</option>' +
-            stages.concat(['REJECTED', 'WITHDRAWN']).map(function (s) {
-              return '<option value="' + s + '">' + s.replace(/_/g, ' ') + '</option>';
-            }).join('') + '</select></td></tr>';
-        }).join('');
-        var ivHtml = ivs.length ? ivs.map(function (iv) {
-          return '<div class="card"><div class="profile-header"><div><strong>' + escapeHtml(fmtWhen(iv.scheduled_at)) +
-            '</strong> · ' + escapeHtml(iv.interviewer_name || iv.interviewer_employee_id || 'Interviewer') +
-            '</div>' + badge(iv.recommendation || iv.stage) + '</div>' +
-            '<p>Rating: ' + escapeHtml(String(iv.rating || '—')) + '</p>' +
-            '<div class="prose">' + escapeHtml(iv.notes || '') + '</div></div>';
-        }).join('') : emptyState('No interviews', 'Schedule an interview from an application.');
-        var actHtml = act.length ? '<ul class="activity-list">' + act.map(function (row) {
-          return '<li><div>' + escapeHtml(row.summary) + '</div><div class="activity-meta">' +
-            escapeHtml(row.action) + ' · ' + escapeHtml(row.actor_email || '') + ' · ' + escapeHtml(fmtWhen(row.created_at)) + '</div></li>';
-        }).join('') + '</ul>' : '<p class="muted">No activity yet.</p>';
+        var appRows = candidateApplicationsBodyHtml_(apps, stages);
+        var ivHtml = candidateInterviewListHtml_(ivs);
+        var actHtml = candidateActivityHtml_(act);
         $('ats-cand-detail').innerHTML =
           '<div class="card"><div class="profile-header"><div>' +
             '<h2>' + escapeHtml(c.full_name) + '</h2>' +
@@ -797,18 +1238,19 @@
           '</div>' +
           '<dl class="dl-grid">' +
             '<dt>Email</dt><dd>' + escapeHtml(c.email) + '</dd>' +
-            '<dt>Phone</dt><dd>' + escapeHtml(c.phone || '—') + '</dd>' +
-            '<dt>Location</dt><dd>' + escapeHtml(c.location || '—') + '</dd>' +
-            '<dt>Source</dt><dd>' + escapeHtml(c.source || '—') + '</dd>' +
-            '<dt>Education</dt><dd>' + escapeHtml(c.education || '—') + '</dd>' +
-            '<dt>Experience</dt><dd>' + escapeHtml(c.experience_summary || '—') + '</dd>' +
-            '<dt>Skills</dt><dd>' + escapeHtml(c.skills || '—') + '</dd>' +
-            '<dt>Linked employee</dt><dd>' + escapeHtml(c.hired_employee_id || 'None — hiring does not create an employee') + '</dd>' +
+            '<dt>Phone</dt><dd>' + escapeHtml(c.phone || '-') + '</dd>' +
+            '<dt>Location</dt><dd>' + escapeHtml(c.location || '-') + '</dd>' +
+            '<dt>Source</dt><dd>' + escapeHtml(c.source || '-') + '</dd>' +
+            '<dt>Education</dt><dd>' + escapeHtml(c.education || '-') + '</dd>' +
+            '<dt>Experience</dt><dd>' + escapeHtml(c.experience_summary || '-') + '</dd>' +
+            '<dt>Skills</dt><dd>' + escapeHtml(c.skills || '-') + '</dd>' +
+            '<dt>Linked employee</dt><dd>' + escapeHtml(c.hired_employee_id || 'None - hiring does not create an employee') + '</dd>' +
           '</dl></div>' +
           '<div class="card"><h2>Applications</h2>' +
-            (appRows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job</th><th>Title</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody>' + appRows + '</tbody></table></div>' : '<p class="muted">None</p>') +
+            (appRows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job</th><th>Title</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody id="ats-cand-apps-body">' + appRows + '</tbody></table></div>' : '<p class="muted">None</p>') +
           '</div>' +
           '<div class="card"><h2>Schedule interview</h2>' +
+            '<p class="hint">Scheduling sends calendar-style notifications to the interviewer and candidate. Feedback is collected after the interview.</p>' +
             '<div class="form-row">' +
               '<div class="form-group"><label class="form-label" for="ats-iv-app">Application</label>' +
               '<select class="form-select" id="ats-iv-app">' + apps.map(function (a) {
@@ -816,59 +1258,46 @@
               }).join('') + '</select></div>' +
               '<div class="form-group"><label class="form-label" for="ats-iv-when">Date & time</label>' +
               '<input class="form-input" id="ats-iv-when" type="datetime-local"></div>' +
-              '<div class="form-group"><label class="form-label" for="ats-iv-name">Interviewer</label>' +
+              '<div class="form-group"><label class="form-label" for="ats-iv-name">Interviewer name</label>' +
               '<input class="form-input" id="ats-iv-name" placeholder="Name"></div>' +
-              '<div class="form-group"><label class="form-label" for="ats-iv-rate">Rating (1–5)</label>' +
-              '<input class="form-input" id="ats-iv-rate" type="number" min="1" max="5"></div>' +
-              '<div class="form-group"><label class="form-label" for="ats-iv-rec">Recommendation</label>' +
-              '<select class="form-select" id="ats-iv-rec">' + recs.map(function (r) {
-                return '<option value="' + r + '">' + (r || '—') + '</option>';
-              }).join('') + '</select></div></div>' +
-            '<div class="form-group"><label class="form-label" for="ats-iv-notes">Notes</label>' +
-            '<textarea class="form-input" id="ats-iv-notes" rows="3"></textarea></div>' +
+              '<div class="form-group"><label class="form-label" for="ats-iv-email">Interviewer email</label>' +
+              '<input class="form-input" id="ats-iv-email" type="email" placeholder="email@company.com"></div></div>' +
+            '<div class="form-group"><label class="form-label" for="ats-iv-notes">Scheduling notes (optional)</label>' +
+            '<textarea class="form-input" id="ats-iv-notes" rows="2" placeholder="Location, meeting link, or instructions"></textarea></div>' +
             '<p class="action-feedback hidden" id="ats-iv-fb"></p>' +
-            '<button type="button" class="btn btn-primary" id="ats-iv-save">Save interview</button></div>' +
-          '<div class="card"><h2>Interviews</h2>' + ivHtml + '</div>' +
+            '<button type="button" class="btn btn-primary" id="ats-iv-save">Schedule interview</button></div>' +
+          '<div class="card"><h2>Interviews</h2><div id="ats-cand-iv-list">' + ivHtml + '</div></div>' +
           '<div class="card"><h2>Comments</h2>' +
             '<div class="form-group"><label class="form-label" for="ats-comment">Add comment</label>' +
             '<textarea class="form-input" id="ats-comment" rows="3"></textarea></div>' +
             '<p class="action-feedback hidden" id="ats-comment-fb"></p>' +
             '<button type="button" class="btn btn-secondary" id="ats-comment-save">Add comment</button></div>' +
-          '<div class="card"><h2>Activity</h2>' + actHtml + '</div>';
+          '<div class="card"><h2>Activity</h2><div id="ats-cand-activity">' + actHtml + '</div></div>';
 
+        var page = pageEl();
         if ($('ats-dl-resume')) $('ats-dl-resume').addEventListener('click', function () {
           rpc('apiAtsDownloadResume', [c.candidate_id], $('ats-dl-resume'), 'Preparing…')
             .then(downloadBlob)
             .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
         });
-        Array.prototype.forEach.call(page.querySelectorAll('[data-move]'), function (sel) {
-          sel.addEventListener('change', function () {
-            var stage = sel.value;
-            if (!stage) return;
-            rpc('apiAtsMoveApplicationStage', [sel.getAttribute('data-move'), stage, ''], sel, 'Moving…')
-              .then(function () {
-                invalidateAtsCandidate_(c.candidate_id, apps.map(function (a) { return a.job_id; }));
-                renderCandidate(c.candidate_id);
-              })
-              .catch(function (err) { showToast((err && err.message) || 'Move failed', 'error'); sel.value = ''; });
-          });
-        });
+        bindCandidateApplicationMoveHandlers_(page, c.candidate_id, apps, stages, seq);
+        bindCandidateInterviewCompleteHandlers_(page, c.candidate_id, seq);
         if ($('ats-iv-save')) $('ats-iv-save').addEventListener('click', function () {
           if (!apps.length) { showToast('No application to attach an interview to.', 'error'); return; }
           rpc('apiAtsScheduleInterview', [{
             application_id: $('ats-iv-app').value,
             scheduled_at: $('ats-iv-when').value,
             interviewer_name: $('ats-iv-name').value,
-            rating: $('ats-iv-rate').value,
-            recommendation: $('ats-iv-rec').value,
+            interviewer_email: $('ats-iv-email') ? $('ats-iv-email').value : '',
             notes: $('ats-iv-notes').value
-          }], $('ats-iv-save'), 'Saving…', $('ats-iv-fb'))
-            .then(function () {
+          }], $('ats-iv-save'), 'Scheduling…', $('ats-iv-fb'))
+            .then(function (res) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              patchCandidateAfterSchedule_(c.candidate_id, res, stages, seq);
               invalidateAtsCandidate_(c.candidate_id);
-              showToast('Interview saved.');
-              renderCandidate(c.candidate_id);
+              showToast('Interview scheduled.');
             })
-            .catch(function (err) { showToast((err && err.message) || 'Save failed', 'error'); });
+            .catch(function (err) { showToast((err && err.message) || 'Schedule failed', 'error'); });
         });
         if ($('ats-comment-save')) $('ats-comment-save').addEventListener('click', function () {
           rpc('apiAtsAddCandidateComment', [c.candidate_id, { body: $('ats-comment').value }], $('ats-comment-save'), 'Saving…', $('ats-comment-fb'))

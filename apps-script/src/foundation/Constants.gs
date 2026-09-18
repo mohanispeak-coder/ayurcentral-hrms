@@ -1,10 +1,11 @@
 /**
- * Shared constants — sheet names, roles, property keys, permission actions.
+ * Shared constants - sheet names, roles, property keys, permission actions.
  */
 var HRMS = HRMS || {};
 
 HRMS.SHEETS = {
   EMPLOYEES: 'Employees',
+  VERTICALS: 'Verticals',
   USERS: 'Users',
   LEAVE_TYPES: 'LeaveTypes',
   LEAVE_BALANCES: 'LeaveBalances',
@@ -21,6 +22,7 @@ HRMS.SHEETS = {
 };
 
 HRMS.ROLES = {
+  OWNER: 'OWNER',
   ADMIN: 'ADMIN',
   HR: 'HR',
   MANAGER: 'MANAGER',
@@ -44,13 +46,15 @@ HRMS.EMPLOYMENT_TYPES = {
   CONSULTANT: 'CONSULTANT'
 };
 
+HRMS.VERTICALS = ['AOPL', 'SAPL', 'AOMS'];
+
 HRMS.DOCUMENT_CATEGORY = {
   EMPLOYEE_FILE: 'EMPLOYEE_FILE',
   PAYSLIP: 'PAYSLIP'
 };
 
 HRMS.WEBAPP = {
-  /** Must match appsscript.json webapp.executeAs — owner-mediated Sheets/Drive access. */
+  /** Must match appsscript.json webapp.executeAs - owner-mediated Sheets/Drive access. */
   EXECUTE_AS: 'USER_DEPLOYING',
   /**
    * Must match appsscript.json webapp.access.
@@ -71,10 +75,10 @@ HRMS.PROPS = {
   DRIVE_ROOT_FOLDER_ID: 'HRMS_DRIVE_ROOT_FOLDER_ID',
   /** Set to '1' to log/return startup timings (dev/test only). */
   PERF_TIMING: 'HRMS_PERF_TIMING',
-  /** Knowledge Hub web app URL — Script Properties only, never sent to the browser. */
+  /** Knowledge Hub web app URL - Script Properties only, never sent to the browser. */
   KH_WEBAPP_URL: 'KH_WEBAPP_URL',
-  /** HMAC secret shared with Knowledge Hub — Script Properties only, never sent to the browser. */
-  KH_HMAC_SECRET: 'KH_HMAC_SECRET'
+  /** HMAC secret shared with Knowledge Hub - Script Properties only, never sent to the browser. */
+  KH_HMAC_SECRET: 'KH_HMAC_SECRET',
 };
 
 HRMS.SETTINGS_KEYS = {
@@ -90,7 +94,7 @@ HRMS.DRIVE = {
   PAYSLIPS: 'Payslips'
 };
 
-/** Permission actions — extend as modules are added. */
+/** Permission actions - extend as modules are added. */
 HRMS.ACTIONS = {
   ACCESS_APP: 'ACCESS_APP',
   /** Native Ask HR chatbot. v1: same roles as ACCESS_APP; can later be disabled per role. */
@@ -109,7 +113,9 @@ HRMS.ACTIONS = {
   LEAVE_ADMIN: 'LEAVE_ADMIN',
   PAYROLL_RUN: 'PAYROLL_RUN',
   VIEW_OWN_PAYSLIP: 'VIEW_OWN_PAYSLIP',
-  COMPENSATION_MANAGE: 'COMPENSATION_MANAGE'
+  COMPENSATION_MANAGE: 'COMPENSATION_MANAGE',
+  ATS_ACCESS: 'ATS_ACCESS',
+  ATS_MANAGE: 'ATS_MANAGE'
 };
 
 HRMS.PAYROLL_STATUS = {
@@ -175,7 +181,7 @@ HRMS.CACHE = {
   IDENTITY_TTL_SEC: 15
 };
 
-/** Ask HR chatbot — server-side only. */
+/** Ask HR chatbot - server-side only. */
 HRMS.ASK_HR = {
   VERSION: '1',
   MIN_QUESTION_LEN: 3,
@@ -198,6 +204,9 @@ HRMS.AUTH_CACHE = {
   OTP_DEMO_RATE_PREFIX: 'hrms_otp_demo_rate_v1_',
   SESSION_PREFIX: 'hrms_sess_v1_'
 };
+
+/** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
+HRMS.CLIENT_ASSETS_VERSION = '2026.09.18.05';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

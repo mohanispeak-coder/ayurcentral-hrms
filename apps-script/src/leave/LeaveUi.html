@@ -2,6 +2,8 @@
 (function () {
   'use strict';
 
+  var LEAVE_UI_BUILD_ = '2026.09.16-names-settings-v2';
+
   function ctx() {
     if (window.HrmsApp) {
       return {
@@ -41,6 +43,10 @@
   }
 
   var leaveViewCache = {};
+  var previewTimer_ = null;
+  var previewGen_ = 0;
+  var previewBusy_ = false;
+  var previewAgain_ = false;
 
   function markLeaveView_(key) {
     if (window.HrmsApp && window.HrmsApp.markModuleViewLoaded) window.HrmsApp.markModuleViewLoaded(key);
@@ -100,7 +106,7 @@
   function badgeClass(status) {
     var s = String(status || '').toUpperCase();
     if (s === 'DRAFT') return 'badge status-badge badge-draft';
-    if (s === 'SUBMITTED') return 'badge status-badge badge-submitted';
+    if (s === 'SUBMITTED' || s.indexOf('PENDING_') === 0) return 'badge status-badge badge-submitted';
     if (s === 'APPROVED') return 'badge status-badge badge-approved';
     if (s === 'REJECTED') return 'badge status-badge badge-rejected';
     if (s === 'CANCELLED') return 'badge status-badge badge-cancelled';
@@ -108,8 +114,244 @@
   }
 
   function fmtDays(n) {
-    if (n === null || n === undefined || n === '') return '—';
+    if (n === null || n === undefined || n === '') return '-';
     return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
+  }
+
+  function leaveBalanceCardsHtml(balances, escapeHtml) {
+    if (!balances || !balances.length) return '';
+    return balances.map(function (b) {
+      return '<article class="leave-balance-card">' +
+        '<header><strong>' + escapeHtml(b.name) + '</strong><span class="mono">' + escapeHtml(b.code) + '</span></header>' +
+        '<dl class="leave-balance-dl">' +
+        '<div><dt>Entitled</dt><dd>' + fmtDays(b.entitled_days) + '</dd></div>' +
+        '<div><dt>Carried</dt><dd>' + fmtDays(b.carried_forward_days) + '</dd></div>' +
+        '<div><dt>Used</dt><dd>' + fmtDays(b.used_days) + '</dd></div>' +
+        '<div><dt>Pending</dt><dd>' + fmtDays(b.pending_days) + '</dd></div>' +
+        '<div><dt>Available</dt><dd>' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</dd></div>' +
+        '</dl></article>';
+    }).join('');
+  }
+
+  function leaveMyLeaveActionsHtml(yearSelect) {
+    return '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
+      '<div class="btn-row leave-toolbar-actions">' +
+      (yearSelect ? yearSelect : '') +
+      '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>' +
+      '</div>';
+  }
+
+  function isLeavePendingActionable_(r) {
+    var st = String(r.status || '').toUpperCase();
+    return st === 'SUBMITTED' || st.indexOf('PENDING_') === 0;
+  }
+
+  function leaveBulkToolbarHtml_(barId) {
+    return '<div class="page-toolbar leave-bulk-bar" id="' + barId + '">' +
+      '<label class="form-check leave-bulk-select-all"><input type="checkbox" id="' + barId + '-all" aria-label="Select all"> Select all</label>' +
+      '<button type="button" class="btn btn-primary btn-sm" id="' + barId + '-approve" disabled>Approve selected</button>' +
+      '<button type="button" class="btn btn-danger btn-sm" id="' + barId + '-reject" disabled>Reject selected</button>' +
+      '<span class="leave-bulk-meta" id="' + barId + '-meta"></span></div>';
+  }
+
+  function leaveSelectCellHtml_(r) {
+    var c = ctx();
+    if (!isLeavePendingActionable_(r)) return '<td class="col-check"></td>';
+    return '<td class="col-check"><input type="checkbox" class="leave-row-select" data-leave-id="' +
+      c.escapeHtml(r.leave_request_id) + '" aria-label="Select request"></td>';
+  }
+
+  function bindLeaveApprovalBulk_(scopeEl, helpers, options) {
+    var c = ctx();
+    options = options || {};
+    var barId = options.barId || 'leave-appr-bulk';
+    var bar = scopeEl.querySelector('#' + barId);
+    if (!bar) return;
+    var selectAll = bar.querySelector('#' + barId + '-all');
+    var btnAp = bar.querySelector('#' + barId + '-approve');
+    var btnRe = bar.querySelector('#' + barId + '-reject');
+    var meta = bar.querySelector('#' + barId + '-meta');
+    var feedback = options.feedbackEl;
+    var flashKey = options.flashKey || 'leave-approvals';
+    var onDone = options.onDone || function () {};
+
+    function boxes() {
+      return scopeEl.querySelectorAll('.leave-row-select');
+    }
+    function selectedIds() {
+      var ids = [];
+      boxes().forEach(function (cb) {
+        if (cb.checked) ids.push(cb.getAttribute('data-leave-id'));
+      });
+      return ids;
+    }
+    function refreshBulkBar_() {
+      var n = selectedIds().length;
+      var total = boxes().length;
+      if (btnAp) btnAp.disabled = n === 0;
+      if (btnRe) btnRe.disabled = n === 0;
+      if (meta) {
+        meta.textContent = total
+          ? (n ? n + ' of ' + total + ' selected' : total + ' in queue - select rows or use Select all')
+          : '';
+      }
+      if (selectAll) selectAll.checked = total > 0 && n === total;
+    }
+    boxes().forEach(function (cb) {
+      cb.addEventListener('change', refreshBulkBar_);
+    });
+    if (selectAll) {
+      selectAll.addEventListener('change', function () {
+        boxes().forEach(function (cb) { cb.checked = selectAll.checked; });
+        refreshBulkBar_();
+      });
+    }
+    if (btnAp) {
+      btnAp.addEventListener('click', function () {
+        var ids = selectedIds();
+        if (!ids.length) return;
+        openDecisionModal(helpers, 'Approve ' + ids.length + ' request(s)', false, function (comment) {
+          c.callServer('apiLeaveApproveMany', ids, comment,
+            actionOpts(btnAp, 'Approving…', feedback))
+            .then(function (summary) {
+              invalidateLeaveAfterRequestMutation_();
+              var msg = summary.succeeded + ' approved';
+              if (summary.failed) msg += ', ' + summary.failed + ' could not be approved';
+              setFlash(msg, summary.failed ? 'warn' : 'success', flashKey);
+              onDone();
+            });
+        });
+      });
+    }
+    if (btnRe) {
+      btnRe.addEventListener('click', function () {
+        var ids = selectedIds();
+        if (!ids.length) return;
+        openDecisionModal(helpers, 'Reject ' + ids.length + ' request(s)', true, function (comment) {
+          c.callServer('apiLeaveRejectMany', ids, comment,
+            actionOpts(btnRe, 'Rejecting…', feedback))
+            .then(function (summary) {
+              invalidateLeaveAfterRequestMutation_();
+              var msg = summary.succeeded + ' rejected';
+              if (summary.failed) msg += ', ' + summary.failed + ' could not be rejected';
+              setFlash(msg, summary.failed ? 'warn' : 'success', flashKey);
+              onDone();
+            });
+        });
+      });
+    }
+    refreshBulkBar_();
+  }
+
+  function bindLeaveRevokeActions_(scopeEl, helpers, options) {
+    var c = ctx();
+    options = options || {};
+    var feedback = options.feedbackEl;
+    var flashKey = options.flashKey || 'leave-approvals';
+    var onDone = options.onDone || function () {};
+    scopeEl.querySelectorAll('[data-revoke]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var kind = btn.getAttribute('data-revoke-kind') || 'approved';
+        var title = kind === 'rejected' ? 'Revoke rejection' :
+          (kind === 'submitted' ? 'Revoke pending leave' : 'Revoke approved leave');
+        openDecisionModal(helpers, title, true, function (comment) {
+          var id = btn.getAttribute('data-revoke');
+          var call = kind === 'rejected'
+            ? c.callServer('apiLeaveRevokeRejection', id, comment, actionOpts(btn, 'Revoking...', feedback))
+            : c.callServer('apiLeaveCancel', id, actionOpts(btn, 'Revoking...', feedback));
+          call.then(function () {
+            invalidateLeaveAfterRequestMutation_();
+            setFlash('Leave decision revoked.', 'success', flashKey);
+            onDone();
+          });
+        });
+      });
+    });
+  }
+
+  function approvalLeaveActionsHtml_(r) {
+    var c = ctx();
+    var id = c.escapeHtml(r.leave_request_id);
+    var st = String(r.status || '').toUpperCase();
+    var html = '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
+      '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ';
+    if (st === 'SUBMITTED' || st.indexOf('PENDING_') === 0) {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
+    } else if (st === 'APPROVED') {
+      html += '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + id + '" data-revoke-kind="approved">Revoke</button>';
+    } else if (st === 'REJECTED') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="rejected">Revoke</button>';
+    }
+    return html;
+  }
+
+  function bindLeaveRowApproveReject_(scopeEl, helpers, options) {
+    var c = ctx();
+    options = options || {};
+    var feedback = options.feedbackEl;
+    var flashKey = options.flashKey || 'leave-approvals';
+    var onDone = options.onDone || function () {};
+    scopeEl.querySelectorAll('[data-approve]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openDecisionModal(helpers, 'Approve leave', false, function (comment) {
+          c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
+            actionOpts(btn, 'Approving…', feedback))
+            .then(function (res) {
+              invalidateLeaveAfterRequestMutation_();
+              var final = res && String(res.status || '').toUpperCase() === 'APPROVED';
+              setFlash(
+                final ? 'Leave fully approved.' : 'Stage approved - forwarded for the next approver.',
+                'success',
+                flashKey
+              );
+              onDone();
+            });
+        });
+      });
+    });
+    scopeEl.querySelectorAll('[data-reject]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openDecisionModal(helpers, 'Reject leave', true, function (comment) {
+          c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
+            actionOpts(btn, 'Rejecting…', feedback))
+            .then(function () {
+              invalidateLeaveAfterRequestMutation_();
+              setFlash('Leave rejected.', 'success', flashKey);
+              onDone();
+            });
+        });
+      });
+    });
+  }
+
+  function adminLeaveActionsHtml_(r) {
+    var c = ctx();
+    var id = c.escapeHtml(r.leave_request_id);
+    var html = '';
+    if (r.status === 'SUBMITTED' || String(r.status || '').indexOf('PENDING_') === 0) {
+      if (r.can_approve !== false) {
+        html += '<button type="button" class="btn btn-primary btn-sm" data-approve="' + id + '">Approve</button> ' +
+          '<button type="button" class="btn btn-danger btn-sm" data-reject="' + id + '">Reject</button> ';
+      }
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="submitted">Revoke</button>';
+    } else if (r.status === 'APPROVED') {
+      html += '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + id + '" data-revoke-kind="approved">Revoke</button>';
+    } else if (r.status === 'REJECTED') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-revoke="' + id + '" data-revoke-kind="rejected">Revoke</button>';
+    } else if (r.status === 'DRAFT') {
+      html += '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + id + '">Cancel</button>';
+    }
+    return html;
+  }
+
+  function adminLeaveRowHtml_(r) {
+    var c = ctx();
+    return '<tr>' + leaveSelectCellHtml_(r) +
+      '<td class="num mono">' + c.escapeHtml(r.employee_id) + '</td>' +
+      '<td>' + c.escapeHtml(r.employee_name || '-') + '</td><td>' + c.escapeHtml(r.leave_type_code) +
+      '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
+      '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
+      c.escapeHtml(r.status_label || r.status) + '</span></td><td class="col-actions">' + adminLeaveActionsHtml_(r) + '</td></tr>';
   }
 
   function payloadFromForm(form) {
@@ -156,15 +398,11 @@
         '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
     }
 
-    Promise.all([
-      c.callServer('apiLeaveGetTypes', false),
-      c.callServer('apiLeaveListEmployees'),
-      c.callServer('apiLeaveGetMyLeave', '')
-    ]).then(function (parts) {
+    c.callServer('apiLeaveGetApplyBundle').then(function (bundle) {
       if (!onRoute('leave-apply')) return;
-      var types = parts[0] || [];
-      var employees = parts[1] || [];
-      var mine = parts[2] || {};
+      var types = bundle.types || [];
+      var employees = bundle.employees || [];
+      var mine = { can_proxy: !!bundle.can_proxy };
       leaveViewCache['leave-apply'] = { types: types, employees: employees, mine: mine, prefill: prefill || {} };
       markLeaveView_('leave-apply');
       paintApplyForm_(page, helpers, types, employees, mine, prefill || {});
@@ -181,12 +419,12 @@
       var typeOpts = types.map(function (t) {
         return '<option value="' + c.escapeHtml(t.leave_type_id) + '"' +
           (prefill.leave_type_id === t.leave_type_id ? ' selected' : '') + '>' +
-          c.escapeHtml(t.code + ' — ' + t.name) + '</option>';
+          c.escapeHtml(t.code + ' - ' + t.name) + '</option>';
       }).join('');
       var empOpts = employees.map(function (e) {
         var selected = (prefill.employee_id || c.state.session.employee_id) === e.employee_id;
         return '<option value="' + c.escapeHtml(e.employee_id) + '"' + (selected ? ' selected' : '') + '>' +
-          c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
+          c.escapeHtml(e.employee_id + ' - ' + e.display_name) + '</option>';
       }).join('');
 
       page.innerHTML =
@@ -211,12 +449,12 @@
               '<div class="form-group"><label class="form-check"><input type="checkbox" id="leave-half" name="is_half_day"' + (prefill.is_half_day ? ' checked' : '') + '> Half day</label></div>' +
               '<div class="form-group"><label class="form-label" for="leave-session">Session</label>' +
                 '<select class="form-select" id="leave-session" name="half_day_session">' +
-                  '<option value="">—</option><option value="AM"' + (prefill.half_day_session === 'AM' ? ' selected' : '') + '>AM</option>' +
+                  '<option value="">-</option><option value="AM"' + (prefill.half_day_session === 'AM' ? ' selected' : '') + '>AM</option>' +
                   '<option value="PM"' + (prefill.half_day_session === 'PM' ? ' selected' : '') + '>PM</option>' +
                 '</select></div>' +
             '</div>' +
-            '<div class="form-group"><label class="form-label" for="leave-reason">Reason</label>' +
-              '<textarea class="form-input form-textarea" id="leave-reason" name="reason" rows="3">' + c.escapeHtml(prefill.reason || '') + '</textarea></div>' +
+            '<div class="form-group"><label class="form-label is-required" for="leave-reason">Reason</label>' +
+              '<textarea class="form-input form-textarea" id="leave-reason" name="reason" rows="3" required>' + c.escapeHtml(prefill.reason || '') + '</textarea></div>' +
             '<p class="hint" id="leave-preview">Duration will be calculated on the server.</p>' +
             '<div class="form-actions">' +
               '<button type="button" class="btn btn-secondary" id="btn-leave-draft">Save draft</button>' +
@@ -241,15 +479,46 @@
         });
       }
 
-      function refreshPreview() {
+      function runPreview_() {
         var p = readForm();
         if (!p.start_date || !p.end_date) return;
+        if (previewBusy_) {
+          previewAgain_ = true;
+          return;
+        }
+        previewBusy_ = true;
+        var gen = ++previewGen_;
         c.callServer('apiLeavePreviewDays', p).then(function (d) {
-          document.getElementById('leave-preview').textContent =
-            'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+          if (gen !== previewGen_) return;
+          var el = document.getElementById('leave-preview');
+          if (el) {
+            el.textContent = 'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+          }
         }).catch(function (err) {
-          document.getElementById('leave-preview').textContent = err.message || 'Could not preview days';
+          if (gen !== previewGen_) return;
+          var el = document.getElementById('leave-preview');
+          if (el) el.textContent = err.message || 'Could not preview days';
+        }).then(function () {
+          previewBusy_ = false;
+          if (previewAgain_) {
+            previewAgain_ = false;
+            runPreview_();
+          }
+        }, function () {
+          previewBusy_ = false;
+          if (previewAgain_) {
+            previewAgain_ = false;
+            runPreview_();
+          }
         });
+      }
+
+      function refreshPreview() {
+        if (previewTimer_) clearTimeout(previewTimer_);
+        previewTimer_ = setTimeout(function () {
+          previewTimer_ = null;
+          runPreview_();
+        }, 300);
       }
 
       ['leave-start', 'leave-end', 'leave-half', 'leave-session'].forEach(function (id) {
@@ -292,7 +561,7 @@
           helpers.navigate('my-leave');
         });
       });
-      refreshPreview();
+      if (prefill.start_date && prefill.end_date) runPreview_();
   }
 
   function renderMyLeave(page, helpers) {
@@ -312,7 +581,7 @@
           '<tbody id="leave-req-body">' + u.skRows(7, 4) + '</tbody></table></div></div>';
     }
 
-    c.callServer('apiLeaveGetMyLeave', '').then(function (data) {
+    c.callServer('apiLeaveGetMyLeave', { employee_id: '', leave_year: leaveViewCache['my-leave-year'] || '' }).then(function (data) {
       if (!onRoute('my-leave')) return;
       leaveViewCache['my-leave'] = data;
       markLeaveView_('my-leave');
@@ -325,37 +594,53 @@
 
   function paintMyLeave_(page, helpers, data) {
       var c = ctx();
+      leaveViewCache['my-leave-year'] = data.leave_year || '';
+      var yearOpts = (data.available_years || [data.leave_year]).map(function (y) {
+        return '<option value="' + c.escapeHtml(String(y)) + '"' +
+          (String(y) === String(data.leave_year) ? ' selected' : '') + '>' +
+          c.escapeHtml(String(y)) + '</option>';
+      }).join('');
+      var yearSelect = (data.available_years && data.available_years.length)
+        ? '<select class="form-select" id="leave-year-select" aria-label="Leave year">' + yearOpts + '</select>'
+        : '';
+      var balCards = leaveBalanceCardsHtml(data.balances || [], c.escapeHtml);
       var balRows = (data.balances || []).map(function (b) {
-        return '<tr><td>' + c.escapeHtml(b.code) + '</td><td>' + c.escapeHtml(b.name) + '</td>' +
-          '<td class="num">' + fmtDays(b.entitled_days) + '</td>' +
-          '<td class="num">' + fmtDays(b.carried_forward_days) + '</td>' +
-          '<td class="num">' + fmtDays(b.used_days) + '</td>' +
-          '<td class="num">' + fmtDays(b.pending_days) + '</td>' +
-          '<td class="num">' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</td></tr>';
+        return '<tr><td data-label="Code">' + c.escapeHtml(b.code) + '</td><td data-label="Type">' + c.escapeHtml(b.name) + '</td>' +
+          '<td class="num" data-label="Entitled">' + fmtDays(b.entitled_days) + '</td>' +
+          '<td class="num" data-label="Carried">' + fmtDays(b.carried_forward_days) + '</td>' +
+          '<td class="num" data-label="Used">' + fmtDays(b.used_days) + '</td>' +
+          '<td class="num" data-label="Pending">' + fmtDays(b.pending_days) + '</td>' +
+          '<td class="num" data-label="Available">' + (b.requires_balance ? fmtDays(b.available_days) : 'n/a') + '</td></tr>';
       }).join('');
       var reqRows = (data.requests || []).map(function (r) {
-        var canCancel = r.status === 'DRAFT' || r.status === 'SUBMITTED';
+        var st = String(r.status || '').toUpperCase();
+        var canCancel = st === 'DRAFT' || st === 'SUBMITTED' || st.indexOf('PENDING_') === 0;
         return '<tr>' +
-          '<td>' + c.escapeHtml(r.leave_request_id) + '</td>' +
-          '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
-          '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
-          '<td class="num">' + fmtDays(r.total_days) + '</td>' +
-          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status) + '</span></td>' +
-          '<td>' + c.escapeHtml(r.reason) + '</td>' +
-          '<td class="col-actions">' + (canCancel ? '<button type="button" class="btn btn-danger btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
-            (r.status === 'DRAFT' ? ' <button type="button" class="btn btn-secondary btn-sm" data-edit="' + c.escapeHtml(r.leave_request_id) + '">Edit</button>' : '') +
+          '<td data-label="ID">' + c.escapeHtml(r.leave_request_id) + '</td>' +
+          '<td data-label="Type">' + c.escapeHtml(r.leave_type_code) + '</td>' +
+          '<td data-label="Dates">' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
+          '<td class="num" data-label="Days">' + fmtDays(r.total_days) + '</td>' +
+          '<td data-label="Status"><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
+          '<td data-label="Reason">' + c.escapeHtml(r.reason) + '</td>' +
+          '<td class="col-actions" data-label="Actions">' + (canCancel ? '<button type="button" class="btn btn-danger btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
+            (r.status === 'DRAFT' ? '<button type="button" class="btn btn-secondary btn-sm" data-edit="' + c.escapeHtml(r.leave_request_id) + '">Edit</button>' : '') +
           '</td></tr>';
       }).join('');
       page.innerHTML =
         flashHtml('my-leave') +
-        pageHead('My Leave', 'Balances for leave year ' + (data.leave_year || '') + '.',
-          '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
-          '<button type="button" class="btn btn-secondary" id="btn-leave-cal">Calendar</button>') +
+        pageHead('My Leave', 'Balances for leave year ' + (data.leave_year || '') +
+          (data.current_leave_year && String(data.current_leave_year) !== String(data.leave_year)
+            ? ' (current year ' + data.current_leave_year + ')'
+            : '') + '.',
+          leaveMyLeaveActionsHtml(yearSelect)) +
         '<div class="card"><h2 class="section-title">Balances</h2>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
-          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div></td></tr>') + '</tbody></table></div></div>' +
+          (balCards ? '<div class="hrms-mobile-only leave-balance-cards">' + balCards + '</div>' : '') +
+          '<div class="table-wrap table-wrap--contain hrms-desktop-only"><table class="data-table data-table--stack-md"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
+          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div></td></tr>') + '</tbody></table></div>' +
+          (!balCards ? '<div class="empty-state empty-state-inline hrms-mobile-only"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div>' : '') +
+        '</div>' +
         '<div class="card"><h2 class="section-title">My requests</h2>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+          '<div class="table-wrap table-wrap--contain"><table class="data-table data-table--stack-md"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
           '<tbody>' + (reqRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave requests yet</p><p class="empty-state-text">Apply leave to create your first request.</p></div></td></tr>') + '</tbody></table></div></div>';
 
       var applyBtn = document.getElementById('btn-apply-leave');
@@ -366,6 +651,14 @@
       if (calBtn) calBtn.addEventListener('click', function () {
         helpers.navigate('leave-calendar');
       });
+      var yearSel = document.getElementById('leave-year-select');
+      if (yearSel) {
+        yearSel.addEventListener('change', function () {
+          leaveViewCache['my-leave-year'] = yearSel.value;
+          delete leaveViewCache['my-leave'];
+          renderMyLeave(page, helpers);
+        });
+      }
       page.querySelectorAll('[data-cancel]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           if (!confirm('Cancel this leave request?')) return;
@@ -382,8 +675,7 @@
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-edit');
           var row = (data.requests || []).filter(function (r) { return r.leave_request_id === id; })[0];
-          helpers.navigate('leave-apply');
-          setTimeout(function () { renderApply(page, helpers, row); }, 0);
+          helpers.navigate('leave-apply', { prefill: row });
         });
       });
   }
@@ -413,9 +705,9 @@
     var u = uiHelpers();
     if (tryRestoreLeave_('leave-approvals', function (rows) { paintApprovals_(page, helpers, rows); })) return;
     if (!keepLeavePaint_('leave-approvals')) {
-      page.innerHTML = pageHead('Leave approvals', 'Submitted requests waiting for a decision.') +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody id="appr-body">' + u.skRows(7, 5) + '</tbody></table></div>';
+      page.innerHTML = pageHead('Leave approvals', 'Requests in your approval queue (manager, then HR/admin as applicable).') +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody id="appr-body">' + u.skRows(8, 5) + '</tbody></table></div>';
     }
     c.callServer('apiLeaveGetApprovals').then(function (rows) {
       if (!onRoute('leave-approvals')) return;
@@ -431,46 +723,38 @@
   function paintApprovals_(page, helpers, rows) {
       var c = ctx();
       var body = (rows || []).map(function (r) {
-        return '<tr>' +
+        return '<tr>' + leaveSelectCellHtml_(r) +
           '<td class="num">' + c.escapeHtml(r.employee_id) + '</td>' +
-          '<td>' + c.escapeHtml(r.employee_name) + '</td>' +
+          '<td>' + c.escapeHtml(r.employee_name || '-') + '</td>' +
           '<td>' + c.escapeHtml(r.leave_type_code) + '</td>' +
           '<td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) + '</td>' +
           '<td class="num">' + fmtDays(r.total_days) + '</td>' +
+          '<td><span class="' + badgeClass(r.status) + '">' + c.escapeHtml(r.status_label || r.status) + '</span></td>' +
           '<td>' + c.escapeHtml(r.reason) + '</td>' +
-          '<td class="col-actions"><button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
-            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button></td></tr>';
+          '<td class="col-actions">' + approvalLeaveActionsHtml_(r) + '</td></tr>';
       }).join('');
       page.innerHTML = flashHtml('leave-approvals') +
-        pageHead('Leave approvals', 'Submitted requests waiting for a decision.') +
+        pageHead('Leave approvals', 'Select one or more requests, or use Select all. Your queue is filtered to what you can act on at this stage.') +
         '<div id="leave-appr-feedback" class="action-feedback hidden" role="status"></div>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No submitted leave needs a decision right now.</p></div></td></tr>') + '</tbody></table></div>';
-      page.querySelectorAll('[data-approve]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Approve leave', false, function (comment) {
-              c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
-                actionOpts(btn, 'Approving...', document.getElementById('leave-appr-feedback')))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave approved.', 'success', 'leave-approvals');
-                  renderApprovals(page, helpers);
-                });
-            });
-        });
+        leaveBulkToolbarHtml_('leave-appr-bulk') +
+        '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + (body || '<tr class="table-empty-row"><td colspan="9"><div class="empty-state empty-state-inline"><p class="empty-state-title">Nothing in your queue</p><p class="empty-state-text">No leave in your queue right now.</p></div></td></tr>') + '</tbody></table></div>';
+      var apprFeedback = document.getElementById('leave-appr-feedback');
+      bindLeaveApprovalBulk_(page, helpers, {
+        barId: 'leave-appr-bulk',
+        feedbackEl: apprFeedback,
+        flashKey: 'leave-approvals',
+        onDone: function () { renderApprovals(page, helpers); }
       });
-      page.querySelectorAll('[data-reject]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Reject leave', true, function (comment) {
-              c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
-                actionOpts(btn, 'Rejecting...', document.getElementById('leave-appr-feedback')))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave rejected.', 'success', 'leave-approvals');
-                  renderApprovals(page, helpers);
-                });
-            });
-        });
+      bindLeaveRowApproveReject_(page, helpers, {
+        feedbackEl: apprFeedback,
+        flashKey: 'leave-approvals',
+        onDone: function () { renderApprovals(page, helpers); }
+      });
+      bindLeaveRevokeActions_(page, helpers, {
+        feedbackEl: apprFeedback,
+        flashKey: 'leave-approvals',
+        onDone: function () { renderApprovals(page, helpers); }
       });
   }
 
@@ -488,8 +772,8 @@
         '<button type="button" class="tab" data-tab="types">Leave types</button>' +
       '</div>' +
       '<div id="tab-requests"><div class="card"><h2 class="section-title">Requests</h2>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
-        '<tbody>' + u.skRows(6, 6) + '</tbody></table></div></div></div>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+        '<tbody>' + u.skRows(7, 6) + '</tbody></table></div></div></div>' +
       '<div id="tab-types" class="hidden"><div class="card"><h2 class="section-title">Leave types</h2>' +
         (u.skRows ? '<div class="table-wrap"><table class="data-table"><tbody>' + u.skRows(4, 4) + '</tbody></table></div>' : '') +
       '</div></div>';
@@ -522,19 +806,9 @@
           '<td>' + (t.is_active ? 'Active' : 'Inactive') + '</td>' +
           '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit-type="' + c.escapeHtml(t.leave_type_id) + '">Edit</button></td></tr>';
       }).join('');
-      var reqRows = (data.requests || []).slice(0, 25).map(function (r) {
-        return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
-          '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
-          '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-          c.escapeHtml(r.status) + '</span></td><td class="col-actions">' +
-          (r.status === 'SUBMITTED' ? '<button type="button" class="btn btn-primary btn-sm" data-approve="' + c.escapeHtml(r.leave_request_id) + '">Approve</button> ' +
-            '<button type="button" class="btn btn-danger btn-sm" data-reject="' + c.escapeHtml(r.leave_request_id) + '">Reject</button> ' : '') +
-          ((r.status === 'DRAFT' || r.status === 'SUBMITTED' || r.status === 'APPROVED')
-            ? '<button type="button" class="btn btn-secondary btn-sm" data-cancel="' + c.escapeHtml(r.leave_request_id) + '">Cancel</button>' : '') +
-          '</td></tr>';
-      }).join('');
+      var reqRows = (data.requests || []).map(adminLeaveRowHtml_).join('');
       var empFilter = employees.map(function (e) {
-        return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' — ' + e.display_name) + '</option>';
+        return '<option value="' + c.escapeHtml(e.employee_id) + '">' + c.escapeHtml(e.employee_id + ' - ' + e.display_name) + '</option>';
       }).join('');
 
       page.innerHTML =
@@ -548,14 +822,24 @@
           '<div class="page-toolbar"><div class="filters">' +
             '<div class="form-group"><label class="form-label" for="flt-emp">Employee</label><select class="form-select" id="flt-emp"><option value="">All</option>' + empFilter + '</select></div>' +
             '<div class="form-group"><label class="form-label" for="flt-status">Status</label><select class="form-select" id="flt-status">' +
-              '<option value="">All</option><option>DRAFT</option><option>SUBMITTED</option><option>APPROVED</option><option>REJECTED</option><option>CANCELLED</option></select></div>' +
+              '<option value="">All</option>' +
+              '<option value="PENDING">Awaiting approval</option>' +
+              '<option value="PENDING_MANAGER">Awaiting manager</option>' +
+              '<option value="PENDING_HR">Awaiting HR</option>' +
+              '<option value="PENDING_ADMIN">Awaiting admin</option>' +
+              '<option value="DRAFT">DRAFT</option>' +
+              '<option value="APPROVED">APPROVED</option>' +
+              '<option value="REJECTED">REJECTED</option>' +
+              '<option value="CANCELLED">CANCELLED</option></select></div>' +
             '<div class="form-group"><button type="button" class="btn btn-secondary" id="btn-flt">Apply filters</button></div>' +
           '</div></div>' +
           '<div id="leave-admin-filter-feedback" class="action-feedback hidden" role="status"></div>' +
-          '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
-          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div></div>' +
+          leaveBulkToolbarHtml_('leave-admin-bulk') +
+          '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
+          '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div>' +
+          '<p class="hint" style="margin-top:8px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' - if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
         '<div id="tab-types" class="hidden">' +
-          '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements — not hard-coded company policy.</p>' +
+          '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements - not hard-coded company policy.</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Balance</th><th>LOP</th><th class="num">Entitlement</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
           '<tbody>' + (typeRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No types yet</p></div></td></tr>') + '</tbody></table></div>' +
           '<form id="leave-type-form" class="form-grid" style="margin-top:20px">' +
@@ -586,31 +870,16 @@
 
       function bindAdminActions() {
         var adminFeedback = function () { return document.getElementById('leave-admin-filter-feedback'); };
-        page.querySelectorAll('[data-approve]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Approve leave', false, function (comment) {
-              c.callServer('apiLeaveApprove', btn.getAttribute('data-approve'), comment,
-                actionOpts(btn, 'Approving...', adminFeedback()))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave approved.', 'success', 'leave-admin');
-                  renderAdmin(page, helpers);
-                });
-            });
-          });
+        bindLeaveApprovalBulk_(page, helpers, {
+          barId: 'leave-admin-bulk',
+          feedbackEl: adminFeedback(),
+          flashKey: 'leave-admin',
+          onDone: function () { renderAdmin(page, helpers); }
         });
-        page.querySelectorAll('[data-reject]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            openDecisionModal(helpers, 'Reject leave', true, function (comment) {
-              c.callServer('apiLeaveReject', btn.getAttribute('data-reject'), comment,
-                actionOpts(btn, 'Rejecting...', adminFeedback()))
-                .then(function () {
-                  invalidateLeaveAfterRequestMutation_();
-                  setFlash('Leave rejected.', 'success', 'leave-admin');
-                  renderAdmin(page, helpers);
-                });
-            });
-          });
+        bindLeaveRowApproveReject_(page, helpers, {
+          feedbackEl: adminFeedback(),
+          flashKey: 'leave-admin',
+          onDone: function () { renderAdmin(page, helpers); }
         });
         page.querySelectorAll('[data-cancel]').forEach(function (btn) {
           btn.addEventListener('click', function () {
@@ -623,6 +892,11 @@
                 renderAdmin(page, helpers);
               });
           });
+        });
+        bindLeaveRevokeActions_(page, helpers, {
+          feedbackEl: adminFeedback(),
+          flashKey: 'leave-admin',
+          onDone: function () { renderAdmin(page, helpers); }
         });
       }
       bindAdminActions();
@@ -648,14 +922,12 @@
           employee_id: document.getElementById('flt-emp').value,
           status: document.getElementById('flt-status').value
         }, actionOpts(fltBtn, 'Filtering...', feedback)).then(function (next) {
-          var html = (next.requests || []).slice(0, 25).map(function (r) {
-            return '<tr><td class="num">' + c.escapeHtml(r.employee_id) + '</td><td>' + c.escapeHtml(r.leave_type_code) +
-              '</td><td>' + c.escapeHtml(r.start_date) + ' → ' + c.escapeHtml(r.end_date) +
-              '</td><td class="num">' + fmtDays(r.total_days) + '</td><td><span class="' + badgeClass(r.status) + '">' +
-              c.escapeHtml(r.status) + '</span></td><td></td></tr>';
-          }).join('');
+          var html = (next.requests || []).map(adminLeaveRowHtml_).join('');
           var tbody = document.getElementById('admin-req-body');
-          if (tbody) tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="6"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+          if (tbody) {
+            tbody.innerHTML = html || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No matching requests</p></div></td></tr>';
+            bindAdminActions();
+          }
         });
       });
 
@@ -716,7 +988,7 @@
         });
       });
       document.getElementById('btn-start-year').addEventListener('click', function () {
-        if (!confirm('Grant leave balances for the current leave year for all ACTIVE employees?')) return;
+        if (!confirm('Grant missing leave balances from each active employee\'s joining year through the current leave year? Existing balances are not overwritten.')) return;
         var yearBtn = this;
         c.callServer('apiLeaveStartLeaveYear', '',
           actionOpts(yearBtn, 'Granting balances...', document.getElementById('leave-year-feedback')))
@@ -781,7 +1053,10 @@
           var hits = (data.items || []).filter(function (r) {
             return r.start_date <= iso && r.end_date >= iso;
           });
-          var names = hits.map(function (h) { return h.employee_id + ' ' + h.leave_type_code; }).join(', ');
+          var names = hits.map(function (h) {
+            var label = (h.employee_name || h.employee_id) + ' (' + h.employee_id + ') ' + h.leave_type_code;
+            return label;
+          }).join(', ');
           cells.push('<div class="cal-cell' + (hits.length ? ' cal-leave' : '') + '"><div class="cal-day">' + i +
             '</div><div class="cal-items">' + c.escapeHtml(names) + '</div></div>');
         }
@@ -805,12 +1080,15 @@
   }
 
   window.HRMSLeaveUi = {
-    render: function (route, helpers) {
+    render: function (route, helpers, params) {
       var page = helpers.$('page-content');
       if (!page) return;
       page.classList.remove('hidden');
       if (route === 'my-leave') return renderMyLeave(page, helpers);
-      if (route === 'leave-apply') return renderApply(page, helpers, null);
+      if (route === 'leave-apply') {
+        var prefill = (params && params.prefill) || null;
+        return renderApply(page, helpers, prefill);
+      }
       if (route === 'leave-approvals') return renderApprovals(page, helpers);
       if (route === 'leave-admin') return renderAdmin(page, helpers);
       if (route === 'leave-calendar') return renderCalendar(page, helpers);

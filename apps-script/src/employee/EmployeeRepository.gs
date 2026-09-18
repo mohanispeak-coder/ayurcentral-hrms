@@ -6,7 +6,14 @@ var HRMS = HRMS || {};
 var EmployeeRepository = (function () {
   function findById(employeeId) {
     if (!employeeId) return null;
-    return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: String(employeeId) });
+    var raw = String(employeeId);
+    var row = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: raw });
+    if (row) return row;
+    var norm = raw.trim().toUpperCase();
+    if (norm && norm !== raw) {
+      return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: norm });
+    }
+    return null;
   }
 
   function findByWorkEmail(email) {
@@ -25,6 +32,27 @@ var EmployeeRepository = (function () {
     return DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
   }
 
+  function listVerticals() {
+    var rows;
+    try {
+      rows = DbService.getAllRecords(HRMS.SHEETS.VERTICALS);
+    } catch (e) {
+      rows = [];
+    }
+    var seen = {};
+    var out = [];
+    rows.forEach(function (row) {
+      var name = String(row.vertical_name || row.name || row.value || '').trim().toUpperCase();
+      if (!name || seen[name]) return;
+      seen[name] = true;
+      out.push(name);
+    });
+    if (!out.length) {
+      return (HRMS.VERTICALS || []).slice();
+    }
+    return out;
+  }
+
   function insert(record) {
     return DbService.insertRecord(HRMS.SHEETS.EMPLOYEES, record);
   }
@@ -34,7 +62,15 @@ var EmployeeRepository = (function () {
   }
 
   function findUserByEmployeeId(employeeId) {
-    return DbService.findOne(HRMS.SHEETS.USERS, { employee_id: String(employeeId) });
+    if (!employeeId) return null;
+    var raw = String(employeeId);
+    var row = DbService.findOne(HRMS.SHEETS.USERS, { employee_id: raw });
+    if (row) return row;
+    var norm = raw.trim().toUpperCase();
+    if (norm && norm !== raw) {
+      return DbService.findOne(HRMS.SHEETS.USERS, { employee_id: norm });
+    }
+    return null;
   }
 
   function findUserByEmail(email) {
@@ -66,6 +102,7 @@ var EmployeeRepository = (function () {
   function listActiveLeaveTypes() {
     return DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES).filter(function (row) {
       var v = row.is_active;
+      if (v === '' || v === null || v === undefined) return true;
       return v === true || v === 1 || String(v).toUpperCase() === 'TRUE';
     });
   }
@@ -94,6 +131,7 @@ var EmployeeRepository = (function () {
     findById: findById,
     findByWorkEmail: findByWorkEmail,
     listAll: listAll,
+    listVerticals: listVerticals,
     insert: insert,
     update: update,
     findUserByEmployeeId: findUserByEmployeeId,

@@ -14,16 +14,23 @@ var AtsPermissionService = (function () {
 
   function requireAccess(session) {
     sessionOrThrow_(session);
-    if (!AtsEngine.canAccessAts(session)) {
+    if (typeof PermissionService !== 'undefined' && PermissionService.require) {
+      PermissionService.require(HRMS.ACTIONS.ATS_ACCESS, {}, session);
+    } else if (!AtsEngine.canAccessAts(session)) {
       throw authorizationError_('Recruitment is not available for your role.');
     }
     return session;
   }
 
   function requireManage(session) {
-    requireAccess(session);
-    if (!AtsEngine.canManageAts(session)) {
-      throw authorizationError_('Only HR or Admin can manage job requisitions.');
+    sessionOrThrow_(session);
+    if (typeof PermissionService !== 'undefined' && PermissionService.require) {
+      PermissionService.require(HRMS.ACTIONS.ATS_MANAGE, {}, session);
+    } else {
+      requireAccess(session);
+      if (!AtsEngine.canManageAts(session)) {
+        throw authorizationError_('Only HR, Admin, or Owner can manage job requisitions.');
+      }
     }
     return session;
   }
@@ -58,14 +65,17 @@ var AtsPermissionService = (function () {
   }
 
   function navItemsForRole(role) {
-    var r = String(role || '').toUpperCase();
+    var r = String(role || '').trim().toUpperCase();
+    if (typeof PermissionService !== 'undefined' && PermissionService.normalizeUserRole) {
+      r = PermissionService.normalizeUserRole(r);
+    }
     return ATS.NAV_ITEMS.filter(function (item) {
       return item.roles.indexOf(r) >= 0;
     });
   }
 
   /**
-   * Optional integrator hook — call from apiGetAppBootstrap after getNavForRole.
+   * Optional integrator hook - call from apiGetAppBootstrap after getNavForRole.
    * Safe no-op if PermissionService is missing.
    */
   function mergeNav(existing, role) {

@@ -1,6 +1,6 @@
 /**
  * Candidate resume storage under HRMS Root / ATS Candidates / {candidate_id}.
- * Reuses DriveService.getRootFolder — does not modify DriveService.
+ * Reuses DriveService.getRootFolder - does not modify DriveService.
  */
 var ATS = ATS || {};
 

@@ -1,5 +1,5 @@
 /**
- * Notification Center service — inbox, preferences, optional MailApp.
+ * Notification Center service - inbox, preferences, optional MailApp.
  * Does not use LockService. Duplicate prevention is dedupe_key on insert.
  * Email failure never rolls back inbox rows.
  */
@@ -68,6 +68,54 @@ var NotificationService = (function () {
   var INBOX_UNREAD_COLS_ = [
     'notification_id', 'recipient_employee_id', 'recipient_email', 'status', 'read_at'
   ];
+
+  var INBOX_LIST_COLS_ = [
+    'notification_id', 'recipient_employee_id', 'recipient_email', 'type', 'title', 'message',
+    'source_module', 'source_record_id', 'created_at', 'read_at', 'priority',
+    'action_route', 'action_params', 'status'
+  ];
+
+  function projectedInboxStore_(cols) {
+    var name = NotificationSchema.INBOX;
+    var rows;
+    try {
+      rows = DbService.getProjectedRecords(name, cols);
+    } catch (e) {
+      rows = DbService.getAllRecords(name);
+    }
+    return {
+      list: function () {
+        return rows;
+      },
+      find: function (id) {
+        var tid = trim_(id);
+        for (var i = 0; i < rows.length; i++) {
+          if (trim_(rows[i].notification_id) === tid) return rows[i];
+        }
+        return null;
+      },
+      update: function (id, fields) {
+        DbService.updateRecord(name, 'notification_id', id, fields);
+        var row = this.find(id);
+        if (row) {
+          Object.keys(fields).forEach(function (k) { row[k] = fields[k]; });
+        }
+        return row;
+      },
+      updateMany: function (ids, fields) {
+        var items = (ids || []).map(function (nid) {
+          return { pk: nid, updates: fields };
+        });
+        DbService.updateRecords(name, 'notification_id', items);
+        (ids || []).forEach(function (nid) {
+          var row = this.find(nid);
+          if (row) {
+            Object.keys(fields).forEach(function (k) { row[k] = fields[k]; });
+          }
+        }.bind(this));
+      }
+    };
+  }
 
   function sheetStore_() {
     var name = NotificationSchema.INBOX;
@@ -188,7 +236,7 @@ var NotificationService = (function () {
     users.forEach(function (u) {
       if (String(u.status || '').toUpperCase() !== 'ACTIVE') return;
       var role = String(u.role || '').toUpperCase();
-      if (role !== 'HR' && role !== 'ADMIN') return;
+      if (role !== 'OWNER' && role !== 'HR' && role !== 'ADMIN') return;
       var rec = resolveRecipient({ employee_id: u.employee_id, email: u.google_email });
       if (!rec) return;
       var key = rec.employee_id || rec.email;
@@ -229,6 +277,13 @@ var NotificationService = (function () {
     } catch (ignore) {}
   }
 
+  function formatBodyWithEmployeeId_(employeeId, body) {
+    body = String(body || '');
+    var id = trim_(employeeId);
+    if (!id || body.indexOf('Employee ID:') >= 0) return body;
+    return 'Employee ID: ' + id + '\n' + body;
+  }
+
   function sendMail_(to, subject, body) {
     if (typeof NotificationService !== 'undefined' && NotificationService._testSendEmail) {
       return NotificationService._testSendEmail(to, subject, body);
@@ -244,9 +299,10 @@ var NotificationService = (function () {
     var to = trim_(record.recipient_email);
     var subject = (normalized && normalized.email_subject) || record.title;
     var body = (normalized && normalized.email_body) || record.message || subject;
+    body = formatBodyWithEmployeeId_(record.recipient_employee_id, body);
     var company = companyName_();
     if (body.indexOf(company) < 0) {
-      body = body + '\n\n— ' + company;
+      body = body + '\n\n- ' + company;
     }
     var log = writeEmailLog_({
       event_type: record.type,
@@ -413,7 +469,7 @@ var NotificationService = (function () {
 
   function getNotifications(session, query) {
     session = session || requireAccess_();
-    return NotificationEngine.inbox.list(sheetStore_(), session, query || {});
+    return NotificationEngine.inbox.list(projectedInboxStore_(INBOX_LIST_COLS_), session, query || {});
   }
 
   function getUnreadCount(session) {
@@ -432,7 +488,12 @@ var NotificationService = (function () {
   function markNotificationRead(session, notificationId) {
     var t0 = Date.now();
     session = session || requireAccess_();
-    var result = NotificationEngine.inbox.markRead(sheetStore_(), notificationId, session, now_());
+    var result = NotificationEngine.inbox.markRead(
+      projectedInboxStore_(INBOX_UNREAD_COLS_),
+      notificationId,
+      session,
+      now_()
+    );
     if (typeof HrmsPerf !== 'undefined') {
       HrmsPerf.addStage('business', Date.now() - t0);
       HrmsPerf.mark('ntf.markReadDone');
@@ -449,7 +510,11 @@ var NotificationService = (function () {
   function markAllNotificationsRead(session) {
     var t0 = Date.now();
     session = session || requireAccess_();
-    var result = NotificationEngine.inbox.markAllRead(sheetStore_(), session, now_());
+    var result = NotificationEngine.inbox.markAllRead(
+      projectedInboxStore_(INBOX_UNREAD_COLS_),
+      session,
+      now_()
+    );
     if (typeof HrmsPerf !== 'undefined') {
       HrmsPerf.addStage('business', Date.now() - t0);
       HrmsPerf.mark('ntf.markAllReadDone');
@@ -664,7 +729,7 @@ var NotificationService = (function () {
       errorMessage = 'NO_EMAIL';
     } else {
       try {
-        sendMail_(to, row.subject, row.subject + '\n\nOpen HRMS to continue.\nEmployee ID: ' + (row.employee_id || ''));
+        sendMail_(to, row.subject, row.body || row.subject);
         newStatus = NotificationEngine.EMAIL_STATUS.SENT;
         sentAt = now_();
       } catch (e) {
@@ -753,6 +818,53 @@ var NotificationService = (function () {
     };
   }
 
+  /**
+   * Send a one-off org email and log to Notifications sheet (leave-style log).
+   * @param {Object} options event_type, to, subject, body, employee_id, related_entity_type, related_entity_id, orgSettingKey
+   */
+  function sendOrgEventEmail(options) {
+    options = options || {};
+    var enabled = true;
+    if (options.orgSettingKey) {
+      enabled = NotificationEngine.isTruthy(ConfigService.getSetting(options.orgSettingKey, true));
+    }
+    var to = trim_(options.to);
+    var subject = String(options.subject || '').trim();
+    var empId = trim_(options.employee_id);
+    var body = formatBodyWithEmployeeId_(empId, String(options.body || subject || '').trim());
+    var status = NotificationEngine.EMAIL_STATUS.PENDING;
+    var errorMessage = '';
+    var sentAt = '';
+    if (!enabled) {
+      status = 'SKIPPED';
+      errorMessage = String(options.orgSettingKey || 'disabled') + ' disabled';
+    } else if (!to) {
+      status = NotificationEngine.EMAIL_STATUS.NO_EMAIL;
+      errorMessage = 'NO_EMAIL';
+    } else {
+      try {
+        sendMail_(to, subject, body);
+        status = NotificationEngine.EMAIL_STATUS.SENT;
+        sentAt = now_();
+      } catch (e) {
+        status = NotificationEngine.EMAIL_STATUS.FAILED;
+        errorMessage = String(e.message || e).substring(0, 300);
+      }
+    }
+    writeEmailLog_({
+      event_type: options.event_type || 'ORG_EMAIL',
+      recipient_email: to,
+      employee_id: empId,
+      subject: subject,
+      status: status,
+      error_message: errorMessage,
+      related_entity_type: options.related_entity_type || '',
+      related_entity_id: options.related_entity_id || '',
+      sent_at: sentAt
+    });
+    return { status: status, error_message: errorMessage };
+  }
+
   return {
     createNotification: createNotification,
     createNotifications: createNotifications,
@@ -772,6 +884,8 @@ var NotificationService = (function () {
     resolveRecipient: resolveRecipient,
     listHrAdminRecipients: listHrAdminRecipients,
     catalogForClient: catalogForClient,
+    sendOrgEventEmail: sendOrgEventEmail,
+    formatBodyWithEmployeeId: formatBodyWithEmployeeId_,
     ensureSchema: ensure_,
     EMAIL_BATCH_LIMIT: EMAIL_BATCH_LIMIT_,
     _testSendEmail: null

@@ -1,5 +1,5 @@
 /**
- * Employee master — create, edit, status, directory, documents, profile views.
+ * Employee master - create, edit, status, directory, documents, profile views.
  */
 var HRMS = HRMS || {};
 
@@ -7,7 +7,7 @@ var EmployeeService = (function () {
   var NAME_MAX_ = 80;
   var DIRECTORY_FIELDS_ = [
     'employee_id', 'first_name', 'last_name', 'display_name', 'department',
-    'designation', 'location', 'employment_type', 'status', 'manager_employee_id', 'work_email'
+    'designation', 'vertical_name', 'location', 'employment_type', 'status', 'manager_employee_id', 'work_email'
   ];
   var WORK_FIELDS_ = DIRECTORY_FIELDS_.concat(['joining_date']);
   var PERSONAL_FIELDS_ = [
@@ -16,11 +16,12 @@ var EmployeeService = (function () {
   var SENSITIVE_FIELDS_ = ['pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name'];
   var EMPLOYMENT_EDIT_FIELDS_ = [
     'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
-    'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
+    'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
     'employment_type', 'location', 'notes'
   ].concat(SENSITIVE_FIELDS_);
   var SELF_EDIT_FIELDS_ = ['phone', 'address'];
   var EMPLOYMENT_TYPES_ = ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'];
+  var EMPLOYEE_ID_PATTERN_ = /^(SAPL|AOPL|AOMS)-\d{4}$/;
 
   function trim_(v) {
     if (v === null || v === undefined) return '';
@@ -29,6 +30,10 @@ var EmployeeService = (function () {
 
   function normalizeEmail_(email) {
     return trim_(email).toLowerCase();
+  }
+
+  function normalizeVerticalName_(vertical) {
+    return trim_(vertical).toUpperCase();
   }
 
   function isValidEmail_(email) {
@@ -108,8 +113,9 @@ var EmployeeService = (function () {
   function canAccessEmployee_(session, emp) {
     if (!session || !session.authorized || !emp) return false;
     if (PermissionService.isHrOrAdmin(session)) return true;
-    if (session.employee_id && session.employee_id === emp.employee_id) return true;
-    if (session.role === HRMS.ROLES.MANAGER && emp.manager_employee_id === session.employee_id) return true;
+    if (session.employee_id && normalizeEmployeeId_(session.employee_id) === normalizeEmployeeId_(emp.employee_id)) return true;
+    if (session.role === HRMS.ROLES.MANAGER &&
+        normalizeEmployeeId_(emp.manager_employee_id) === normalizeEmployeeId_(session.employee_id)) return true;
     return false;
   }
 
@@ -120,8 +126,8 @@ var EmployeeService = (function () {
 
   function isTeamWorkOnly_(session, emp) {
     return session.role === HRMS.ROLES.MANAGER &&
-      session.employee_id !== emp.employee_id &&
-      emp.manager_employee_id === session.employee_id;
+      normalizeEmployeeId_(session.employee_id) !== normalizeEmployeeId_(emp.employee_id) &&
+      normalizeEmployeeId_(emp.manager_employee_id) === normalizeEmployeeId_(session.employee_id);
   }
 
   /**
@@ -147,6 +153,7 @@ var EmployeeService = (function () {
       work.can_view_payroll_ids = false;
       work.can_view_salary_summary = false;
       work.can_view_payslips = false;
+      work.can_view_leave = false;
       return work;
     }
 
@@ -172,24 +179,76 @@ var EmployeeService = (function () {
 
     var isSelf = session.employee_id === row.employee_id;
     var hr = PermissionService.isHrOrAdmin(session);
+    var selfFlags = (typeof UserAccessService !== 'undefined')
+      ? UserAccessService.getFlagsForSession(session)
+      : { access_documents: true, access_payslips: true, access_leave: true };
     out.view_mode = hr ? 'HR' : (isSelf ? 'SELF' : 'OTHER');
     out.can_edit = hr;
     out.can_edit_contact = hr || isSelf;
     out.can_change_status = hr;
     out.can_upload_documents = hr;
-    out.can_view_documents = hr || isSelf;
-    if (!out.hasOwnProperty('can_view_payslips')) {
-      out.can_view_payslips = hr || isSelf;
+    out.can_manage_app_access = hr && !isSelf;
+    out.can_manage_user_role = PermissionService.isAdmin(session) && !isSelf;
+    if (hr) {
+      out.can_view_documents = true;
+      out.can_view_leave = true;
+      if (!out.hasOwnProperty('can_view_payslips')) {
+        out.can_view_payslips = true;
+      }
+    } else if (isSelf) {
+      out.can_view_documents = !!selfFlags.access_documents;
+      out.can_view_payslips = !!selfFlags.access_payslips;
+      out.can_view_leave = !!selfFlags.access_leave;
+    } else {
+      out.can_view_documents = false;
+      out.can_view_payslips = false;
+      out.can_view_leave = false;
     }
     return out;
+  }
+
+  function employeeDisplayName_(emp) {
+    if (!emp) return '';
+    var dn = trim_(emp.display_name);
+    if (dn) return dn;
+    return trim_((emp.first_name || '') + ' ' + (emp.last_name || ''));
+  }
+
+  function employeeSearchText_(emp) {
+    if (!emp) return '';
+    return [
+      emp.employee_id,
+      emp.display_name,
+      emp.first_name,
+      emp.last_name,
+      emp.work_email,
+      emp.department,
+      emp.designation,
+      emp.vertical_name,
+      emp.location
+    ].map(function (v) { return trim_(v); }).filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function matchesEmployeeSearch_(emp, q) {
+    q = trim_(q).toLowerCase();
+    if (!q) return true;
+    var hay = employeeSearchText_(emp);
+    if (hay.indexOf(q) >= 0) return true;
+    var terms = q.split(/\s+/).filter(Boolean);
+    if (terms.length <= 1) return false;
+    for (var i = 0; i < terms.length; i++) {
+      if (hay.indexOf(terms[i]) < 0) return false;
+    }
+    return true;
   }
 
   function directoryRow_(emp, nameMap) {
     return {
       employee_id: emp.employee_id,
-      display_name: emp.display_name || trim_(emp.first_name + ' ' + emp.last_name),
+      display_name: employeeDisplayName_(emp) || emp.employee_id,
       department: emp.department || '',
       designation: emp.designation || '',
+      vertical_name: emp.vertical_name || '',
       location: emp.location || '',
       employment_type: emp.employment_type || '',
       status: emp.status || '',
@@ -198,15 +257,23 @@ var EmployeeService = (function () {
     };
   }
 
-  function scopedEmployees_(session) {
-    var all = EmployeeRepository.listAll();
+  function scopedEmployeesFrom_(session, all) {
+    all = all || [];
     if (PermissionService.isHrOrAdmin(session)) return all;
     if (session.role === HRMS.ROLES.MANAGER) {
+      var selfId = normalizeEmployeeId_(session.employee_id);
       return all.filter(function (e) {
-        return e.employee_id === session.employee_id || e.manager_employee_id === session.employee_id;
+        return normalizeEmployeeId_(e.employee_id) === selfId ||
+          normalizeEmployeeId_(e.manager_employee_id) === selfId;
       });
     }
-    return all.filter(function (e) { return e.employee_id === session.employee_id; });
+    return all.filter(function (e) {
+      return normalizeEmployeeId_(e.employee_id) === normalizeEmployeeId_(session.employee_id);
+    });
+  }
+
+  function scopedEmployees_(session) {
+    return scopedEmployeesFrom_(session, EmployeeRepository.listAll());
   }
 
   function uniqueSorted_(values) {
@@ -228,33 +295,36 @@ var EmployeeService = (function () {
     if (session.role === HRMS.ROLES.EMPLOYEE) {
       throw authorizationError_('Employees cannot open the company directory.');
     }
-    var all = scopedEmployees_(session);
+    var org = EmployeeRepository.listAll();
+    var all = scopedEmployeesFrom_(session, org);
     if (session.role === HRMS.ROLES.MANAGER && query.teamOnly) {
-      all = all.filter(function (e) { return e.manager_employee_id === session.employee_id; });
+      all = all.filter(function (e) {
+        return normalizeEmployeeId_(e.manager_employee_id) === normalizeEmployeeId_(session.employee_id);
+      });
     }
     var q = trim_(query.q).toLowerCase();
     var status = trim_(query.status).toUpperCase();
     var department = trim_(query.department);
     var location = trim_(query.location);
+    var vertical = normalizeVerticalName_(query.vertical_name || query.vertical);
     var filtered = all.filter(function (e) {
       if (status && String(e.status || '').toUpperCase() !== status) return false;
       if (department && String(e.department || '') !== department) return false;
       if (location && String(e.location || '') !== location) return false;
-      if (q) {
-        var hay = (
-          String(e.employee_id || '') + ' ' +
-          String(e.display_name || '') + ' ' +
-          String(e.first_name || '') + ' ' +
-          String(e.last_name || '')
-        ).toLowerCase();
-        if (hay.indexOf(q) < 0) return false;
+      if (vertical) {
+        var empVertical = normalizeVerticalName_(e.vertical_name);
+        if (!empVertical) {
+          empVertical = normalizeVerticalName_(String(e.employee_id || '').split('-')[0]);
+        }
+        if (empVertical !== vertical) return false;
       }
+      if (q && !matchesEmployeeSearch_(e, q)) return false;
       return true;
     });
     filtered.sort(function (a, b) {
       return String(a.employee_id).localeCompare(String(b.employee_id));
     });
-    var nameMap = managerNameMap_(EmployeeRepository.listAll());
+    var nameMap = managerNameMap_(org);
     var pageSize = Number(query.pageSize) || 25;
     if (pageSize < 1) pageSize = 25;
     var page = Number(query.page) || 1;
@@ -269,7 +339,12 @@ var EmployeeService = (function () {
       page: page,
       pageSize: pageSize,
       departments: uniqueSorted_(all.map(function (e) { return e.department; })),
-      locations: uniqueSorted_(all.map(function (e) { return e.location; }))
+      locations: uniqueSorted_(all.map(function (e) { return e.location; })),
+      verticals: uniqueSorted_(all.map(function (e) {
+        var v = normalizeVerticalName_(e.vertical_name);
+        if (!v) v = normalizeVerticalName_(String(e.employee_id || '').split('-')[0]);
+        return v;
+      }))
     };
   }
 
@@ -302,9 +377,35 @@ var EmployeeService = (function () {
       .sort(function (a, b) { return a.employee_id.localeCompare(b.employee_id); });
   }
 
+  function listVerticals(session) {
+    AuthService.requireAuth();
+    if (!PermissionService.isHrOrAdmin(session)) {
+      throw authorizationError_();
+    }
+    return EmployeeRepository.listVerticals();
+  }
+
+  function normalizeEmployeeId_(value) {
+    return trim_(value).toUpperCase();
+  }
+
+  function isValidEmployeeIdFormat_(employeeId) {
+    return EMPLOYEE_ID_PATTERN_.test(normalizeEmployeeId_(employeeId));
+  }
+
   function validatePayload_(payload, employeeIdForSelfCheck, isCreate) {
     var errors = {};
     var warnings = [];
+    if (isCreate) {
+      var employeeId = normalizeEmployeeId_(payload.employee_id);
+      if (!employeeId) {
+        errors.employee_id = 'Employee code is required.';
+      } else if (!isValidEmployeeIdFormat_(employeeId)) {
+        errors.employee_id = 'Use format SAPL-0001, AOPL-0001, or AOMS-0001.';
+      } else if (EmployeeRepository.findById(employeeId)) {
+        errors.employee_id = 'Employee code already exists.';
+      }
+    }
     var first = trim_(payload.first_name);
     var last = trim_(payload.last_name);
     if (!first) errors.first_name = 'First name is required.';
@@ -318,6 +419,13 @@ var EmployeeService = (function () {
 
     if (!trim_(payload.department)) errors.department = 'Department is required.';
     if (!trim_(payload.designation)) errors.designation = 'Designation is required.';
+    var verticalName = normalizeVerticalName_(payload.vertical_name);
+    if (!verticalName && !isCreate && employeeIdForSelfCheck) {
+      verticalName = normalizeVerticalName_(String(employeeIdForSelfCheck).split('-')[0]);
+    }
+    var allowedVerticals = EmployeeRepository.listVerticals();
+    if (!verticalName) errors.vertical_name = 'Vertical is required.';
+    else if (allowedVerticals.indexOf(verticalName) < 0) errors.vertical_name = 'Select a valid vertical.';
     if (!trim_(payload.joining_date)) errors.joining_date = 'Joining date is required.';
     var empType = trim_(payload.employment_type).toUpperCase();
     if (!empType) errors.employment_type = 'Employment type is required.';
@@ -349,7 +457,7 @@ var EmployeeService = (function () {
     if (Object.keys(errors).length) {
       throw validationError_('Please correct the highlighted fields.', { fields: errors, warnings: warnings });
     }
-    return { warnings: warnings, employment_type: empType, work_email: email };
+    return { warnings: warnings, employment_type: empType, work_email: email, vertical_name: verticalName };
   }
 
   function ensureUniqueEmail_(email, exceptEmployeeId) {
@@ -361,6 +469,33 @@ var EmployeeService = (function () {
     }
   }
 
+  function countLeaveBalances_(employeeId) {
+    try {
+      return EmployeeRepository.listLeaveBalances(employeeId).length;
+    } catch (ignore) {
+      return 0;
+    }
+  }
+
+  function ensureLeaveBalancesOnCreate_(employeeId, now) {
+    var before = countLeaveBalances_(employeeId);
+    if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+      try {
+        LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
+      } catch (ignoreGrant) {}
+    }
+    if (countLeaveBalances_(employeeId) <= before) {
+      seedLeaveBalances_(employeeId, now);
+    }
+    if (countLeaveBalances_(employeeId) <= before &&
+        typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+      try {
+        LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
+      } catch (ignoreRetry) {}
+    }
+    return countLeaveBalances_(employeeId) - before;
+  }
+
   function seedLeaveBalances_(employeeId, now) {
     var types;
     try {
@@ -369,28 +504,63 @@ var EmployeeService = (function () {
       return 0;
     }
     if (!types.length) return 0;
-    var year = currentLeaveYear_();
+    var emp = EmployeeRepository.findById(employeeId);
+    var startMonth = Number(ConfigService.getSetting('leave_year_start_month', 1)) || 1;
+    var asOf = now;
+    try {
+      asOf = Utilities.formatDate(now, ConfigService.getTimezone(), 'yyyy-MM-dd');
+    } catch (ignore) {}
+    var years;
+    if (typeof LeaveEngine !== 'undefined' && LeaveEngine.employeeLeaveYears) {
+      years = LeaveEngine.employeeLeaveYears(emp && emp.joining_date, asOf, startMonth);
+    } else {
+      years = [currentLeaveYear_()];
+    }
+    if (!years.length) return 0;
     var existing = EmployeeRepository.listLeaveBalances(employeeId);
     var seeded = 0;
-    types.forEach(function (t) {
-      var already = existing.some(function (b) {
-        return String(b.leave_type_id) === String(t.leave_type_id) && String(b.leave_year) === year;
+    years.forEach(function (year) {
+      types.forEach(function (t) {
+        if (typeof LeaveEngine !== 'undefined' && LeaveEngine.typeRequiresBalance) {
+          if (!LeaveEngine.typeRequiresBalance(t)) return;
+        } else if (t.hasOwnProperty('requires_balance') && !LeaveEngine.isTruthy(t.requires_balance)) {
+          return;
+        }
+        var already = existing.some(function (b) {
+          return String(b.leave_type_id) === String(t.leave_type_id) && String(b.leave_year) === String(year);
+        });
+        if (already) return;
+        var entitled = (typeof LeaveEngine !== 'undefined' && LeaveEngine.entitledDaysForLeaveYear)
+          ? LeaveEngine.entitledDaysForLeaveYear(emp && emp.joining_date, year, startMonth, t.annual_entitlement_days)
+          : (Number(t.annual_entitlement_days) || 0);
+        var prevYear = String((Number(year) || 0) - 1);
+        var prev = null;
+        for (var i = 0; i < existing.length; i++) {
+          if (String(existing[i].leave_type_id) === String(t.leave_type_id) &&
+              String(existing[i].leave_year) === prevYear) {
+            prev = existing[i];
+            break;
+          }
+        }
+        var cf = (typeof LeaveEngine !== 'undefined' && LeaveEngine.carryForwardDays)
+          ? LeaveEngine.carryForwardDays(prev, t.carry_forward_max_days)
+          : 0;
+        var record = {
+          leave_balance_id: DbService.generateId('LB'),
+          employee_id: employeeId,
+          leave_type_id: t.leave_type_id,
+          leave_year: String(year),
+          entitled_days: entitled,
+          used_days: 0,
+          pending_days: 0,
+          carried_forward_days: cf,
+          available_days: entitled + cf,
+          updated_at: now
+        };
+        EmployeeRepository.insertLeaveBalance(record);
+        existing.push(record);
+        seeded++;
       });
-      if (already) return;
-      var entitled = Number(t.annual_entitlement_days) || 0;
-      EmployeeRepository.insertLeaveBalance({
-        leave_balance_id: DbService.generateId('LB'),
-        employee_id: employeeId,
-        leave_type_id: t.leave_type_id,
-        leave_year: year,
-        entitled_days: entitled,
-        used_days: 0,
-        pending_days: 0,
-        carried_forward_days: 0,
-        available_days: entitled,
-        updated_at: now
-      });
-      seeded++;
     });
     return seeded;
   }
@@ -404,28 +574,84 @@ var EmployeeService = (function () {
     }
   }
 
-  function createEmployee(session, payload) {
+  function parseCreateUserFlag_(value) {
+    if (value === false || value === 0) return false;
+    var normalized = trim_(value).toUpperCase();
+    if (normalized === 'NO' || normalized === 'N' || normalized === 'FALSE' || normalized === '0') return false;
+    return true;
+  }
+
+  function resolveGoogleLoginEmail_(payload, workEmail) {
+    var loginEmail = normalizeEmail_(payload.google_login_email);
+    if (loginEmail) return loginEmail;
+    return workEmail;
+  }
+
+  function notifyEmployeeCreated_(session, record, userCreated) {
+    try {
+      if (typeof NotificationService === 'undefined' || !NotificationService.sendOrgEventEmail) return;
+      if (typeof NotificationService.listHrAdminRecipients !== 'function') return;
+      var recipients = NotificationService.listHrAdminRecipients() || [];
+      if (!recipients.length) return;
+      var name = trim_(record.display_name) || (trim_(record.first_name) + ' ' + trim_(record.last_name));
+      var body = [
+        'A new employee record was created in HRMS.',
+        'Employee ID: ' + record.employee_id,
+        'Name: ' + name,
+        'Department: ' + (record.department || '-'),
+        'Designation: ' + (record.designation || '-'),
+        'Work email: ' + (record.work_email || '-'),
+        'Created by: ' + (session.email || '-'),
+        userCreated ? 'User login: enabled' : 'User login: not created'
+      ].join('\n');
+      var subject = 'New employee: ' + name + ' (' + record.employee_id + ')';
+      recipients.forEach(function (rec) {
+        NotificationService.sendOrgEventEmail({
+          event_type: 'EMPLOYEE_CREATED',
+          to: rec.email,
+          subject: subject,
+          body: body,
+          employee_id: record.employee_id,
+          related_entity_type: 'Employees',
+          related_entity_id: record.employee_id,
+          orgSettingKey: 'notification_employee_create'
+        });
+      });
+    } catch (ignore) {}
+  }
+
+  function createEmployee(session, payload, options) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     payload = payload || {};
+    options = options || {};
     var validated = validatePayload_(payload, '', true);
     var displayName = trim_(payload.display_name) || (trim_(payload.first_name) + ' ' + trim_(payload.last_name));
-    var createUser = payload.create_user !== false && payload.create_user !== 'false';
+    var createUser = parseCreateUserFlag_(payload.create_user);
+    var employeeId = normalizeEmployeeId_(payload.employee_id);
+    var loginEmail = resolveGoogleLoginEmail_(payload, validated.work_email);
     var now = new Date();
 
-    return withScriptLock_(function () {
+    var runCreate = function () {
+      if (EmployeeRepository.findById(employeeId)) {
+        throw validationError_('Employee code already exists.', {
+          fields: { employee_id: 'Employee code already exists.' }
+        });
+      }
       ensureUniqueEmail_(validated.work_email, null);
       if (createUser) {
-        var existingUser = EmployeeRepository.findUserByEmail(validated.work_email);
+        if (!loginEmail) {
+          throw validationError_('Google login email is required when creating a user login.', {
+            fields: { google_login_email: 'Enter the Google sign-in email.' }
+          });
+        }
+        var existingUser = EmployeeRepository.findUserByEmail(loginEmail);
         if (existingUser) {
           throw validationError_('A user login already exists for this email.', {
-            fields: { work_email: 'This email is already mapped to a user.' }
+            fields: { google_login_email: 'This email is already mapped to a user.' }
           });
         }
       }
 
-      var employeeId = DbService.nextEmployeeIdAssumingLocked
-        ? DbService.nextEmployeeIdAssumingLocked()
-        : DbService.nextEmployeeId();
       var record = {
         employee_id: employeeId,
         first_name: trim_(payload.first_name),
@@ -438,8 +664,9 @@ var EmployeeService = (function () {
         work_email: validated.work_email,
         department: trim_(payload.department),
         designation: trim_(payload.designation),
+        vertical_name: validated.vertical_name,
         manager_employee_id: trim_(payload.manager_employee_id),
-        joining_date: trim_(payload.joining_date),
+        joining_date: toIsoDate_(trim_(payload.joining_date)) || trim_(payload.joining_date),
         employment_type: validated.employment_type,
         location: trim_(payload.location),
         status: HRMS.EMPLOYEE_STATUS.ACTIVE,
@@ -456,47 +683,55 @@ var EmployeeService = (function () {
       };
       EmployeeRepository.insert(record);
 
-      var leaveSeeded = 0;
-      if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-        try {
-          var granted = LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-          leaveSeeded = granted ? granted.length : 0;
-        } catch (ignore) {
-          leaveSeeded = seedLeaveBalances_(employeeId, now);
-        }
-      } else {
-        leaveSeeded = seedLeaveBalances_(employeeId, now);
-      }
+      var leaveSeeded = ensureLeaveBalancesOnCreate_(employeeId, now);
 
+      var welcomeDelivery = null;
       if (createUser) {
-        EmployeeRepository.insertUser({
-          google_email: validated.work_email,
+        if (typeof UserAccessService !== 'undefined' && UserAccessService.ensureColumns) {
+          UserAccessService.ensureColumns();
+        }
+        var accessDefaults = (typeof UserAccessService !== 'undefined' && UserAccessService.newUserAccessDefaults)
+          ? UserAccessService.newUserAccessDefaults(HRMS.ROLES.EMPLOYEE)
+          : {};
+        var userRow = Object.assign({
+          google_email: loginEmail,
           employee_id: employeeId,
           role: HRMS.ROLES.EMPLOYEE,
           status: HRMS.USER_STATUS.ACTIVE,
           created_at: now,
           updated_at: now
-        });
+        }, accessDefaults);
+        EmployeeRepository.insertUser(userRow);
       }
 
       var drive = maybeCreateDriveFolder_(employeeId);
-      AuditService.log(
-        'EMPLOYEE_CREATE',
-        'Employees',
-        employeeId,
-        'Created ' + displayName + ' (' + record.department + ', ' + record.employment_type + ')' +
-          (createUser ? '; user login enabled' : ''),
-        employeeId
-      );
+      var auditNote = 'Created ' + displayName + ' (' + record.department + ', ' + record.employment_type + ')' +
+        (createUser ? '; user login enabled' : '');
+      if (options.source === 'bulk_upload') auditNote += '; source=bulk_upload';
+      AuditService.log('EMPLOYEE_CREATE', 'Employees', employeeId, auditNote, employeeId);
+
+      notifyEmployeeCreated_(session, record, createUser);
+      if (createUser && typeof EmployeeWelcomeService !== 'undefined') {
+        welcomeDelivery = EmployeeWelcomeService.sendWelcomeOnCreate(record, loginEmail);
+      }
+
+      var allWarnings = (validated.warnings || []).slice();
+      if (welcomeDelivery && welcomeDelivery.warnings && welcomeDelivery.warnings.length) {
+        welcomeDelivery.warnings.forEach(function (w) { allWarnings.push(w); });
+      }
 
       return {
         employee: sanitizeForViewer(EmployeeRepository.findById(employeeId), session),
-        warnings: validated.warnings,
+        warnings: allWarnings,
+        welcome_delivery: welcomeDelivery,
         leave_balances_seeded: leaveSeeded,
         drive_folder_created: drive.created,
         user_created: createUser
       };
-    });
+    };
+
+    if (options.alreadyLocked) return runCreate();
+    return withScriptLock_(runCreate);
   }
 
   function getEmployee(session, employeeId) {
@@ -542,10 +777,15 @@ var EmployeeService = (function () {
     var updates = {};
     EMPLOYMENT_EDIT_FIELDS_.forEach(function (k) {
       if (payload.hasOwnProperty(k)) {
-        updates[k] = (k === 'pan' || k === 'bank_ifsc') ? trim_(payload[k]).toUpperCase() : trim_(payload[k]);
+        updates[k] = (k === 'pan' || k === 'bank_ifsc' || k === 'vertical_name')
+          ? trim_(payload[k]).toUpperCase()
+          : trim_(payload[k]);
       }
     });
     if (updates.work_email) updates.work_email = normalizeEmail_(updates.work_email);
+    if (updates.hasOwnProperty('joining_date')) {
+      updates.joining_date = toIsoDate_(updates.joining_date) || updates.joining_date;
+    }
     if (updates.employment_type) updates.employment_type = String(updates.employment_type).toUpperCase();
     if (updates.first_name || updates.last_name) {
       if (!trim_(payload.display_name) && payload.first_name && payload.last_name) {
@@ -591,6 +831,9 @@ var EmployeeService = (function () {
       validated = validatePayload_(merged, id, false);
       updates = applyHrUpdates_(payload);
       if (!updates.work_email) updates.work_email = normalizeEmail_(row.work_email);
+      if (!updates.hasOwnProperty('vertical_name') && !trim_(row.vertical_name) && validated.vertical_name) {
+        updates.vertical_name = validated.vertical_name;
+      }
     } else {
       updates = applySelfContact_(payload);
     }
@@ -616,6 +859,12 @@ var EmployeeService = (function () {
         }
       }
       EmployeeRepository.update(id, updates);
+      if (hr && updates.hasOwnProperty('joining_date') &&
+          typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+        try {
+          LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
+        } catch (ignore) {}
+      }
       AuditService.log(
         'EMPLOYEE_UPDATE',
         'Employees',
@@ -661,6 +910,12 @@ var EmployeeService = (function () {
         'Status set to ' + next + (user ? '; user ' + (next === HRMS.EMPLOYEE_STATUS.INACTIVE ? 'DISABLED' : 'ACTIVE') : ''),
         id
       );
+      if (next === HRMS.EMPLOYEE_STATUS.ACTIVE &&
+          typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+        try {
+          LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
+        } catch (ignore) {}
+      }
       return getEmployee(session, id);
     });
   }
@@ -695,21 +950,46 @@ var EmployeeService = (function () {
       throw authorizationError_('You cannot view these payslips.');
     }
     return EmployeeRepository.listDocuments(emp.employee_id, HRMS.DOCUMENT_CATEGORY.PAYSLIP).map(function (d) {
+      var enriched = typeof PayslipService.enrichPayslipDoc === 'function'
+        ? PayslipService.enrichPayslipDoc(d, emp.employee_id)
+        : d;
       return {
-        document_id: d.document_id,
-        title: d.title,
+        document_id: enriched.document_id,
+        title: enriched.title,
+        period_label: enriched.period_label || enriched.title,
         category: d.category,
-        payroll_run_id: d.payroll_run_id || '',
-        uploaded_at: toIsoDateTime_(d.uploaded_at),
-        uploaded_by_email: d.uploaded_by_email
+        payroll_run_id: enriched.payroll_run_id || d.payroll_run_id || '',
+        net_pay: enriched.net_pay,
+        uploaded_at: toIsoDateTime_(enriched.uploaded_at || d.uploaded_at),
+        generated_at: enriched.generated_at || toIsoDateTime_(d.uploaded_at)
       };
     });
   }
 
-  function uploadDocument(session, employeeId, meta) {
+  function uploadDocuments(session, employeeId, files) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
     if (!PermissionService.isHrOrAdmin(session)) {
       throw authorizationError_('Only HR or Admin can upload employee files.');
+    }
+    files = files || [];
+    if (!files.length) throw validationError_('At least one file is required.');
+    if (files.length > 20) {
+      throw validationError_('Maximum 20 files per upload. Remove some files and try again.');
+    }
+    var uploaded = [];
+    files.forEach(function (meta) {
+      uploaded.push(uploadDocument(session, employeeId, meta, { skipPermissionCheck: true }));
+    });
+    return { uploadedCount: uploaded.length, files: uploaded };
+  }
+
+  function uploadDocument(session, employeeId, meta, options) {
+    options = options || {};
+    if (!options.skipPermissionCheck) {
+      PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
+      if (!PermissionService.isHrOrAdmin(session)) {
+        throw authorizationError_('Only HR or Admin can upload employee files.');
+      }
     }
     meta = meta || {};
     var emp = EmployeeRepository.findById(trim_(employeeId));
@@ -720,7 +1000,14 @@ var EmployeeService = (function () {
     var base64 = trim_(meta.base64);
     if (!base64) throw validationError_('File data is required.');
 
-    var folder = DriveService.getEmployeeDocumentsFolder(emp.employee_id);
+    var folder;
+    try {
+      folder = DriveService.getEmployeeDocumentsFolder(emp.employee_id);
+    } catch (e) {
+      throw configurationError_(
+        (e && e.message) || 'Could not access employee document folder. Ensure the script owner can create folders in Google Drive.'
+      );
+    }
     var bytes = Utilities.base64Decode(base64);
     var blob = Utilities.newBlob(bytes, mimeType, fileName);
     var file = folder.createFile(blob);
@@ -780,6 +1067,16 @@ var EmployeeService = (function () {
     var emp = EmployeeRepository.findById(trim_(employeeId));
     if (!emp) throw notFoundError_('Employee not found.');
     if (!canAccessEmployee_(session, emp)) throw authorizationError_();
+    var view = sanitizeForViewer(emp, session);
+    if (!view.can_view_leave) {
+      throw authorizationError_('You do not have access to leave information.');
+    }
+    if (String(emp.status || '').toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE &&
+        typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
+      try {
+        LeaveService.grantBalancesForEmployee(emp.employee_id, null);
+      } catch (ignore) {}
+    }
     var types = [];
     try {
       types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);
@@ -787,17 +1084,24 @@ var EmployeeService = (function () {
     var typeName = {};
     types.forEach(function (t) { typeName[t.leave_type_id] = t.name || t.code; });
     return EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
+      var available = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
+        ? LeaveEngine.availableDays(b)
+        : Number(b.available_days) || 0;
       return {
         leave_balance_id: b.leave_balance_id,
         leave_type_id: b.leave_type_id,
         leave_type_name: typeName[b.leave_type_id] || b.leave_type_id,
-        leave_year: b.leave_year,
+        leave_year: String(b.leave_year),
         entitled_days: Number(b.entitled_days) || 0,
         used_days: Number(b.used_days) || 0,
         pending_days: Number(b.pending_days) || 0,
         carried_forward_days: Number(b.carried_forward_days) || 0,
-        available_days: Number(b.available_days) || 0
+        available_days: available
       };
+    }).sort(function (a, b) {
+      var yearCmp = String(b.leave_year).localeCompare(String(a.leave_year));
+      if (yearCmp) return yearCmp;
+      return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
     });
   }
 
@@ -816,7 +1120,9 @@ var EmployeeService = (function () {
 
   function getDirectReportIds(managerEmployeeId) {
     return EmployeeRepository.listAll()
-      .filter(function (e) { return e.manager_employee_id === managerEmployeeId; })
+      .filter(function (e) {
+        return normalizeEmployeeId_(e.manager_employee_id) === normalizeEmployeeId_(managerEmployeeId);
+      })
       .map(function (e) { return e.employee_id; });
   }
 
@@ -853,6 +1159,7 @@ var EmployeeService = (function () {
     listDocuments: listDocuments,
     listPayslips: listPayslips,
     uploadDocument: uploadDocument,
+    uploadDocuments: uploadDocuments,
     downloadDocument: downloadDocument,
     getLeaveSummary: getLeaveSummary,
     isActive: isActive,
@@ -860,6 +1167,10 @@ var EmployeeService = (function () {
     getDirectReportIds: getDirectReportIds,
     listActiveEmployees: listActiveEmployees,
     sanitizeForViewer: sanitizeForViewer,
-    matchesDirectoryFilter: matchesDirectoryFilter
+    matchesDirectoryFilter: matchesDirectoryFilter,
+    normalizeEmployeeId: normalizeEmployeeId_,
+    listVerticals: listVerticals,
+    isValidEmployeeIdFormat: isValidEmployeeIdFormat_,
+    parseCreateUserFlag: parseCreateUserFlag_
   };
 })();
