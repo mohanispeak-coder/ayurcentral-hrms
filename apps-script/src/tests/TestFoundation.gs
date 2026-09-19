@@ -133,7 +133,7 @@ function testFoundation_All() {
   record('moduleUiLeaveFiles',
     HRMS_MODULE_UI_FILES_ && HRMS_MODULE_UI_FILES_.leave && HRMS_MODULE_UI_FILES_.leave.length === 2);
   record('moduleUiPayrollFiles',
-    HRMS_MODULE_UI_FILES_ && HRMS_MODULE_UI_FILES_.payroll && HRMS_MODULE_UI_FILES_.payroll.length === 1);
+    HRMS_MODULE_UI_FILES_ && HRMS_MODULE_UI_FILES_.payroll && HRMS_MODULE_UI_FILES_.payroll.length === 2);
 
   var failed = results.filter(function (r) { return !r.passed && !r.skipped; });
   Logger.log('Foundation tests: ' + (results.length - failed.length) + '/' + results.length + ' passed (' + failed.length + ' failed)');

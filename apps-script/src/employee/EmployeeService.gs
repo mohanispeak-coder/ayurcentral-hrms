@@ -778,6 +778,14 @@ var EmployeeService = (function () {
       throw authorizationError_('You do not have access to this employee.');
     }
     var view = sanitizeForViewer(row, session);
+    if (view.hasOwnProperty('salary_structure_id')) {
+      view.salary_structure_name = '';
+      var mappedId = trim_(view.salary_structure_id);
+      if (mappedId && typeof SalaryStructureTypeService !== 'undefined' && SalaryStructureTypeService.findTypeById) {
+        var mappedType = SalaryStructureTypeService.findTypeById(mappedId);
+        if (mappedType) view.salary_structure_name = String(mappedType.structure_name || '');
+      }
+    }
     if (view.can_view_salary_summary) {
       var structure = EmployeeRepository.findCurrentSalaryStructure(id);
       view.current_structure = structure ? {
