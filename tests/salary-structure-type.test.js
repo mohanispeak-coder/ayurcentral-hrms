@@ -37,7 +37,9 @@ function makeDb() {
       store[s] = rows(s).filter(function (r) { return !matches(r, filter || {}); });
       (newRows || []).forEach(function (r) { store[s].push(Object.assign({}, r)); });
     },
-    generateId: function (prefix) { seq += 1; return prefix + '-' + seq; }
+    generateId: function (prefix) { seq += 1; return prefix + '-' + seq; },
+    nextSequenceAssumingLocked: function () { seq += 1; return seq; },
+    nextSequence: function () { seq += 1; return seq; }
   };
 }
 
@@ -89,6 +91,7 @@ var created = Svc.saveStructureType({
   ]
 });
 check('create returns id', !!created.salary_structure_id, created.salary_structure_id);
+check('id is short sequential (SS-###)', /^SS-\d{3}$/.test(created.salary_structure_id), created.salary_structure_id);
 check('create uppercases vertical', created.vertical_name === 'SAPL');
 check('create default active', created.status === 'ACTIVE');
 check('create stores components', created.components.length === 4);

@@ -26,6 +26,16 @@ var SalaryStructureTypeService = (function () {
     return !!row && trim_(row.structure_name) !== '' && trim_(row.employee_id) === '';
   }
 
+  /** Short, readable, sequential id (SS-001, SS-002, ...). Caller holds the script lock. */
+  function nextStructureId_() {
+    var seq = DbService.nextSequenceAssumingLocked
+      ? DbService.nextSequenceAssumingLocked('seq_salary_structure')
+      : DbService.nextSequence('seq_salary_structure');
+    var n = String(seq);
+    while (n.length < 3) n = '0' + n;
+    return 'SS-' + n;
+  }
+
   function parseNonNegative_(value, label) {
     if (value === '' || value == null) return 0;
     var n = Number(value);
@@ -246,7 +256,7 @@ var SalaryStructureTypeService = (function () {
         });
         savedId = structureId;
       } else {
-        savedId = DbService.generateId('SS');
+        savedId = nextStructureId_();
         DbService.insertRecord(HRMS.SHEETS.SALARY_STRUCTURES, {
           salary_structure_id: savedId,
           structure_name: name,

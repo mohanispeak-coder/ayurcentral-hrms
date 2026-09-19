@@ -61,6 +61,7 @@
         ? '<span class="sst-status-active">Active</span>'
         : '<span class="sst-status-inactive">Inactive</span>';
       return '<tr>' +
+        '<td class="mono">' + esc_(s.salary_structure_id) + '</td>' +
         '<td>' + esc_(s.structure_name) + '</td>' +
         '<td>' + esc_(s.vertical_name) + '</td>' +
         '<td class="num">' + ((s.components || []).length) + '</td>' +
@@ -74,7 +75,7 @@
     m.innerHTML =
       '<div class="card"><div class="sst-list-head"><button type="button" class="btn btn-primary" id="sst-new">New salary structure</button></div>' +
       (rows
-        ? '<table class="data-table"><thead><tr><th>Name</th><th>Vertical</th><th class="num">Components</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
+        ? '<table class="data-table"><thead><tr><th>ID</th><th>Name</th><th>Vertical</th><th class="num">Components</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
         : '<p class="empty-state">No salary structures yet. Click \u201cNew salary structure\u201d to create one.</p>') +
       '</div>';
     var nw = document.getElementById('sst-new');

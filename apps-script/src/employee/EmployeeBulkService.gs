@@ -13,7 +13,7 @@ var EmployeeBulkService = (function () {
   var HEADERS_ = [
     'employee_id', 'first_name', 'last_name', 'display_name', 'work_email',
     'department', 'designation', 'vertical_name', 'location', 'employment_type', 'joining_date',
-    'salary_structure', 'ctc_monthly',
+    'salary_structure_id', 'ctc_monthly',
     'manager_employee_id', 'phone', 'address', 'date_of_birth', 'gender',
     'pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name',
     'notes', 'create_login', 'google_login_email'
@@ -155,7 +155,10 @@ var EmployeeBulkService = (function () {
     try {
       if (typeof SalaryStructureTypeService !== 'undefined' && SalaryStructureTypeService.listStructureTypeOptions) {
         return SalaryStructureTypeService.listStructureTypeOptions({ activeOnly: true })
-          .map(function (s) { return s.structure_name; });
+          .map(function (s) {
+            return s.salary_structure_id + ' \u2014 ' + s.structure_name +
+              (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
+          });
       }
     } catch (ignore) {}
     return [];
@@ -227,7 +230,7 @@ var EmployeeBulkService = (function () {
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
     instructionLines.push(['vertical_name is required and must be one of the values on the Lists sheet.']);
-    instructionLines.push(['salary_structure (optional) must match an active structure name on the Lists sheet; ctc_monthly is the monthly CTC amount (number).']);
+    instructionLines.push(['salary_structure_id (optional) is the structure ID from the Salary structures screen (e.g. SS-001); a structure name is also accepted. See the Lists sheet. ctc_monthly is the monthly CTC amount (number).']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
     instructionLines.push(['AOPL — AOPL-0001, AOPL-0002, ...']);
@@ -242,7 +245,7 @@ var EmployeeBulkService = (function () {
     lists.getRange(1, 4).setValue('employment_types');
     lists.getRange(1, 5).setValue('create_login');
     lists.getRange(1, 6).setValue('verticals');
-    lists.getRange(1, 7).setValue('salary_structures');
+    lists.getRange(1, 7).setValue('salary_structure_ids');
     var salaryStructures = refs.salary_structures || [];
     var maxList = Math.max(
       refs.departments.length, refs.designations.length, refs.locations.length,
@@ -472,16 +475,18 @@ var EmployeeBulkService = (function () {
       if (bankNo && !ifsc) rowErrors.push({ field: 'bank_ifsc', message: 'IFSC is required when a bank account number is provided.' });
       if (ifsc && !bankNo) rowErrors.push({ field: 'bank_account_number', message: 'Bank account number is required when IFSC is provided.' });
 
-      var structureName = trim_(payload.salary_structure);
+      var structureRef = trim_(payload.salary_structure_id);
       var resolvedStructureId = '';
-      if (structureName) {
-        var structureType = (typeof SalaryStructureTypeService !== 'undefined')
-          ? SalaryStructureTypeService.findTypeByName(structureName)
-          : null;
+      if (structureRef) {
+        var structureType = null;
+        if (typeof SalaryStructureTypeService !== 'undefined') {
+          structureType = SalaryStructureTypeService.findTypeById(structureRef) ||
+            SalaryStructureTypeService.findTypeByName(structureRef);
+        }
         if (!structureType) {
-          rowErrors.push({ field: 'salary_structure', message: 'Salary structure name was not found.' });
+          rowErrors.push({ field: 'salary_structure_id', message: 'Salary structure ID (or name) was not found.' });
         } else if (String(structureType.status || '').toUpperCase() !== HRMS.STRUCTURE_TYPE_STATUS.ACTIVE) {
-          rowErrors.push({ field: 'salary_structure', message: 'Salary structure is inactive.' });
+          rowErrors.push({ field: 'salary_structure_id', message: 'Salary structure is inactive.' });
         } else {
           resolvedStructureId = structureType.salary_structure_id;
         }
@@ -532,7 +537,7 @@ var EmployeeBulkService = (function () {
             department: trim_(payload.department),
             designation: trim_(payload.designation),
             vertical_name: verticalName,
-            salary_structure: structureName,
+            salary_structure: resolvedStructureId || structureRef,
             ctc_monthly: ctcValue,
             create_login: payload.create_user ? 'YES' : 'NO'
           }

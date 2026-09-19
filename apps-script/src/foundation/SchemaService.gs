@@ -94,6 +94,7 @@ var SchemaService = (function () {
     ['seq_leave_type', '0', 'NUMBER', 'Last leave type sequence', true],
     ['seq_leave_request', '0', 'NUMBER', 'Last leave request sequence', true],
     ['seq_leave_balance', '0', 'NUMBER', 'Last leave balance sequence', true],
+    ['seq_salary_structure', '0', 'NUMBER', 'Last salary structure sequence', true],
     ['leave_year_start_month', '1', 'NUMBER', 'Leave year starts (1-12)', false],
     ['leave_count_method', 'WEEKDAYS_ONLY', 'STRING', 'WEEKDAYS_ONLY or CALENDAR_DAYS', false],
     ['default_working_days', '26', 'NUMBER', 'Default working days per month', false],
