@@ -8,7 +8,9 @@ var SchemaService = (function () {
   SHEET_HEADERS_[HRMS.SHEETS.EMPLOYEES] = [
     'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender',
     'phone', 'address', 'work_email', 'department', 'designation', 'manager_employee_id',
-    'vertical_name', 'joining_date', 'employment_type', 'location', 'status', 'pan', 'bank_account_name',
+    'vertical_name', 'joining_date', 'employment_type', 'location', 'status',
+    'salary_structure_id', 'ctc_monthly',
+    'pan', 'bank_account_name',
     'bank_account_number', 'bank_ifsc', 'bank_name', 'notes',
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
@@ -40,9 +42,10 @@ var SchemaService = (function () {
     'admin_approver_employee_id', 'admin_decision_at', 'admin_decision_comment'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_STRUCTURES] = [
-    'salary_structure_id', 'employee_id', 'effective_from', 'effective_to', 'status',
-    'ctc_monthly', 'currency', 'previous_structure_id', 'revision_reason',
-    'approved_by_email', 'created_at', 'created_by_email'
+    'salary_structure_id', 'structure_name', 'vertical_name', 'status',
+    'currency', 'created_at', 'created_by_email', 'updated_at', 'updated_by_email',
+    'employee_id', 'effective_from', 'effective_to',
+    'ctc_monthly', 'previous_structure_id', 'revision_reason', 'approved_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_COMPONENTS] = [
     'salary_component_id', 'salary_structure_id', 'component_code', 'component_name',
