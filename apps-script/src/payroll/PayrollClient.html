@@ -23,8 +23,24 @@
   'use strict';
 
   function ready(fn) {
-    if (window.HrmsApp) fn();
-    else document.addEventListener('DOMContentLoaded', fn);
+    function run() {
+      if (!window.HrmsApp) return false;
+      fn();
+      return true;
+    }
+    if (run()) return;
+    function waitForApp() {
+      if (run()) return;
+      var tries = 0;
+      var timer = setInterval(function () {
+        if (run() || ++tries > 200) clearInterval(timer);
+      }, 25);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', waitForApp);
+    } else {
+      waitForApp();
+    }
   }
 
   ready(function initPayrollUi() {
@@ -74,6 +90,7 @@
     function invalidateCompensation_() {
       compState.bundle = null;
       compState.employees = [];
+      compState._loaded = false;
       shellInv_('compensation');
     }
 
@@ -106,7 +123,7 @@
 
     App.registerRoute('payroll', { title: 'Payroll', render: renderPayrollHome });
     App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollRun(params && params.runId); } });
-    App.registerRoute('compensation', { title: 'Compensation', render: renderCompensation });
+    App.registerRoute('compensation', { title: 'Salary structure', render: renderCompensation });
     App.registerRoute('my-payslips', { title: 'My Payslips', render: renderMyPayslips });
 
     function pageEl() {
@@ -1239,12 +1256,13 @@
       var page = pageEl();
       if (!page) return;
       var seq = App.getState().navSeq;
-      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('compensation') && compState.employees && compState.employees.length >= 0 && compState._loaded) {
+      if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('compensation') &&
+          compState._loaded && compState.employees && compState.employees.length) {
         paintCompensationShell_(page);
         return;
       }
       if (!(App.isModuleRefresh && App.isModuleRefresh('compensation') && compState._loaded)) {
-        page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Compensation</h2>' +
+        page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
           '<p class="page-lede">Salary structures are contractual. Revisions create history; superseded amounts are never edited.</p></div>' +
           '<div class="card">' + spinner('Loading employees…') + '</div><div id="comp-editor"></div></div>';
       }
@@ -1285,7 +1303,7 @@
           escapeHtml(e.employee_id + ' — ' + e.display_name) + escapeHtml(miss) + '</option>';
       }).join('');
 
-      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Compensation</h2>' +
+      page.innerHTML = '<div class="payroll-page"><div class="page-header"><h2>Salary structure</h2>' +
         '<p class="page-lede">Save a first structure in place. After payroll is locked against it, create a revision so history stays intact.</p></div>' +
         '<div class="card"><h2>Employee</h2>' +
         '<div class="page-toolbar"><div class="filters">' +
