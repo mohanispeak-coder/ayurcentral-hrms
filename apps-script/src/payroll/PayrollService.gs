@@ -915,6 +915,38 @@ var PayrollService = (function () {
     return withScriptLock_(body_);
   }
 
+  function listEligibleEmployeesForPeriod(periodYear, periodMonth) {
+    requireHr_();
+    return eligibleEmployees_(periodYear, periodMonth);
+  }
+
+  /**
+   * After a new or reactivated employee is saved, add them to open draft/calculated payroll runs
+   * when they qualify for that month (no redeploy or manual sync required).
+   */
+  function syncOpenPayrollRunsForEmployee(employeeId) {
+    requireHr_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) return { runsSynced: 0, inputsAdded: 0 };
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    var runsSynced = 0;
+    var inputsAdded = 0;
+    runs.forEach(function (run) {
+      var st = String(run.status || '').toUpperCase();
+      if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) return;
+      if (!isEmployeeEligibleForPeriod(employeeId, run.period_year, run.period_month)) return;
+      try {
+        var meta = syncEligibleEmployees(run.payroll_run_id);
+        runsSynced++;
+        inputsAdded += (meta && meta.added) ? meta.added : 0;
+      } catch (syncErr) {
+        Logger.log('syncOpenPayrollRunsForEmployee ' + employeeId + ' ' + run.payroll_run_id + ': ' +
+          (syncErr.message || syncErr));
+      }
+    });
+    return { runsSynced: runsSynced, inputsAdded: inputsAdded };
+  }
+
   function isEmployeeEligibleForPeriod(employeeId, periodYear, periodMonth) {
     requireHr_();
     var emp = null;
@@ -1184,6 +1216,8 @@ var PayrollService = (function () {
     createCorrectionRun: createCorrectionRun,
     saveInputs: saveInputs,
     syncEligibleEmployees: syncEligibleEmployees,
+    syncOpenPayrollRunsForEmployee: syncOpenPayrollRunsForEmployee,
+    listEligibleEmployeesForPeriod: listEligibleEmployeesForPeriod,
     isEmployeeEligibleForPeriod: isEmployeeEligibleForPeriod,
     refreshLopFromLeave: refreshLopFromLeave,
     applyLeaveLopToDays: applyLeaveLopToDays,

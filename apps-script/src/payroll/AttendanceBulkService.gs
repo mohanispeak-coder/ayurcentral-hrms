@@ -146,7 +146,7 @@ var AttendanceBulkService = (function () {
 
     var headers = AttendanceRegisterService.buildTemplateHeaders_(year, month);
     var dim = headers.daysInMonth;
-    var employees = AttendanceRegisterService.listActiveEmployees_();
+    var employees = AttendanceRegisterService.listEmployeesForPayrollPeriod_(year, month);
     if (employees.length > MAX_ROWS_) {
       throw validationError_('Too many employees for one template (max ' + MAX_ROWS_ + ').');
     }
@@ -162,10 +162,10 @@ var AttendanceBulkService = (function () {
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Month: ' + year + '-' + AttendanceRegisterService.pad2_(month)],
         ['Rows 1–2 on the Attendance sheet are headers only. Employee data starts on row 3.'],
-        ['All ACTIVE employees in HRMS are listed (re-download after adding employees to pick up new rows).'],
+        ['Eligible ACTIVE employees for this payroll month are listed (roster is built live from HRMS each download).'],
         ['Fill one code per day: P, W/H (or WH), A, L, H, S.'],
         ['Summary columns (P, W/H, A, L, H, S, DAYS) calculate in Excel.'],
-        ['Upload only employees who are in this payroll month (sync runs when you download).'],
+        ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']
       ];
       instructions.getRange(3, 1, lines.length, 1).setValues(lines);
@@ -236,7 +236,8 @@ var AttendanceBulkService = (function () {
         mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         base64: Utilities.base64Encode(bytes),
         templateVersion: TEMPLATE_VERSION_,
-        employeeCount: AttendanceRegisterService.listActiveEmployees_().length
+        employeeCount: AttendanceRegisterService.listEmployeesForPayrollPeriod_(
+          Number(run.period_year), Number(run.period_month)).length
       };
     } catch (e) {
       Logger.log('Attendance template download failed: ' + (e.message || e) + '\n' + (e.stack || ''));

@@ -120,7 +120,15 @@ function apiCommitAttendanceRegisterUpload(runId, uploadId, sessionToken) {
 
 function apiListAttendanceRegister(runId, sessionToken) {
   return hrmsRun_(function () {
-    return AttendanceRegisterService.listSummariesForRun_(runId);
+    var id = String(runId || '').trim();
+    if (id) {
+      try {
+        PayrollService.syncEligibleEmployees(id);
+      } catch (syncErr) {
+        Logger.log('apiListAttendanceRegister sync: ' + (syncErr.message || syncErr));
+      }
+    }
+    return AttendanceRegisterService.listSummariesForRun_(id);
   }, sessionToken);
 }
 

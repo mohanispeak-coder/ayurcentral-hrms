@@ -779,6 +779,14 @@ var EmployeeService = (function () {
         welcomeDelivery = EmployeeWelcomeService.sendWelcomeOnCreate(record, loginEmail);
       }
 
+      try {
+        if (typeof PayrollService !== 'undefined' && PayrollService.syncOpenPayrollRunsForEmployee) {
+          PayrollService.syncOpenPayrollRunsForEmployee(employeeId);
+        }
+      } catch (ignorePayrollSync) {
+        Logger.log('Payroll sync after employee create: ' + (ignorePayrollSync.message || ignorePayrollSync));
+      }
+
       var allWarnings = (validated.warnings || []).slice();
       if (welcomeDelivery && welcomeDelivery.warnings && welcomeDelivery.warnings.length) {
         welcomeDelivery.warnings.forEach(function (w) { allWarnings.push(w); });
@@ -995,6 +1003,15 @@ var EmployeeService = (function () {
         try {
           LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
         } catch (ignore) {}
+      }
+      if (next === HRMS.EMPLOYEE_STATUS.ACTIVE) {
+        try {
+          if (typeof PayrollService !== 'undefined' && PayrollService.syncOpenPayrollRunsForEmployee) {
+            PayrollService.syncOpenPayrollRunsForEmployee(id);
+          }
+        } catch (ignorePayrollSync) {
+          Logger.log('Payroll sync after employee activate: ' + (ignorePayrollSync.message || ignorePayrollSync));
+        }
       }
       return getEmployee(session, id);
     });

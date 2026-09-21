@@ -61,7 +61,8 @@
       if (!page) return;
       page.innerHTML =
         '<div class="att-page"><div class="page-header"><h2>Attendance</h2>' +
-        '<p class="page-lede">Monthly register: one code per day (P, W/H, A, L, H, S). Bulk Excel matches the statutory grid layout.</p></div>' +
+        '<p class="page-lede">Monthly register: one code per day (P, W/H, A, L, H, S). Bulk Excel matches the statutory grid layout. ' +
+        'The roster refreshes from HRMS when you open this page or download the template—no redeploy needed.</p></div>' +
         '<div id="att-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
       loadContext_();
     }

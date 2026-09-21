@@ -197,6 +197,20 @@ var AttendanceRegisterService = (function () {
     };
   }
 
+  function listEmployeesForPayrollPeriod_(year, month) {
+    try {
+      if (typeof PayrollService !== 'undefined' && PayrollService.listEligibleEmployeesForPeriod) {
+        var eligible = PayrollService.listEligibleEmployeesForPeriod(year, month) || [];
+        if (eligible.length) {
+          return eligible.slice().sort(function (a, b) {
+            return String(a.employee_id).localeCompare(String(b.employee_id));
+          });
+        }
+      }
+    } catch (ignorePayroll) {}
+    return listActiveEmployees_();
+  }
+
   function listActiveEmployees_() {
     var rows = [];
     var fromEmployeeService = false;
@@ -290,6 +304,7 @@ var AttendanceRegisterService = (function () {
     rowFromSheetValues_: rowFromSheetValues_,
     employeeDisplayName_: employeeDisplayName_,
     listActiveEmployees_: listActiveEmployees_,
+    listEmployeesForPayrollPeriod_: listEmployeesForPayrollPeriod_,
     listSummariesForRun_: listSummariesForRun_,
     saveRegisterForInput_: saveRegisterForInput_
   };
