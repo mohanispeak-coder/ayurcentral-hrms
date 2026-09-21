@@ -134,7 +134,8 @@
         return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.vertical_name) + '</td><td>' +
           esc_(r.display_name) + '</td><td class="num">' + esc_(r.days_present) + '</td><td class="num">' +
           esc_(r.days_leave) + '</td><td>' + esc_(complete) + '</td><td class="col-actions">' +
-          (canEdit ? '<button type="button" class="btn btn-secondary btn-sm" data-att-edit="' + esc_(r.employee_id) + '">Edit days</button>' : '') +
+          (canEdit && r.in_payroll_run ? '<button type="button" class="btn btn-secondary btn-sm" data-att-edit="' + esc_(r.employee_id) + '">Edit days</button>' :
+            (!r.in_payroll_run ? '<span class="hint">Not in payroll month</span>' : '')) +
           '</td></tr>';
       }).join('');
 
@@ -180,7 +181,10 @@
         var btn = this;
         callServer('apiDownloadAttendanceRegisterTemplate', runId, { button: btn, loadingText: 'Downloading…' })
           .then(function (res) {
-            if (!res || !res.base64) return;
+            if (!res || !res.base64) {
+              showToast('Template download returned no file. Redeploy the app (clasp push) and try again.', 'error');
+              return;
+            }
             var a = document.createElement('a');
             a.href = 'data:' + (res.mimeType || 'application/octet-stream') + ';base64,' + res.base64;
             a.download = res.fileName || 'attendance.xlsx';

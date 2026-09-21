@@ -42,7 +42,7 @@ function loadRegister() {
 var Reg = loadRegister();
 
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '1'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '2'/.test(bulkSrc));
 check('template-headers', /buildTemplateHeaders_/.test(regSrc) && /SUMMARY_HEADERS_/.test(regSrc));
 check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate/.test(api));
 check('api-attendance-validate', /apiValidateAttendanceRegisterUpload/.test(api));

@@ -159,7 +159,7 @@ var AttendanceRegisterService = (function () {
     var range = start + ':' + end;
     return {
       P: '=COUNTIF(' + range + ',"P")',
-      'W/H': '=COUNTIF(' + range + ',"W/H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")',
+      'W/H': '=COUNTIF(' + range + ',"W"&CHAR(47)&"H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")',
       A: '=COUNTIF(' + range + ',"A")',
       L: '=COUNTIF(' + range + ',"L")',
       H: '=COUNTIF(' + range + ',"H")',
@@ -197,33 +197,55 @@ var AttendanceRegisterService = (function () {
     };
   }
 
+  function listActiveEmployees_() {
+    var rows = [];
+    try {
+      if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll) {
+        rows = EmployeeRepository.listAll() || [];
+      }
+    } catch (ignoreRepo) {}
+    if (!rows.length) {
+      rows = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES) || [];
+    }
+    return rows.filter(function (e) {
+      return String(e.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+    }).sort(function (a, b) {
+      return String(a.employee_id).localeCompare(String(b.employee_id));
+    });
+  }
+
+  function employeeDisplayName_(emp) {
+    if (!emp) return '';
+    var name = trim_(emp.display_name);
+    if (name) return name;
+    return trim_((emp.first_name || '') + ' ' + (emp.last_name || '')) || trim_(emp.employee_id);
+  }
+
   function listSummariesForRun_(runId) {
     PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
     if (!run) throw notFoundError_('Payroll run not found.');
     var year = Number(run.period_year);
     var month = Number(run.period_month);
-    var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-    var employees = {};
-    (EmployeeRepository.listAll() || []).forEach(function (e) {
-      employees[e.employee_id] = e;
+    var inputByEmp = {};
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      inputByEmp[inp.employee_id] = inp;
     });
-    return inputs.map(function (inp) {
-      var emp = employees[inp.employee_id] || {};
-      var reg = parseRegister_(inp.daily_attendance_json);
+    return listActiveEmployees_().map(function (emp) {
+      var inp = inputByEmp[emp.employee_id] || null;
+      var reg = inp ? parseRegister_(inp.daily_attendance_json) : {};
       var sum = summarize_(reg, year, month);
       return {
-        employee_id: inp.employee_id,
-        display_name: emp.display_name || inp.employee_id,
-        vertical_name: emp.vertical_name || '',
-        payroll_input_id: inp.payroll_input_id,
+        employee_id: emp.employee_id,
+        display_name: employeeDisplayName_(emp),
+        vertical_name: trim_(emp.vertical_name),
+        payroll_input_id: inp ? inp.payroll_input_id : '',
+        in_payroll_run: !!inp,
         days_present: sum.present,
         days_leave: sum.leave_days,
-        register_complete: isRegisterComplete_(reg, year, month),
+        register_complete: inp ? isRegisterComplete_(reg, year, month) : false,
         summary: sum
       };
-    }).sort(function (a, b) {
-      return String(a.employee_id).localeCompare(String(b.employee_id));
     });
   }
 
@@ -254,6 +276,8 @@ var AttendanceRegisterService = (function () {
     colToLetter_: colToLetter_,
     summaryFormulasForRow_: summaryFormulasForRow_,
     rowFromSheetValues_: rowFromSheetValues_,
+    employeeDisplayName_: employeeDisplayName_,
+    listActiveEmployees_: listActiveEmployees_,
     listSummariesForRun_: listSummariesForRun_,
     saveRegisterForInput_: saveRegisterForInput_
   };

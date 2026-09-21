@@ -4,13 +4,17 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '1';
+  var TEMPLATE_VERSION_ = '2';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
 
   function trim_(v) {
     return v == null ? '' : String(v).trim();
+  }
+
+  function driveApiHint_() {
+    return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API → Add (identifier: Drive), then redeploy.';
   }
 
   function assertRunEditable_(runId) {
@@ -26,41 +30,151 @@ var AttendanceBulkService = (function () {
     return run;
   }
 
-  function employeeDisplayName_(emp) {
-    if (!emp) return '';
-    var name = trim_(emp.display_name);
-    if (name) return name;
-    return trim_((emp.first_name || '') + ' ' + (emp.last_name || '')) || trim_(emp.employee_id);
-  }
-
-  function listTemplateEmployees_() {
-    return (EmployeeRepository.listAll() || []).filter(function (e) {
-      return String(e.status || '').toUpperCase() !== 'INACTIVE';
-    }).sort(function (a, b) {
-      return String(a.employee_id).localeCompare(String(b.employee_id));
-    });
-  }
-
   function exportSpreadsheetXlsx_(spreadsheetId) {
     SpreadsheetApp.flush();
+    Utilities.sleep(300);
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
-    var url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
+
+    function tryFetchExport(url, label) {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) Utilities.sleep(400 * attempt);
+        try {
+          var resp = UrlFetchApp.fetch(url, {
+            headers: auth,
+            muteHttpExceptions: true,
+            followRedirects: true
+          });
+          if (resp.getResponseCode() === 200) {
+            var b = resp.getBlob();
+            if (b && b.getBytes().length > 100) return b;
+          }
+          Logger.log(label + ' attempt ' + (attempt + 1) + ' HTTP ' + resp.getResponseCode());
+        } catch (e) {
+          Logger.log(label + ' attempt ' + (attempt + 1) + ' failed: ' + (e.message || e));
+        }
+      }
+      return null;
+    }
+
+    var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
       '/export?mimeType=' + encodeURIComponent(xlsxMime);
-    for (var attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) Utilities.sleep(400 * attempt);
-      var resp = UrlFetchApp.fetch(url, { headers: auth, muteHttpExceptions: true, followRedirects: true });
-      if (resp.getResponseCode() === 200) {
-        var b = resp.getBlob();
-        if (b && b.getBytes().length > 100) return b;
+    var blob = tryFetchExport(v3Url, 'Drive v3 export');
+    if (blob) return blob;
+
+    var docsUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
+    blob = tryFetchExport(docsUrl, 'Docs export');
+    if (blob) return blob;
+
+    if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
+      try {
+        return Drive.Files.export(spreadsheetId, xlsxMime);
+      } catch (e) {
+        Logger.log('Drive.Files.export failed: ' + (e.message || e));
       }
     }
-    throw configurationError_('Could not export attendance Excel template.');
+
+    try {
+      return DriveApp.getFileById(spreadsheetId).getBlob().getAs(xlsxMime);
+    } catch (e4) {
+      throw configurationError_(
+        'Could not export attendance Excel template.' + driveApiHint_() + ' Details: ' + (e4.message || e4)
+      );
+    }
+  }
+
+  function applySummaryFormulas_(sheet, rowNum, year, month, dim) {
+    var formulas = AttendanceRegisterService.summaryFormulasForRow_(rowNum, year, month);
+    var summaryStart = 4 + dim;
+    var keys = ['P', 'W/H', 'A', 'L', 'H', 'S', 'Leave Balan', 'DAYS'];
+    for (var c = 0; c < keys.length; c++) {
+      try {
+        sheet.getRange(rowNum, summaryStart + c).setFormula(formulas[keys[c]]);
+      } catch (formulaErr) {
+        Logger.log('Attendance formula row ' + rowNum + ' col ' + keys[c] + ': ' + (formulaErr.message || formulaErr));
+      }
+    }
+  }
+
+  function buildTemplateSpreadsheet_(run) {
+    if (typeof AttendanceRegisterService === 'undefined') {
+      throw configurationError_('Attendance register module is not loaded. Redeploy the web app (clasp push).');
+    }
+    var year = Number(run.period_year);
+    var month = Number(run.period_month);
+    try {
+      PayrollService.syncEligibleEmployees(run.payroll_run_id);
+    } catch (syncErr) {
+      Logger.log('Attendance template sync (non-fatal): ' + (syncErr.message || syncErr));
+    }
+
+    var headers = AttendanceRegisterService.buildTemplateHeaders_(year, month);
+    var dim = headers.daysInMonth;
+    var employees = AttendanceRegisterService.listActiveEmployees_();
+    if (employees.length > MAX_ROWS_) {
+      throw validationError_('Too many employees for one template (max ' + MAX_ROWS_ + ').');
+    }
+
+    var ss = SpreadsheetApp.create('HRMS Attendance Register');
+    var fileId = ss.getId();
+    var blob;
+    try {
+      var instructions = ss.getSheets()[0];
+      instructions.setName('Instructions');
+      instructions.getRange(1, 1).setValue('HRMS Attendance Register');
+      var lines = [
+        ['Template version: ' + TEMPLATE_VERSION_],
+        ['Month: ' + year + '-' + AttendanceRegisterService.pad2_(month)],
+        ['Rows 1–2 on the Attendance sheet are headers only. Employee data starts on row 3.'],
+        ['All ACTIVE employees in HRMS are listed with employee_id, name, and vertical pre-filled.'],
+        ['Fill one code per day: P, W/H (or WH), A, L, H, S.'],
+        ['Summary columns (P, W/H, A, L, H, S, DAYS) calculate in Excel.'],
+        ['Upload only employees who are in this payroll month (sync runs when you download).'],
+        ['Sheet name for upload: Attendance']
+      ];
+      instructions.getRange(3, 1, 2 + lines.length, 1).setValues(lines);
+
+      var sheet = ss.insertSheet('Attendance');
+      sheet.getRange(1, 1, 1, headers.row1.length).setValues([headers.row1]);
+      sheet.getRange(2, 1, 2, headers.row2.length).setValues([headers.row2]);
+      sheet.setFrozenRows(2);
+
+      if (employees.length) {
+        var dataStartRow = 3;
+        var data = employees.map(function (emp) {
+          var row = [
+            emp.employee_id,
+            AttendanceRegisterService.employeeDisplayName_(emp),
+            trim_(emp.vertical_name)
+          ];
+          for (var d = 1; d <= dim; d++) row.push('');
+          return row;
+        });
+        sheet.getRange(dataStartRow, 1, dataStartRow + data.length - 1, 3 + dim).setValues(data);
+        for (var i = 0; i < employees.length; i++) {
+          applySummaryFormulas_(sheet, dataStartRow + i, year, month, dim);
+        }
+      }
+
+      SpreadsheetApp.flush();
+      Utilities.sleep(200);
+      blob = exportSpreadsheetXlsx_(fileId).setName('HRMS_Attendance_Register_' + year + '_' +
+        AttendanceRegisterService.pad2_(month) + '.xlsx');
+    } catch (e) {
+      if (e.hrmsCode) throw e;
+      throw configurationError_('Could not build attendance template: ' + (e.message || e));
+    } finally {
+      try { DriveApp.getFileById(fileId).setTrashed(true); } catch (ignoreTrash) {}
+    }
+    if (!blob || !blob.getBytes || blob.getBytes().length < 100) {
+      throw configurationError_('Attendance template export returned an empty file.');
+    }
+    return blob;
   }
 
   function convertUploadToSheetId_(blob) {
     if (typeof Drive === 'undefined' || !Drive.Files) {
-      throw configurationError_('Google Drive advanced service is required for Excel uploads.');
+      throw configurationError_('Google Drive advanced service is required for Excel uploads.' + driveApiHint_());
     }
     var temp = DriveApp.createFile(blob);
     try {
@@ -69,55 +183,6 @@ var AttendanceBulkService = (function () {
       return converted.id;
     } finally {
       temp.setTrashed(true);
-    }
-  }
-
-  function buildTemplateSpreadsheet_(run) {
-    var year = Number(run.period_year);
-    var month = Number(run.period_month);
-    PayrollService.syncEligibleEmployees(run.payroll_run_id);
-    var headers = AttendanceRegisterService.buildTemplateHeaders_(year, month);
-    var ss = SpreadsheetApp.create('HRMS Attendance Register');
-    var fileId = ss.getId();
-    try {
-      var instructions = ss.getSheets()[0];
-      instructions.setName('Instructions');
-      instructions.getRange(1, 1).setValue('HRMS Attendance Register');
-      var lines = [
-        ['Template version: ' + TEMPLATE_VERSION_],
-        ['Month: ' + year + '-' + AttendanceRegisterService.pad2_(month)],
-        ['Fill one code per day: P, W/H, A, L, H, S (week-off/holiday = W/H).'],
-        ['Summary columns (P, W/H, A, L, H, S, DAYS) are calculated in Excel — payroll uses server totals on upload.'],
-        ['Do not change employee_id. display_name and vertical_name are for reference.'],
-        ['Sheet name for upload: Attendance']
-      ];
-      instructions.getRange(3, 1, 3 + lines.length - 1, 1).setValues(lines);
-
-      var sheet = ss.insertSheet('Attendance');
-      sheet.getRange(1, 1, 1, headers.row1.length).setValues([headers.row1]);
-      sheet.getRange(2, 1, 2, headers.row2.length).setValues([headers.row2]);
-      sheet.setFrozenRows(2);
-
-      var employees = listTemplateEmployees_();
-      var dataStartRow = 3;
-      employees.forEach(function (emp, idx) {
-        var rowNum = dataStartRow + idx;
-        var base = [emp.employee_id, employeeDisplayName_(emp), trim_(emp.vertical_name)];
-        for (var d = 1; d <= headers.daysInMonth; d++) base.push('');
-        sheet.getRange(rowNum, 1, rowNum, base.length).setValues([base]);
-        var formulas = AttendanceRegisterService.summaryFormulasForRow_(rowNum, year, month);
-        var summaryStart = 4 + headers.daysInMonth;
-        var formulaList = [formulas.P, formulas['W/H'], formulas.A, formulas.L, formulas.H, formulas.S,
-          formulas['Leave Balan'], formulas.DAYS];
-        for (var c = 0; c < formulaList.length; c++) {
-          sheet.getRange(rowNum, summaryStart + c).setFormula(formulaList[c]);
-        }
-      });
-      SpreadsheetApp.flush();
-      return exportSpreadsheetXlsx_(fileId).setName('HRMS_Attendance_Register_' + year + '_' +
-        AttendanceRegisterService.pad2_(month) + '.xlsx');
-    } finally {
-      try { DriveApp.getFileById(fileId).setTrashed(true); } catch (ignore) {}
     }
   }
 
@@ -131,7 +196,8 @@ var AttendanceBulkService = (function () {
       fileName: blob.getName() || 'HRMS_Attendance_Register.xlsx',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       base64: Utilities.base64Encode(blob.getBytes()),
-      templateVersion: TEMPLATE_VERSION_
+      templateVersion: TEMPLATE_VERSION_,
+      employeeCount: AttendanceRegisterService.listActiveEmployees_().length
     };
   }
 
@@ -167,11 +233,16 @@ var AttendanceBulkService = (function () {
   function validateRows_(parsed, run) {
     var year = Number(run.period_year);
     var month = Number(run.period_month);
+    try {
+      PayrollService.syncEligibleEmployees(run.payroll_run_id);
+    } catch (ignoreSync) {}
     var inputMap = {};
     DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: run.payroll_run_id })
       .forEach(function (inp) { inputMap[inp.employee_id] = inp; });
     var employees = {};
-    EmployeeRepository.listAll().forEach(function (e) { employees[e.employee_id] = e; });
+    AttendanceRegisterService.listActiveEmployees_().forEach(function (e) {
+      employees[e.employee_id] = e;
+    });
 
     var valid = [];
     var errors = [];
@@ -183,8 +254,12 @@ var AttendanceBulkService = (function () {
       var rowErrors = [];
       if (!empId) rowErrors.push({ field: 'employee_id', message: 'Employee ID is required.' });
       else if (!employees[empId]) rowErrors.push({ field: 'employee_id', message: 'Unknown employee ID.' });
-      else if (!inputMap[empId]) rowErrors.push({ field: 'employee_id', message: 'Employee not in this payroll month.' });
-      else if (seen[empId]) rowErrors.push({ field: 'employee_id', message: 'Duplicate row for employee.' });
+      else if (!inputMap[empId]) {
+        rowErrors.push({
+          field: 'employee_id',
+          message: 'Employee is not in this payroll month. Start/sync payroll or check joining date and status.'
+        });
+      } else if (seen[empId]) rowErrors.push({ field: 'employee_id', message: 'Duplicate row for employee.' });
 
       var reg = parsedRow.register;
       if (!Object.keys(reg).length) {
@@ -192,11 +267,7 @@ var AttendanceBulkService = (function () {
       }
 
       if (rowErrors.length) {
-        errors.push({
-          rowNumber: item.rowNumber,
-          employee_id: empId,
-          messages: rowErrors
-        });
+        errors.push({ rowNumber: item.rowNumber, employee_id: empId, messages: rowErrors });
       } else {
         seen[empId] = true;
         var sum = AttendanceRegisterService.summarize_(reg, year, month);
@@ -206,8 +277,8 @@ var AttendanceBulkService = (function () {
           register: reg,
           preview: {
             employee_id: empId,
-            display_name: employees[empId].display_name || empId,
-            vertical_name: employees[empId].vertical_name || '',
+            display_name: AttendanceRegisterService.employeeDisplayName_(employees[empId]),
+            vertical_name: trim_(employees[empId].vertical_name),
             days_present: sum.present,
             days_leave: sum.leave_days
           }
@@ -244,7 +315,7 @@ var AttendanceBulkService = (function () {
     var session = AuthService.requireAuth();
     var run = assertRunEditable_(runId);
     var parsed = parseUpload_(meta);
-    if (!parsed.rows.length) throw validationError_('No attendance rows found. Use the Attendance sheet.');
+    if (!parsed.rows.length) throw validationError_('No attendance rows found. Use the Attendance sheet (data from row 3).');
     var result = validateRows_(parsed, run);
     var uploadId = Utilities.getUuid();
     CacheService.getScriptCache().put(STAGE_PREFIX_ + uploadId, JSON.stringify({
@@ -293,7 +364,9 @@ var AttendanceBulkService = (function () {
       payroll_run_id: runId,
       employee_id: trim_(employeeId)
     });
-    if (!inp) throw notFoundError_('Employee not in this payroll run.');
+    if (!inp) {
+      throw validationError_('Employee is not in this payroll month. Sync employees on the Payroll screen first.');
+    }
     var reg = AttendanceRegisterService.parseRegister_(register);
     return withScriptLock_(function () {
       var updates = AttendanceRegisterService.saveRegisterForInput_(
