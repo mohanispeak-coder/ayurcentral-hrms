@@ -55,7 +55,7 @@ check('api-bulk-commit', /apiCommitPayrollUpload/.test(api));
 check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
 var attClient = read('payroll/AttendanceClient.html');
-check('attendance-register-client', /AttendanceClient/.test(attClient) && /apiDownloadAttendanceRegisterTemplate/.test(attClient) &&
+check('attendance-register-client', /initAttendanceUi/.test(attClient) && /apiDownloadAttendanceRegisterTemplate/.test(attClient) &&
   !/registerRoute\('attendance-bulk-upload'/.test(client));
 check('payroll-sync-employees-api', /apiSyncPayrollEmployees/.test(api));
 check('payroll-table-reset-on-run', /resetPayrollTableView_/.test(client) && /tableRunId/.test(client));
