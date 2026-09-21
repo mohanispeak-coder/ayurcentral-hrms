@@ -937,7 +937,8 @@
                     result.hasOwnProperty('created') || result.hasOwnProperty('preferences') ||
                     result.hasOwnProperty('components') || result.hasOwnProperty('structure') ||
                     result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
-                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline')) {
+                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline') ||
+                    (result.hasOwnProperty('base64') && result.hasOwnProperty('fileName'))) {
                   resolve(result);
                   return;
                 }

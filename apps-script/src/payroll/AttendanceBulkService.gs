@@ -190,15 +190,22 @@ var AttendanceBulkService = (function () {
     PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
     runId = trim_(runId);
     if (!runId) throw validationError_('runId is required.');
-    var run = assertRunEditable_(runId);
-    var blob = buildTemplateSpreadsheet_(run);
-    return {
-      fileName: blob.getName() || 'HRMS_Attendance_Register.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      base64: Utilities.base64Encode(blob.getBytes()),
-      templateVersion: TEMPLATE_VERSION_,
-      employeeCount: AttendanceRegisterService.listActiveEmployees_().length
-    };
+    try {
+      var run = assertRunEditable_(runId);
+      var blob = buildTemplateSpreadsheet_(run);
+      var bytes = blob.getBytes();
+      return {
+        fileName: blob.getName() || 'HRMS_Attendance_Register.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: Utilities.base64Encode(bytes),
+        templateVersion: TEMPLATE_VERSION_,
+        employeeCount: AttendanceRegisterService.listActiveEmployees_().length
+      };
+    } catch (e) {
+      Logger.log('Attendance template download failed: ' + (e.message || e) + '\n' + (e.stack || ''));
+      if (e.hrmsCode) throw e;
+      throw configurationError_('Attendance template download failed: ' + (e.message || String(e)));
+    }
   }
 
   function parseUpload_(meta) {
