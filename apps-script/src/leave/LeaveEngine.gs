@@ -229,6 +229,7 @@ var LeaveEngine = (function () {
 
   function typeRequiresBalance_(type) {
     if (!type) return true;
+    if (toNumber(type.annual_entitlement_days) > 0) return true;
     if (!type.hasOwnProperty('requires_balance') && !type.hasOwnProperty('requiresBalance')) return true;
     return isTruthy(type.requires_balance !== undefined ? type.requires_balance : type.requiresBalance);
   }

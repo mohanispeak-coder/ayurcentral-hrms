@@ -292,9 +292,12 @@ var LeaveService = (function () {
       code: row.code,
       name: row.name,
       is_paid: LeaveEngine.isTruthy(row.is_paid),
-      requires_balance: (row.requires_balance === '' || row.requires_balance == null)
-        ? true
-        : LeaveEngine.isTruthy(row.requires_balance),
+      requires_balance: (function () {
+        var annual = LeaveEngine.toNumber(row.annual_entitlement_days);
+        if (annual > 0) return true;
+        if (row.requires_balance === '' || row.requires_balance == null) return true;
+        return LeaveEngine.isTruthy(row.requires_balance);
+      })(),
       allow_half_day: LeaveEngine.isTruthy(row.allow_half_day),
       counts_as_lop: LeaveEngine.isTruthy(row.counts_as_lop),
       annual_entitlement_days: LeaveEngine.toNumber(row.annual_entitlement_days),
@@ -432,7 +435,7 @@ var LeaveService = (function () {
   }
 
   function balanceKey_(employeeId, leaveTypeId, leaveYear) {
-    return String(employeeId) + '|' + String(leaveTypeId) + '|' + String(leaveYear);
+    return LeaveEngine.normalizeEmployeeId(employeeId) + '|' + String(leaveTypeId) + '|' + String(leaveYear);
   }
 
   function loadBalanceIndex_() {
@@ -533,7 +536,7 @@ var LeaveService = (function () {
   }
 
   function buildNewBalanceRecordLocked_(employeeId, type, leaveYear, balanceIndex, joiningDate, startMonth) {
-    if (!type.requires_balance) return null;
+    if (!LeaveEngine.typeRequiresBalance(type)) return null;
     var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear), balanceIndex);
     var cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
     var entitled = LeaveEngine.entitledDaysForLeaveYear(
@@ -562,7 +565,7 @@ var LeaveService = (function () {
     var toInsert = [];
     (plan || []).forEach(function (item) {
       var type = typeMap[String(item.leave_type_id)];
-      if (!type || !type.requires_balance) return;
+      if (!type || !LeaveEngine.typeRequiresBalance(type)) return;
       if (findBalance_(employeeId, type.leave_type_id, item.leave_year, balanceIndex)) return;
       var record = buildNewBalanceRecordLocked_(employeeId, type, item.leave_year, balanceIndex, joiningDate, startMonth);
       if (!record) return;
@@ -599,7 +602,7 @@ var LeaveService = (function () {
   function ensureBalanceLocked_(employeeId, type, leaveYear, createIfMissing, balanceIndex, joiningDate) {
     var existing = findBalance_(employeeId, type.leave_type_id, leaveYear, balanceIndex);
     if (existing) return existing;
-    if (!createIfMissing || !type.requires_balance) return null;
+    if (!createIfMissing || !LeaveEngine.typeRequiresBalance(type)) return null;
     if (joiningDate === undefined) {
       var empRow = getEmployee_(employeeId);
       joiningDate = empRow ? empRow.joining_date : null;
@@ -691,7 +694,7 @@ var LeaveService = (function () {
   }
 
   function applyPendingDeltaLocked_(employeeId, type, leaveYear, deltaPending, deltaUsed, balanceIndex) {
-    if (!type.requires_balance) return null;
+    if (!LeaveEngine.typeRequiresBalance(type)) return null;
     var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true, balanceIndex);
     var pending = LeaveEngine.toNumber(bal.pending_days) + deltaPending;
     var used = LeaveEngine.toNumber(bal.used_days) + deltaUsed;
@@ -706,7 +709,7 @@ var LeaveService = (function () {
   }
 
   function assertSufficientLocked_(employeeId, type, leaveYear, totalDays, balanceIndex) {
-    if (!type.requires_balance) return;
+    if (!LeaveEngine.typeRequiresBalance(type)) return;
     var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true, balanceIndex);
     var available = LeaveEngine.availableDays(bal);
     if (available + 1e-9 < totalDays) {
@@ -1245,7 +1248,7 @@ var LeaveService = (function () {
         : availableYears[availableYears.length - 1];
     }
     var balances = listTypes_(true).filter(function (t) {
-      return t.requires_balance;
+      return LeaveEngine.typeRequiresBalance(t);
     }).map(function (t) {
       var row = findBalance_(target, t.leave_type_id, year, balanceIndex);
       return serializeBalanceRow_(t, row, year);
@@ -1367,7 +1370,8 @@ var LeaveService = (function () {
         code: code,
         name: name,
         is_paid: LeaveEngine.isTruthy(payload.is_paid),
-        requires_balance: LeaveEngine.isTruthy(payload.requires_balance),
+        requires_balance: LeaveEngine.isTruthy(payload.requires_balance) ||
+          LeaveEngine.toNumber(payload.annual_entitlement_days) > 0,
         allow_half_day: LeaveEngine.isTruthy(payload.allow_half_day),
         counts_as_lop: LeaveEngine.isTruthy(payload.counts_as_lop),
         annual_entitlement_days: LeaveEngine.toNumber(payload.annual_entitlement_days),
@@ -1441,7 +1445,7 @@ var LeaveService = (function () {
 
     function run_(balanceIndex) {
       var startMonth = leaveYearStartMonth_();
-      var types = listTypes_(true).filter(function (t) { return t.requires_balance; });
+      var types = listTypes_(true).filter(function (t) { return LeaveEngine.typeRequiresBalance(t); });
       var plan = LeaveEngine.planBalanceGrants({
         joiningDate: emp.joining_date,
         asOfDate: todayDateOnly_(),
@@ -1481,7 +1485,7 @@ var LeaveService = (function () {
     }
 
     var peekIndex = loadBalanceIndex_();
-    var peekTypes = listTypes_(true).filter(function (t) { return t.requires_balance; });
+    var peekTypes = listTypes_(true).filter(function (t) { return LeaveEngine.typeRequiresBalance(t); });
     var peekPlan = LeaveEngine.planBalanceGrants({
       joiningDate: emp.joining_date,
       asOfDate: todayDateOnly_(),
@@ -1502,7 +1506,7 @@ var LeaveService = (function () {
     return withScriptLock_(function () {
       var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(isActiveEmployeeForLeave_);
       var startMonth = leaveYearStartMonth_();
-      var types = listTypes_(true).filter(function (t) { return t.requires_balance; });
+      var types = listTypes_(true).filter(function (t) { return LeaveEngine.typeRequiresBalance(t); });
       var typeMap = typeMapFromList_(types);
       var balanceIndex = loadBalanceIndex_();
       var toInsert = [];

@@ -636,8 +636,12 @@
         '<div class="card"><h2 class="section-title">Balances</h2>' +
           (balCards ? '<div class="hrms-mobile-only leave-balance-cards">' + balCards + '</div>' : '') +
           '<div class="table-wrap table-wrap--contain hrms-desktop-only"><table class="data-table data-table--stack-md"><thead><tr><th>Code</th><th>Type</th><th class="num">Entitled</th><th class="num">Carried</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Available</th></tr></thead>' +
-          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div></td></tr>') + '</tbody></table></div>' +
-          (!balCards ? '<div class="empty-state empty-state-inline hrms-mobile-only"><p class="empty-state-title">No leave types yet</p><p class="empty-state-text">HR can add types in Leave admin.</p></div>' : '') +
+          '<tbody>' + (balRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">' +
+            ((data.types && data.types.length)
+              ? 'Open this page again after deploy, or ask HR to run Leave → Add / edit leave types → Start leave year (grant balances).'
+              : 'HR can add leave types under Time off → Leave → Add / edit leave types.') +
+            '</p></div></td></tr>') + '</tbody></table></div>' +
+          (!balCards ? '<div class="empty-state empty-state-inline hrms-mobile-only"><p class="empty-state-title">No leave balances yet</p></div>' : '') +
         '</div>' +
         '<div class="card"><h2 class="section-title">My requests</h2>' +
           '<div class="table-wrap table-wrap--contain"><table class="data-table data-table--stack-md"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
@@ -813,7 +817,8 @@
 
       page.innerHTML =
         flashHtml('leave-admin') +
-        pageHead('Leave', 'Company leave requests and configurable leave types.') +
+        pageHead('Leave', 'Company leave requests and configurable leave types.',
+          '<button type="button" class="btn btn-primary" id="btn-goto-types">Add / edit leave types</button>') +
         '<div class="tabs" id="leave-admin-tabs">' +
           '<button type="button" class="tab active" data-tab="requests">All requests</button>' +
           '<button type="button" class="tab" data-tab="types">Leave types</button>' +
@@ -839,7 +844,8 @@
           '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div>' +
           '<p class="hint" style="margin-top:8px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' - if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
         '<div id="tab-types" class="hidden">' +
-          '<div class="card"><h2 class="section-title">Leave types</h2><p>Configurable entitlements - not hard-coded company policy.</p>' +
+          '<div class="card"><h2 class="section-title">Leave types</h2>' +
+          '<p class="page-lede">Add or edit types below. Types with annual entitlement &gt; 0 track balances automatically (even if Requires balance is unchecked in the sheet).</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Balance</th><th>LOP</th><th class="num">Entitlement</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
           '<tbody>' + (typeRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No types yet</p></div></td></tr>') + '</tbody></table></div>' +
           '<form id="leave-type-form" class="form-grid" style="margin-top:20px">' +
@@ -936,7 +942,7 @@
         document.getElementById('type-code').value = t ? t.code : '';
         document.getElementById('type-name').value = t ? t.name : '';
         document.getElementById('type-paid').checked = t ? t.is_paid : false;
-        document.getElementById('type-bal').checked = t ? t.requires_balance : false;
+        document.getElementById('type-bal').checked = t ? t.requires_balance : true;
         document.getElementById('type-half').checked = t ? t.allow_half_day : false;
         document.getElementById('type-lop').checked = t ? t.counts_as_lop : false;
         document.getElementById('type-active').checked = t ? t.is_active : true;
@@ -961,9 +967,34 @@
           if (tabTypes) tabTypes.classList.remove('hidden');
         });
       });
+      function switchToTypesTab_() {
+        page.querySelectorAll('#leave-admin-tabs .tab').forEach(function (tab) {
+          tab.classList.toggle('active', tab.getAttribute('data-tab') === 'types');
+        });
+        var tabReq = document.getElementById('tab-requests');
+        var tabTypes = document.getElementById('tab-types');
+        if (tabReq) tabReq.classList.add('hidden');
+        if (tabTypes) tabTypes.classList.remove('hidden');
+      }
+      var gotoTypesBtn = document.getElementById('btn-goto-types');
+      if (gotoTypesBtn) {
+        gotoTypesBtn.addEventListener('click', function () {
+          switchToTypesTab_();
+          document.getElementById('leave-type-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+      var entInput = document.getElementById('type-ent');
+      if (entInput) {
+        entInput.addEventListener('input', function () {
+          if (Number(entInput.value) > 0) document.getElementById('type-bal').checked = true;
+        });
+      }
       document.getElementById('btn-type-reset').addEventListener('click', function () { fillType(null); });
       document.getElementById('leave-type-form').addEventListener('submit', function (ev) {
         ev.preventDefault();
+        if (Number(document.getElementById('type-ent').value) > 0) {
+          document.getElementById('type-bal').checked = true;
+        }
         var payload = {
           leave_type_id: document.getElementById('type-id').value,
           code: document.getElementById('type-code').value,
