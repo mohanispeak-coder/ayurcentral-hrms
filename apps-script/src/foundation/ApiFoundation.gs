@@ -118,11 +118,20 @@ function apiGetModuleUi(moduleId, sessionToken) {
     }
     var t0 = Date.now();
     var parts = [];
+    var missing = [];
     for (var i = 0; i < files.length; i++) {
-      parts.push(HtmlService.createHtmlOutputFromFile(files[i]).getContent());
+      try {
+        parts.push(HtmlService.createHtmlOutputFromFile(files[i]).getContent());
+      } catch (fileErr) {
+        // A single missing/broken file must not take down the whole module.
+        // (e.g. a new client file not yet pushed to this deployment.)
+        missing.push(files[i]);
+        Logger.log('apiGetModuleUi: skipped file ' + files[i] + ' for module ' + id +
+          ': ' + (fileErr && fileErr.message ? fileErr.message : fileErr));
+      }
     }
     HrmsPerf.log('apiGetModuleUi:' + id, Date.now() - t0);
-    return { moduleId: id, html: parts.join('\n') };
+    return { moduleId: id, html: parts.join('\n'), missingFiles: missing };
   }, sessionToken);
 }
 
