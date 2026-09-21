@@ -46,23 +46,32 @@ var PayrollService = (function () {
     return isFinite(n) ? n : 0;
   }
 
-  function hasCompleteAttendance_(inp) {
+  function hasCompleteAttendance_(inp, periodYear, periodMonth) {
     if (!inp) return false;
+    if (inp.daily_attendance_json && typeof AttendanceRegisterService !== 'undefined') {
+      var reg = AttendanceRegisterService.parseRegister_(inp.daily_attendance_json);
+      if (periodYear && periodMonth) {
+        return AttendanceRegisterService.isRegisterComplete_(reg, periodYear, periodMonth);
+      }
+      return Object.keys(reg).length > 0;
+    }
     var w = num_(inp.working_days);
     var p = num_(inp.paid_days);
     var l = num_(inp.lop_days);
     return w > 0 && p >= 0 && l >= 0 && Math.abs(p + l - w) < 0.001;
   }
 
-  function assertAttendanceComplete_(inputs) {
+  function assertAttendanceComplete_(inputs, periodYear, periodMonth) {
     inputs = inputs || [];
     if (!inputs.length) {
       throw validationError_('No employees in this payroll run. Sync eligible employees first.');
     }
-    var incomplete = inputs.filter(function (inp) { return !hasCompleteAttendance_(inp); });
+    var incomplete = inputs.filter(function (inp) {
+      return !hasCompleteAttendance_(inp, periodYear, periodMonth);
+    });
     if (incomplete.length) {
       throw validationError_('Attendance is incomplete for ' + incomplete.length +
-        ' of ' + inputs.length + ' employees. Upload or save working days, paid days, and LOP before calculating.');
+        ' of ' + inputs.length + ' employees. Complete the daily register (all days in the month) before calculating.');
     }
   }
 
@@ -525,7 +534,7 @@ var PayrollService = (function () {
         throw conflictError_('Calculate is only allowed from DRAFT or CALCULATED.');
       }
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-      assertAttendanceComplete_(inputs);
+      assertAttendanceComplete_(inputs, run.period_year, run.period_month);
       var employees = indexEmployees_();
       var settings = {
         payroll_round: ConfigService.getSetting('payroll_round', 'NEAREST_RUPEE')

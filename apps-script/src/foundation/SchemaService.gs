@@ -60,7 +60,7 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_INPUTS] = [
     'payroll_input_id', 'payroll_run_id', 'employee_id', 'working_days', 'paid_days',
-    'lop_days', 'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount',
+    'lop_days', 'daily_attendance_json', 'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount',
     'lop_from_leave', 'remarks'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_RECORDS] = [

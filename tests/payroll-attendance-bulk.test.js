@@ -1,5 +1,5 @@
 /**
- * Payroll attendance bulk upload tests.
+ * Attendance register bulk upload tests.
  * Run: node tests/payroll-attendance-bulk.test.js
  */
 var fs = require('fs');
@@ -20,61 +20,43 @@ function check(name, cond, detail) {
   }
 }
 
-function loadPayrollBulk() {
-  var bulkSrc = fs.readFileSync(path.join(payrollDir, 'PayrollBulkService.gs'), 'utf8');
+var regSrc = fs.readFileSync(path.join(payrollDir, 'AttendanceRegisterService.gs'), 'utf8');
+var bulkSrc = fs.readFileSync(path.join(payrollDir, 'AttendanceBulkService.gs'), 'utf8');
+var payrollBulkSrc = fs.readFileSync(path.join(payrollDir, 'PayrollBulkService.gs'), 'utf8');
+var attClient = fs.readFileSync(path.join(payrollDir, 'AttendanceClient.html'), 'utf8');
+var api = fs.readFileSync(path.join(payrollDir, 'ApiPayroll.gs'), 'utf8');
+
+function loadRegister() {
   var ctx = {
-    HRMS: { PAYROLL_STATUS: { LOCKED: 'LOCKED', DRAFT: 'DRAFT', CALCULATED: 'CALCULATED' } },
-    Utilities: {
-      parseCsv: function (text) {
-        return text.split('\n').map(function (line) { return line.split(','); });
-      }
-    },
-    validationError_: function (msg) { throw new Error(msg); }
+    HRMS: { ACTIONS: { PAYROLL_RUN: 'PAYROLL_RUN' } },
+    PermissionService: { require: function () {} },
+    DbService: { findOne: function () { return null; }, findRecords: function () { return []; } },
+    EmployeeRepository: { listAll: function () { return []; } },
+    notFoundError_: function (m) { throw new Error(m); },
+    validationError_: function (m) { throw new Error(m); }
   };
-  vm.runInNewContext(bulkSrc, ctx);
-  return ctx.PayrollBulkService;
+  vm.runInNewContext(regSrc, ctx);
+  return ctx.AttendanceRegisterService;
 }
 
-var Bulk = loadPayrollBulk();
-var bulkSrc = fs.readFileSync(path.join(payrollDir, 'PayrollBulkService.gs'), 'utf8');
-var client = fs.readFileSync(path.join(payrollDir, 'PayrollClient.html'), 'utf8');
+var Reg = loadRegister();
 
-check('template-v4', /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
-check('template-blank-attendance', /blankTemplateRow_/.test(bulkSrc) &&
-  /return '';\s*\n\s*\}\);\s*\n\s*\}\);/.test(bulkSrc) &&
-  !/working_days: '26'/.test(bulkSrc));
-check('attendance-headers', /days_present/.test(bulkSrc) && /days_absent/.test(bulkSrc) && /leave_days/.test(bulkSrc));
-check('employee-info-columns', /display_name/.test(bulkSrc) && /work_email/.test(bulkSrc) && /listTemplateEmployees_/.test(bulkSrc));
-check('download-not-blocked-locked', /assertRunExists_/.test(bulkSrc) && /buildTemplateSpreadsheet_[\s\S]*assertRunExists_/.test(bulkSrc));
-check('bind-download-always', /bindBulkUpload_[\s\S]*btn-dl-template[\s\S]*if \(!editable\)/.test(client));
-check('derive-attendance', /deriveAttendanceDays_/.test(bulkSrc));
-check('csv-supported', /Upload a \.csv or \.xlsx file/.test(bulkSrc));
-check('no-csv-reject', !/CSV is not supported/.test(bulkSrc));
-check('ui-csv-accept', /accept="\.xlsx,\.xls,\.csv/.test(client));
-check('ui-choose-button-not-label', /btn-pr-bulk-choose/.test(client) && !/for="pr-bulk-file"/.test(client));
-check('validate-no-full-repaint', /bindBulkUpload_[\s\S]*apiValidatePayrollUpload[\s\S]*paintBulkPreview_/.test(client) &&
-  !/apiValidatePayrollUpload[\s\S]{0,400}paintUnifiedPayroll_/.test(client));
-check('ui-validate-button', /btn-pr-bulk-validate/.test(client) && /Validate upload/.test(client));
-check('ui-return-draft-attendance', /btn-attendance-gate-draft/.test(client) && /canReturnPayrollToDraft_/.test(client));
-check('ui-attendance-locked-banner', /paintAttendanceLockedBanner_/.test(client) && !/Attendance upload is ready/.test(client));
-check('manual-entry-on-attendance', /paintAttendanceBulkPage_[\s\S]*paintPayrollDataSection_/.test(client));
-check('no-manual-entry-on-payroll-main', !/else if \(detail\)[\s\S]{0,500}paintPayrollDataSection_/.test(
-  client.match(/function paintUnifiedPayroll_[\s\S]*?function repaintCurrentPayrollView_/)?.[0] || ''));
-check('ui-can-upload-attendance', /canUploadAttendance_/.test(client));
+check('register-service', /AttendanceRegisterService/.test(regSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '1'/.test(bulkSrc));
+check('template-headers', /buildTemplateHeaders_/.test(regSrc) && /SUMMARY_HEADERS_/.test(regSrc));
+check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate/.test(api));
+check('api-attendance-validate', /apiValidateAttendanceRegisterUpload/.test(api));
+check('api-list-register', /apiListAttendanceRegister/.test(api));
+check('attendance-client-route', /registerRoute\('attendance-bulk-upload'/.test(attClient));
+check('attendance-list-columns', /Days present/.test(attClient) && /Days leave/.test(attClient));
+check('payroll-bulk-no-attendance-columns', /'employee_id', 'display_name', 'work_email'/.test(payrollBulkSrc) &&
+  !/'working_days', 'days_present'/.test(payrollBulkSrc));
 
-var derived = Bulk.deriveAttendanceDays({ days_present: '24', days_absent: '1', leave_days: '1' }, 26);
-check('paid-days-formula', derived.paid_days === 25 && derived.lop_days === 1);
-check('attendance-mode', derived.mode === 'attendance');
+var sum = Reg.summarize_({ '01': 'P', '02': 'W/H', '03': 'A', '04': 'L', '05': 'S' }, 2026, 1);
+check('summarize-present', sum.present === 1 && sum.absent === 1 && sum.leave_days === 2);
 
-var legacy = Bulk.deriveAttendanceDays({ paid_days: '25', lop_days: '1' }, 26);
-check('legacy-mode', legacy.mode === 'legacy' && legacy.paid_days === 25);
-
-var over = Bulk.deriveAttendanceDays({ days_present: '20', leave_days: '10' }, 26);
-check('reject-over-paid', !!over.error);
-
-var csv = 'employee_id,working_days,days_present,days_absent,leave_days\nSAPL-0001,26,24,1,1\n';
-var rows = Bulk.parseCsvRows(csv);
-check('parse-csv', rows.length === 1 && rows[0].working_days === '26');
+var derived = Reg.derivePayrollDays_(sum);
+check('derive-paid-lop', derived.paid_days >= 1 && derived.lop_days === 1);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');

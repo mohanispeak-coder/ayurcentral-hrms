@@ -100,6 +100,36 @@ function apiDownloadPayrollTemplate(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiDownloadAttendanceRegisterTemplate(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.downloadTemplate(runId);
+  }, sessionToken);
+}
+
+function apiValidateAttendanceRegisterUpload(runId, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.validateUpload(runId, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitAttendanceRegisterUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
+function apiListAttendanceRegister(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceRegisterService.listSummariesForRun_(runId);
+  }, sessionToken);
+}
+
+function apiSaveAttendanceRegister(runId, employeeId, register, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.saveEmployeeRegister(runId, employeeId, register || {});
+  }, sessionToken);
+}
+
 function apiValidatePayrollUpload(runId, meta, sessionToken) {
   return hrmsRun_(function () {
     return PayrollBulkService.validateUpload(runId, meta || {});

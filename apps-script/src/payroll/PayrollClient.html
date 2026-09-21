@@ -177,7 +177,6 @@
       var route = App.getState().currentRoute;
       var p = payrollPeriodNavParams_();
       if (route === 'salary-structure' || route === 'compensation') renderSalaryStructure(p);
-      else if (route === 'attendance-bulk-upload') renderAttendanceBulkUpload(p);
       else renderPayrollHome(p);
     }
 
@@ -331,7 +330,6 @@
     App.registerRoute('payroll', { title: 'Payroll', render: renderPayrollHome });
     App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollHome({ runId: params && params.runId }); } });
     App.registerRoute('salary-structure', { title: 'Salary structure', render: renderSalaryStructure });
-    App.registerRoute('attendance-bulk-upload', { title: 'Attendance', render: renderAttendanceBulkUpload });
     App.registerRoute('compensation', { title: 'Salary structure', render: renderSalaryStructure });
     App.registerRoute('my-payslips', { title: 'My Payslips', render: renderMyPayslips });
 
@@ -955,10 +953,30 @@
 
     function attendanceStats_(detail) {
       var rows = (detail && detail.rows) || [];
+      var run = detail && detail.run;
+      var year = run ? Number(run.period_year) : 0;
+      var month = run ? Number(run.period_month) : 0;
       var total = rows.length;
       var ready = 0;
       rows.forEach(function (row) {
         var inp = row.input || {};
+        var regComplete = false;
+        if (inp.daily_attendance_json && year && month) {
+          try {
+            var reg = JSON.parse(inp.daily_attendance_json);
+            var dim = new Date(year, month, 0).getDate();
+            var filled = 0;
+            for (var d = 1; d <= dim; d++) {
+              var key = (d < 10 ? '0' : '') + d;
+              if (reg[key]) filled++;
+            }
+            regComplete = filled === dim;
+          } catch (ignoreReg) {}
+        }
+        if (regComplete) {
+          ready += 1;
+          return;
+        }
         var w = Number(inp.working_days);
         var p = Number(inp.paid_days);
         var l = Number(inp.lop_days);
