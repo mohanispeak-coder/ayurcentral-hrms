@@ -583,7 +583,7 @@
       var current = selectedValue != null ? String(selectedValue) : sel.value;
       var html = '<option value="">None</option>';
       (values || []).forEach(function (s) {
-        var label = s.salary_structure_id + ' — ' + s.structure_name + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
+        var label = s.salary_structure_id + ' - ' + s.structure_name + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
         html += '<option value="' + escapeHtml(s.salary_structure_id) + '"' +
           (String(s.salary_structure_id) === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
       });
@@ -964,7 +964,7 @@
         html += '<p class="hint">Salary structures (component percentages) are defined in Payroll → Salary structures. Percentages apply to the Monthly CTC above.</p>';
       } else {
         html += dl([
-          ['Salary structure', emp.salary_structure_id ? (emp.salary_structure_id + (emp.salary_structure_name ? ' — ' + emp.salary_structure_name : '')) : ''],
+          ['Salary structure', emp.salary_structure_id ? (emp.salary_structure_id + (emp.salary_structure_name ? ' - ' + emp.salary_structure_name : '')) : ''],
           ['Monthly CTC', emp.ctc_monthly],
           ['UAN no.', emp.uan_no], ['ESI no.', emp.esi_no], ['PF no.', emp.pf_no],
           ['PAN', emp.pan], ['Account name', emp.bank_account_name],

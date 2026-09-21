@@ -1,5 +1,5 @@
 /**
- * Attendance register bulk upload — daily grid template per payroll month.
+ * Attendance register bulk upload - daily grid template per payroll month.
  */
 var HRMS = HRMS || {};
 

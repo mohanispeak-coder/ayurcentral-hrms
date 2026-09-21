@@ -687,7 +687,7 @@
 
   /**
    * google.script.run maps arguments by position. sessionToken must be appended last.
-   * Strip leaked UI objects only — never treat business strings (module ids, EMP001, run ids)
+   * Strip leaked UI objects only - never treat business strings (module ids, EMP001, run ids)
    * as the OTP token or every lazy-loaded module fails for non-deployers.
    */
   function prepareGoogleScriptArgs_(args) {

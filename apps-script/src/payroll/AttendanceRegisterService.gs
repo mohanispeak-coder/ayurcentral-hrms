@@ -1,5 +1,5 @@
 /**
- * Monthly attendance register — daily codes (P, W/H, A, L, H, S) and payroll day derivation.
+ * Monthly attendance register - daily codes (P, W/H, A, L, H, S) and payroll day derivation.
  */
 var HRMS = HRMS || {};
 

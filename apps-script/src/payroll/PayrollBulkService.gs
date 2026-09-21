@@ -207,7 +207,7 @@ var PayrollBulkService = (function () {
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Upload .xlsx or .csv. Do not change header names on the PayrollInputs sheet.'],
-        ['Template lists ACTIVE employees — ID, name, email. Attendance is on the Attendance screen.'],
+        ['Template lists ACTIVE employees - ID, name, email. Attendance is on the Attendance screen.'],
         ['display_name and work_email are for reference only - do not edit employee_id.'],
         ['Optional amounts (bonus, incentive, etc.) must be valid numbers >= 0.'],
         ['employee_id must match an active employee eligible for this payroll month.'],

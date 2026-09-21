@@ -247,16 +247,16 @@ var EmployeeBulkService = (function () {
     var fileId = ss.getId();
     var instructions = ss.getSheets()[0];
     instructions.setName('Instructions');
-    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload — Instructions');
+    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
     instructionLines.push(['vertical_name is required and must be one of the values on the Lists sheet.']);
     instructionLines.push(['salary_structure_id (optional) is the structure ID from the Salary structures screen (e.g. SS-001); a structure name is also accepted. See the Lists sheet. ctc_monthly is the monthly CTC amount (number).']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
-    instructionLines.push(['AOPL — AOPL-0001, AOPL-0002, ...']);
-    instructionLines.push(['SAPL — SAPL-0001, SAPL-0002, ...']);
-    instructionLines.push(['AOMS — AOMS-0001, AOMS-0002, ...']);
+    instructionLines.push(['AOPL - AOPL-0001, AOPL-0002, ...']);
+    instructionLines.push(['SAPL - SAPL-0001, SAPL-0002, ...']);
+    instructionLines.push(['AOMS - AOMS-0001, AOMS-0002, ...']);
     instructions.getRange(3, 1, instructionLines.length, 1).setValues(instructionLines);
 
     var lists = ss.insertSheet('Lists');

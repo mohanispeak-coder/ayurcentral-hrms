@@ -499,7 +499,7 @@ var EmployeeService = (function () {
       }
     }
     if (salaryStructureId && ctcMonthly === '' && !errors.ctc_monthly) {
-      warnings.push('Salary structure is set but Monthly CTC is empty — payroll will need a CTC amount.');
+      warnings.push('Salary structure is set but Monthly CTC is empty - payroll will need a CTC amount.');
     }
 
     if (Object.keys(errors).length) {
