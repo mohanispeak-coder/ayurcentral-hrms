@@ -184,7 +184,7 @@ check('legacy row not in list', Svc.listStructureTypes(false).every(function (s)
 
 const clientHtml = fs.readFileSync(path.join(src, 'payroll', 'SalaryStructureClient.html'), 'utf8');
 check('client-uses-hrms-callserver', /var callServer = App\.callServer/.test(clientHtml));
-check('client-no-bare-callserver', !/(^|[^\w.])callServer\(/.test(clientHtml.replace(/App\.callServer/g, '')));
+check('client-binds-showtoast', /var showToast = App\.showToast/.test(clientHtml));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
