@@ -5,13 +5,15 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '2';
+  var TEMPLATE_VERSION_ = '3';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
 
   var HEADERS_ = [
-    'employee_id', 'first_name', 'last_name', 'display_name', 'work_email',
+    'employee_id', 'first_name', 'last_name', 'display_name',
+    'father_husband_name', 'uan_no', 'esi_no', 'pf_no',
+    'work_email',
     'department', 'designation', 'vertical_name', 'location', 'employment_type', 'joining_date',
     'salary_structure_id', 'ctc_monthly',
     'manager_employee_id', 'phone', 'address', 'date_of_birth', 'gender',
@@ -29,6 +31,10 @@ var EmployeeBulkService = (function () {
     first_name: 'Ravi',
     last_name: 'Kumar',
     display_name: 'Ravi Kumar',
+    father_husband_name: 'Ravi Kumar Sr.',
+    uan_no: '100012345678',
+    esi_no: '1234567890',
+    pf_no: 'MH/BAN/12345/000/1234567',
     work_email: 'ravi.kumar@example.com',
     department: 'Operations',
     designation: 'Executive',
@@ -56,6 +62,10 @@ var EmployeeBulkService = (function () {
     first_name: 'Meena',
     last_name: 'Shah',
     display_name: 'Meena Shah',
+    father_husband_name: '',
+    uan_no: '',
+    esi_no: '',
+    pf_no: '',
     work_email: 'meena.shah@example.com',
     department: 'Operations',
     designation: 'Senior Executive',
@@ -119,6 +129,16 @@ var EmployeeBulkService = (function () {
     base.push(['']);
     base.push(['After upload, review validation results before confirming import.']);
     return base;
+  }
+
+  function bulkHeaders_() {
+    var extra = [];
+    try {
+      if (typeof EmployeeFieldDefService !== 'undefined' && EmployeeFieldDefService.listActiveFieldKeys) {
+        extra = EmployeeFieldDefService.listActiveFieldKeys();
+      }
+    } catch (ignore) {}
+    return HEADERS_.concat(extra);
   }
 
   function trim_(v) {
@@ -213,8 +233,9 @@ var EmployeeBulkService = (function () {
       }
       return v;
     };
-    var lines = [HEADERS_.join(',')];
-    lines.push(HEADERS_.map(function (h) { return esc(sample[h] || ''); }).join(','));
+    var headers = bulkHeaders_();
+    var lines = [headers.join(',')];
+    lines.push(headers.map(function (h) { return esc(sample[h] || ''); }).join(','));
     var name = templateFileBase_(variant) + '.csv';
     return Utilities.newBlob(lines.join('\n'), 'text/csv', name);
   }
@@ -262,12 +283,13 @@ var EmployeeBulkService = (function () {
     }
 
     var employees = ss.insertSheet('Employees');
-    var headerLabels = HEADERS_.map(function (h) {
+    var sheetHeaders = bulkHeaders_();
+    var headerLabels = sheetHeaders.map(function (h) {
       return REQUIRED_HEADERS_.indexOf(h) >= 0 ? h + '*' : h;
     });
-    employees.getRange(1, 1, 1, HEADERS_.length).setValues([headerLabels]);
-    var sampleRow = HEADERS_.map(function (h) { return sample[h] || ''; });
-    employees.getRange(2, 1, 1, HEADERS_.length).setValues([sampleRow]);
+    employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
+    var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
+    employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
 
     var blob;
@@ -390,11 +412,14 @@ var EmployeeBulkService = (function () {
 
   function rowToPayload_(row) {
     var payload = {};
-    HEADERS_.forEach(function (key) {
+    bulkHeaders_().forEach(function (key) {
       if (row.hasOwnProperty(key)) payload[key] = row[key];
     });
     payload.employee_id = EmployeeService.normalizeEmployeeId(row.employee_id);
     payload.create_user = EmployeeService.parseCreateUserFlag(row.create_login);
+    if (typeof EmployeeFieldDefService !== 'undefined' && EmployeeFieldDefService.applyBulkCustomFields_) {
+      payload = EmployeeFieldDefService.applyBulkCustomFields_(payload, row);
+    }
     return payload;
   }
 

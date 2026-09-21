@@ -1,0 +1,151 @@
+<style>
+.efd-page .efd-list-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+.efd-page .data-table { width: 100%; }
+.efd-page td.col-actions { white-space: nowrap; text-align: right; }
+</style>
+<script>
+(function () {
+  'use strict';
+
+  var initialized_ = false;
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    function wait() {
+      if (run()) return;
+      var tries = 0;
+      var timer = setInterval(function () {
+        if (run() || ++tries > 200) clearInterval(timer);
+      }, 25);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wait);
+    } else {
+      wait();
+    }
+  }
+
+  whenAppReady(function initEmployeeFieldDefsUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
+    var navigate = App.navigate;
+
+    function esc_(v) {
+      return escapeHtml(v == null ? '' : String(v));
+    }
+
+    function pageEl_() {
+      var p = document.getElementById('page-content');
+      if (p) p.classList.remove('hidden');
+      return p;
+    }
+
+    function fieldRowHtml_(f) {
+      f = f || {};
+      var active = String(f.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+      return '<tr class="efd-row">' +
+        '<td><input class="form-input efd-key" value="' + esc_(f.field_key || '') + '" placeholder="aadhaar_no"></td>' +
+        '<td><input class="form-input efd-label" value="' + esc_(f.field_label || '') + '" placeholder="Aadhaar number"></td>' +
+        '<td><label class="form-check"><input type="checkbox" class="efd-active"' + (active ? ' checked' : '') + '> Active</label></td>' +
+        '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm efd-remove" title="Remove">\u2715</button></td>' +
+        '</tr>';
+    }
+
+    function render_(params) {
+      var page = pageEl_();
+      if (!page) return;
+      page.innerHTML =
+        '<div class="efd-page"><div class="page-header"><h2>Employee custom fields</h2>' +
+        '<p class="page-lede">Define extra fields that appear on employee profiles and bulk upload templates. ' +
+        'Built-in fields (father/husband name, UAN, ESI, PF) are always available.</p></div>' +
+        '<div id="efd-mount"><div class="hrms-loading-block" aria-busy="true">Loading\u2026</div></div></div>';
+      load_();
+    }
+
+    function load_() {
+      callServer('apiListEmployeeFieldDefs', true).then(function (list) {
+        paint_(list || []);
+      }).catch(function (err) {
+        var m = document.getElementById('efd-mount');
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load.') + '</div>';
+      });
+    }
+
+    function paint_(list) {
+      var m = document.getElementById('efd-mount');
+      if (!m) return;
+      var rows = (list && list.length) ? list : [{ field_key: '', field_label: '', status: 'ACTIVE' }];
+      m.innerHTML =
+        '<div class="card">' +
+        '<div class="efd-list-head">' +
+          '<button type="button" class="btn btn-secondary" id="efd-back">Back to employees</button>' +
+          '<button type="button" class="btn btn-primary" id="efd-save">Save field definitions</button>' +
+        '</div>' +
+        '<table class="data-table"><thead><tr><th>Field key</th><th>Label (shown on forms)</th><th>Active</th><th></th></tr></thead>' +
+        '<tbody id="efd-body">' + rows.map(fieldRowHtml_).join('') + '</tbody></table>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="efd-add" style="margin-top:12px">+ Add field</button>' +
+        '<p class="hint" style="margin-top:12px">Keys must be lowercase with underscores (e.g. <code>blood_group</code>). ' +
+        'They become optional columns on bulk upload after you save.</p></div>';
+      document.getElementById('efd-back').addEventListener('click', function () { navigate('employees'); });
+      document.getElementById('efd-add').addEventListener('click', function () {
+        var body = document.getElementById('efd-body');
+        var tmp = document.createElement('tbody');
+        tmp.innerHTML = fieldRowHtml_({});
+        body.appendChild(tmp.firstChild);
+        bindRemove_();
+      });
+      document.getElementById('efd-save').addEventListener('click', function () { save_(this); });
+      bindRemove_();
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('employee-field-defs');
+    }
+
+    function bindRemove_() {
+      document.querySelectorAll('#efd-body .efd-remove').forEach(function (b) {
+        b.onclick = function () {
+          var tr = b.closest('tr');
+          if (tr) tr.remove();
+        };
+      });
+    }
+
+    function collect_() {
+      var out = [];
+      document.querySelectorAll('#efd-body .efd-row').forEach(function (tr, i) {
+        var key = tr.querySelector('.efd-key').value.trim();
+        var label = tr.querySelector('.efd-label').value.trim();
+        if (!key && !label) return;
+        out.push({
+          field_key: key,
+          field_label: label,
+          sort_order: i + 1,
+          status: tr.querySelector('.efd-active').checked ? 'ACTIVE' : 'INACTIVE'
+        });
+      });
+      return out;
+    }
+
+    function save_(btn) {
+      callServer('apiSaveEmployeeFieldDefs', { fields: collect_() }, { button: btn, loadingText: 'Saving\u2026' })
+        .then(function () {
+          showToast('Employee field definitions saved.', 'success');
+          load_();
+        })
+        .catch(function (err) {
+          showToast((err && err.message) || 'Save failed.', 'error');
+        });
+    }
+
+    App.registerRoute('employee-field-defs', { title: 'Employee custom fields', render: render_ });
+  });
+})();
+</script>

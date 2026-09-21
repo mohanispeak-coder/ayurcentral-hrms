@@ -106,3 +106,17 @@ function apiGetEmployeeLeaveSummary(employeeId, sessionToken) {
     return EmployeeService.getLeaveSummary(session, employeeId);
   }, sessionToken);
 }
+
+function apiListEmployeeFieldDefs(includeInactive, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeFieldDefService.listFieldDefs(!includeInactive);
+  }, sessionToken);
+}
+
+function apiSaveEmployeeFieldDefs(payload, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeFieldDefService.saveFieldDefs(payload || {});
+  }, sessionToken);
+}

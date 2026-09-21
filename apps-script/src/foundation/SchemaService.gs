@@ -6,12 +6,14 @@ var HRMS = HRMS || {};
 var SchemaService = (function () {
   var SHEET_HEADERS_ = {};
   SHEET_HEADERS_[HRMS.SHEETS.EMPLOYEES] = [
-    'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender',
+    'employee_id', 'first_name', 'last_name', 'display_name',
+    'father_husband_name', 'uan_no', 'esi_no', 'pf_no',
+    'date_of_birth', 'gender',
     'phone', 'address', 'work_email', 'department', 'designation', 'manager_employee_id',
     'vertical_name', 'joining_date', 'employment_type', 'location', 'status',
     'salary_structure_id', 'ctc_monthly',
     'pan', 'bank_account_name',
-    'bank_account_number', 'bank_ifsc', 'bank_name', 'notes',
+    'bank_account_number', 'bank_ifsc', 'bank_name', 'custom_fields_json', 'notes',
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.VERTICALS] = [
@@ -81,6 +83,10 @@ var SchemaService = (function () {
     'setting_key', 'setting_value', 'value_type', 'description', 'admin_only',
     'updated_at', 'updated_by_email'
   ];
+  SHEET_HEADERS_[HRMS.SHEETS.EMPLOYEE_FIELD_DEFS] = [
+    'field_def_id', 'field_key', 'field_label', 'sort_order', 'status',
+    'created_at', 'updated_at'
+  ];
   SHEET_HEADERS_[HRMS.SHEETS.DOCUMENTS] = [
     'document_id', 'employee_id', 'category', 'title', 'drive_file_id',
     'drive_folder_id', 'payroll_run_id', 'uploaded_at', 'uploaded_by_email'
@@ -95,6 +101,7 @@ var SchemaService = (function () {
     ['seq_leave_request', '0', 'NUMBER', 'Last leave request sequence', true],
     ['seq_leave_balance', '0', 'NUMBER', 'Last leave balance sequence', true],
     ['seq_salary_structure', '0', 'NUMBER', 'Last salary structure sequence', true],
+    ['seq_employee_field_def', '0', 'NUMBER', 'Last employee custom field def sequence', true],
     ['leave_year_start_month', '1', 'NUMBER', 'Leave year starts (1-12)', false],
     ['leave_count_method', 'WEEKDAYS_ONLY', 'STRING', 'WEEKDAYS_ONLY or CALENDAR_DAYS', false],
     ['default_working_days', '26', 'NUMBER', 'Default working days per month', false],

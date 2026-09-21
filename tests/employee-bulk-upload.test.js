@@ -94,6 +94,8 @@ var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
 var decodedTpl = Buffer.from(csvTpl.base64, 'base64').toString('utf8');
 check('csv template has base64', csvTpl.fileName.indexOf('.csv') >= 0 && csvTpl.base64.length > 10);
 check('csv template has vertical column', decodedTpl.indexOf('vertical_name') >= 0);
+check('csv template has father_husband_name column', decodedTpl.indexOf('father_husband_name') >= 0);
+check('csv template has uan_no column', decodedTpl.indexOf('uan_no') >= 0);
 
 if (fails) {
   console.error(fails + ' test(s) failed');
