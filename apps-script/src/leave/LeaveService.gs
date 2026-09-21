@@ -93,6 +93,36 @@ var LeaveService = (function () {
     return emp;
   }
 
+  function employeeIdsMatch_(a, b) {
+    return LeaveEngine.normalizeEmployeeId(a) === LeaveEngine.normalizeEmployeeId(b);
+  }
+
+  /** Legacy rows may leave status blank; treat as active unless explicitly INACTIVE. */
+  function isActiveEmployeeForLeave_(emp) {
+    if (!emp) return false;
+    var st = String(emp.status || '').trim().toUpperCase();
+    if (!st) return true;
+    var inactive = HRMS.EMPLOYEE_STATUS && HRMS.EMPLOYEE_STATUS.INACTIVE
+      ? String(HRMS.EMPLOYEE_STATUS.INACTIVE).toUpperCase()
+      : 'INACTIVE';
+    if (st === inactive) return false;
+    var active = HRMS.EMPLOYEE_STATUS && HRMS.EMPLOYEE_STATUS.ACTIVE
+      ? String(HRMS.EMPLOYEE_STATUS.ACTIVE).toUpperCase()
+      : 'ACTIVE';
+    return st === active;
+  }
+
+  function normalizeJoiningDateForLeave_(value) {
+    var d = LeaveEngine.toDateOnly(value);
+    return d ? LeaveEngine.formatIsoDate(d) : String(value == null ? '' : value).trim();
+  }
+
+  function employeeForLeave_(employeeId) {
+    var emp = requireEmployee_(employeeId);
+    emp.joining_date = normalizeJoiningDateForLeave_(emp.joining_date);
+    return emp;
+  }
+
   function applicantUserRole_(employeeId) {
     if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.findUserByEmployeeId) {
       var norm = LeaveEngine.normalizeEmployeeId(employeeId);
@@ -430,7 +460,7 @@ var LeaveService = (function () {
     var rows = DbService.getAllRecords(HRMS.SHEETS.LEAVE_BALANCES);
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
-      if (String(r.employee_id) === String(employeeId) &&
+      if (employeeIdsMatch_(r.employee_id, employeeId) &&
           String(r.leave_type_id) === String(leaveTypeId) &&
           String(r.leave_year) === String(leaveYear)) {
         return r;
@@ -466,7 +496,7 @@ var LeaveService = (function () {
     if (!balanceIndex) return rows;
     Object.keys(balanceIndex).forEach(function (key) {
       var row = balanceIndex[key];
-      if (row && String(row.employee_id) === String(employeeId)) {
+      if (row && employeeIdsMatch_(row.employee_id, employeeId)) {
         rows.push({ leave_type_id: row.leave_type_id, leave_year: row.leave_year });
       }
     });
@@ -1194,12 +1224,12 @@ var LeaveService = (function () {
     }
     var currentYear = currentLeaveYear_();
     var startMonth = leaveYearStartMonth_();
+    emp = employeeForLeave_(target);
     var joinYear = emp.joining_date ? LeaveEngine.getLeaveYear(emp.joining_date, startMonth) : currentYear;
-    var isActive = String(emp.status || '').toUpperCase() === 'ACTIVE';
+    var isActive = isActiveEmployeeForLeave_(emp);
     if (isActive) {
       grantBalancesForEmployee(target, currentYear);
     }
-    var types = listTypes_(false);
     var balanceIndex = loadBalanceIndex_();
     var availableYears = isActive
       ? LeaveEngine.employeeLeaveYears(emp.joining_date, todayDateOnly_(), startMonth)
@@ -1214,8 +1244,8 @@ var LeaveService = (function () {
         ? currentYear
         : availableYears[availableYears.length - 1];
     }
-    var balances = types.filter(function (t) {
-      return !!findBalance_(target, t.leave_type_id, year, balanceIndex);
+    var balances = listTypes_(true).filter(function (t) {
+      return t.requires_balance;
     }).map(function (t) {
       var row = findBalance_(target, t.leave_type_id, year, balanceIndex);
       return serializeBalanceRow_(t, row, year);
@@ -1360,7 +1390,31 @@ var LeaveService = (function () {
         saved = record;
       }
       AuditService.log(HRMS.LEAVE_AUDIT.TYPE_SAVE, 'LeaveType', saved.leave_type_id, 'Saved type ' + code, session.employee_id);
-      return coerceType_(saved);
+      var out = coerceType_(saved);
+      if (!payload.leave_type_id && out.requires_balance && out.is_active) {
+        propagateNewLeaveTypeToActiveEmployeesLocked_(out);
+      }
+      return out;
+    });
+  }
+
+  function propagateNewLeaveTypeToActiveEmployeesLocked_(type) {
+    var year = currentLeaveYear_();
+    var startMonth = leaveYearStartMonth_();
+    var balanceIndex = loadBalanceIndex_();
+    var typeMap = typeMapFromList_([type]);
+    var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(isActiveEmployeeForLeave_);
+    employees.forEach(function (emp) {
+      var joining = normalizeJoiningDateForLeave_(emp.joining_date);
+      var plan = LeaveEngine.planBalanceGrants({
+        joiningDate: joining,
+        asOfDate: todayDateOnly_(),
+        startMonth: startMonth,
+        targetYear: year,
+        types: [type],
+        existing: existingKeysForEmployee_(balanceIndex, emp.employee_id)
+      });
+      applyPlanLocked_(emp.employee_id, typeMap, plan, balanceIndex, joining, startMonth);
     });
   }
 
@@ -1374,9 +1428,9 @@ var LeaveService = (function () {
    */
   function grantBalancesForEmployee(employeeId, leaveYear, options) {
     options = options || {};
-    var emp = requireEmployee_(employeeId);
+    var emp = employeeForLeave_(employeeId);
     var throughYear = String(leaveYear || currentLeaveYear_());
-    var isActive = String(emp.status || '').toUpperCase() === 'ACTIVE';
+    var isActive = isActiveEmployeeForLeave_(emp);
     if (!isActive && !options.includeInactive) {
       return [];
     }
@@ -1446,9 +1500,7 @@ var LeaveService = (function () {
     PermissionService.require(HRMS.ACTIONS.LEAVE_ADMIN, {}, session);
     var year = String(leaveYear || currentLeaveYear_());
     return withScriptLock_(function () {
-      var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(function (e) {
-        return String(e.status).toUpperCase() === 'ACTIVE';
-      });
+      var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(isActiveEmployeeForLeave_);
       var startMonth = leaveYearStartMonth_();
       var types = listTypes_(true).filter(function (t) { return t.requires_balance; });
       var typeMap = typeMapFromList_(types);

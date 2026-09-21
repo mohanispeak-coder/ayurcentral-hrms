@@ -537,7 +537,9 @@ var EmployeeService = (function () {
     if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
       try {
         LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-      } catch (ignoreGrant) {}
+      } catch (grantErr) {
+        Logger.log('Leave grant on create (first pass): ' + (grantErr.message || grantErr));
+      }
     }
     if (countLeaveBalances_(employeeId) <= before) {
       seedLeaveBalances_(employeeId, now);
