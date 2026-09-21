@@ -301,7 +301,11 @@ var LeaveService = (function () {
       allow_half_day: LeaveEngine.isTruthy(row.allow_half_day),
       counts_as_lop: LeaveEngine.isTruthy(row.counts_as_lop),
       annual_entitlement_days: LeaveEngine.toNumber(row.annual_entitlement_days),
-      carry_forward_max_days: LeaveEngine.toNumber(row.carry_forward_max_days),
+      carry_forward_max_days: LeaveEngine.toNumber(
+        row.carry_forward_max_days != null && row.carry_forward_max_days !== ''
+          ? row.carry_forward_max_days
+          : row.carry_forward_days
+      ),
       max_consecutive_days: row.max_consecutive_days === '' || row.max_consecutive_days == null
         ? null
         : LeaveEngine.toNumber(row.max_consecutive_days),
