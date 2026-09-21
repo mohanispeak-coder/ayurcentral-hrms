@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '2';
+  var TEMPLATE_VERSION_ = '3';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -83,6 +83,42 @@ var AttendanceBulkService = (function () {
     }
   }
 
+  function applyAttendanceHeaderStyles_(sheet, year, month, dim) {
+    var summaryLen = AttendanceRegisterService.SUMMARY_HEADERS.length;
+    var totalCols = 3 + dim + summaryLen;
+    var dayStartCol = 4;
+
+    sheet.getRange(1, 1, 2, totalCols)
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
+      .setWrap(true);
+
+    sheet.getRange(1, 1, 2, 3).setBackground('#2d5a3d').setFontColor('#ffffff');
+
+    for (var d = 1; d <= dim; d++) {
+      var abbr = AttendanceRegisterService.dayAbbr_(year, month, d);
+      var col = dayStartCol + d - 1;
+      var weekend = abbr === 'Sun' || abbr === 'Sat';
+      sheet.getRange(1, col, 2, 1)
+        .setBackground(weekend ? '#93c5fd' : '#dbeafe')
+        .setFontColor('#1e3a5f');
+    }
+
+    sheet.getRange(1, dayStartCol + dim, 2, summaryLen)
+      .setBackground('#ffedd5')
+      .setFontColor('#7c2d12');
+
+    sheet.setRowHeight(1, 24);
+    sheet.setRowHeight(2, 24);
+    sheet.setColumnWidth(1, 108);
+    sheet.setColumnWidth(2, 200);
+    sheet.setColumnWidth(3, 96);
+    for (var c = dayStartCol; c < dayStartCol + dim; c++) {
+      sheet.setColumnWidth(c, 34);
+    }
+  }
+
   function applySummaryFormulas_(sheet, rowNum, year, month, dim) {
     var formulas = AttendanceRegisterService.summaryFormulasForRow_(rowNum, year, month);
     var summaryStart = 4 + dim;
@@ -126,7 +162,7 @@ var AttendanceBulkService = (function () {
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Month: ' + year + '-' + AttendanceRegisterService.pad2_(month)],
         ['Rows 1–2 on the Attendance sheet are headers only. Employee data starts on row 3.'],
-        ['All ACTIVE employees in HRMS are listed with employee_id, name, and vertical pre-filled.'],
+        ['All ACTIVE employees in HRMS are listed (re-download after adding employees to pick up new rows).'],
         ['Fill one code per day: P, W/H (or WH), A, L, H, S.'],
         ['Summary columns (P, W/H, A, L, H, S, DAYS) calculate in Excel.'],
         ['Upload only employees who are in this payroll month (sync runs when you download).'],
@@ -137,6 +173,7 @@ var AttendanceBulkService = (function () {
       var sheet = ss.insertSheet('Attendance');
       sheet.getRange(1, 1, 1, headers.row1.length).setValues([headers.row1]);
       sheet.getRange(2, 1, 1, headers.row2.length).setValues([headers.row2]);
+      applyAttendanceHeaderStyles_(sheet, year, month, dim);
       sheet.setFrozenRows(2);
 
       if (employees.length) {

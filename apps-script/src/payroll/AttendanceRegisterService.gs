@@ -199,17 +199,29 @@ var AttendanceRegisterService = (function () {
 
   function listActiveEmployees_() {
     var rows = [];
+    var fromEmployeeService = false;
     try {
-      if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll) {
+      if (typeof EmployeeService !== 'undefined' && EmployeeService.listActiveEmployees) {
+        rows = EmployeeService.listActiveEmployees() || [];
+        fromEmployeeService = true;
+      } else if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listAll) {
         rows = EmployeeRepository.listAll() || [];
       }
     } catch (ignoreRepo) {}
     if (!rows.length) {
       rows = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES) || [];
     }
-    return rows.filter(function (e) {
-      return String(e.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
-    }).sort(function (a, b) {
+    if (!fromEmployeeService) {
+      rows = rows.filter(function (e) {
+        var st = String(e.status || 'ACTIVE').toUpperCase();
+        if (st === 'INACTIVE') return false;
+        if (HRMS.EMPLOYEE_STATUS && HRMS.EMPLOYEE_STATUS.ACTIVE) {
+          return st === String(HRMS.EMPLOYEE_STATUS.ACTIVE).toUpperCase();
+        }
+        return true;
+      });
+    }
+    return rows.slice().sort(function (a, b) {
       return String(a.employee_id).localeCompare(String(b.employee_id));
     });
   }

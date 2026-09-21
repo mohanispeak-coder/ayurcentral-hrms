@@ -203,7 +203,9 @@
               return;
             }
             downloadBlob_(res);
-            showToast('Attendance template downloaded (' + (res.fileName || 'file') + ').', 'success');
+            var n = res.employeeCount != null ? res.employeeCount : '';
+            var extra = n !== '' ? ' — ' + n + ' active employee' + (n === 1 ? '' : 's') : '';
+            showToast('Attendance template downloaded' + extra + '.', 'success');
           })
           .catch(function (err) {
             showToast((err && err.message) || 'Download failed', 'error');
