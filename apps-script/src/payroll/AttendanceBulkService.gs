@@ -136,7 +136,7 @@ var AttendanceBulkService = (function () {
 
       var sheet = ss.insertSheet('Attendance');
       sheet.getRange(1, 1, 1, headers.row1.length).setValues([headers.row1]);
-      sheet.getRange(2, 1, 2, headers.row2.length).setValues([headers.row2]);
+      sheet.getRange(2, 1, 1, headers.row2.length).setValues([headers.row2]);
       sheet.setFrozenRows(2);
 
       if (employees.length) {
@@ -150,7 +150,7 @@ var AttendanceBulkService = (function () {
           for (var d = 1; d <= dim; d++) row.push('');
           return row;
         });
-        sheet.getRange(dataStartRow, 1, dataStartRow + data.length - 1, 3 + dim).setValues(data);
+        sheet.getRange(dataStartRow, 1, data.length, 3 + dim).setValues(data);
         for (var i = 0; i < employees.length; i++) {
           applySummaryFormulas_(sheet, dataStartRow + i, year, month, dim);
         }
