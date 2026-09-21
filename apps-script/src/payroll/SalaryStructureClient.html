@@ -1,0 +1,282 @@
+<style>
+.sst-page .sst-list-head { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.sst-page .data-table { width: 100%; }
+.sst-page td.col-actions { white-space: nowrap; text-align: right; }
+.sst-page .sst-status-active { color: var(--color-success); font-weight: 600; }
+.sst-page .sst-status-inactive { color: var(--color-text-muted); }
+.sst-page .sst-comp-value { max-width: 120px; }
+.sst-page .empty-state { color: var(--color-text-muted); padding: 12px 0; }
+</style>
+<script>
+(function () {
+  'use strict';
+
+  var initialized_ = false;
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    function wait() {
+      if (run()) return;
+      var tries = 0;
+      var timer = setInterval(function () {
+        if (run() || ++tries > 200) clearInterval(timer);
+      }, 25);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wait);
+    } else {
+      wait();
+    }
+  }
+
+  whenAppReady(function initSalaryStructureUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
+
+  var KINDS_ = [['EARNING', 'Earning'], ['DEDUCTION', 'Deduction'], ['EMPLOYER', 'Employer']];
+  var METHODS_ = [['PERCENT_OF_CTC', '% of CTC'], ['FIXED', 'Fixed amount']];
+
+  function pageEl_() {
+    var p = document.getElementById('page-content');
+    if (p) p.classList.remove('hidden');
+    return p;
+  }
+
+  function esc_(v) {
+    return escapeHtml(v == null ? '' : String(v));
+  }
+
+  function spin_(label) {
+    return App.sectionSkeleton
+      ? App.sectionSkeleton({ label: label || 'Loading' })
+      : '<div class="hrms-loading-block" aria-busy="true">' + esc_(label || 'Loading') + '…</div>';
+  }
+
+  function render_(params) {
+    var page = pageEl_();
+    if (!page) return;
+    page.innerHTML =
+      '<div class="sst-page"><div class="page-header"><h2>Salary structures</h2>' +
+      '<p class="page-lede">Reusable salary structure templates. Assign a structure to an employee in their profile; ' +
+      'component percentages apply to that employee\u2019s monthly CTC.</p></div>' +
+      '<div id="sst-mount">' + spin_('Loading salary structures\u2026') + '</div></div>';
+    loadList_();
+  }
+
+  function loadList_() {
+    try {
+      callServer('apiListSalaryStructureTypes', true).then(function (list) {
+        paintList_(list || []);
+      }).catch(function (err) {
+        var m = document.getElementById('sst-mount');
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
+      });
+    } catch (err) {
+      var m = document.getElementById('sst-mount');
+      if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
+    }
+  }
+
+  function paintList_(list) {
+    var m = document.getElementById('sst-mount');
+    if (!m) return;
+    var rows = list.map(function (s) {
+      var active = String(s.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+      var statusHtml = active
+        ? '<span class="sst-status-active">Active</span>'
+        : '<span class="sst-status-inactive">Inactive</span>';
+      return '<tr>' +
+        '<td class="mono">' + esc_(s.salary_structure_id) + '</td>' +
+        '<td>' + esc_(s.structure_name) + '</td>' +
+        '<td>' + esc_(s.vertical_name) + '</td>' +
+        '<td class="num">' + ((s.components || []).length) + '</td>' +
+        '<td>' + statusHtml + '</td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-sst-edit="' + esc_(s.salary_structure_id) + '">Edit</button> ' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-sst-toggle="' + esc_(s.salary_structure_id) + '" data-next="' + (active ? 'INACTIVE' : 'ACTIVE') + '">' +
+            (active ? 'Deactivate' : 'Activate') + '</button>' +
+        '</td></tr>';
+    }).join('');
+    m.innerHTML =
+      '<div class="card"><div class="sst-list-head"><button type="button" class="btn btn-primary" id="sst-new">New salary structure</button></div>' +
+      (rows
+        ? '<table class="data-table"><thead><tr><th>ID</th><th>Name</th><th>Vertical</th><th class="num">Components</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<p class="empty-state">No salary structures yet. Click \u201cNew salary structure\u201d to create one.</p>') +
+      '</div>';
+    var nw = document.getElementById('sst-new');
+    if (nw) nw.addEventListener('click', function () { openForm_(null); });
+    m.querySelectorAll('[data-sst-edit]').forEach(function (b) {
+      b.addEventListener('click', function () { openForm_(b.getAttribute('data-sst-edit')); });
+    });
+    m.querySelectorAll('[data-sst-toggle]').forEach(function (b) {
+      b.addEventListener('click', function () { toggle_(b.getAttribute('data-sst-toggle'), b.getAttribute('data-next'), b); });
+    });
+    if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
+  }
+
+  function toggle_(id, next, btn) {
+    callServer('apiSetSalaryStructureTypeStatus', id, next, { button: btn, loadingText: 'Saving\u2026' }).then(function () {
+      showToast('Salary structure ' + (next === 'ACTIVE' ? 'activated' : 'deactivated') + '.', 'success');
+      loadList_();
+    }).catch(function (err) {
+      showToast((err && err.message) || 'Update failed.', 'error');
+    });
+  }
+
+  function loadVerticals_() {
+    return callServer('apiGetEmployeeVerticals').then(function (list) {
+      return (list && list.length) ? list : ['AOPL', 'SAPL', 'AOMS', 'OTHERS'];
+    }).catch(function () {
+      return ['AOPL', 'SAPL', 'AOMS', 'OTHERS'];
+    });
+  }
+
+  function componentRowHtml_(c) {
+    c = c || {};
+    var kindVal = String(c.component_kind || 'EARNING').toUpperCase();
+    var methodVal = String(c.calc_method || 'PERCENT_OF_CTC').toUpperCase();
+    var kindOpts = KINDS_.map(function (k) {
+      return '<option value="' + k[0] + '"' + (kindVal === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
+    }).join('');
+    var methodOpts = METHODS_.map(function (k) {
+      return '<option value="' + k[0] + '"' + (methodVal === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
+    }).join('');
+    var value = (c.percent != null && c.percent !== '') ? c.percent
+      : ((c.amount != null && c.amount !== '') ? c.amount : '');
+    return '<tr class="sst-comp-row">' +
+      '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="BP"></td>' +
+      '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Basic Pay"></td>' +
+      '<td><select class="form-select sst-c-kind">' + kindOpts + '</select></td>' +
+      '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
+      '<td><input class="form-input sst-comp-value sst-c-value" type="number" step="0.01" min="0" value="' + esc_(value) + '"></td>' +
+      '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
+      '</tr>';
+  }
+
+  function openForm_(id) {
+    var page = pageEl_();
+    if (!page) return;
+    page.innerHTML =
+      '<div class="sst-page"><div class="page-header"><h2>' + (id ? 'Edit' : 'New') + ' salary structure</h2></div>' +
+      '<div id="sst-form-mount">' + spin_('Loading\u2026') + '</div></div>';
+    Promise.all([
+      loadVerticals_(),
+      id ? callServer('apiGetSalaryStructureType', id) : Promise.resolve(null)
+    ]).then(function (res) {
+      paintForm_(res[0], res[1]);
+    }).catch(function (err) {
+      var m = document.getElementById('sst-form-mount');
+      if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load.') + '</div>';
+    });
+  }
+
+  function paintForm_(verticals, existing) {
+    var m = document.getElementById('sst-form-mount');
+    if (!m) return;
+    existing = existing || {};
+    var comps = (existing.components && existing.components.length) ? existing.components : [
+      { component_code: 'BP', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50 },
+      { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 30 },
+      { component_code: 'SA', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 20 }
+    ];
+    var currentVertical = String(existing.vertical_name || '').toUpperCase();
+    var vertOpts = '<option value="">Select vertical</option>' + (verticals || []).map(function (v) {
+      return '<option value="' + esc_(v) + '"' + (currentVertical === String(v).toUpperCase() ? ' selected' : '') + '>' + esc_(v) + '</option>';
+    }).join('');
+    var active = String(existing.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+    m.innerHTML =
+      '<div class="card">' +
+      '<input type="hidden" id="sst-id" value="' + esc_(existing.salary_structure_id || '') + '">' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label" for="sst-name">Structure name</label>' +
+          '<input class="form-input" id="sst-name" value="' + esc_(existing.structure_name || '') + '" placeholder="e.g. SAPL Executive"></div>' +
+        '<div class="form-group"><label class="form-label" for="sst-vertical">Vertical</label>' +
+          '<select class="form-select" id="sst-vertical">' + vertOpts + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+          '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
+      '</div>' +
+      '<h3>Components</h3>' +
+      '<p class="page-lede">Percentages apply to each employee\u2019s monthly CTC. Earning percentages usually total 100%.</p>' +
+      '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Method</th><th>% / amount</th><th></th></tr></thead>' +
+      '<tbody id="sst-comp-body">' + comps.map(componentRowHtml_).join('') + '</tbody></table>' +
+      '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-comp">+ Add component</button>' +
+      '<div class="form-actions" style="margin-top:16px;">' +
+        '<button type="button" class="btn btn-primary" id="sst-save">Save structure</button> ' +
+        '<button type="button" class="btn btn-secondary" id="sst-cancel">Cancel</button>' +
+      '</div></div>';
+    document.getElementById('sst-cancel').addEventListener('click', function () { render_({}); });
+    document.getElementById('sst-add-comp').addEventListener('click', function () {
+      var body = document.getElementById('sst-comp-body');
+      var tmp = document.createElement('tbody');
+      tmp.innerHTML = componentRowHtml_({});
+      body.appendChild(tmp.firstChild);
+      bindRemove_();
+    });
+    document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
+    bindRemove_();
+  }
+
+  function bindRemove_() {
+    document.querySelectorAll('#sst-comp-body .sst-c-remove').forEach(function (b) {
+      b.onclick = function () {
+        var tr = b.closest('tr');
+        if (tr) tr.remove();
+      };
+    });
+  }
+
+  function collectComponents_() {
+    var out = [];
+    document.querySelectorAll('#sst-comp-body .sst-comp-row').forEach(function (tr, i) {
+      var code = tr.querySelector('.sst-c-code').value.trim();
+      var name = tr.querySelector('.sst-c-name').value.trim();
+      if (!code && !name) return;
+      var kind = tr.querySelector('.sst-c-kind').value;
+      var method = tr.querySelector('.sst-c-method').value;
+      var value = tr.querySelector('.sst-c-value').value;
+      var c = {
+        component_code: code,
+        component_name: name,
+        component_kind: kind,
+        calc_method: method,
+        sort_order: i + 1
+      };
+      if (method === 'FIXED') c.amount = value;
+      else c.percent = value;
+      out.push(c);
+    });
+    return out;
+  }
+
+  function save_(btn) {
+    var payload = {
+      salary_structure_id: document.getElementById('sst-id').value,
+      structure_name: document.getElementById('sst-name').value.trim(),
+      vertical_name: document.getElementById('sst-vertical').value,
+      status: document.getElementById('sst-active').checked ? 'ACTIVE' : 'INACTIVE',
+      components: collectComponents_()
+    };
+    callServer('apiSaveSalaryStructureType', payload, { button: btn, loadingText: 'Saving\u2026' }).then(function (res) {
+      if (res && res.warning) showToast(res.warning, 'warning');
+      showToast('Salary structure saved.', 'success');
+      render_({});
+    }).catch(function (err) {
+      showToast((err && err.message) || 'Save failed.', 'error');
+    });
+  }
+
+  App.registerRoute('salary-structure', { title: 'Salary structures', render: render_ });
+  App.registerRoute('compensation', { title: 'Salary structures', render: render_ });
+  });
+})();
+</script>

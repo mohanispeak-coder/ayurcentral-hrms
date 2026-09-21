@@ -13,7 +13,7 @@ var EmployeeService = (function () {
   var PERSONAL_FIELDS_ = [
     'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address'
   ];
-  var SENSITIVE_FIELDS_ = ['pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name'];
+  var SENSITIVE_FIELDS_ = ['salary_structure_id', 'ctc_monthly', 'pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name'];
   var EMPLOYMENT_EDIT_FIELDS_ = [
     'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
     'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
@@ -21,7 +21,7 @@ var EmployeeService = (function () {
   ].concat(SENSITIVE_FIELDS_);
   var SELF_EDIT_FIELDS_ = ['phone', 'address'];
   var EMPLOYMENT_TYPES_ = ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'];
-  var EMPLOYEE_ID_PATTERN_ = /^(SAPL|AOPL|AOMS)-\d{4}$/;
+  var EMPLOYEE_ID_PATTERN_ = /^(SAPL|AOPL|AOMS|OTHERS)-\d{4}$/;
 
   function trim_(v) {
     if (v === null || v === undefined) return '';
@@ -454,10 +454,42 @@ var EmployeeService = (function () {
       warnings.push('PAN format looks unusual (expected AAAAA9999A). Saved anyway.');
     }
 
+    // Salary structure mapping + monthly CTC (both optional).
+    var salaryStructureId = trim_(payload.salary_structure_id);
+    if (salaryStructureId) {
+      var structureType = (typeof SalaryStructureTypeService !== 'undefined')
+        ? SalaryStructureTypeService.findTypeById(salaryStructureId)
+        : null;
+      if (!structureType) {
+        errors.salary_structure_id = 'Select a valid salary structure.';
+      } else if (String(structureType.status || '').toUpperCase() !== HRMS.STRUCTURE_TYPE_STATUS.ACTIVE) {
+        errors.salary_structure_id = 'Selected salary structure is inactive.';
+      }
+    }
+    var ctcMonthly = '';
+    if (trim_(payload.ctc_monthly) !== '') {
+      var ctcNum = Number(payload.ctc_monthly);
+      if (!isFinite(ctcNum) || ctcNum < 0) {
+        errors.ctc_monthly = 'Monthly CTC must be a non-negative number.';
+      } else {
+        ctcMonthly = ctcNum;
+      }
+    }
+    if (salaryStructureId && ctcMonthly === '' && !errors.ctc_monthly) {
+      warnings.push('Salary structure is set but Monthly CTC is empty — payroll will need a CTC amount.');
+    }
+
     if (Object.keys(errors).length) {
       throw validationError_('Please correct the highlighted fields.', { fields: errors, warnings: warnings });
     }
-    return { warnings: warnings, employment_type: empType, work_email: email, vertical_name: verticalName };
+    return {
+      warnings: warnings,
+      employment_type: empType,
+      work_email: email,
+      vertical_name: verticalName,
+      salary_structure_id: salaryStructureId,
+      ctc_monthly: ctcMonthly
+    };
   }
 
   function ensureUniqueEmail_(email, exceptEmployeeId) {
@@ -670,6 +702,8 @@ var EmployeeService = (function () {
         employment_type: validated.employment_type,
         location: trim_(payload.location),
         status: HRMS.EMPLOYEE_STATUS.ACTIVE,
+        salary_structure_id: validated.salary_structure_id || '',
+        ctc_monthly: validated.ctc_monthly === '' || validated.ctc_monthly == null ? '' : validated.ctc_monthly,
         pan: trim_(payload.pan).toUpperCase(),
         bank_account_name: trim_(payload.bank_account_name),
         bank_account_number: trim_(payload.bank_account_number),
@@ -744,6 +778,14 @@ var EmployeeService = (function () {
       throw authorizationError_('You do not have access to this employee.');
     }
     var view = sanitizeForViewer(row, session);
+    if (view.hasOwnProperty('salary_structure_id')) {
+      view.salary_structure_name = '';
+      var mappedId = trim_(view.salary_structure_id);
+      if (mappedId && typeof SalaryStructureTypeService !== 'undefined' && SalaryStructureTypeService.findTypeById) {
+        var mappedType = SalaryStructureTypeService.findTypeById(mappedId);
+        if (mappedType) view.salary_structure_name = String(mappedType.structure_name || '');
+      }
+    }
     if (view.can_view_salary_summary) {
       var structure = EmployeeRepository.findCurrentSalaryStructure(id);
       view.current_structure = structure ? {
@@ -783,6 +825,10 @@ var EmployeeService = (function () {
       }
     });
     if (updates.work_email) updates.work_email = normalizeEmail_(updates.work_email);
+    if (updates.hasOwnProperty('ctc_monthly')) {
+      var ctcRaw = trim_(payload.ctc_monthly);
+      updates.ctc_monthly = ctcRaw === '' ? '' : Number(ctcRaw);
+    }
     if (updates.hasOwnProperty('joining_date')) {
       updates.joining_date = toIsoDate_(updates.joining_date) || updates.joining_date;
     }

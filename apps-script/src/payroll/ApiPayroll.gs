@@ -201,3 +201,35 @@ function apiCommitCompensationBulkUpload(uploadId, sessionToken) {
     return CompensationBulkService.commitUpload(uploadId);
   }, sessionToken);
 }
+
+/* -------- Salary structure types (shared templates) -------- */
+
+function apiListSalaryStructureTypes(includeInactive, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.listStructureTypes(!includeInactive);
+  }, sessionToken);
+}
+
+function apiGetSalaryStructureType(structureId, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.getStructureType(structureId);
+  }, sessionToken);
+}
+
+function apiSaveSalaryStructureType(payload, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.saveStructureType(payload || {});
+  }, sessionToken);
+}
+
+function apiSetSalaryStructureTypeStatus(structureId, status, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.setStructureTypeStatus(structureId, status);
+  }, sessionToken);
+}
+
+function apiListSalaryStructureTypeOptions(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.listStructureTypeOptions(filter || {});
+  }, sessionToken);
+}
