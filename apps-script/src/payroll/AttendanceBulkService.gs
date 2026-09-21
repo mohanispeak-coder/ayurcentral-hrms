@@ -132,7 +132,7 @@ var AttendanceBulkService = (function () {
         ['Upload only employees who are in this payroll month (sync runs when you download).'],
         ['Sheet name for upload: Attendance']
       ];
-      instructions.getRange(3, 1, 2 + lines.length, 1).setValues(lines);
+      instructions.getRange(3, 1, lines.length, 1).setValues(lines);
 
       var sheet = ss.insertSheet('Attendance');
       sheet.getRange(1, 1, 1, headers.row1.length).setValues([headers.row1]);
