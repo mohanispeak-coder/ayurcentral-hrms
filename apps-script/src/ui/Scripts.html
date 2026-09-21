@@ -59,7 +59,7 @@
     'leave-calendar': 'Leave Calendar',
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
-    compensation: 'Compensation',
+    compensation: 'Salary structure',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
     'ats-jobs': 'Jobs',
@@ -799,7 +799,7 @@
   function isNavRouteActive(itemRoute, current) {
     if (itemRoute === current) return true;
     if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
-    if (itemRoute === 'payroll' && current === 'payroll-run') return true;
+    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
@@ -1086,11 +1086,36 @@
     });
   }
 
+  function moduleRoutesRegistered_(moduleId) {
+    if (!moduleId) return true;
+    var keys = Object.keys(ROUTE_MODULE).filter(function (r) { return ROUTE_MODULE[r] === moduleId; });
+    if (!keys.length) return true;
+    return keys.some(function (r) {
+      return ROUTES[r] && ROUTES[r].render && !ROUTES[r]._lazy;
+    });
+  }
+
+  function waitForModuleRoutes_(moduleId, attempts) {
+    attempts = attempts || 0;
+    if (moduleRoutesRegistered_(moduleId)) return Promise.resolve();
+    if (attempts > 40) {
+      return Promise.reject({ message: 'Module UI did not initialize (' + moduleId + '). Refresh the page and try again.' });
+    }
+    return new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        waitForModuleRoutes_(moduleId, attempts + 1).then(resolve, reject);
+      }, 25);
+    });
+  }
+
   function ensureModule(moduleId, opts) {
     opts = opts || {};
     if (opts.userInitiated) pauseBackgroundPreload();
     if (moduleLoaded_[moduleId]) {
-      return Promise.resolve();
+      if (moduleRoutesRegistered_(moduleId)) {
+        return Promise.resolve();
+      }
+      delete moduleLoaded_[moduleId];
     }
     if (moduleLoading_[moduleId]) {
       return moduleLoading_[moduleId];
@@ -1103,15 +1128,17 @@
       .then(function (data) {
         var tInject = Date.now();
         injectModuleHtml(data && data.html ? data.html : '');
-        logClientPerf_({
-          kind: 'module-ui',
-          moduleId: moduleId,
-          rpcAndInjectMs: Date.now() - tMod,
-          injectMs: Date.now() - tInject,
-          htmlChars: data && data.html ? data.html.length : 0
+        return waitForModuleRoutes_(moduleId).then(function () {
+          logClientPerf_({
+            kind: 'module-ui',
+            moduleId: moduleId,
+            rpcAndInjectMs: Date.now() - tMod,
+            injectMs: Date.now() - tInject,
+            htmlChars: data && data.html ? data.html.length : 0
+          });
+          moduleLoaded_[moduleId] = true;
+          delete moduleLoading_[moduleId];
         });
-        moduleLoaded_[moduleId] = true;
-        delete moduleLoading_[moduleId];
       })
       .catch(function (err) {
         delete moduleLoading_[moduleId];
