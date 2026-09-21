@@ -182,6 +182,10 @@ db.insertRecord('SalaryStructures', { salary_structure_id: 'SS-legacy', employee
 check('legacy row not a type (findTypeById)', Svc.findTypeById('SS-legacy') === null);
 check('legacy row not in list', Svc.listStructureTypes(false).every(function (s) { return s.salary_structure_id !== 'SS-legacy'; }));
 
+const clientHtml = fs.readFileSync(path.join(src, 'payroll', 'SalaryStructureClient.html'), 'utf8');
+check('client-uses-hrms-callserver', /var callServer = App\.callServer/.test(clientHtml));
+check('client-no-bare-callserver', !/(^|[^\w.])callServer\(/.test(clientHtml.replace(/App\.callServer/g, '')));
+
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
   process.exit(1);

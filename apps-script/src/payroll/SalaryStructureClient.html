@@ -9,8 +9,39 @@
 </style>
 <script>
 (function () {
-  var App = window.HrmsApp;
-  if (!App || !App.registerRoute) return;
+  'use strict';
+
+  var initialized_ = false;
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    function wait() {
+      if (run()) return;
+      var tries = 0;
+      var timer = setInterval(function () {
+        if (run() || ++tries > 200) clearInterval(timer);
+      }, 25);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wait);
+    } else {
+      wait();
+    }
+  }
+
+  whenAppReady(function initSalaryStructureUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
 
   var KINDS_ = [['EARNING', 'Earning'], ['DEDUCTION', 'Deduction'], ['EMPLOYER', 'Employer']];
   var METHODS_ = [['PERCENT_OF_CTC', '% of CTC'], ['FIXED', 'Fixed amount']];
@@ -39,17 +70,21 @@
       '<p class="page-lede">Reusable salary structure templates. Assign a structure to an employee in their profile; ' +
       'component percentages apply to that employee\u2019s monthly CTC.</p></div>' +
       '<div id="sst-mount">' + spin_('Loading salary structures\u2026') + '</div></div>';
-    if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
     loadList_();
   }
 
   function loadList_() {
-    callServer('apiListSalaryStructureTypes', true).then(function (list) {
-      paintList_(list || []);
-    }).catch(function (err) {
+    try {
+      callServer('apiListSalaryStructureTypes', true).then(function (list) {
+        paintList_(list || []);
+      }).catch(function (err) {
+        var m = document.getElementById('sst-mount');
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
+      });
+    } catch (err) {
       var m = document.getElementById('sst-mount');
       if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
-    });
+    }
   }
 
   function paintList_(list) {
@@ -86,6 +121,7 @@
     m.querySelectorAll('[data-sst-toggle]').forEach(function (b) {
       b.addEventListener('click', function () { toggle_(b.getAttribute('data-sst-toggle'), b.getAttribute('data-next'), b); });
     });
+    if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
   }
 
   function toggle_(id, next, btn) {
@@ -241,5 +277,6 @@
 
   App.registerRoute('salary-structure', { title: 'Salary structures', render: render_ });
   App.registerRoute('compensation', { title: 'Salary structures', render: render_ });
+  });
 })();
 </script>
