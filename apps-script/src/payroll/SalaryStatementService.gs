@@ -426,27 +426,69 @@ var SalaryStatementService = (function () {
     };
   }
 
+  function driveApiHint_() {
+    return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API (identifier: Drive), then redeploy.';
+  }
+
   function exportSpreadsheetXlsx_(spreadsheetId) {
     SpreadsheetApp.flush();
     Utilities.sleep(300);
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+
+    function tryFetchExport(url, label) {
+      try {
+        var resp = UrlFetchApp.fetch(url, {
+          headers: auth,
+          muteHttpExceptions: true,
+          followRedirects: true
+        });
+        if (resp.getResponseCode() === 200) {
+          var blob = resp.getBlob();
+          if (blob && blob.getBytes().length > 100) return blob;
+        }
+        Logger.log(label + ' export HTTP ' + resp.getResponseCode() + ': ' + resp.getContentText().substring(0, 200));
+      } catch (e) {
+        Logger.log(label + ' export failed: ' + (e.message || e));
+      }
+      return null;
+    }
+
     var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
       '/export?mimeType=' + encodeURIComponent(xlsxMime);
-    var resp = UrlFetchApp.fetch(v3Url, {
-      headers: auth,
-      muteHttpExceptions: true,
-      followRedirects: true
-    });
-    if (resp.getResponseCode() === 200) {
-      var blob = resp.getBlob();
-      if (blob && blob.getBytes().length > 100) return blob;
+    var blob = tryFetchExport(v3Url, 'Drive v3');
+    if (blob) return blob;
+
+    var docsUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
+    blob = tryFetchExport(docsUrl, 'Sheets docs');
+    if (blob) return blob;
+
+    if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
+      try {
+        return Drive.Files.export(spreadsheetId, xlsxMime);
+      } catch (e) {
+        Logger.log('Drive.Files.export failed: ' + (e.message || e));
+      }
     }
-    throw configurationError_('Could not export salary statement Excel. Enable Google Drive API for the script project.');
+
+    try {
+      return DriveApp.getFileById(spreadsheetId).getBlob().getAs(xlsxMime);
+    } catch (e4) {
+      throw configurationError_(
+        'Could not export salary statement Excel.' + driveApiHint_() + ' Details: ' + (e4.message || e4)
+      );
+    }
   }
 
-  function applySaplStyles_(sheet, dataRowCount) {
-    var lastCol = 32;
+  function padRowWidth_(row, width) {
+    row = (row || []).slice();
+    while (row.length < width) row.push('');
+    if (row.length > width) row.length = width;
+    return row;
+  }
+
+  function applySaplStyles_(sheet, dataRowCount, lastCol) {
+    lastCol = Number(lastCol) || 32;
     sheet.getRange(1, 1, 1, lastCol).merge()
       .setBackground('#2d5a3d')
       .setFontColor('#ffffff')
@@ -479,17 +521,22 @@ var SalaryStatementService = (function () {
     DED_KEYS_.forEach(function (c) { row3.push(c.label); });
     row3.push('Total DED', 'Net Pay', 'TRF');
 
-    var row2 = ['', '', '', '', '', '', '', '',
+    var ncol = row3.length;
+    var row2 = padRowWidth_([
+      '', '', '', '', '', '', '', '',
       'RATE OF PAY', '', '', '', '', '',
       'Worked',
       'EARNED PAY', '', '', '', '', '',
-      'DEDUCTION', '', '', '', '', '', '', '', '', ''];
+      'DEDUCTION', '', '', '', '', '', '', '', '', ''
+    ], ncol);
 
-    var row1 = [title];
-    while (row1.length < row3.length) row1.push('');
+    var row1 = padRowWidth_([title], ncol);
 
     var body = [];
     rows.forEach(function (r, idx) {
+      var rate = r.rate || {};
+      var earned = r.earned || {};
+      var deductions = r.deductions || {};
       var line = [
         idx + 1,
         r.employee_id,
@@ -501,30 +548,33 @@ var SalaryStatementService = (function () {
         r.fixed_days
       ];
       RATE_EARN_KEYS_.forEach(function (c) {
-        line.push(dash_(r.rate[c.label]));
+        line.push(dash_(rate[c.label]));
       });
       line.push(dash_(r.rate_gross));
       line.push(r.worked_days != null ? r.worked_days : '-');
       RATE_EARN_KEYS_.forEach(function (c) {
-        line.push(dash_(r.earned[c.label]));
+        line.push(dash_(earned[c.label]));
       });
       line.push(dash_(r.earned_gross));
       DED_KEYS_.forEach(function (c) {
-        line.push(dash_(r.deductions[c.label]));
+        line.push(dash_(deductions[c.label]));
       });
       line.push(dash_(r.total_deductions));
       line.push(dash_(r.net_pay));
       line.push('-');
-      body.push(line);
+      body.push(padRowWidth_(line, ncol));
     });
 
-    var all = [row1, row2, row3].concat(body);
+    var all = [row1, row2, padRowWidth_(row3, ncol)].concat(body);
     var ss = SpreadsheetApp.create('Salary Statement');
     var fileId = ss.getId();
     var sheet = ss.getSheets()[0];
     sheet.setName('HO');
-    sheet.getRange(1, 1, all.length, row3.length).setValues(all);
-    applySaplStyles_(sheet, body.length);
+    if (!all.length || !ncol) {
+      throw validationError_('No data to export.');
+    }
+    sheet.getRange(1, 1, all.length, ncol).setValues(all);
+    applySaplStyles_(sheet, body.length, ncol);
     SpreadsheetApp.flush();
     Utilities.sleep(200);
     var fname = vertical + '_Salary_Statement_' + meta.period_year + '_' +
@@ -537,7 +587,14 @@ var SalaryStatementService = (function () {
   function downloadExcel(options) {
     PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
     var data = listStatement(options);
-    var blob = buildExcel_(data);
+    var blob;
+    try {
+      blob = buildExcel_(data);
+    } catch (e) {
+      if (e && e.hrmsCode) throw e;
+      Logger.log('Salary statement Excel build failed: ' + (e.message || e) + '\n' + (e.stack || ''));
+      throw systemError_('Could not build salary statement Excel. ' + (e.message || 'Check Apps Script execution log.'));
+    }
     return {
       fileName: blob.getName(),
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
