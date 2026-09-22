@@ -17,7 +17,7 @@ var SchemaService = (function () {
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.VERTICALS] = [
-    'vertical_name'
+    'vertical_name', 'legal_name', 'address_line1', 'address_line2'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
     'google_email', 'employee_id', 'role', 'status',
@@ -148,11 +148,13 @@ var SchemaService = (function () {
         if (name) existing[name] = true;
       }
     }
+    var legalDefaults = HRMS.VERTICAL_LEGAL_NAMES_DEFAULT || {};
     var inserted = 0;
     (HRMS.VERTICALS || []).forEach(function (name) {
       var vertical = String(name || '').trim().toUpperCase();
       if (!vertical || existing[vertical]) return;
-      sheet.appendRow([vertical]);
+      var legal = String(legalDefaults[vertical] || legalDefaults.OTHERS || '').trim();
+      sheet.appendRow([vertical, legal]);
       inserted++;
     });
     return inserted;

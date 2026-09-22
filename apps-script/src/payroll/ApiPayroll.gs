@@ -100,15 +100,27 @@ function apiDownloadPayrollTemplate(runId, sessionToken) {
   }, sessionToken);
 }
 
-function apiDownloadAttendanceRegisterTemplate(runId, sessionToken) {
+function apiDownloadAttendanceRegisterTemplate(runId, verticalName, sessionToken) {
   return hrmsRun_(function () {
-    return AttendanceBulkService.downloadTemplate(runId);
+    return AttendanceBulkService.downloadTemplate(runId, verticalName);
   }, sessionToken);
 }
 
-function apiValidateAttendanceRegisterUpload(runId, meta, sessionToken) {
+function apiValidateAttendanceRegisterUpload(runId, verticalName, meta, sessionToken) {
   return hrmsRun_(function () {
-    return AttendanceBulkService.validateUpload(runId, meta || {});
+    return AttendanceBulkService.validateUpload(runId, verticalName, meta || {});
+  }, sessionToken);
+}
+
+function apiGetFormTStatus(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return FormTService.getStatus(runId, verticalName);
+  }, sessionToken);
+}
+
+function apiDownloadFormT(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return FormTService.download(runId, verticalName);
   }, sessionToken);
 }
 
