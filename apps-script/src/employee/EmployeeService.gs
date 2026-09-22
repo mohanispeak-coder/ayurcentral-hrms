@@ -1048,6 +1048,9 @@ var EmployeeService = (function () {
     if (!view.can_view_payslips) {
       throw authorizationError_('You cannot view these payslips.');
     }
+    if (typeof PayslipService !== 'undefined' && PayslipService.listForEmployee) {
+      return PayslipService.listForEmployee(emp.employee_id, { lockedRunsOnly: true });
+    }
     return EmployeeRepository.listDocuments(emp.employee_id, HRMS.DOCUMENT_CATEGORY.PAYSLIP).map(function (d) {
       var enriched = typeof PayslipService.enrichPayslipDoc === 'function'
         ? PayslipService.enrichPayslipDoc(d, emp.employee_id)

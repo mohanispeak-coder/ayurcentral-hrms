@@ -808,7 +808,9 @@ var PayrollService = (function () {
 
     try {
       if (generatePayslips) {
-        PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session);
+        PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session, {
+          replaceExisting: false
+        });
       }
     } catch (e) {
       // Run is already LOCKED; payslip generation is idempotent on retry (trashes same file names).
@@ -890,7 +892,7 @@ var PayrollService = (function () {
   }
 
   /**
-   * Generate or replace one employee payslip for a LOCKED run.
+   * Regenerate one employee payslip for a LOCKED run (archives the prior file).
    */
   function regeneratePayslipForEmployee(runId, employeeId) {
     var session = requireHr_();
@@ -928,7 +930,8 @@ var PayrollService = (function () {
         snapshot.run,
         snapshot.record,
         empRow,
-        session
+        session,
+        { replaceExisting: true }
       );
     } catch (e) {
       Logger.log('PAYROLL_REGENERATE_ONE payslip failed for ' + runId + '/' + employeeId + ': ' + (e.message || e));

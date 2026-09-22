@@ -24,7 +24,85 @@ var PayslipService = (function () {
     return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API (identifier: Drive), then redeploy.';
   }
 
-  function generateForRun(run, records, employeesById, session) {
+  function payslipDriveFileOk_(doc) {
+    var id = doc && doc.drive_file_id ? String(doc.drive_file_id).trim() : '';
+    if (!id) return false;
+    try {
+      var f = DriveApp.getFileById(id);
+      return !!(f && !f.isTrashed());
+    } catch (ignore) {
+      return false;
+    }
+  }
+
+  function getArchiveFolder_(monthFolder) {
+    var it = monthFolder.getFoldersByName('Archive');
+    if (it.hasNext()) return it.next();
+    return monthFolder.createFolder('Archive');
+  }
+
+  /** Move superseded payslip file into month/Archive (keeps history for audit). */
+  function archiveDriveFile_(monthFolder, driveFileId) {
+    if (!driveFileId) return;
+    try {
+      var f = DriveApp.getFileById(String(driveFileId));
+      if (!f || f.isTrashed()) return;
+      var archive = getArchiveFolder_(monthFolder);
+      var tz = ConfigService.getTimezone() || 'Asia/Kolkata';
+      var stamp = Utilities.formatDate(new Date(), tz, 'yyyyMMdd_HHmmss');
+      var name = f.getName() || 'payslip';
+      var dot = name.lastIndexOf('.');
+      var base = dot >= 0 ? name.substring(0, dot) : name;
+      var ext = dot >= 0 ? name.substring(dot) : '';
+      f.setName(base + '-archived-' + stamp + ext);
+      f.moveTo(archive);
+    } catch (e) {
+      Logger.log('archiveDriveFile_ failed: ' + (e.message || e));
+    }
+  }
+
+  function isPayrollRunLocked_(runId) {
+    if (!runId) return false;
+    var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: String(runId) });
+    return !!(run && String(run.status || '').toUpperCase() === HRMS.PAYROLL_STATUS.LOCKED);
+  }
+
+  function sortDocsByPayPeriodDesc_(docs) {
+    function periodKey(doc) {
+      if (!doc || !doc.payroll_run_id) return 0;
+      var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: doc.payroll_run_id });
+      if (!run) return 0;
+      return Number(run.period_year) * 100 + Number(run.period_month);
+    }
+    return (docs || []).slice().sort(function (a, b) {
+      return periodKey(b) - periodKey(a);
+    });
+  }
+
+  function listForEmployee(employeeId, options) {
+    options = options || {};
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) return [];
+    var norm = empKey_(employeeId);
+    var docs = (DbService.getAllRecords(HRMS.SHEETS.DOCUMENTS) || []).filter(function (d) {
+      if (String(d.category || '').toUpperCase() !== HRMS.DOCUMENT_CATEGORY.PAYSLIP) return false;
+      return empKey_(d.employee_id) === norm;
+    });
+    docs = dedupePayslipsByRun(docs);
+    if (options.lockedRunsOnly) {
+      docs = docs.filter(function (d) {
+        return isPayrollRunLocked_(d.payroll_run_id);
+      });
+    }
+    docs = sortDocsByPayPeriodDesc_(docs);
+    return docs.map(function (d) {
+      return enrichPayslipDoc_(d, employeeId);
+    });
+  }
+
+  function generateForRun(run, records, employeesById, session, options) {
+    options = options || {};
+    var replaceExisting = options.replaceExisting === true;
     records = records || [];
     if (!records.length) return [];
     var folder = DriveService.getPayslipMonthFolder(run.period_year, run.period_month);
@@ -51,9 +129,29 @@ var PayslipService = (function () {
       var rec = records[i];
       try {
         var emp = resolveEmployee_(employeesById, rec.employee_id);
-        var file = writePayslipFile_(folder, run, rec, emp);
         var existingDocs = docsByEmp[String(rec.employee_id)] || docsByEmp[empKey_(rec.employee_id)] || [];
         var reuse = findReusableDocument(existingDocs, rec);
+        if (!replaceExisting && reuse && payslipDriveFileOk_(reuse)) {
+          if (String(rec.payslip_document_id || '') !== String(reuse.document_id)) {
+            recUpdates.push({
+              pk: rec.payroll_record_id,
+              updates: { payslip_document_id: reuse.document_id }
+            });
+          }
+          rec.payslip_document_id = reuse.document_id;
+          created.push({
+            document_id: reuse.document_id,
+            employee_id: rec.employee_id,
+            drive_file_id: reuse.drive_file_id,
+            reused: true,
+            skipped: true
+          });
+          continue;
+        }
+        if (replaceExisting && reuse && payslipDriveFileOk_(reuse)) {
+          archiveDriveFile_(folder, reuse.drive_file_id);
+        }
+        var file = writePayslipFile_(folder, run, rec, emp, { replaceExisting: replaceExisting });
         var documentId;
         if (reuse && reuse.document_id) {
           documentId = reuse.document_id;
@@ -111,13 +209,13 @@ var PayslipService = (function () {
     return created;
   }
 
-  function generateForEmployee(run, record, employee, session) {
+  function generateForEmployee(run, record, employee, session, options) {
     if (!record) throw validationError_('Payroll record is required.');
     var byId = {};
     byId[record.employee_id] = employee || {};
     var norm = empKey_(record.employee_id);
     if (norm) byId[norm] = employee || {};
-    var created = generateForRun(run, [record], byId, session);
+    var created = generateForRun(run, [record], byId, session, options || {});
     if (!created || !created.length) {
       throw new Error('Payslip file could not be created.');
     }
@@ -202,7 +300,7 @@ var PayslipService = (function () {
     }
   }
 
-  function trashPayslipFiles_(folder, baseName) {
+  function trashOrphanPayslipFiles_(folder, baseName) {
     ['.pdf', '.html'].forEach(function (ext) {
       var existing = folder.getFilesByName(baseName + ext);
       while (existing.hasNext()) {
@@ -211,11 +309,19 @@ var PayslipService = (function () {
     });
   }
 
-  function writePayslipFile_(folder, run, rec, emp) {
+  function writePayslipFile_(folder, run, rec, emp, writeOpts) {
+    writeOpts = writeOpts || {};
     var html = buildHtml_(run, rec, emp);
     var baseName = rec.employee_id + '-' + run.payroll_run_id + '-payslip';
     var fileName = baseName + '.pdf';
-    trashPayslipFiles_(folder, baseName);
+    if (writeOpts.replaceExisting) {
+      trashOrphanPayslipFiles_(folder, baseName);
+    } else {
+      var pdfIt = folder.getFilesByName(fileName);
+      if (pdfIt.hasNext()) return pdfIt.next();
+      var htmlIt = folder.getFilesByName(baseName + '.html');
+      if (htmlIt.hasNext()) return htmlIt.next();
+    }
     var pdfBlob = htmlToPdfBlob_(html, fileName);
     return folder.createFile(pdfBlob);
   }
@@ -261,8 +367,11 @@ var PayslipService = (function () {
       throw notFoundError_('Payslip not found.');
     }
     if (!PermissionService.isHrOrAdmin(session)) {
-      if (String(doc.employee_id) !== String(session.employee_id)) {
+      if (empKey_(doc.employee_id) !== empKey_(session.employee_id)) {
         throw authorizationError_('You can only download your own payslip.');
+      }
+      if (!isPayrollRunLocked_(doc.payroll_run_id)) {
+        throw authorizationError_('This payslip is not available until payroll is finalized for that month.');
       }
     }
     var file = DriveApp.getFileById(doc.drive_file_id);
@@ -286,15 +395,8 @@ var PayslipService = (function () {
   function listOwnPayslips() {
     var session = PermissionService.require(HRMS.ACTIONS.VIEW_OWN_PAYSLIP);
     var employeeId = String(session.employee_id || '').trim();
-    // My Payslips is always self-scope. Missing employee link → empty list (not all payslips).
     if (!employeeId) return [];
-    var docs = DbService.findRecords(HRMS.SHEETS.DOCUMENTS, {
-      employee_id: employeeId,
-      category: HRMS.DOCUMENT_CATEGORY.PAYSLIP
-    });
-    return dedupePayslipsByRun(docs).map(function (d) {
-      return enrichPayslipDoc_(d, employeeId);
-    });
+    return listForEmployee(employeeId, { lockedRunsOnly: true });
   }
 
   function daysInMonth_(year, month) {
@@ -495,8 +597,10 @@ var PayslipService = (function () {
     generateForEmployee: generateForEmployee,
     getPayslipForDownload: getPayslipForDownload,
     listOwnPayslips: listOwnPayslips,
+    listForEmployee: listForEmployee,
     findReusableDocument: findReusableDocument,
     dedupePayslipsByRun: dedupePayslipsByRun,
-    enrichPayslipDoc: enrichPayslipDoc_
+    enrichPayslipDoc: enrichPayslipDoc_,
+    payslipDriveFileOk: payslipDriveFileOk_
   };
 })();

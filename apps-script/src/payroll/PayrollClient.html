@@ -1878,8 +1878,10 @@
       if (regen) regen.addEventListener('click', function () {
         confirmModal({
           title: 'Generate all payslips?',
-          body: 'Creates or replaces payslip files for all employees and sends payslip email notifications to everyone in this payroll. Amounts stay unchanged.',
-          okLabel: 'Generate all payslips'
+          body: 'Creates payslip files for employees who do not have one yet for this payroll month. ' +
+            'Already generated payslips are kept (each month stays in Drive for lifetime download). ' +
+            'Sends email notifications. Payroll amounts stay unchanged.',
+          okLabel: 'Generate missing payslips'
         }).then(function (ok) {
           if (!ok) return;
           if (!setButtonLoading(regen, 'Generating...')) return;
@@ -1954,9 +1956,10 @@
       }
       empName = empName || employeeId;
       confirmModal({
-        title: 'Generate payslip for ' + empName + '?',
-        body: 'Creates or replaces the payslip file for this employee only and sends them the payslip email notification.',
-        okLabel: 'Generate & notify'
+        title: 'Regenerate payslip for ' + empName + '?',
+        body: 'Creates a new payslip file for this employee and month. The previous file is moved to Archive in Drive (not deleted). ' +
+          'Sends the payslip email notification. Payroll amounts stay unchanged.',
+        okLabel: 'Regenerate & notify'
       }).then(function (ok) {
         if (!ok) return;
         if (btn && !setButtonLoading(btn, 'Generating...')) return;
@@ -2650,7 +2653,7 @@
 
     function paintMyPayslips_(page, slips, own) {
         var html = '<div class="payroll-page"><div class="page-header"><h2>My payslips</h2>' +
-          '<p class="page-lede">Your generated payslips. Amounts come from the payroll snapshot, not live salary.</p></div>';
+          '<p class="page-lede">Download any finalized (locked) monthly payslip. Each month is kept separately.</p></div>';
         if (own && own.components) {
           html += '<div class="card"><h2>Current structure (read-only)</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Component</th><th>Kind</th><th class="num">Amount / %</th></tr></thead><tbody>' +
             own.components.map(function (c) {
