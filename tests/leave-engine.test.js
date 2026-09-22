@@ -74,6 +74,16 @@ check('same AM overlap', LeaveEngine.requestsOverlap(
 check('LV-07 April split', LeaveEngine.lopDaysInMonth('2026-04-29', '2026-05-02', false, 'CALENDAR_DAYS', 2026, 4) === 2);
 check('LV-07 May split', LeaveEngine.lopDaysInMonth('2026-04-29', '2026-05-02', false, 'CALENDAR_DAYS', 2026, 5) === 2);
 check('available days', LeaveEngine.availableDays({ entitled_days: 12, carried_forward_days: 2, used_days: 3, pending_days: 1 }) === 10);
+check('sheet serial joining date', LeaveEngine.formatIsoDate(45321) === '2024-02-29' ||
+  LeaveEngine.getLeaveYear(45321, 1) === '2024');
+check('entitlement implies balance track', LeaveEngine.typeRequiresBalance({
+  annual_entitlement_days: 12,
+  requires_balance: false
+}) === true);
+check('zero entitlement optional balance', LeaveEngine.typeRequiresBalance({
+  annual_entitlement_days: 0,
+  requires_balance: false
+}) === false);
 
 const mgr = { authorized: true, role: 'MANAGER', employee_id: 'EMP002' };
 const hr = { authorized: true, role: 'HR', employee_id: 'EMP001' };

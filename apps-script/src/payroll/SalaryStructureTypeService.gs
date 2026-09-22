@@ -1,5 +1,5 @@
 /**
- * Salary structure *types* — reusable, shared templates (like Leave Types).
+ * Salary structure *types* - reusable, shared templates (like Leave Types).
  *
  * A structure type lives in the SalaryStructures sheet with a structure_name,
  * a vertical_name (label only), status ACTIVE/INACTIVE, and an empty employee_id
@@ -309,7 +309,7 @@ var SalaryStructureTypeService = (function () {
     return isTypeRow_(row) ? row : null;
   }
 
-  /** Resolve a structure by its (case-insensitive) name — used by bulk upload. */
+  /** Resolve a structure by its (case-insensitive) name - used by bulk upload. */
   function findTypeByName(name) {
     name = trim_(name).toUpperCase();
     if (!name) return null;

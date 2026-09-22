@@ -1,22 +1,21 @@
 /**
  * Payroll bulk upload - .xlsx or .csv. Validate → preview → commit.
- * Attendance columns (days_present, days_absent, leave_days) are segregated;
- * paid_days and lop_days are derived for payroll calculation.
+ * Payroll extras only (bonus, TDS, etc.). Monthly attendance uses AttendanceBulkService.
  */
 var HRMS = HRMS || {};
 
 var PayrollBulkService = (function () {
-  var TEMPLATE_VERSION_ = '4';
+  var TEMPLATE_VERSION_ = '5';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_payroll_upload_';
 
   var HEADERS_ = [
-    'employee_id', 'display_name', 'work_email', 'working_days', 'days_present', 'days_absent', 'leave_days',
+    'employee_id', 'display_name', 'work_email',
     'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount', 'remarks'
   ];
 
-  var REQUIRED_HEADERS_ = ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days'];
+  var REQUIRED_HEADERS_ = ['employee_id'];
 
   function trim_(v) {
     if (v === null || v === undefined) return '';
@@ -208,15 +207,10 @@ var PayrollBulkService = (function () {
       var lines = [
         ['Template version: ' + TEMPLATE_VERSION_],
         ['Upload .xlsx or .csv. Do not change header names on the PayrollInputs sheet.'],
-        ['Template lists all ACTIVE employees with ID, name, and email only. Attendance columns are blank.'],
+        ['Template lists ACTIVE employees - ID, name, email. Attendance is on the Attendance screen.'],
         ['display_name and work_email are for reference only - do not edit employee_id.'],
-        ['Fill working_days, days_present, days_absent, and leave_days before upload.'],
-        ['employee_id must match an active employee eligible for this payroll month.'],
-        ['New employees are synced into the payroll run when you download the template or upload.'],
-        ['Employees are never created from Excel. Duplicate employee rows are rejected.'],
-        ['working_days must be greater than 0. days_present, days_absent, and leave_days default to 0 if empty.'],
-        ['paid_days = days_present + leave_days. lop_days = working_days - paid_days (calculated by payroll).'],
         ['Optional amounts (bonus, incentive, etc.) must be valid numbers >= 0.'],
+        ['employee_id must match an active employee eligible for this payroll month.'],
         ['After upload, review validation results before confirming import.'],
         ['Maximum ' + MAX_ROWS_ + ' rows per upload.']
       ];
@@ -447,24 +441,15 @@ var PayrollBulkService = (function () {
         rowErrors.push({ field: 'employee_id', message: 'Duplicate employee row. Each employee may appear only once.' });
       }
 
-      var working = parseNumberField_(row.working_days, 'working_days', true, false);
       var bonus = parseNumberField_(row.bonus, 'bonus', false, true);
       var incentive = parseNumberField_(row.incentive, 'incentive', false, true);
       var otherEarn = parseNumberField_(row.other_earnings, 'other_earnings', false, true);
       var otherDed = parseNumberField_(row.other_deductions, 'other_deductions', false, true);
       var tds = parseNumberField_(row.tds_amount, 'tds_amount', false, true);
 
-      [working, bonus, incentive, otherEarn, otherDed, tds].forEach(function (parsed) {
+      [bonus, incentive, otherEarn, otherDed, tds].forEach(function (parsed) {
         if (parsed.error) rowErrors.push({ field: 'amounts', message: parsed.error });
       });
-
-      var attendance = null;
-      if (!rowErrors.length && working.value != null) {
-        attendance = deriveAttendanceDays_(row, working.value);
-        if (attendance.error) {
-          rowErrors.push({ field: 'attendance', message: attendance.error });
-        }
-      }
 
       if (rowErrors.length) {
         errors.push({
@@ -490,9 +475,9 @@ var PayrollBulkService = (function () {
         var inp = inputMap[empId];
         var payload = {
           payroll_input_id: inp.payroll_input_id,
-          working_days: working.value,
-          paid_days: attendance.paid_days,
-          lop_days: attendance.lop_days,
+          working_days: inp.working_days,
+          paid_days: inp.paid_days,
+          lop_days: inp.lop_days,
           bonus: bonus.value,
           incentive: incentive.value,
           other_earnings: otherEarn.value,
@@ -507,12 +492,8 @@ var PayrollBulkService = (function () {
             rowNumber: rowLabel,
             employee_id: empId,
             display_name: employees[empId].display_name || empId,
-            working_days: working.value,
-            days_present: attendance.days_present,
-            days_absent: attendance.days_absent,
-            leave_days: attendance.leave_days,
-            paid_days: attendance.paid_days,
-            lop_days: attendance.lop_days
+            bonus: bonus.value,
+            incentive: incentive.value
           }
         });
       }

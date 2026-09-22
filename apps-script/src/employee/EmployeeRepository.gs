@@ -112,7 +112,10 @@ var EmployeeRepository = (function () {
   }
 
   function listLeaveBalances(employeeId) {
-    return DbService.findRecords(HRMS.SHEETS.LEAVE_BALANCES, { employee_id: String(employeeId) });
+    var norm = String(employeeId || '').trim().toUpperCase();
+    return DbService.getAllRecords(HRMS.SHEETS.LEAVE_BALANCES).filter(function (b) {
+      return String(b.employee_id || '').trim().toUpperCase() === norm;
+    });
   }
 
   function findCurrentSalaryStructure(employeeId) {

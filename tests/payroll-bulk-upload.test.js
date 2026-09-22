@@ -34,8 +34,7 @@ var payslip = read('payroll/PayslipService.gs');
 
 check('bulk-service-exists', /var PayrollBulkService/.test(bulk));
 check('bulk-csv-xlsx', /Upload a \.csv or \.xlsx file/.test(bulk));
-check('bulk-attendance-v4', /TEMPLATE_VERSION_ = '4'/.test(bulk) && /days_present/.test(bulk) &&
-  /display_name/.test(bulk) && /deriveAttendanceDays_/.test(bulk));
+check('bulk-extras-v5', /TEMPLATE_VERSION_ = '5'/.test(bulk) && /'employee_id', 'display_name', 'work_email'/.test(bulk));
 check('bulk-no-auto-create', /cannot be created from Excel/.test(bulk));
 check('bulk-duplicate-reject', /Duplicate employee row/.test(bulk));
 check('bulk-stage-cache', /STAGE_PREFIX_/.test(bulk) && /validateUpload/.test(bulk) && /commitUpload/.test(bulk));
@@ -55,8 +54,9 @@ check('api-bulk-commit', /apiCommitPayrollUpload/.test(api));
 
 check('one-page-ui', /paintUnifiedPayroll_/.test(client));
 check('finalize-button', /apiFinalizePayroll/.test(client) && /Finalize payroll/i.test(client));
-check('attendance-bulk-ui', /attendance-bulk-card/.test(client) && /Attendance bulk upload/.test(client));
-check('attendance-bulk-standalone-route', /renderAttendanceBulkUpload/.test(client) && /registerRoute\('attendance-bulk-upload'/.test(client));
+var attClient = read('payroll/AttendanceClient.html');
+check('attendance-register-client', /initAttendanceUi/.test(attClient) && /apiDownloadAttendanceRegisterTemplate/.test(attClient) &&
+  !/registerRoute\('attendance-bulk-upload'/.test(client));
 check('payroll-sync-employees-api', /apiSyncPayrollEmployees/.test(api));
 check('payroll-table-reset-on-run', /resetPayrollTableView_/.test(client) && /tableRunId/.test(client));
 check('payroll-load-eligible-button', /btn-pr-sync-employees/.test(client));

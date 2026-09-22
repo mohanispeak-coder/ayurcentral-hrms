@@ -18,7 +18,8 @@ HRMS.SHEETS = {
   NOTIFICATIONS: 'Notifications',
   AUDIT_LOG: 'AuditLog',
   SETTINGS: 'Settings',
-  DOCUMENTS: 'Documents'
+  DOCUMENTS: 'Documents',
+  EMPLOYEE_FIELD_DEFS: 'EmployeeFieldDefs'
 };
 
 HRMS.ROLES = {

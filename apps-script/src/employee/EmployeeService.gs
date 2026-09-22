@@ -11,11 +11,16 @@ var EmployeeService = (function () {
   ];
   var WORK_FIELDS_ = DIRECTORY_FIELDS_.concat(['joining_date']);
   var PERSONAL_FIELDS_ = [
-    'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address'
+    'first_name', 'last_name', 'display_name', 'father_husband_name',
+    'date_of_birth', 'gender', 'phone', 'address'
   ];
-  var SENSITIVE_FIELDS_ = ['salary_structure_id', 'ctc_monthly', 'pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name'];
+  var SENSITIVE_FIELDS_ = [
+    'salary_structure_id', 'ctc_monthly', 'uan_no', 'esi_no', 'pf_no',
+    'pan', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_name'
+  ];
   var EMPLOYMENT_EDIT_FIELDS_ = [
-    'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
+    'first_name', 'last_name', 'display_name', 'father_husband_name', 'date_of_birth', 'gender', 'phone', 'address',
+    'uan_no', 'esi_no', 'pf_no',
     'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
     'employment_type', 'location', 'notes'
   ].concat(SENSITIVE_FIELDS_);
@@ -99,6 +104,21 @@ var EmployeeService = (function () {
     return out;
   }
 
+  function attachCustomFieldsToView_(view, row) {
+    if (!view) return view;
+    var parsed = {};
+    if (typeof EmployeeFieldDefService !== 'undefined') {
+      parsed = EmployeeFieldDefService.parseCustomFieldsJson_(row.custom_fields_json);
+      try {
+        view.employee_field_defs = EmployeeFieldDefService.listFieldDefs(true);
+      } catch (ignoreDefs) {
+        view.employee_field_defs = [];
+      }
+    }
+    view.custom_fields = parsed;
+    return view;
+  }
+
   function managerNameMap_(employees) {
     var map = {};
     employees.forEach(function (e) {
@@ -179,6 +199,9 @@ var EmployeeService = (function () {
 
     var isSelf = session.employee_id === row.employee_id;
     var hr = PermissionService.isHrOrAdmin(session);
+    if (hr || isSelf) {
+      attachCustomFieldsToView_(out, row);
+    }
     var selfFlags = (typeof UserAccessService !== 'undefined')
       ? UserAccessService.getFlagsForSession(session)
       : { access_documents: true, access_payslips: true, access_leave: true };
@@ -476,7 +499,7 @@ var EmployeeService = (function () {
       }
     }
     if (salaryStructureId && ctcMonthly === '' && !errors.ctc_monthly) {
-      warnings.push('Salary structure is set but Monthly CTC is empty — payroll will need a CTC amount.');
+      warnings.push('Salary structure is set but Monthly CTC is empty - payroll will need a CTC amount.');
     }
 
     if (Object.keys(errors).length) {
@@ -514,7 +537,9 @@ var EmployeeService = (function () {
     if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
       try {
         LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-      } catch (ignoreGrant) {}
+      } catch (grantErr) {
+        Logger.log('Leave grant on create (first pass): ' + (grantErr.message || grantErr));
+      }
     }
     if (countLeaveBalances_(employeeId) <= before) {
       seedLeaveBalances_(employeeId, now);
@@ -689,6 +714,10 @@ var EmployeeService = (function () {
         first_name: trim_(payload.first_name),
         last_name: trim_(payload.last_name),
         display_name: displayName,
+        father_husband_name: trim_(payload.father_husband_name),
+        uan_no: trim_(payload.uan_no),
+        esi_no: trim_(payload.esi_no),
+        pf_no: trim_(payload.pf_no),
         date_of_birth: trim_(payload.date_of_birth) || '',
         gender: trim_(payload.gender),
         phone: trim_(payload.phone),
@@ -709,6 +738,9 @@ var EmployeeService = (function () {
         bank_account_number: trim_(payload.bank_account_number),
         bank_ifsc: trim_(payload.bank_ifsc).toUpperCase(),
         bank_name: trim_(payload.bank_name),
+        custom_fields_json: (typeof EmployeeFieldDefService !== 'undefined')
+          ? EmployeeFieldDefService.mergeCustomFieldsFromPayload_(payload, '')
+          : '',
         notes: trim_(payload.notes),
         created_at: now,
         created_by_email: session.email,
@@ -747,6 +779,14 @@ var EmployeeService = (function () {
       notifyEmployeeCreated_(session, record, createUser);
       if (createUser && typeof EmployeeWelcomeService !== 'undefined') {
         welcomeDelivery = EmployeeWelcomeService.sendWelcomeOnCreate(record, loginEmail);
+      }
+
+      try {
+        if (typeof PayrollService !== 'undefined' && PayrollService.syncOpenPayrollRunsForEmployee) {
+          PayrollService.syncOpenPayrollRunsForEmployee(employeeId);
+        }
+      } catch (ignorePayrollSync) {
+        Logger.log('Payroll sync after employee create: ' + (ignorePayrollSync.message || ignorePayrollSync));
       }
 
       var allWarnings = (validated.warnings || []).slice();
@@ -880,6 +920,10 @@ var EmployeeService = (function () {
       if (!updates.hasOwnProperty('vertical_name') && !trim_(row.vertical_name) && validated.vertical_name) {
         updates.vertical_name = validated.vertical_name;
       }
+      if (payload.custom_fields && typeof EmployeeFieldDefService !== 'undefined') {
+        updates.custom_fields_json = EmployeeFieldDefService.mergeCustomFieldsFromPayload_(
+          payload, row.custom_fields_json);
+      }
     } else {
       updates = applySelfContact_(payload);
     }
@@ -961,6 +1005,15 @@ var EmployeeService = (function () {
         try {
           LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
         } catch (ignore) {}
+      }
+      if (next === HRMS.EMPLOYEE_STATUS.ACTIVE) {
+        try {
+          if (typeof PayrollService !== 'undefined' && PayrollService.syncOpenPayrollRunsForEmployee) {
+            PayrollService.syncOpenPayrollRunsForEmployee(id);
+          }
+        } catch (ignorePayrollSync) {
+          Logger.log('Payroll sync after employee activate: ' + (ignorePayrollSync.message || ignorePayrollSync));
+        }
       }
       return getEmployee(session, id);
     });

@@ -54,7 +54,7 @@
       delete empViewCache.lists.employees;
       delete empViewCache.lists['my-team'];
       empViewCache.picker = null;
-      shellInv_(['employees', 'my-team', 'employee-create', 'employee-bulk-upload']);
+      shellInv_(['employees', 'my-team', 'employee-create', 'employee-bulk-upload', 'employee-field-defs']);
     }
 
     function invalidateEmpProfileLists_(employeeId, isSelf) {
@@ -230,12 +230,14 @@
       var refreshHtml = App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '';
       var addHtml = '';
       if (!team && (session.role === 'OWNER' || session.role === 'HR' || session.role === 'ADMIN')) {
-        addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-bulk">Bulk upload</button> ' +
+        addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-fields">Custom fields</button> ' +
+          '<button type="button" class="btn btn-secondary" id="btn-emp-bulk">Bulk upload</button> ' +
           '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
       }
       if (actions) actions.innerHTML = refreshHtml + addHtml;
       if ($('btn-emp-add')) $('btn-emp-add').addEventListener('click', function () { navigate('employee-create'); });
       if ($('btn-emp-bulk')) $('btn-emp-bulk').addEventListener('click', function () { navigate('employee-bulk-upload'); });
+      if ($('btn-emp-fields')) $('btn-emp-fields').addEventListener('click', function () { navigate('employee-field-defs'); });
       ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc', 'emp-filter-vertical'].forEach(function (id) {
         var el = $(id);
         if (!el) return;
@@ -419,6 +421,45 @@
       if ($('emp-next')) $('emp-next').addEventListener('click', function () { listState.page = page + 1; loadList(); });
     }
 
+    function customFieldsBlockHtml_(emp, canEdit) {
+      var defs = emp.employee_field_defs || [];
+      if (!defs.length) return '';
+      var values = emp.custom_fields || {};
+      var html = '<div class="form-span-2"><h3 class="section-title">Additional fields</h3><div class="form-grid emp-form-grid">';
+      defs.forEach(function (d) {
+        var val = values[d.field_key] != null ? values[d.field_key] : '';
+        if (canEdit) {
+          html += fieldGroup('custom_field_' + d.field_key, d.field_label,
+            '<input class="form-input emp-custom-field" data-custom-key="' + escapeHtml(d.field_key) + '" id="custom_field_' +
+            escapeHtml(d.field_key) + '" value="' + escapeHtml(val) + '">');
+        } else {
+          html += '<div><dt class="hint">' + escapeHtml(d.field_label) + '</dt><dd>' + escapeHtml(val || '-') + '</dd></div>';
+        }
+      });
+      html += '</div></div>';
+      return html;
+    }
+
+    function collectCustomFieldsPayload_() {
+      var custom = {};
+      document.querySelectorAll('.emp-custom-field').forEach(function (el) {
+        var key = el.getAttribute('data-custom-key');
+        if (key) custom[key] = el.value;
+      });
+      return Object.keys(custom).length ? { custom_fields: custom } : {};
+    }
+
+    function appendCustomFieldsToForm_(defs, values) {
+      if (!defs || !defs.length) return;
+      var form = $('emp-form');
+      if (!form) return;
+      var html = customFieldsBlockHtml_({ employee_field_defs: defs, custom_fields: values || {} }, true);
+      if (!html) return;
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      while (tmp.firstChild) form.appendChild(tmp.firstChild);
+    }
+
     function employeeFormHtml(emp, mode) {
       emp = emp || {};
       var types = [
@@ -446,6 +487,7 @@
       html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
       html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
       html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
+      html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name));
       html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
       html += fieldGroup('gender', 'Gender', select('gender', genders, emp.gender || ''));
       html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
@@ -461,6 +503,9 @@
       if (emp.can_view_payroll_ids || mode === 'create') {
         html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>');
         html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly));
+        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no));
+        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no));
+        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no));
         html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
         html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
         html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
@@ -469,6 +514,9 @@
       }
       if (mode === 'create' || (emp.view_mode === 'HR')) {
         html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
+      }
+      if (mode !== 'create' && emp.can_edit) {
+        html += customFieldsBlockHtml_(emp, true);
       }
       html += '</form>';
       if (mode === 'create') {
@@ -535,7 +583,7 @@
       var current = selectedValue != null ? String(selectedValue) : sel.value;
       var html = '<option value="">None</option>';
       (values || []).forEach(function (s) {
-        var label = s.salary_structure_id + ' — ' + s.structure_name + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
+        var label = s.salary_structure_id + ' - ' + s.structure_name + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
         html += '<option value="' + escapeHtml(s.salary_structure_id) + '"' +
           (String(s.salary_structure_id) === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
       });
@@ -587,15 +635,16 @@
 
     function collectEmployeePayload() {
       var ids = [
-        'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
+        'employee_id', 'first_name', 'last_name', 'display_name', 'father_husband_name', 'date_of_birth', 'gender', 'phone', 'address',
         'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
-        'employment_type', 'location', 'pan', 'bank_account_name', 'bank_account_number',
+        'employment_type', 'location', 'uan_no', 'esi_no', 'pf_no', 'pan', 'bank_account_name', 'bank_account_number',
         'bank_ifsc', 'bank_name', 'notes', 'google_login_email'
       ];
       ids.push('salary_structure_id');
       ids.push('ctc_monthly');
       var payload = formValues(ids);
       if ($('create_user')) payload.create_user = $('create_user').checked;
+      Object.assign(payload, collectCustomFieldsPayload_());
       return payload;
     }
 
@@ -619,6 +668,9 @@
       }
       loadVerticalOptions('');
       loadSalaryStructureOptions('');
+      callServer('apiListEmployeeFieldDefs').then(function (defs) {
+        appendCustomFieldsToForm_(defs, {});
+      }).catch(function () {});
       markView_(createKey);
       $('btn-emp-cancel').addEventListener('click', function () { navigate('employees'); });
       (function syncGoogleLoginFromWork_() {
@@ -843,14 +895,17 @@
           html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
           html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
           html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
+          html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name));
           html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
           html += fieldGroup('gender', 'Gender', input('gender', 'text', emp.gender));
         } else {
           html += '<div class="form-span-2">' + dl([
             ['First name', emp.first_name], ['Last name', emp.last_name],
-            ['Display name', emp.display_name], ['Date of birth', emp.date_of_birth], ['Gender', emp.gender]
+            ['Display name', emp.display_name], ['Father / husband name', emp.father_husband_name],
+            ['Date of birth', emp.date_of_birth], ['Gender', emp.gender]
           ]) + '</div>';
         }
+        html += customFieldsBlockHtml_(emp, emp.can_edit);
         html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
         html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true);
         html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-personal">Save</button>';
@@ -860,8 +915,9 @@
       }
       return dl([
         ['First name', emp.first_name], ['Last name', emp.last_name], ['Display name', emp.display_name],
+        ['Father / husband name', emp.father_husband_name],
         ['Date of birth', emp.date_of_birth], ['Gender', emp.gender], ['Phone', emp.phone], ['Address', emp.address]
-      ]);
+      ]) + customFieldsBlockHtml_(emp, false);
     }
 
     function employmentPanel(emp) {
@@ -895,6 +951,9 @@
         html += '<div class="form-grid emp-form-grid">';
         html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>');
         html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly));
+        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no));
+        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no));
+        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no));
         html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
         html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
         html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
@@ -905,8 +964,9 @@
         html += '<p class="hint">Salary structures (component percentages) are defined in Payroll → Salary structures. Percentages apply to the Monthly CTC above.</p>';
       } else {
         html += dl([
-          ['Salary structure', emp.salary_structure_id ? (emp.salary_structure_id + (emp.salary_structure_name ? ' — ' + emp.salary_structure_name : '')) : ''],
+          ['Salary structure', emp.salary_structure_id ? (emp.salary_structure_id + (emp.salary_structure_name ? ' - ' + emp.salary_structure_name : '')) : ''],
           ['Monthly CTC', emp.ctc_monthly],
+          ['UAN no.', emp.uan_no], ['ESI no.', emp.esi_no], ['PF no.', emp.pf_no],
           ['PAN', emp.pan], ['Account name', emp.bank_account_name],
           ['Account number', emp.bank_account_number], ['IFSC', emp.bank_ifsc], ['Bank', emp.bank_name]
         ]);
@@ -918,13 +978,15 @@
       function save(btn, feedbackEl) {
         clearFieldErrors();
         var payload = {};
-        ['first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
+        ['first_name', 'last_name', 'display_name', 'father_husband_name', 'date_of_birth', 'gender', 'phone', 'address',
           'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
-          'employment_type', 'location', 'notes', 'salary_structure_id', 'ctc_monthly', 'pan', 'bank_account_name', 'bank_account_number',
+          'employment_type', 'location', 'notes', 'salary_structure_id', 'ctc_monthly',
+          'uan_no', 'esi_no', 'pf_no', 'pan', 'bank_account_name', 'bank_account_number',
           'bank_ifsc', 'bank_name'].forEach(function (id) {
           var el = $(id);
           if (el && !el.disabled) payload[id] = el.value;
         });
+        Object.assign(payload, collectCustomFieldsPayload_());
         var route = emp.employee_id === (App.getState().session || {}).employee_id ? 'my-profile' : 'employee-profile';
         return callServer('apiUpdateEmployee', emp.employee_id, payload, {
           button: btn,

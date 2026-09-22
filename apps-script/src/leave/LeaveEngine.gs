@@ -53,11 +53,24 @@ var LeaveEngine = (function () {
     if (Object.prototype.toString.call(value) === '[object Date]') {
       if (isNaN(value.getTime())) return null;
       d = value;
+    } else if (typeof value === 'number' && isFinite(value)) {
+      if (value > 1000 && value < 1000000) {
+        d = new Date(Math.round((value - 25569) * 86400 * 1000));
+      } else {
+        d = new Date(value);
+      }
     } else if (typeof value === 'string') {
       var s = String(value).trim();
       if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
         var parts = s.substring(0, 10).split('-');
         d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      } else if (/^\d+(\.\d+)?$/.test(s)) {
+        var serial = Number(s);
+        if (serial > 1000 && serial < 1000000) {
+          d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+        } else {
+          d = new Date(s);
+        }
       } else {
         var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
         if (dmy) {
@@ -216,6 +229,7 @@ var LeaveEngine = (function () {
 
   function typeRequiresBalance_(type) {
     if (!type) return true;
+    if (toNumber(type.annual_entitlement_days) > 0) return true;
     if (!type.hasOwnProperty('requires_balance') && !type.hasOwnProperty('requiresBalance')) return true;
     return isTruthy(type.requires_balance !== undefined ? type.requires_balance : type.requiresBalance);
   }

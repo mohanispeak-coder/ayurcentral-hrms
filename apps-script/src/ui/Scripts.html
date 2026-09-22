@@ -26,6 +26,8 @@
     'my-profile': 'employee',
     'employee-create': 'employee',
     'employee-profile': 'employee',
+    'employee-bulk-upload': 'employee',
+    'employee-field-defs': 'employee',
     'my-leave': 'leave',
     'leave-apply': 'leave',
     'leave-approvals': 'leave',
@@ -54,6 +56,8 @@
     'my-profile': 'My Profile',
     'employee-create': 'Add employee',
     'employee-profile': 'Employee',
+    'employee-bulk-upload': 'Bulk upload',
+    'employee-field-defs': 'Employee custom fields',
     'my-leave': 'My Leave',
     'leave-apply': 'Apply Leave',
     'leave-approvals': 'Leave Approvals',
@@ -83,6 +87,8 @@
     'my-profile': 'Your employee record and the details you are allowed to see.',
     'employee-create': 'Employee ID is assigned on save. Payroll identifiers are optional.',
     'employee-profile': 'Employee master record.',
+    'employee-bulk-upload': 'Import many employees from Excel or CSV.',
+    'employee-field-defs': 'Define optional extra columns for profiles and bulk upload.',
     'my-leave': 'Balances for the current leave year and your requests.',
     'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
     'leave-approvals': 'Submitted requests waiting for a decision.',
@@ -681,7 +687,7 @@
 
   /**
    * google.script.run maps arguments by position. sessionToken must be appended last.
-   * Strip leaked UI objects only — never treat business strings (module ids, EMP001, run ids)
+   * Strip leaked UI objects only - never treat business strings (module ids, EMP001, run ids)
    * as the OTP token or every lazy-loaded module fails for non-deployers.
    */
   function prepareGoogleScriptArgs_(args) {
@@ -931,7 +937,8 @@
                     result.hasOwnProperty('created') || result.hasOwnProperty('preferences') ||
                     result.hasOwnProperty('components') || result.hasOwnProperty('structure') ||
                     result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
-                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline')) {
+                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline') ||
+                    (result.hasOwnProperty('base64') && result.hasOwnProperty('fileName'))) {
                   resolve(result);
                   return;
                 }
