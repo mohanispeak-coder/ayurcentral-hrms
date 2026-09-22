@@ -1,12 +1,16 @@
 /**
- * Pure leave math and rules — no spreadsheet I/O.
+ * Pure leave math and rules - no spreadsheet I/O.
  * Payroll consumes LOP day counts via LeaveLopService (this file computes the split).
  */
 var HRMS = HRMS || {};
 
 HRMS.LEAVE_STATUS = {
   DRAFT: 'DRAFT',
+  /** Legacy: treated as PENDING_MANAGER for employees. */
   SUBMITTED: 'SUBMITTED',
+  PENDING_MANAGER: 'PENDING_MANAGER',
+  PENDING_HR: 'PENDING_HR',
+  PENDING_ADMIN: 'PENDING_ADMIN',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
   CANCELLED: 'CANCELLED'
@@ -22,6 +26,7 @@ HRMS.LEAVE_AUDIT = {
   APPROVE: 'LEAVE_APPROVE',
   REJECT: 'LEAVE_REJECT',
   CANCEL: 'LEAVE_CANCEL',
+  REVOKE: 'LEAVE_REVOKE',
   TYPE_SAVE: 'LEAVE_TYPE_SAVE',
   YEAR_START: 'LEAVE_YEAR_START',
   GRANT: 'LEAVE_GRANT'
@@ -48,9 +53,32 @@ var LeaveEngine = (function () {
     if (Object.prototype.toString.call(value) === '[object Date]') {
       if (isNaN(value.getTime())) return null;
       d = value;
-    } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-      var parts = value.substring(0, 10).split('-');
-      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else if (typeof value === 'number' && isFinite(value)) {
+      if (value > 1000 && value < 1000000) {
+        d = new Date(Math.round((value - 25569) * 86400 * 1000));
+      } else {
+        d = new Date(value);
+      }
+    } else if (typeof value === 'string') {
+      var s = String(value).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        var parts = s.substring(0, 10).split('-');
+        d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      } else if (/^\d+(\.\d+)?$/.test(s)) {
+        var serial = Number(s);
+        if (serial > 1000 && serial < 1000000) {
+          d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+        } else {
+          d = new Date(s);
+        }
+      } else {
+        var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+        if (dmy) {
+          d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+        } else {
+          d = new Date(s);
+        }
+      }
     } else {
       d = new Date(value);
     }
@@ -130,6 +158,144 @@ var LeaveEngine = (function () {
     return String(toNumber(leaveYear) - 1);
   }
 
+  function leaveYearsInclusive(fromYear, toYear) {
+    var start = toNumber(fromYear);
+    var end = toNumber(toYear);
+    var out = [];
+    if (!start || !end || start > end) return out;
+    for (var y = start; y <= end; y++) out.push(String(y));
+    return out;
+  }
+
+  /**
+   * Leave years an employee should hold balances for, from joining year through as-of year.
+   * Future joiners (joining leave year after as-of) get no years.
+   */
+  function employeeLeaveYears(joiningDate, asOfDate, startMonth) {
+    var asOfYear = getLeaveYear(asOfDate || new Date(), startMonth);
+    var join = toDateOnly(joiningDate);
+    if (!join) return [asOfYear];
+    var joinYear = getLeaveYear(join, startMonth);
+    if (toNumber(joinYear) > toNumber(asOfYear)) return [];
+    return leaveYearsInclusive(joinYear, asOfYear);
+  }
+
+  function isEligibleForLeaveYear(joiningDate, leaveYear, startMonth) {
+    var join = toDateOnly(joiningDate);
+    if (!join) return true;
+    return toNumber(getLeaveYear(join, startMonth)) <= toNumber(leaveYear);
+  }
+
+  /**
+   * Inclusive calendar bounds for a leave year label (e.g. FY April: 2025 → 1 Apr 2025–31 Mar 2026).
+   */
+  function leaveYearDateRange(leaveYear, startMonth) {
+    var y = toNumber(leaveYear);
+    var sm = toNumber(startMonth, 1);
+    if (sm < 1 || sm > 12) sm = 1;
+    if (!y) return { start: null, end: null };
+    var start = new Date(y, sm - 1, 1);
+    var end = new Date(y + 1, sm - 1, 0);
+    return { start: start, end: end };
+  }
+
+  function inclusiveDaysBetween(startDate, endDate) {
+    var start = toDateOnly(startDate);
+    var end = toDateOnly(endDate);
+    if (!start || !end || end.getTime() < start.getTime()) return 0;
+    return Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  }
+
+  /**
+   * Annual entitlement for one leave year. Join-year is pro-rated from DOJ through year-end; later years use full annual.
+   */
+  function entitledDaysForLeaveYear(joiningDate, leaveYear, startMonth, annualEntitlementDays) {
+    var annual = toNumber(annualEntitlementDays, 0);
+    if (annual <= 0) return 0;
+    var range = leaveYearDateRange(leaveYear, startMonth);
+    if (!range.start || !range.end) return roundHalf_(annual);
+    var join = toDateOnly(joiningDate);
+    if (!join) return roundHalf_(annual);
+    var joinYear = getLeaveYear(join, startMonth);
+    if (toNumber(joinYear) > toNumber(leaveYear)) return 0;
+    if (toNumber(joinYear) < toNumber(leaveYear)) return roundHalf_(annual);
+    if (join.getTime() > range.end.getTime()) return 0;
+    if (join.getTime() <= range.start.getTime()) return roundHalf_(annual);
+    var daysEligible = inclusiveDaysBetween(join, range.end);
+    var totalDays = inclusiveDaysBetween(range.start, range.end);
+    if (totalDays <= 0) return 0;
+    return roundHalf_(annual * daysEligible / totalDays);
+  }
+
+  function typeRequiresBalance_(type) {
+    if (!type) return true;
+    if (toNumber(type.annual_entitlement_days) > 0) return true;
+    if (!type.hasOwnProperty('requires_balance') && !type.hasOwnProperty('requiresBalance')) return true;
+    return isTruthy(type.requires_balance !== undefined ? type.requires_balance : type.requiresBalance);
+  }
+
+  /**
+   * Decide which (leave_type_id, leave_year) rows to persist.
+   * Existing rows are never overwritten. A newly added leave type is granted
+   * for the through-year (and later), not back-filled into already-closed years,
+   * unless the employee has no balances yet (first grant / recovery).
+   *
+   * @param {Object} opts
+   * @param {Date|string=} opts.joiningDate
+   * @param {Date|string=} opts.asOfDate
+   * @param {number=} opts.startMonth
+   * @param {string|number=} opts.targetYear  Through-year (inclusive). Defaults to as-of leave year.
+   * @param {Array.<{leave_type_id: string}>} opts.types
+   * @param {Array.<{leave_type_id: string, leave_year: string}>} opts.existing
+   * @return {Array.<{leave_type_id: string, leave_year: string}>}
+   */
+  function planBalanceGrants(opts) {
+    opts = opts || {};
+    var startMonth = toNumber(opts.startMonth, 1);
+    var throughYear = opts.targetYear
+      ? String(opts.targetYear)
+      : getLeaveYear(opts.asOfDate || new Date(), startMonth);
+    if (!isEligibleForLeaveYear(opts.joiningDate, throughYear, startMonth)) return [];
+    var join = toDateOnly(opts.joiningDate);
+    var joinYear = join ? getLeaveYear(join, startMonth) : throughYear;
+    var years = leaveYearsInclusive(joinYear, throughYear);
+    var existingSet = {};
+    var existing = opts.existing || [];
+    existing.forEach(function (b) {
+      existingSet[String(b.leave_type_id) + '|' + String(b.leave_year)] = true;
+    });
+    var hasAny = existing.length > 0;
+    var types = opts.types || [];
+    var planned = [];
+    years.forEach(function (year) {
+      types.forEach(function (type) {
+        if (!typeRequiresBalance_(type)) return;
+        var id = String(type.leave_type_id || '');
+        if (!id) return;
+        var key = id + '|' + year;
+        if (existingSet[key]) return;
+        var isThrough = String(year) === String(throughYear);
+        var prevExists = !!existingSet[id + '|' + previousLeaveYear(year)];
+        if (isThrough || !hasAny || prevExists) {
+          planned.push({ leave_type_id: id, leave_year: year });
+          existingSet[key] = true;
+        }
+      });
+    });
+    return planned;
+  }
+
+  function matchesStatusFilter(status, filter) {
+    var f = String(filter || '').toUpperCase();
+    if (!f) return true;
+    var raw = String(status || '').toUpperCase();
+    var normalized = normalizeLeaveStatus_(status);
+    if (f === 'SUBMITTED' || f === 'PENDING') {
+      return isPendingApprovalStatus(status) || raw === 'SUBMITTED';
+    }
+    return raw === f || normalized === f;
+  }
+
   function carryForwardDays(previousBalance, carryForwardMax) {
     if (!previousBalance) return 0;
     var unused = availableDays({
@@ -171,7 +337,80 @@ var LeaveEngine = (function () {
   }
 
   function blockingStatuses() {
-    return [HRMS.LEAVE_STATUS.SUBMITTED, HRMS.LEAVE_STATUS.APPROVED];
+    return [
+      HRMS.LEAVE_STATUS.SUBMITTED,
+      HRMS.LEAVE_STATUS.PENDING_MANAGER,
+      HRMS.LEAVE_STATUS.PENDING_HR,
+      HRMS.LEAVE_STATUS.PENDING_ADMIN,
+      HRMS.LEAVE_STATUS.APPROVED
+    ];
+  }
+
+  function isPendingApprovalStatus(status) {
+    var s = normalizeLeaveStatus_(status);
+    return s === HRMS.LEAVE_STATUS.PENDING_MANAGER ||
+      s === HRMS.LEAVE_STATUS.PENDING_HR ||
+      s === HRMS.LEAVE_STATUS.PENDING_ADMIN;
+  }
+
+  /** Map legacy SUBMITTED to the manager queue. */
+  function normalizeLeaveStatus_(status) {
+    var s = String(status || '').toUpperCase();
+    if (s === HRMS.LEAVE_STATUS.SUBMITTED) return HRMS.LEAVE_STATUS.PENDING_MANAGER;
+    return s;
+  }
+
+  function normalizeApplicantRole_(role) {
+    role = String(role || HRMS.ROLES.EMPLOYEE).trim().toUpperCase();
+    if (role === HRMS.ROLES.OWNER) return HRMS.ROLES.ADMIN;
+    return role;
+  }
+
+  /**
+   * First queue after submit.
+   * @param {string} applicantUserRole Users.role for the applicant.
+   * @param {boolean} hasManager Whether Employees.manager_employee_id is set.
+   */
+  function initialPendingStatus(applicantUserRole, hasManager) {
+    var role = normalizeApplicantRole_(applicantUserRole);
+    if (role === HRMS.ROLES.HR || role === HRMS.ROLES.ADMIN) {
+      return HRMS.LEAVE_STATUS.PENDING_ADMIN;
+    }
+    if (role === HRMS.ROLES.MANAGER) {
+      return HRMS.LEAVE_STATUS.PENDING_HR;
+    }
+    if (hasManager) return HRMS.LEAVE_STATUS.PENDING_MANAGER;
+    return HRMS.LEAVE_STATUS.PENDING_HR;
+  }
+
+  /**
+   * @return {{ status: string, final: boolean }}
+   */
+  function statusAfterApproval(currentStatus, applicantUserRole) {
+    var status = normalizeLeaveStatus_(currentStatus);
+    var applicant = normalizeApplicantRole_(applicantUserRole);
+    if (status === HRMS.LEAVE_STATUS.PENDING_MANAGER) {
+      return { status: HRMS.LEAVE_STATUS.PENDING_HR, final: false };
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
+      if (applicant === HRMS.ROLES.MANAGER) {
+        return { status: HRMS.LEAVE_STATUS.PENDING_ADMIN, final: false };
+      }
+      return { status: HRMS.LEAVE_STATUS.APPROVED, final: true };
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_ADMIN) {
+      return { status: HRMS.LEAVE_STATUS.APPROVED, final: true };
+    }
+    return { status: status, final: false };
+  }
+
+  function statusLabel(status) {
+    var s = normalizeLeaveStatus_(status);
+    if (s === HRMS.LEAVE_STATUS.PENDING_MANAGER) return 'Awaiting manager';
+    if (s === HRMS.LEAVE_STATUS.PENDING_HR) return 'Awaiting HR';
+    if (s === HRMS.LEAVE_STATUS.PENDING_ADMIN) return 'Awaiting admin';
+    if (s === HRMS.LEAVE_STATUS.SUBMITTED) return 'Submitted';
+    return s;
   }
 
   function isBlockingStatus(status) {
@@ -232,18 +471,63 @@ var LeaveEngine = (function () {
     return Math.floor(ms / (24 * 60 * 60 * 1000));
   }
 
+  function isLeaveAuthority_(role) {
+    role = String(role || '').toUpperCase();
+    return role === HRMS.ROLES.OWNER || role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR;
+  }
+
+  function isAdminRole_(role) {
+    role = String(role || '').toUpperCase();
+    return role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.OWNER;
+  }
+
+  function normalizeEmployeeId_(id) {
+    return String(id || '').trim().toUpperCase();
+  }
+
+  /** Session user is the Employees.manager_employee_id for the applicant. */
+  function isAssignedReportingManager_(session, managerEmployeeId) {
+    if (!session || !session.employee_id) return false;
+    var selfId = normalizeEmployeeId_(session.employee_id);
+    var mgrId = normalizeEmployeeId_(managerEmployeeId);
+    return !!selfId && !!mgrId && selfId === mgrId;
+  }
+
+  /** Roles that may complete stage 1 when they are the assigned reporting manager. */
+  function canActManagerApprovalStage_(role) {
+    role = String(role || '').toUpperCase();
+    return role === HRMS.ROLES.MANAGER ||
+      role === HRMS.ROLES.HR ||
+      isAdminRole_(role);
+  }
+
   /**
-   * Self-approve is always denied. HR/ADMIN may decide others. MANAGER: direct reports only.
+   * Employee: manager → HR or Admin (either). Manager applicant: HR then Admin. HR applicant: Admin only.
+   * @param {string=} requestStatus LeaveRequests.status
+   * @param {string=} applicantUserRole Users.role for the employee who applied
    */
-  function canApproveRequest(session, targetEmployeeId, managerEmployeeId) {
+  function canApproveRequest(session, targetEmployeeId, managerEmployeeId, requestStatus, applicantUserRole) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
-    var selfId = String(session.employee_id || '');
-    var target = String(targetEmployeeId || '');
+    var selfId = normalizeEmployeeId_(session.employee_id);
+    var target = normalizeEmployeeId_(targetEmployeeId);
     if (selfId && target && selfId === target) return false;
-    if (role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR) return true;
-    if (role === HRMS.ROLES.MANAGER) {
-      return String(managerEmployeeId || '') === selfId;
+
+    var status = normalizeLeaveStatus_(requestStatus || HRMS.LEAVE_STATUS.PENDING_MANAGER);
+    var applicant = normalizeApplicantRole_(applicantUserRole);
+
+    if (status === HRMS.LEAVE_STATUS.PENDING_MANAGER) {
+      if (!isAssignedReportingManager_(session, managerEmployeeId)) return false;
+      return canActManagerApprovalStage_(role);
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
+      if (applicant === HRMS.ROLES.MANAGER) {
+        return role === HRMS.ROLES.HR;
+      }
+      return role === HRMS.ROLES.HR || isAdminRole_(role);
+    }
+    if (status === HRMS.LEAVE_STATUS.PENDING_ADMIN) {
+      return isAdminRole_(role);
     }
     return false;
   }
@@ -251,29 +535,68 @@ var LeaveEngine = (function () {
   function canViewEmployeeLeave(session, targetEmployeeId, managerEmployeeId) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
-    var selfId = String(session.employee_id || '');
-    var target = String(targetEmployeeId || '');
-    if (selfId === target) return true;
-    if (role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR) return true;
+    var selfId = normalizeEmployeeId_(session.employee_id);
+    var target = normalizeEmployeeId_(targetEmployeeId);
+    if (selfId && target && selfId === target) return true;
+    if (isLeaveAuthority_(role)) return true;
     if (role === HRMS.ROLES.MANAGER) {
-      return String(managerEmployeeId || '') === selfId;
+      return isAssignedReportingManager_(session, managerEmployeeId);
     }
     return false;
   }
 
-  function canCancel(session, request) {
+  function canCancel(session, request, context) {
     if (!session || !session.authorized || !request) return false;
+    context = context || {};
     var status = String(request.status || '').toUpperCase();
     var role = String(session.role || '').toUpperCase();
-    var own = String(session.employee_id || '') === String(request.employee_id || '');
-    var hr = role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR;
-    if (status === HRMS.LEAVE_STATUS.DRAFT || status === HRMS.LEAVE_STATUS.SUBMITTED) {
-      return own || hr;
+    var selfId = String(session.employee_id || '');
+    var own = selfId === String(request.employee_id || '');
+    var authority = isLeaveAuthority_(role);
+    var managerId = String(context.manager_employee_id || '');
+    var managerScope = role === HRMS.ROLES.MANAGER && managerId && managerId === selfId;
+    if (status === HRMS.LEAVE_STATUS.DRAFT || isPendingApprovalStatus(status)) {
+      if (own || authority) return true;
+      if (managerScope) {
+        return canApproveRequest(
+          session,
+          request.employee_id,
+          managerId,
+          status,
+          context.applicant_role || ''
+        );
+      }
+      return false;
     }
     if (status === HRMS.LEAVE_STATUS.APPROVED) {
-      return hr;
+      if (authority) return true;
+      return managerScope;
     }
     return false;
+  }
+
+  /** Undo an authority decision (approved, rejected, or pending submission). */
+  function canRevokeDecision(session, request, context) {
+    if (!session || !session.authorized || !request) return false;
+    context = context || {};
+    var status = String(request.status || '').toUpperCase();
+    var allowedStatus = isPendingApprovalStatus(status) ||
+      status === HRMS.LEAVE_STATUS.APPROVED ||
+      status === HRMS.LEAVE_STATUS.REJECTED;
+    if (!allowedStatus) return false;
+    if (isLeaveAuthority_(session.role)) return true;
+    var role = String(session.role || '').toUpperCase();
+    var selfId = String(session.employee_id || '');
+    var managerId = String(context.manager_employee_id || '');
+    if (role !== HRMS.ROLES.MANAGER || !managerId || managerId !== selfId) return false;
+    if (status === HRMS.LEAVE_STATUS.REJECTED) return true;
+    return canApproveRequest(
+      session,
+      request.employee_id,
+      managerId,
+      status,
+      context.applicant_role || ''
+    );
   }
 
   function canApplyFor(session, targetEmployeeId) {
@@ -281,7 +604,7 @@ var LeaveEngine = (function () {
     var role = String(session.role || '').toUpperCase();
     var target = String(targetEmployeeId || session.employee_id || '');
     if (!target) return false;
-    if (role === HRMS.ROLES.ADMIN || role === HRMS.ROLES.HR) return true;
+    if (isLeaveAuthority_(role)) return true;
     return target === String(session.employee_id || '');
   }
 
@@ -300,6 +623,13 @@ var LeaveEngine = (function () {
     getLeaveYear: getLeaveYear,
     availableDays: availableDays,
     previousLeaveYear: previousLeaveYear,
+    leaveYearsInclusive: leaveYearsInclusive,
+    employeeLeaveYears: employeeLeaveYears,
+    isEligibleForLeaveYear: isEligibleForLeaveYear,
+    leaveYearDateRange: leaveYearDateRange,
+    entitledDaysForLeaveYear: entitledDaysForLeaveYear,
+    planBalanceGrants: planBalanceGrants,
+    matchesStatusFilter: matchesStatusFilter,
     carryForwardDays: carryForwardDays,
     requestsOverlap: requestsOverlap,
     isBlockingStatus: isBlockingStatus,
@@ -310,7 +640,15 @@ var LeaveEngine = (function () {
     canApproveRequest: canApproveRequest,
     canViewEmployeeLeave: canViewEmployeeLeave,
     canCancel: canCancel,
+    canRevokeDecision: canRevokeDecision,
     canApplyFor: canApplyFor,
-    normalizeSession: normalizeSession
+    normalizeSession: normalizeSession,
+    normalizeLeaveStatus: normalizeLeaveStatus_,
+    normalizeEmployeeId: normalizeEmployeeId_,
+    initialPendingStatus: initialPendingStatus,
+    statusAfterApproval: statusAfterApproval,
+    isPendingApprovalStatus: isPendingApprovalStatus,
+    statusLabel: statusLabel,
+    typeRequiresBalance: typeRequiresBalance_
   };
 })();

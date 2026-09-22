@@ -51,7 +51,7 @@ check('refresh-aria-busy', /pageBusy\.setAttribute\('aria-busy'/.test(scripts) &
 
 check('ats-jobs-initial-skeleton', /skRows\(7,\s*7\)/.test(ats) && /ats-job-body/.test(ats));
 check('ats-jobs-keep-refresh', /keepRefresh[\s\S]*paintJobRows\(atsView\.jobs\)/.test(ats));
-check('ats-cands-initial-skeleton', /ats-cand-body[\s\S]*skRows\(7,\s*7\)/.test(ats));
+check('ats-cands-initial-skeleton', /ats-cand-body[\s\S]*skRows\(8,\s*8\)/.test(ats));
 check('ats-cands-keep-refresh', /keepRefresh[\s\S]*paintCandRows\(atsView\.candidates\)/.test(ats));
 check('ats-detail-skeleton', /function detailSkeleton/.test(ats) && /detailSkeleton\(\)/.test(ats));
 check('ats-no-plain-loading-p', !/<p>Loading…<\/p>/.test(ats));

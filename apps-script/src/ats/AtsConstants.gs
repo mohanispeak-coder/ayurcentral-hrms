@@ -1,5 +1,5 @@
 /**
- * ATS module constants. Candidates are not employees — never reuse employee_id.
+ * ATS module constants. Candidates are not employees - never reuse employee_id.
  * Sheet names live here (not in foundation Constants) so ATS can ship independently.
  */
 var ATS = ATS || {};
@@ -42,6 +42,11 @@ ATS.RECOMMENDATION = {
   HIRE: 'HIRE',
   HOLD: 'HOLD',
   NO_HIRE: 'NO_HIRE'
+};
+
+ATS.INTERVIEW_STATUS = {
+  SCHEDULED: 'SCHEDULED',
+  COMPLETED: 'COMPLETED'
 };
 
 ATS.EMPLOYMENT_TYPES = [
@@ -123,7 +128,7 @@ ATS.PUBLIC_JOB_FIELDS = [
   'requirements', 'skills', 'openings', 'closing_date', 'published_at'
 ];
 
-/** Reserved job columns for future job-board APIs — do not remove. */
+/** Reserved job columns for future job-board APIs - do not remove. */
 ATS.SHARE_CHANNELS = [
   { id: 'copy_link', label: 'Copy link', enabled: true, provider: 'manual' },
   { id: 'open_apply', label: 'Open application', enabled: true, provider: 'manual' },
@@ -133,7 +138,7 @@ ATS.SHARE_CHANNELS = [
 ];
 
 ATS.NAV_ITEMS = [
-  { id: 'ats', label: 'Recruitment', route: 'ats', icon: 'group', roles: ['ADMIN', 'HR', 'MANAGER'] },
-  { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['ADMIN', 'HR', 'MANAGER'] },
-  { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['ADMIN', 'HR', 'MANAGER'] }
+  { id: 'ats', label: 'Recruitment', route: 'ats', icon: 'group', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+  { id: 'ats-jobs', label: 'Jobs', route: 'ats-jobs', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+  { id: 'ats-candidates', label: 'Candidates', route: 'ats-candidates', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] }
 ];

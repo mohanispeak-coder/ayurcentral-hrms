@@ -1,19 +1,28 @@
 /**
- * Database schema bootstrap — creates sheets and headers without destroying data.
+ * Database schema bootstrap - creates sheets and headers without destroying data.
  */
 var HRMS = HRMS || {};
 
 var SchemaService = (function () {
   var SHEET_HEADERS_ = {};
   SHEET_HEADERS_[HRMS.SHEETS.EMPLOYEES] = [
-    'employee_id', 'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender',
+    'employee_id', 'first_name', 'last_name', 'display_name',
+    'father_husband_name', 'uan_no', 'esi_no', 'pf_no',
+    'date_of_birth', 'gender',
     'phone', 'address', 'work_email', 'department', 'designation', 'manager_employee_id',
-    'joining_date', 'employment_type', 'location', 'status', 'pan', 'bank_account_name',
-    'bank_account_number', 'bank_ifsc', 'bank_name', 'notes',
+    'vertical_name', 'joining_date', 'employment_type', 'location', 'status',
+    'salary_structure_id', 'ctc_monthly',
+    'pan', 'bank_account_name',
+    'bank_account_number', 'bank_ifsc', 'bank_name', 'custom_fields_json', 'notes',
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
+  SHEET_HEADERS_[HRMS.SHEETS.VERTICALS] = [
+    'vertical_name'
+  ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
-    'google_email', 'employee_id', 'role', 'status', 'created_at', 'updated_at'
+    'google_email', 'employee_id', 'role', 'status',
+    'access_documents', 'access_payslips', 'access_leave',
+    'created_at', 'updated_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_TYPES] = [
     'leave_type_id', 'code', 'name', 'is_paid', 'requires_balance', 'allow_half_day',
@@ -28,12 +37,17 @@ var SchemaService = (function () {
     'leave_request_id', 'employee_id', 'leave_type_id', 'start_date', 'end_date',
     'is_half_day', 'half_day_session', 'total_days', 'status', 'reason',
     'approver_employee_id', 'decision_at', 'decision_comment', 'submitted_at',
-    'cancelled_at', 'created_at'
+    'cancelled_at', 'created_at',
+    'manager_employee_id_at_submit',
+    'manager_approver_employee_id', 'manager_decision_at', 'manager_decision_comment',
+    'hr_approver_employee_id', 'hr_decision_at', 'hr_decision_comment',
+    'admin_approver_employee_id', 'admin_decision_at', 'admin_decision_comment'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_STRUCTURES] = [
-    'salary_structure_id', 'employee_id', 'effective_from', 'effective_to', 'status',
-    'ctc_monthly', 'currency', 'previous_structure_id', 'revision_reason',
-    'approved_by_email', 'created_at', 'created_by_email'
+    'salary_structure_id', 'structure_name', 'vertical_name', 'status',
+    'currency', 'created_at', 'created_by_email', 'updated_at', 'updated_by_email',
+    'employee_id', 'effective_from', 'effective_to',
+    'ctc_monthly', 'previous_structure_id', 'revision_reason', 'approved_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_COMPONENTS] = [
     'salary_component_id', 'salary_structure_id', 'component_code', 'component_name',
@@ -46,7 +60,7 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_INPUTS] = [
     'payroll_input_id', 'payroll_run_id', 'employee_id', 'working_days', 'paid_days',
-    'lop_days', 'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount',
+    'lop_days', 'daily_attendance_json', 'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount',
     'lop_from_leave', 'remarks'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_RECORDS] = [
@@ -69,6 +83,10 @@ var SchemaService = (function () {
     'setting_key', 'setting_value', 'value_type', 'description', 'admin_only',
     'updated_at', 'updated_by_email'
   ];
+  SHEET_HEADERS_[HRMS.SHEETS.EMPLOYEE_FIELD_DEFS] = [
+    'field_def_id', 'field_key', 'field_label', 'sort_order', 'status',
+    'created_at', 'updated_at'
+  ];
   SHEET_HEADERS_[HRMS.SHEETS.DOCUMENTS] = [
     'document_id', 'employee_id', 'category', 'title', 'drive_file_id',
     'drive_folder_id', 'payroll_run_id', 'uploaded_at', 'uploaded_by_email'
@@ -82,6 +100,8 @@ var SchemaService = (function () {
     ['seq_leave_type', '0', 'NUMBER', 'Last leave type sequence', true],
     ['seq_leave_request', '0', 'NUMBER', 'Last leave request sequence', true],
     ['seq_leave_balance', '0', 'NUMBER', 'Last leave balance sequence', true],
+    ['seq_salary_structure', '0', 'NUMBER', 'Last salary structure sequence', true],
+    ['seq_employee_field_def', '0', 'NUMBER', 'Last employee custom field def sequence', true],
     ['leave_year_start_month', '1', 'NUMBER', 'Leave year starts (1-12)', false],
     ['leave_count_method', 'WEEKDAYS_ONLY', 'STRING', 'WEEKDAYS_ONLY or CALENDAR_DAYS', false],
     ['default_working_days', '26', 'NUMBER', 'Default working days per month', false],
@@ -90,7 +110,26 @@ var SchemaService = (function () {
     ['block_lock_missing_bank', 'true', 'BOOLEAN', 'Block lock without bank', true],
     ['allow_lock_negative_net', 'false', 'BOOLEAN', 'Allow lock with negative net', true],
     ['notification_leave', 'true', 'BOOLEAN', 'Leave emails enabled', false],
+    ['leave_decision_notify_employee', 'true', 'BOOLEAN', 'Email employee on leave approve/reject', false],
+    ['leave_decision_notify_manager', 'true', 'BOOLEAN', 'Email manager on leave approve/reject', false],
+    ['leave_decision_notify_additional_enabled', 'false', 'BOOLEAN', 'Email extra recipient on leave approve/reject', false],
+    ['leave_decision_notify_additional_email', '', 'STRING', 'Extra recipient email (not the manager)', false],
     ['notification_payroll', 'true', 'BOOLEAN', 'Payroll emails enabled', false],
+    ['notification_employee_create', 'true', 'BOOLEAN', 'Email HR when employee is created', false],
+    ['role_access_EMPLOYEE_documents', 'true', 'BOOLEAN', 'Default: employee role document download', false],
+    ['role_access_EMPLOYEE_payslips', 'true', 'BOOLEAN', 'Default: employee role payslip download', false],
+    ['role_access_EMPLOYEE_leave', 'true', 'BOOLEAN', 'Default: employee role leave self-service', false],
+    ['role_access_MANAGER_documents', 'true', 'BOOLEAN', 'Default: manager role document download', false],
+    ['role_access_MANAGER_payslips', 'true', 'BOOLEAN', 'Default: manager role payslip download', false],
+    ['role_access_MANAGER_leave', 'true', 'BOOLEAN', 'Default: manager role leave self-service', false],
+    ['role_access_HR_documents', 'true', 'BOOLEAN', 'Default: HR role document download', false],
+    ['role_access_HR_payslips', 'true', 'BOOLEAN', 'Default: HR role payslip download', false],
+    ['role_access_HR_leave', 'true', 'BOOLEAN', 'Default: HR role leave self-service', false],
+    ['role_access_ADMIN_documents', 'true', 'BOOLEAN', 'Default: admin role document download', false],
+    ['role_access_ADMIN_payslips', 'true', 'BOOLEAN', 'Default: admin role payslip download', false],
+    ['role_access_ADMIN_leave', 'true', 'BOOLEAN', 'Default: admin role leave self-service', false],
+    ['notification_employee_welcome', 'true', 'BOOLEAN', 'Welcome email to new employee when login is created', false],
+    ['hrms_webapp_url', '', 'STRING', 'HRMS web app /exec URL for employee emails (optional; uses deployment URL if empty)', false],
     ['drive_root_folder_id', '', 'STRING', 'Drive root folder ID', true],
     ['timezone', 'Asia/Kolkata', 'STRING', 'Application timezone', false],
     ['app_mode', 'PRODUCTION', 'STRING', 'PRODUCTION or DEMO (admin only)', true],
@@ -99,6 +138,26 @@ var SchemaService = (function () {
     ['demo_roles', '', 'STRING', 'DEMO only: email:ROLE overrides (comma-separated)', true]
   ];
 
+  function seedVerticals_(sheet) {
+    if (!sheet) return 0;
+    var existing = {};
+    if (sheet.getLastRow() >= 2) {
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var name = String(data[i][0] || '').trim().toUpperCase();
+        if (name) existing[name] = true;
+      }
+    }
+    var inserted = 0;
+    (HRMS.VERTICALS || []).forEach(function (name) {
+      var vertical = String(name || '').trim().toUpperCase();
+      if (!vertical || existing[vertical]) return;
+      sheet.appendRow([vertical]);
+      inserted++;
+    });
+    return inserted;
+  }
+
   function applyUsersValidations_(sheet) {
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var roleCol = headers.indexOf('role') + 1;
@@ -106,7 +165,7 @@ var SchemaService = (function () {
     var lastRow = Math.max(sheet.getMaxRows(), 1000);
     if (roleCol > 0) {
       var roleRule = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'], true)
+        .requireValueInList(['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'], true)
         .setAllowInvalid(false)
         .build();
       sheet.getRange(2, roleCol, lastRow, roleCol).setDataValidation(roleRule);
@@ -120,6 +179,29 @@ var SchemaService = (function () {
     }
   }
 
+  function mergeSheetHeaders_(sheet, headers) {
+    if (!sheet || !headers || !headers.length) return;
+    var lastCol = Math.max(sheet.getLastColumn(), 1);
+    var row1 = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var existing = [];
+    row1.forEach(function (cell) {
+      var h = String(cell || '').trim();
+      if (h) existing.push(h);
+    });
+    if (!existing.length) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      return;
+    }
+    headers.forEach(function (header) {
+      if (existing.indexOf(header) >= 0) return;
+      var col = existing.length + 1;
+      sheet.getRange(1, col).setValue(header).setFontWeight('bold');
+      existing.push(header);
+    });
+  }
+
   function ensureSheet_(ss, name, headers) {
     var sheet = ss.getSheetByName(name);
     var created = false;
@@ -127,11 +209,7 @@ var SchemaService = (function () {
       sheet = ss.insertSheet(name);
       created = true;
     }
-    if (sheet.getLastRow() === 0 || sheet.getRange(1, 1).getValue() === '') {
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.setFrozenRows(1);
-      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
-    }
+    mergeSheetHeaders_(sheet, headers);
     if (name === HRMS.SHEETS.USERS && created) {
       applyUsersValidations_(sheet);
     }
@@ -152,7 +230,11 @@ var SchemaService = (function () {
     var now = new Date();
     var actor = Session.getActiveUser().getEmail().toLowerCase() || 'system';
     var inserted = 0;
-    DEFAULT_SETTINGS_.forEach(function (row) {
+    var rowsToSeed = DEFAULT_SETTINGS_.slice();
+    if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.defaultSettingsRows) {
+      rowsToSeed = rowsToSeed.concat(HrmsContentTemplateService.defaultSettingsRows());
+    }
+    rowsToSeed.forEach(function (row) {
       if (existing[row[0]]) return;
       sheet.appendRow([
         row[0], row[1], row[2], row[3], row[4], now, actor
@@ -186,6 +268,9 @@ var SchemaService = (function () {
     Object.keys(SHEET_HEADERS_).forEach(function (name) {
       var result = ensureSheet_(ss, name, SHEET_HEADERS_[name]);
       sheetResults.push({ name: name, created: result.created });
+      if (name === HRMS.SHEETS.VERTICALS) {
+        seedVerticals_(result.sheet);
+      }
     });
 
     var settingsSeed = seedDefaultSettings_(ss);
@@ -239,9 +324,22 @@ var SchemaService = (function () {
     };
   }
 
+  function ensureSheetHeaders(sheetName) {
+    var headers = SHEET_HEADERS_[sheetName];
+    if (!headers) return { ok: false, reason: 'unknown sheet' };
+    var sheet = ConfigService.openSpreadsheet().getSheetByName(sheetName);
+    if (!sheet) return { ok: false, reason: 'missing tab' };
+    mergeSheetHeaders_(sheet, headers);
+    return { ok: true };
+  }
+
   return {
     setupDatabase: setupDatabase,
     getSchemaInfo: getSchemaInfo,
+    ensureSheetHeaders: ensureSheetHeaders,
+    seedMissingDefaultSettings: function (ss) {
+      return seedDefaultSettings_(ss || ConfigService.openSpreadsheet());
+    },
     ensureModuleSheets: function () {
       return ensureModuleSheets_(ConfigService.openSpreadsheet());
     }

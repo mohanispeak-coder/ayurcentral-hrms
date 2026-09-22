@@ -1,5 +1,5 @@
 /**
- * Notification Center tests — engine is always runnable; sheet cases skip without DB.
+ * Notification Center tests - engine is always runnable; sheet cases skip without DB.
  * Run testNotifications_All from the Apps Script editor.
  */
 
@@ -105,7 +105,7 @@ function testNotifications_SheetSmoke() {
   record('ensure-sheets', !!(ensured && ensured.ok));
   var session = AuthService.resolveSession();
   if (!session.authorized) {
-    record('auth', true, 'skipped — not authorized in editor');
+    record('auth', true, 'skipped - not authorized in editor');
     return { results: results, allPassed: true, skipped: true };
   }
   var listed = NotificationService.getNotifications(session, { limit: 5 });

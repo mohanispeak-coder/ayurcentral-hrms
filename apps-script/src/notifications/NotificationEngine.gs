@@ -1,5 +1,5 @@
 /**
- * Pure notification logic — no spreadsheet, MailApp, or LockService.
+ * Pure notification logic - no spreadsheet, MailApp, or LockService.
  * NotificationService persists; adapters build typed payloads.
  */
 var HRMS = HRMS || {};
@@ -210,7 +210,7 @@ var NotificationEngine = (function () {
   }
 
   function payslipSubject(year, month) {
-    return 'Payslip available — ' + periodLabel(year, month);
+    return 'Payslip available - ' + periodLabel(year, month);
   }
 
   function payslipContainsNet_(text) {
@@ -240,11 +240,14 @@ var NotificationEngine = (function () {
   function isHrOrAdmin(session) {
     if (!session || !session.authorized) return false;
     var role = String(session.role || '').toUpperCase();
-    return role === 'HR' || role === 'ADMIN';
+    // Keep in sync with PermissionService.isHrOrAdmin.
+    return role === 'OWNER' || role === 'HR' || role === 'ADMIN';
   }
 
   function isAdmin(session) {
-    return !!(session && session.authorized && String(session.role || '').toUpperCase() === 'ADMIN');
+    if (!session || !session.authorized) return false;
+    var role = String(session.role || '').toUpperCase();
+    return role === 'ADMIN' || role === 'OWNER';
   }
 
   function ownsRow(row, session) {
@@ -292,12 +295,38 @@ var NotificationEngine = (function () {
     }
   }
 
+  var LEAVE_ROUTE_ = {
+    MY_LEAVE: 'my-leave',
+    APPROVALS: 'leave-approvals',
+    ADMIN: 'leave-admin'
+  };
+
+  /**
+   * Recipient-aware leave inbox destination.
+   * audience hint: employee | hr | admin | manager | approver
+   */
+  function leaveRouteForRecipient_(recipientEmployeeId, requestEmployeeId, audience) {
+    var recipient = trim_(recipientEmployeeId);
+    var owner = trim_(requestEmployeeId);
+    if (recipient && owner && recipient === owner) {
+      return LEAVE_ROUTE_.MY_LEAVE;
+    }
+    var aud = trim_(audience).toLowerCase();
+    if (aud === 'hr' || aud === 'admin') {
+      return LEAVE_ROUTE_.ADMIN;
+    }
+    if (aud === 'employee' || aud === 'owner') {
+      return LEAVE_ROUTE_.MY_LEAVE;
+    }
+    return LEAVE_ROUTE_.APPROVALS;
+  }
+
   function actionFor(type, sourceRecordId, extra) {
     extra = extra || {};
     var def = getTypeDef(type) || {};
     var route = extra.action_route || def.actionRoute || '';
     var params = extra.action_params ? parseActionParams(extra.action_params) : {};
-    if (route === 'leave-approvals' && sourceRecordId && !params.leaveRequestId) {
+    if ((route === 'leave-approvals' || route === 'my-leave') && sourceRecordId && !params.leaveRequestId) {
       params.leaveRequestId = sourceRecordId;
     }
     if (route === 'payroll-run' && sourceRecordId && !params.runId) {
@@ -623,12 +652,12 @@ var NotificationEngine = (function () {
   function markReadInStore_(store, notificationId, session, now) {
     var id = trim_(notificationId);
     if (!id) return { ok: false, error: 'notification_id is required.' };
-    var rows = null;
+    var rows = store.list ? (store.list() || []) : null;
     var row = null;
     if (store.find) {
       row = store.find(id);
-    } else {
-      rows = store.list() || [];
+    }
+    if (!row && rows) {
       for (var i = 0; i < rows.length; i++) {
         if (trim_(rows[i].notification_id) === id) {
           row = rows[i];
@@ -772,7 +801,8 @@ var NotificationEngine = (function () {
     };
   }
 
-  function buildLeaveSubmitted(rec, employee, manager) {
+  function buildLeaveSubmitted(rec, employee, recipient, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
@@ -780,46 +810,114 @@ var NotificationEngine = (function () {
       end_date: rec.end_date,
       total_days: rec.total_days
     };
-    return payloadBase_(TYPE.LEAVE_SUBMITTED, manager, rec.leave_request_id, vars, {
-      title: 'Leave submitted for ' + vars.display_name,
-      message: vars.display_name + ' (' + vars.employee_id + ') submitted leave from ' +
-        vars.start_date + ' to ' + vars.end_date + ' (' + vars.total_days + ' day(s)).',
-      email_body: interpolate(
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
+    var route = leaveRouteForRecipient_(
+      recipient && recipient.employee_id,
+      requestEmployeeId,
+      extra.audience || extra.audience_hint || 'approver'
+    );
+    return payloadBase_(TYPE.LEAVE_SUBMITTED, recipient, rec.leave_request_id, vars, {
+      title: extra.title || ('Leave submitted for ' + vars.display_name),
+      message: extra.message || (
+        vars.display_name + ' (' + vars.employee_id + ') submitted leave from ' +
+        vars.start_date + ' to ' + vars.end_date + ' (' + vars.total_days + ' day(s)).'
+      ),
+      email_body: extra.email_body || interpolate(
         '{display_name} ({employee_id}) submitted leave from {start_date} to {end_date}.\nOpen HRMS to review this request.',
         vars
-      )
+      ),
+      action_route: extra.action_route || route,
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
-  function buildLeaveApproved(rec, employee) {
+  function buildLeaveApproved(rec, employee, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
       start_date: rec.start_date,
       end_date: rec.end_date
     };
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
     return payloadBase_(TYPE.LEAVE_APPROVED, employee, rec.leave_request_id, vars, {
-      title: 'Leave approved',
-      message: 'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was approved.',
-      email_subject: 'Leave approved'
+      title: extra.title || 'Leave approved',
+      message: extra.message || (
+        'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was approved.'
+      ),
+      email_subject: extra.email_subject || extra.title || 'Leave approved',
+      email_body: extra.email_body || '',
+      action_route: extra.action_route || leaveRouteForRecipient_(
+        employee && employee.employee_id,
+        requestEmployeeId,
+        'employee'
+      ),
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
-  function buildLeaveRejected(rec, employee) {
+  function buildLeaveRejected(rec, employee, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: employee.employee_id,
       display_name: employee.display_name || employee.employee_id,
       start_date: rec.start_date,
-      end_date: rec.end_date
+      end_date: rec.end_date,
+      total_days: rec.total_days
     };
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
     return payloadBase_(TYPE.LEAVE_REJECTED, employee, rec.leave_request_id, vars, {
-      title: 'Leave rejected',
-      message: 'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was not approved.',
-      email_subject: 'Leave rejected'
+      title: extra.title || 'Leave rejected',
+      message: extra.message || (
+        'Your leave from ' + vars.start_date + ' to ' + vars.end_date + ' was not approved.'
+      ),
+      email_subject: extra.email_subject || extra.title || 'Leave rejected',
+      email_body: extra.email_body || '',
+      action_route: extra.action_route || leaveRouteForRecipient_(
+        employee && employee.employee_id,
+        requestEmployeeId,
+        'employee'
+      ),
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
-  function buildLeaveCancelled(rec, recipient, actorName) {
+  function buildLeaveDecisionNotice(rec, employee, recipient, decision, extra) {
+    extra = extra || {};
+    var vars = {
+      employee_id: employee.employee_id,
+      display_name: employee.display_name || employee.employee_id,
+      start_date: rec.start_date,
+      end_date: rec.end_date,
+      total_days: rec.total_days,
+      status: String(decision || '').toLowerCase() === 'rejected' ? 'Rejected' : 'Approved'
+    };
+    var requestEmployeeId = trim_(rec.employee_id) || trim_(employee && employee.employee_id);
+    var typeDef = String(decision || '').toLowerCase() === 'rejected' ? TYPE.LEAVE_REJECTED : TYPE.LEAVE_APPROVED;
+    var title = vars.status === 'Rejected'
+      ? ('Leave rejected for ' + vars.display_name)
+      : ('Leave approved for ' + vars.display_name);
+    var message = extra.email_body || (
+      'Employee Name: ' + vars.display_name + '\n' +
+      'Leave Dates: ' + vars.start_date + ' to ' + vars.end_date + '\n' +
+      'Number of Days: ' + vars.total_days + '\n' +
+      'Status: ' + vars.status
+    );
+    return payloadBase_(typeDef, recipient, rec.leave_request_id, vars, {
+      title: extra.title || title,
+      message: extra.message || message,
+      email_body: extra.email_body || message,
+      action_route: extra.action_route || leaveRouteForRecipient_(
+        recipient && recipient.employee_id,
+        requestEmployeeId,
+        extra.audience || 'approver'
+      ),
+      dedupe_bucket: extra.dedupe_bucket || ('decision|' + vars.status)
+    });
+  }
+
+  function buildLeaveCancelled(rec, recipient, actorName, extra) {
+    extra = extra || {};
     var vars = {
       employee_id: rec.employee_id,
       display_name: rec.display_name || rec.employee_id,
@@ -827,10 +925,19 @@ var NotificationEngine = (function () {
       end_date: rec.end_date,
       actor: actorName || 'HR'
     };
+    var route = leaveRouteForRecipient_(
+      recipient && recipient.employee_id,
+      trim_(rec.employee_id),
+      extra.audience || extra.audience_hint || ''
+    );
     return payloadBase_(TYPE.LEAVE_CANCELLED, recipient, rec.leave_request_id, vars, {
-      title: 'Leave cancelled',
-      message: 'Leave for ' + vars.display_name + ' from ' + vars.start_date + ' to ' +
+      title: extra.title || 'Leave cancelled',
+      message: extra.message || (
+        'Leave for ' + vars.display_name + ' from ' + vars.start_date + ' to ' +
         vars.end_date + ' was cancelled' + (actorName ? ' by ' + actorName : '') + '.'
+      ),
+      action_route: extra.action_route || route,
+      dedupe_bucket: extra.dedupe_bucket || ''
     });
   }
 
@@ -856,47 +963,63 @@ var NotificationEngine = (function () {
   function buildPayrollReadyReview(run, recipient) {
     var period = periodLabel(run.period_year, run.period_month);
     return payloadBase_(TYPE.PAYROLL_READY_REVIEW, recipient, run.payroll_run_id, { period: period }, {
-      title: 'Payroll ready for review — ' + period,
+      title: 'Payroll ready for review - ' + period,
       message: 'The ' + period + ' payroll run is under review.',
-      email_subject: 'Payroll ready for review — ' + period
+      email_subject: 'Payroll ready for review - ' + period
     });
   }
 
   function buildPayrollApproved(run, recipient) {
     var period = periodLabel(run.period_year, run.period_month);
     return payloadBase_(TYPE.PAYROLL_APPROVED, recipient, run.payroll_run_id, { period: period }, {
-      title: 'Payroll approved — ' + period,
+      title: 'Payroll approved - ' + period,
       message: 'The ' + period + ' payroll run was approved.',
-      email_subject: 'Payroll approved — ' + period
+      email_subject: 'Payroll approved - ' + period
     });
   }
 
   function buildPayrollLocked(run, recipient) {
     var period = periodLabel(run.period_year, run.period_month);
     return payloadBase_(TYPE.PAYROLL_LOCKED, recipient, run.payroll_run_id, { period: period }, {
-      title: 'Payroll locked — ' + period,
+      title: 'Payroll locked - ' + period,
       message: 'The ' + period + ' payroll run is locked. Amounts will not change.',
-      email_subject: 'Payroll locked — ' + period
+      email_subject: 'Payroll locked - ' + period
     });
   }
 
   function buildAtsInternal(type, application, recipient) {
+    application = application || {};
     var name = application.candidate_name || 'A candidate';
+    var role = application.requisition_title || application.title || 'a role';
+    var when = application.interview_at ? String(application.interview_at) : '';
     var titles = {};
     titles[TYPE.ATS_NEW_APPLICATION] = 'New application received';
     titles[TYPE.ATS_SHORTLISTED] = name + ' shortlisted';
-    titles[TYPE.ATS_INTERVIEW_SCHEDULED] = 'Interview scheduled — ' + name;
-    titles[TYPE.ATS_FEEDBACK_PENDING] = 'Interview feedback pending — ' + name;
+    titles[TYPE.ATS_INTERVIEW_SCHEDULED] = 'Interview scheduled - ' + name;
+    titles[TYPE.ATS_FEEDBACK_PENDING] = 'Interview feedback pending - ' + name;
     titles[TYPE.ATS_SELECTED] = name + ' selected';
     var messages = {};
-    messages[TYPE.ATS_NEW_APPLICATION] = name + ' applied for ' + (application.requisition_title || 'a role') + '.';
-    messages[TYPE.ATS_SHORTLISTED] = name + ' was shortlisted for ' + (application.requisition_title || 'a role') + '.';
-    messages[TYPE.ATS_INTERVIEW_SCHEDULED] = 'An interview is scheduled for ' + name + '.';
-    messages[TYPE.ATS_FEEDBACK_PENDING] = 'Feedback is pending for ' + name + '.';
-    messages[TYPE.ATS_SELECTED] = name + ' was selected. Complete offer steps in ATS.';
+    messages[TYPE.ATS_NEW_APPLICATION] = name + ' applied for ' + role + '.';
+    messages[TYPE.ATS_SHORTLISTED] = name + ' was shortlisted for ' + role + '.';
+    messages[TYPE.ATS_INTERVIEW_SCHEDULED] = when
+      ? ('Interview with ' + name + ' for ' + role + ' is scheduled on ' + when + '.')
+      : ('Interview with ' + name + ' for ' + role + ' is scheduled.');
+    messages[TYPE.ATS_FEEDBACK_PENDING] = when
+      ? ('Feedback is pending for ' + name + ' (interview on ' + when + ').')
+      : ('Feedback is pending for ' + name + '.');
+    messages[TYPE.ATS_SELECTED] = name + ' was selected for ' + role + '. Complete offer steps in ATS.';
+    var subject = titles[type] || 'ATS update';
+    if (type === TYPE.ATS_INTERVIEW_SCHEDULED && when) {
+      subject = 'Interview scheduled - ' + name + ' on ' + when;
+    } else if (type === TYPE.ATS_FEEDBACK_PENDING && when) {
+      subject = 'Interview feedback pending - ' + name + ' (' + when + ')';
+    }
+    var message = messages[type] || '';
     return payloadBase_(type, recipient, application.application_id, {}, {
       title: titles[type] || 'ATS update',
-      message: messages[type] || ''
+      message: message,
+      email_subject: subject,
+      email_body: message
     });
   }
 
@@ -906,7 +1029,7 @@ var NotificationEngine = (function () {
     if (!def || def.audience !== 'candidate') {
       return { ok: false, errors: ['Not a candidate email type.'] };
     }
-    var name = candidate.candidate_name || 'there';
+    var name = candidate.full_name || candidate.candidate_name || 'there';
     var role = extra.requisition_title || candidate.requisition_title || 'the role';
     var subject = extra.subject;
     var body = extra.body;
@@ -948,7 +1071,7 @@ var NotificationEngine = (function () {
     var name = employee.display_name || employee.employee_id;
     var y = Number(years) || 0;
     return payloadBase_(TYPE.WORK_ANNIVERSARY, employee, employee.employee_id, {}, {
-      title: 'Work anniversary — ' + name,
+      title: 'Work anniversary - ' + name,
       message: name + ' completes ' + y + ' year' + (y === 1 ? '' : 's') + ' with AyurCentral.',
       dedupe_bucket: String(year || '')
     });
@@ -1067,6 +1190,8 @@ var NotificationEngine = (function () {
     parseActionParams: parseActionParams,
     stringifyActionParams: stringifyActionParams,
     actionFor: actionFor,
+    leaveRouteForRecipient: leaveRouteForRecipient_,
+    LEAVE_ROUTE: LEAVE_ROUTE_,
     resolveChannels: resolveChannels,
     validateCreate: validateCreate,
     serializeRow: serializeRow,
@@ -1081,6 +1206,7 @@ var NotificationEngine = (function () {
       leaveSubmitted: buildLeaveSubmitted,
       leaveApproved: buildLeaveApproved,
       leaveRejected: buildLeaveRejected,
+      leaveDecisionNotice: buildLeaveDecisionNotice,
       leaveCancelled: buildLeaveCancelled,
       payslipAvailable: buildPayslipAvailable,
       payrollReadyReview: buildPayrollReadyReview,

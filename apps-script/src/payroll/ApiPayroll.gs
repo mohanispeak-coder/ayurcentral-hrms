@@ -15,6 +15,13 @@ function apiGetPayrollRun(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiSyncPayrollEmployees(runId, sessionToken) {
+  return hrmsRun_(function () {
+    PayrollService.syncEligibleEmployees(runId);
+    return PayrollService.getRunDetail(runId, { skipSync: false });
+  }, sessionToken);
+}
+
 function apiCreatePayrollRun(periodYear, periodMonth, notes, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.createRun(periodYear, periodMonth, notes);
@@ -75,6 +82,74 @@ function apiRegeneratePayslips(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiRegeneratePayslipForEmployee(runId, employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.regeneratePayslipForEmployee(runId, employeeId);
+  }, sessionToken);
+}
+
+function apiFinalizePayroll(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.finalizePayroll(runId);
+  }, sessionToken);
+}
+
+function apiDownloadPayrollTemplate(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.downloadTemplate(runId);
+  }, sessionToken);
+}
+
+function apiDownloadAttendanceRegisterTemplate(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.downloadTemplate(runId);
+  }, sessionToken);
+}
+
+function apiValidateAttendanceRegisterUpload(runId, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.validateUpload(runId, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitAttendanceRegisterUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
+function apiListAttendanceRegister(runId, sessionToken) {
+  return hrmsRun_(function () {
+    var id = String(runId || '').trim();
+    if (id) {
+      try {
+        PayrollService.syncEligibleEmployees(id);
+      } catch (syncErr) {
+        Logger.log('apiListAttendanceRegister sync: ' + (syncErr.message || syncErr));
+      }
+    }
+    return AttendanceRegisterService.listSummariesForRun_(id);
+  }, sessionToken);
+}
+
+function apiSaveAttendanceRegister(runId, employeeId, register, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.saveEmployeeRegister(runId, employeeId, register || {});
+  }, sessionToken);
+}
+
+function apiValidatePayrollUpload(runId, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.validateUpload(runId, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitPayrollUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
 function apiApplyPayrollLeaveLop(runId, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.applyLeaveLopToDays(runId);
@@ -96,6 +171,12 @@ function apiListSalaryStructures(employeeId, sessionToken) {
 function apiGetSalaryStructure(structureId, sessionToken) {
   return hrmsRun_(function () {
     return CompensationService.getStructure(structureId);
+  }, sessionToken);
+}
+
+function apiGetCompensationEditorBundle(employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationService.getEditorBundle(employeeId);
   }, sessionToken);
 }
 
@@ -132,5 +213,61 @@ function apiListOwnPayslips(sessionToken) {
 function apiGetPayslipDownload(documentId, sessionToken) {
   return hrmsRun_(function () {
     return PayslipService.getPayslipForDownload(documentId);
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadTemplate();
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkCsvTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadCsvTemplate();
+  }, sessionToken);
+}
+
+function apiValidateCompensationBulkUpload(meta, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.validateUpload(meta || {});
+  }, sessionToken);
+}
+
+function apiCommitCompensationBulkUpload(uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.commitUpload(uploadId);
+  }, sessionToken);
+}
+
+/* -------- Salary structure types (shared templates) -------- */
+
+function apiListSalaryStructureTypes(includeInactive, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.listStructureTypes(!includeInactive);
+  }, sessionToken);
+}
+
+function apiGetSalaryStructureType(structureId, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.getStructureType(structureId);
+  }, sessionToken);
+}
+
+function apiSaveSalaryStructureType(payload, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.saveStructureType(payload || {});
+  }, sessionToken);
+}
+
+function apiSetSalaryStructureTypeStatus(structureId, status, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.setStructureTypeStatus(structureId, status);
+  }, sessionToken);
+}
+
+function apiListSalaryStructureTypeOptions(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.listStructureTypeOptions(filter || {});
   }, sessionToken);
 }

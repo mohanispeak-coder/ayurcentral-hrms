@@ -72,17 +72,25 @@ function hrmsResolveAuthAccess_(input) {
       };
     }
 
-    return {
+    var role = String(user.role || '').trim().toUpperCase();
+    if (typeof PermissionService !== 'undefined' && PermissionService.normalizeUserRole) {
+      role = PermissionService.normalizeUserRole(role);
+    }
+    var session = {
       authorized: true,
       email: email,
-      employee_id: user.employee_id,
-      role: String(user.role).toUpperCase(),
+      employee_id: String(user.employee_id || '').trim(),
+      role: role,
       status: user.status,
       displayName: input.displayName || '',
       demo: false,
       reason: '',
       message: ''
     };
+    if (typeof UserAccessService !== 'undefined' && UserAccessService.attachToSession) {
+      UserAccessService.attachToSession(session, user);
+    }
+    return session;
   }
 
   var appMode = String(input.appMode || HRMS.APP_MODE.PRODUCTION).trim().toUpperCase();
@@ -208,7 +216,7 @@ var AuthService = (function () {
   }
 
   /**
-   * Diagnostics only — HRMS auth uses activeEmail, never effectiveEmail.
+   * Diagnostics only - HRMS auth uses activeEmail, never effectiveEmail.
    * Under USER_DEPLOYING, effectiveEmail is the script owner; activeEmail is the visitor.
    * @return {{activeEmail: string, effectiveEmail: string}}
    */
@@ -332,7 +340,7 @@ var AuthService = (function () {
       };
     } else {
       session = hrmsResolveAuthAccess_(buildAccessInput_(resolvedEmail));
-      // Wrong/unauthorized Google identity must not block the login shell — OTP remains available.
+      // Wrong/unauthorized Google identity must not block the login shell - OTP remains available.
       session.authRequired = hrmsAuthRequiredForSession_(session);
     }
     requestSession_ = session;
@@ -356,7 +364,7 @@ var AuthService = (function () {
 
   /**
    * First-run helper: when Users sheet is empty, register the running user as ADMIN.
-   * Does not hard-code any email — uses Session only.
+   * Does not hard-code any email - uses Session only.
    * @param {Object=} options { alreadyLocked: true } when caller holds script lock
    * @return {Object|null}
    */

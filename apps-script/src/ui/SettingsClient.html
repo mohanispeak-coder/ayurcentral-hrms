@@ -1,0 +1,209 @@
+<script>
+(function () {
+  'use strict';
+
+  function ready(fn) {
+    if (window.HrmsApp) fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  ready(function initSettingsUi() {
+    var App = window.HrmsApp;
+    if (!App) return;
+    var $ = App.$;
+    var escapeHtml = App.escapeHtml;
+    var callServer = App.callServer;
+    var showToast = App.showToast;
+    var pageHeaderHtml = App.pageHeaderHtml;
+
+    var settingsState = { data: null };
+
+    App.registerRoute('settings', {
+      title: 'Settings',
+      render: function () { renderSettings(); }
+    });
+
+    function stillOn(seq) {
+      if (App.routeStill) return App.routeStill(seq, 'settings');
+      var s = App.getState();
+      return seq === s.navSeq && s.currentRoute === 'settings';
+    }
+
+    function renderSettings() {
+      var page = $('page-content');
+      if (!page) return;
+      page.classList.remove('hidden');
+      var seq = App.getState().navSeq;
+      page.innerHTML = '<div class="settings-page">' +
+        pageHeaderHtml('Settings', 'Organisation email toggles and default self-service access by role. Changes are stored in the Settings sheet.') +
+        '<div id="settings-body">' +
+        (App.sectionSkeleton ? App.sectionSkeleton({ label: 'Loading settings' }) : '<p>Loading…</p>') +
+        '</div></div>';
+      callServer('apiGetAdminSettings')
+        .then(function (data) {
+          if (!stillOn(seq)) return;
+          settingsState.data = data;
+          paintSettings(data);
+        })
+        .catch(function (err) {
+          if (!stillOn(seq)) return;
+          $('settings-body').innerHTML = '<div class="alert alert-danger">' + escapeHtml(err.message || 'Could not load settings') + '</div>';
+        });
+    }
+
+    function paintSettings(data) {
+      var body = $('settings-body');
+      if (!body || !data) return;
+      var email = data.email || [];
+      var rm = data.role_modules || {};
+      var modFeatures = rm.modules || [];
+      var modMatrix = rm.matrix || [];
+      var ra = data.role_access || {};
+      var features = ra.features || [];
+      var matrix = ra.matrix || [];
+
+      var welcome = data.welcome || {};
+      var welcomeHtml = '<div class="card"><h2>Welcome messaging</h2>' +
+        '<p class="hint">Welcome email copy is edited under <strong>Content templates</strong> below. ' +
+        'Toggle automatic send on login creation in the email toggles section.</p>' +
+        '<p class="hint">Welcome email on create: ' + (welcome.email_welcome_enabled ? 'enabled' : 'disabled') + '</p></div>';
+
+      var emailHtml = '<div class="card" style="margin-top:16px"><h2>Email &amp; welcome toggles</h2>' +
+        '<p class="hint">When disabled, emails are skipped but rows still appear in Notifications → Email log as SKIPPED where applicable.</p>';
+      email.forEach(function (row) {
+        if (row.type === 'boolean') {
+          emailHtml += '<label class="form-check" style="display:block;margin:8px 0">' +
+            '<input type="checkbox" data-email-key="' + escapeHtml(row.key) + '"' + (row.value ? ' checked' : '') + '> ' +
+            escapeHtml(row.label) + '</label>';
+        } else {
+          var inputType = row.type === 'string' ? 'text' : 'email';
+          emailHtml += '<div class="form-group"><label class="form-label" for="set-' + escapeHtml(row.key) + '">' +
+            escapeHtml(row.label) + '</label>' +
+            '<input class="form-input" id="set-' + escapeHtml(row.key) + '" data-email-key="' + escapeHtml(row.key) + '" type="' + inputType + '" value="' +
+            escapeHtml(row.value || '') + '"></div>';
+        }
+      });
+      emailHtml += '</div>';
+
+      var modHtml = '<div class="card" style="margin-top:16px"><h2>HRMS module access by role</h2>' +
+        '<p class="hint">Control which sidebar areas each role can see and use (Employee, Manager, HR, Admin). ' +
+        'OWNER always has full access. Users should refresh after you save. This cannot grant modules outside a role’s built-in scope.</p>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
+      modFeatures.forEach(function (f) {
+        modHtml += '<th title="' + escapeHtml(f.id) + '">' + escapeHtml(f.label) + '</th>';
+      });
+      modHtml += '</tr></thead><tbody>';
+      modMatrix.forEach(function (row) {
+        modHtml += '<tr><td><strong>' + escapeHtml(row.role) + '</strong></td>';
+        modFeatures.forEach(function (f) {
+          var on = row.modules && row.modules[f.id];
+          modHtml += '<td><label class="form-check"><input type="checkbox" data-mod-role="' + escapeHtml(row.role) +
+            '" data-mod-id="' + escapeHtml(f.id) + '"' + (on ? ' checked' : '') + '></label></td>';
+        });
+        modHtml += '</tr>';
+      });
+      modHtml += '</tbody></table></div></div>';
+
+      var roleHtml = '<div class="card" style="margin-top:16px"><h2>New login defaults (self-service)</h2>' +
+        '<p class="hint">Default document / payslip / leave checkboxes when creating a user login. Per-employee overrides remain on the employee profile.</p>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
+      features.forEach(function (f) {
+        roleHtml += '<th>' + escapeHtml(f.label) + '</th>';
+      });
+      roleHtml += '</tr></thead><tbody>';
+      matrix.forEach(function (row) {
+        roleHtml += '<tr><td><strong>' + escapeHtml(row.role) + '</strong></td>';
+        features.forEach(function (f) {
+          var on = row.flags && row.flags[f.id];
+          roleHtml += '<td><label class="form-check"><input type="checkbox" data-role="' + escapeHtml(row.role) +
+            '" data-feat="' + escapeHtml(f.id) + '"' + (on ? ' checked' : '') + '></label></td>';
+        });
+        roleHtml += '</tr>';
+      });
+      roleHtml += '</tbody></table></div></div>';
+
+      var templates = data.content_templates || [];
+      var tplHtml = '<div class="card" style="margin-top:16px"><h2>Content templates</h2>' +
+        '<p class="hint">Edit welcome email, bulk-upload instruction text, and ATS offer letter wording. ' +
+        'Placeholders are listed per template. Save applies to new emails and newly downloaded bulk templates.</p>';
+      if (!templates.length) {
+        tplHtml += '<p class="alert alert-warning">Template rows are missing from the Settings sheet. ' +
+          'Open the spreadsheet → run <strong>HRMS → Database setup</strong> (or run <span class="mono">runDatabaseSetupFromEditor</span> in Apps Script), then refresh this page.</p>';
+      }
+      templates.forEach(function (tpl) {
+        tplHtml += '<div class="template-block" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border,#e2e8f0)">' +
+          '<h3 style="margin:0 0 6px;font-size:1rem">' + escapeHtml(tpl.label) + '</h3>' +
+          '<p class="hint" style="margin:0 0 8px">' + escapeHtml(tpl.description || '') + '</p>';
+        if (tpl.placeholders && tpl.placeholders.length) {
+          tplHtml += '<p class="hint" style="margin:0 0 8px">Placeholders: ' +
+            escapeHtml(tpl.placeholders.join(', ')) + '</p>';
+        }
+        var fields = tpl.fields || {};
+        if (fields.subject !== undefined) {
+          tplHtml += '<div class="form-group"><label class="form-label">Subject</label>' +
+            '<input class="form-input" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="subject" type="text" value="' +
+            escapeHtml(fields.subject || '') + '"></div>';
+        }
+        if (fields.body !== undefined) {
+          tplHtml += '<div class="form-group"><label class="form-label">Body</label>' +
+            '<textarea class="form-input" rows="8" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="body">' +
+            escapeHtml(fields.body || '') + '</textarea></div>';
+        }
+        tplHtml += '</div>';
+      });
+      tplHtml += '</div>';
+
+      body.innerHTML = welcomeHtml + emailHtml + tplHtml + modHtml + roleHtml +
+        '<div class="form-actions" style="margin-top:16px">' +
+        '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
+        '<span class="hint" id="settings-save-hint"></span></div>';
+
+      $('btn-save-settings').addEventListener('click', function () {
+        var btn = $('btn-save-settings');
+        var emailPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-email-key]'), function (el) {
+          var key = el.getAttribute('data-email-key');
+          if (el.type === 'checkbox') emailPatch[key] = el.checked;
+          else emailPatch[key] = el.value;
+        });
+        var rolePatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-role][data-feat]'), function (el) {
+          var role = el.getAttribute('data-role');
+          var feat = el.getAttribute('data-feat');
+          if (!rolePatch[role]) rolePatch[role] = {};
+          rolePatch[role][feat] = el.checked;
+        });
+        var modPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-mod-role][data-mod-id]'), function (el) {
+          var role = el.getAttribute('data-mod-role');
+          var mid = el.getAttribute('data-mod-id');
+          if (!modPatch[role]) modPatch[role] = {};
+          modPatch[role][mid] = el.checked;
+        });
+        var tplPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-tpl-id][data-tpl-part]'), function (el) {
+          var id = el.getAttribute('data-tpl-id');
+          var part = el.getAttribute('data-tpl-part');
+          if (!tplPatch[id]) tplPatch[id] = {};
+          tplPatch[id][part] = el.value;
+        });
+        callServer('apiSaveAdminSettings', {
+          email: emailPatch,
+          role_modules: modPatch,
+          role_access: rolePatch,
+          content_templates: tplPatch
+        }, {
+          button: btn, loadingText: 'Saving…'
+        }).then(function (next) {
+          settingsState.data = next;
+          showToast('Settings saved', 'success');
+        }).catch(function (err) {
+          showToast(err.message || 'Save failed', 'error');
+        });
+      });
+    }
+  });
+})();
+</script>

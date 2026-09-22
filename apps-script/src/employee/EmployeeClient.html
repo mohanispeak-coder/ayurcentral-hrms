@@ -21,11 +21,17 @@
     var flashBannerHtml = App.flashBannerHtml;
 
     var listState = { page: 1, team: false };
+    var listSearchTimer_ = null;
+    var listLoadGen_ = 0;
+    var listLoadBusy_ = false;
+    var listLoadAgain_ = false;
     var empViewCache = {
       lists: {},
       profiles: {},
       extras: {},
-      picker: null
+      picker: null,
+      verticals: null,
+      salaryStructures: null
     };
 
     function listCacheKey(team) {
@@ -48,7 +54,7 @@
       delete empViewCache.lists.employees;
       delete empViewCache.lists['my-team'];
       empViewCache.picker = null;
-      shellInv_(['employees', 'my-team', 'employee-create']);
+      shellInv_(['employees', 'my-team', 'employee-create', 'employee-bulk-upload', 'employee-field-defs']);
     }
 
     function invalidateEmpProfileLists_(employeeId, isSelf) {
@@ -70,6 +76,8 @@
         empViewCache.profiles = {};
         empViewCache.extras = {};
         empViewCache.picker = null;
+        empViewCache.verticals = null;
+        empViewCache.salaryStructures = null;
       });
     }
 
@@ -77,7 +85,10 @@
     App.registerRoute('my-team', { title: 'My Team', render: function () { renderList(true); } });
     App.registerRoute('my-profile', { title: 'My Profile', render: renderMyProfile });
     App.registerRoute('employee-create', { title: 'Add employee', render: renderCreate });
-    App.registerRoute('employee-profile', { title: 'Employee', render: function (params) { renderProfile(params && params.employeeId); } });
+    App.registerRoute('employee-bulk-upload', { title: 'Bulk upload', render: renderBulkUpload });
+    App.registerRoute('employee-profile', { title: 'Employee', render: function (params) {
+      renderProfile(params && params.employeeId, false, params && params.tab);
+    } });
 
     function pageEl() {
       var page = $('page-content');
@@ -121,10 +132,12 @@
         '<select class="form-select" id="emp-filter-dept"><option value="">All</option></select></div>' +
         '<div class="form-group"><label class="form-label" for="emp-filter-loc">Location</label>' +
         '<select class="form-select" id="emp-filter-loc"><option value="">All</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="emp-filter-vertical">Vertical</label>' +
+        '<select class="form-select" id="emp-filter-vertical"><option value="">All</option></select></div>' +
         '</div></div>' +
-        '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md"><thead><tr>' +
         '<th>Employee ID</th><th>Name</th><th>Department</th><th>Designation</th>' +
-        '<th>Location</th><th>Type</th><th>Status</th><th>Manager</th>' +
+        '<th>Vertical</th><th>Location</th><th>Type</th><th>Status</th><th>Manager</th>' +
         '</tr></thead><tbody id="emp-table-body"></tbody></table></div>' +
         '<div class="pagination" id="emp-pagination"></div>';
     }
@@ -165,8 +178,8 @@
         escapeHtml(value || '') + '"' + (required ? ' required' : '') + '>';
     }
 
-    function select(id, options, value) {
-      var html = '<select class="form-select" id="' + id + '" name="' + id + '">';
+    function select(id, options, value, required) {
+      var html = '<select class="form-select" id="' + id + '" name="' + id + '"' + (required ? ' required' : '') + '>';
       options.forEach(function (o) {
         var v = typeof o === 'string' ? o : o.value;
         var l = typeof o === 'string' ? o : o.label;
@@ -216,20 +229,33 @@
       var session = App.getState().session || {};
       var refreshHtml = App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '';
       var addHtml = '';
-      if (!team && (session.role === 'HR' || session.role === 'ADMIN')) {
-        addHtml = '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
+      if (!team && (session.role === 'OWNER' || session.role === 'HR' || session.role === 'ADMIN')) {
+        addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-fields">Custom fields</button> ' +
+          '<button type="button" class="btn btn-secondary" id="btn-emp-bulk">Bulk upload</button> ' +
+          '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
       }
       if (actions) actions.innerHTML = refreshHtml + addHtml;
       if ($('btn-emp-add')) $('btn-emp-add').addEventListener('click', function () { navigate('employee-create'); });
-      ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc'].forEach(function (id) {
+      if ($('btn-emp-bulk')) $('btn-emp-bulk').addEventListener('click', function () { navigate('employee-bulk-upload'); });
+      if ($('btn-emp-fields')) $('btn-emp-fields').addEventListener('click', function () { navigate('employee-field-defs'); });
+      ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc', 'emp-filter-vertical'].forEach(function (id) {
         var el = $(id);
         if (!el) return;
         el.addEventListener(id === 'emp-search' ? 'input' : 'change', function () {
           if (listState.ignoreFilter) return;
           listState.page = 1;
-          loadList();
+          if (id === 'emp-search') scheduleDirectoryLoad_(300);
+          else loadList();
         });
       });
+    }
+
+    function scheduleDirectoryLoad_(delayMs) {
+      if (listSearchTimer_) clearTimeout(listSearchTimer_);
+      listSearchTimer_ = setTimeout(function () {
+        listSearchTimer_ = null;
+        loadList();
+      }, delayMs);
     }
 
     function applyListQuery_(query) {
@@ -239,6 +265,7 @@
       if ($('emp-filter-status')) $('emp-filter-status').value = query.status || '';
       if ($('emp-filter-dept') && query.department) $('emp-filter-dept').value = query.department;
       if ($('emp-filter-loc') && query.location) $('emp-filter-loc').value = query.location;
+      if ($('emp-filter-vertical') && query.vertical_name) $('emp-filter-vertical').value = query.vertical_name;
       listState.ignoreFilter = false;
     }
 
@@ -257,6 +284,7 @@
         if (cached.data) {
           fillSelectOptions('emp-filter-dept', cached.data.departments || [], cached.query && cached.query.department);
           fillSelectOptions('emp-filter-loc', cached.data.locations || [], cached.query && cached.query.location);
+          fillSelectOptions('emp-filter-vertical', cached.data.verticals || [], cached.query && cached.query.vertical_name);
           renderTable(cached.data);
         }
         return;
@@ -271,53 +299,70 @@
       if (cached && cached.query) applyListQuery_(cached.query);
       var tbody = $('emp-table-body');
       if (tbody && !(App.isModuleRefresh && App.isModuleRefresh(key) && cached && cached.data)) {
-        tbody.innerHTML = skRows(8, 6);
+        tbody.innerHTML = skRows(9, 6);
       } else if (cached && cached.data) {
         fillSelectOptions('emp-filter-dept', cached.data.departments || [], cached.query && cached.query.department);
         fillSelectOptions('emp-filter-loc', cached.data.locations || [], cached.query && cached.query.location);
+        fillSelectOptions('emp-filter-vertical', cached.data.verticals || [], cached.query && cached.query.vertical_name);
         renderTable(cached.data);
       }
       loadList();
     }
 
     function loadList() {
+      if (listLoadBusy_) {
+        listLoadAgain_ = true;
+        return;
+      }
+      listLoadBusy_ = true;
+      var gen = ++listLoadGen_;
       var seq = App.getState().navSeq;
       var route = listRoute();
       var key = listCacheKey(listState.team);
       var tbody = $('emp-table-body');
       if (tbody && !(App.isModuleRefresh && App.isModuleRefresh(key) && empViewCache.lists[key])) {
-        tbody.innerHTML = skRows(8, 6);
+        tbody.innerHTML = skRows(9, 6);
       }
       var query = {
         q: $('emp-search') ? $('emp-search').value : '',
         status: $('emp-filter-status') ? $('emp-filter-status').value : '',
         department: $('emp-filter-dept') ? $('emp-filter-dept').value : '',
         location: $('emp-filter-loc') ? $('emp-filter-loc').value : '',
+        vertical_name: $('emp-filter-vertical') ? $('emp-filter-vertical').value : '',
         page: listState.page,
         pageSize: 25
       };
       var fn = listState.team ? 'apiGetMyTeam' : 'apiGetEmployeeDirectory';
+      function finishLoad_() {
+        listLoadBusy_ = false;
+        if (listLoadAgain_) {
+          listLoadAgain_ = false;
+          loadList();
+        }
+      }
       callServer(fn, query)
         .then(function (data) {
-          if (!stillOn(seq, route) || !$('emp-table-body')) return;
+          if (gen !== listLoadGen_ || !stillOn(seq, route) || !$('emp-table-body')) return;
           empViewCache.lists[key] = { data: data, query: query };
           fillSelectOptions('emp-filter-dept', data.departments || [], query.department);
           fillSelectOptions('emp-filter-loc', data.locations || [], query.location);
+          fillSelectOptions('emp-filter-vertical', data.verticals || [], query.vertical_name);
           renderTable(data);
           markView_(key);
         })
         .catch(function (err) {
-          if (!stillOn(seq, route)) return;
+          if (gen !== listLoadGen_ || !stillOn(seq, route)) return;
           failRefresh_();
           var body = $('emp-table-body');
           if (body) {
-            body.innerHTML = '<tr><td colspan="8"></td></tr>';
+            body.innerHTML = '<tr><td colspan="9"></td></tr>';
             var cell = body.querySelector('td');
             if (cell) {
               paintErr(cell, err.message || 'Failed to load directory', function () { loadList(); });
             }
           }
-        });
+        })
+        .then(finishLoad_, finishLoad_);
     }
 
     function fillSelectOptions(id, values, selected) {
@@ -338,20 +383,21 @@
       var tbody = $('emp-table-body');
       if (!tbody) return;
       if (!data.rows || !data.rows.length) {
-        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline">' +
+        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="9"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p>' +
           '<p class="empty-state-text">Try a different search or clear a filter.</p></div></td></tr>';
       } else {
         tbody.innerHTML = data.rows.map(function (r) {
           return '<tr class="table-row-click" data-id="' + escapeHtml(r.employee_id) + '">' +
-            '<td class="mono">' + escapeHtml(r.employee_id) + '</td>' +
-            '<td>' + escapeHtml(r.display_name) + '</td>' +
-            '<td>' + escapeHtml(r.department) + '</td>' +
-            '<td>' + escapeHtml(r.designation) + '</td>' +
-            '<td>' + escapeHtml(r.location) + '</td>' +
-            '<td>' + escapeHtml(r.employment_type) + '</td>' +
-            '<td>' + statusBadge(r.status) + '</td>' +
-            '<td>' + escapeHtml(r.manager_name || r.manager_employee_id || '—') + '</td>' +
+            '<td class="mono" data-label="Employee ID">' + escapeHtml(r.employee_id) + '</td>' +
+            '<td data-label="Name">' + escapeHtml(r.display_name) + '</td>' +
+            '<td data-label="Department">' + escapeHtml(r.department) + '</td>' +
+            '<td data-label="Designation" class="col-emp-extra">' + escapeHtml(r.designation) + '</td>' +
+            '<td data-label="Vertical" class="col-emp-extra">' + escapeHtml(r.vertical_name || '') + '</td>' +
+            '<td data-label="Location" class="col-emp-extra">' + escapeHtml(r.location) + '</td>' +
+            '<td data-label="Type" class="col-emp-extra">' + escapeHtml(r.employment_type) + '</td>' +
+            '<td data-label="Status">' + statusBadge(r.status) + '</td>' +
+            '<td data-label="Manager" class="col-emp-extra">' + escapeHtml(r.manager_name || r.manager_employee_id || '-') + '</td>' +
             '</tr>';
         }).join('');
         var rows = tbody.querySelectorAll('tr.table-row-click');
@@ -375,6 +421,45 @@
       if ($('emp-next')) $('emp-next').addEventListener('click', function () { listState.page = page + 1; loadList(); });
     }
 
+    function customFieldsBlockHtml_(emp, canEdit) {
+      var defs = emp.employee_field_defs || [];
+      if (!defs.length) return '';
+      var values = emp.custom_fields || {};
+      var html = '<div class="form-span-2"><h3 class="section-title">Additional fields</h3><div class="form-grid emp-form-grid">';
+      defs.forEach(function (d) {
+        var val = values[d.field_key] != null ? values[d.field_key] : '';
+        if (canEdit) {
+          html += fieldGroup('custom_field_' + d.field_key, d.field_label,
+            '<input class="form-input emp-custom-field" data-custom-key="' + escapeHtml(d.field_key) + '" id="custom_field_' +
+            escapeHtml(d.field_key) + '" value="' + escapeHtml(val) + '">');
+        } else {
+          html += '<div><dt class="hint">' + escapeHtml(d.field_label) + '</dt><dd>' + escapeHtml(val || '-') + '</dd></div>';
+        }
+      });
+      html += '</div></div>';
+      return html;
+    }
+
+    function collectCustomFieldsPayload_() {
+      var custom = {};
+      document.querySelectorAll('.emp-custom-field').forEach(function (el) {
+        var key = el.getAttribute('data-custom-key');
+        if (key) custom[key] = el.value;
+      });
+      return Object.keys(custom).length ? { custom_fields: custom } : {};
+    }
+
+    function appendCustomFieldsToForm_(defs, values) {
+      if (!defs || !defs.length) return;
+      var form = $('emp-form');
+      if (!form) return;
+      var html = customFieldsBlockHtml_({ employee_field_defs: defs, custom_fields: values || {} }, true);
+      if (!html) return;
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      while (tmp.firstChild) form.appendChild(tmp.firstChild);
+    }
+
     function employeeFormHtml(emp, mode) {
       emp = emp || {};
       var types = [
@@ -384,7 +469,7 @@
         { value: 'CONSULTANT', label: 'Consultant' }
       ];
       var genders = [
-        { value: '', label: '—' },
+        { value: '', label: '-' },
         { value: 'Female', label: 'Female' },
         { value: 'Male', label: 'Male' },
         { value: 'Other', label: 'Other' },
@@ -392,13 +477,17 @@
       ];
       var readId = mode !== 'create';
       var html = '<form id="emp-form" class="form-grid emp-form-grid">';
-      if (readId) {
+      if (mode === 'create') {
+        html += fieldGroup('employee_id', 'Employee code', input('employee_id', 'text', emp.employee_id, true) +
+          '<p class="form-hint">Format: SAPL-0001, AOPL-0001, or AOMS-0001</p>');
+      } else if (readId) {
         html += fieldGroup('employee_id', 'Employee ID', '<input class="form-input mono" id="employee_id" value="' +
           escapeHtml(emp.employee_id || '') + '" disabled>');
       }
       html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
       html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
       html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
+      html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name));
       html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
       html += fieldGroup('gender', 'Gender', select('gender', genders, emp.gender || ''));
       html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
@@ -406,11 +495,17 @@
       html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
       html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
       html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
+      html += fieldGroup('vertical_name', 'Vertical', '<select class="form-select" id="vertical_name" name="vertical_name" required><option value="">Select vertical</option></select>');
       html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
       html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
-      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT'));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT', true));
       html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
       if (emp.can_view_payroll_ids || mode === 'create') {
+        html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>');
+        html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly));
+        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no));
+        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no));
+        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no));
         html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
         html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
         html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
@@ -420,9 +515,16 @@
       if (mode === 'create' || (emp.view_mode === 'HR')) {
         html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
       }
+      if (mode !== 'create' && emp.can_edit) {
+        html += customFieldsBlockHtml_(emp, true);
+      }
       html += '</form>';
       if (mode === 'create') {
-        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create login for this work email (role EMPLOYEE)</label>';
+        html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create Google login</label>';
+        html += '<p class="form-hint">New logins are always created as <strong>Employee</strong>. Only Admin or Owner can change HRMS role later on the employee profile.</p>';
+        html += fieldGroup('google_login_email', 'Google login email',
+          input('google_login_email', 'email', emp.google_login_email) +
+          '<p class="form-hint">Required when login is enabled. Can match work email.</p>');
       }
       return html;
     }
@@ -435,7 +537,7 @@
         if (excludeId && p.employee_id === excludeId) return;
         var opt = document.createElement('option');
         opt.value = p.employee_id;
-        opt.textContent = p.employee_id + ' — ' + p.display_name;
+        opt.textContent = p.employee_id + ' - ' + p.display_name;
         if (p.employee_id === selectedId) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -463,15 +565,86 @@
       });
     }
 
+    function fillVerticalSelect_(values, selectedValue) {
+      var sel = $('vertical_name');
+      if (!sel) return;
+      var current = selectedValue || sel.value;
+      var html = '<option value="">Select vertical</option>';
+      (values || []).forEach(function (v) {
+        html += '<option value="' + escapeHtml(v) + '"' + (v === current ? ' selected' : '') + '>' +
+          escapeHtml(v) + '</option>';
+      });
+      sel.innerHTML = html;
+    }
+
+    function fillSalaryStructureSelect_(values, selectedValue) {
+      var sel = $('salary_structure_id');
+      if (!sel) return;
+      var current = selectedValue != null ? String(selectedValue) : sel.value;
+      var html = '<option value="">None</option>';
+      (values || []).forEach(function (s) {
+        var label = s.salary_structure_id + ' - ' + s.structure_name + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
+        html += '<option value="' + escapeHtml(s.salary_structure_id) + '"' +
+          (String(s.salary_structure_id) === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      });
+      sel.innerHTML = html;
+    }
+
+    function loadSalaryStructureOptions(selectedValue) {
+      var sel = $('salary_structure_id');
+      if (!sel) return;
+      if (empViewCache.salaryStructures && !(App.isModuleRefresh && App.isModuleRefresh('employee-create'))) {
+        fillSalaryStructureSelect_(empViewCache.salaryStructures, selectedValue);
+        return;
+      }
+      callServer('apiListSalaryStructureTypeOptions', { activeOnly: true }).then(function (list) {
+        empViewCache.salaryStructures = list || [];
+        fillSalaryStructureSelect_(empViewCache.salaryStructures, selectedValue);
+      }).catch(function () {
+        if (selectedValue) {
+          var opt = document.createElement('option');
+          opt.value = selectedValue;
+          opt.textContent = selectedValue;
+          opt.selected = true;
+          sel.appendChild(opt);
+        }
+      });
+    }
+
+    function loadVerticalOptions(selectedValue) {
+      var sel = $('vertical_name');
+      if (!sel) return;
+      if (empViewCache.verticals && !(App.isModuleRefresh && App.isModuleRefresh('employee-create'))) {
+        fillVerticalSelect_(empViewCache.verticals, selectedValue);
+        return;
+      }
+      sel.innerHTML = '<option value="">Select vertical</option>';
+      callServer('apiGetEmployeeVerticals').then(function (list) {
+        empViewCache.verticals = list || [];
+        fillVerticalSelect_(list, selectedValue);
+      }).catch(function () {
+        if (selectedValue) {
+          var opt = document.createElement('option');
+          opt.value = selectedValue;
+          opt.textContent = selectedValue;
+          opt.selected = true;
+          sel.appendChild(opt);
+        }
+      });
+    }
+
     function collectEmployeePayload() {
       var ids = [
-        'first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
-        'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
-        'employment_type', 'location', 'pan', 'bank_account_name', 'bank_account_number',
-        'bank_ifsc', 'bank_name', 'notes'
+        'employee_id', 'first_name', 'last_name', 'display_name', 'father_husband_name', 'date_of_birth', 'gender', 'phone', 'address',
+        'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
+        'employment_type', 'location', 'uan_no', 'esi_no', 'pf_no', 'pan', 'bank_account_name', 'bank_account_number',
+        'bank_ifsc', 'bank_name', 'notes', 'google_login_email'
       ];
+      ids.push('salary_structure_id');
+      ids.push('ctc_monthly');
       var payload = formValues(ids);
       if ($('create_user')) payload.create_user = $('create_user').checked;
+      Object.assign(payload, collectCustomFieldsPayload_());
       return payload;
     }
 
@@ -481,7 +654,7 @@
       var createKey = 'employee-create';
       page.innerHTML = '<div class="page-header"><div class="page-header-text">' +
         '<h2 class="page-heading" aria-hidden="true">Add employee</h2>' +
-        '<p class="page-lede">Employee ID is assigned on save. Payroll identifiers are optional.</p></div>' +
+        '<p class="page-lede">Enter the employee code (e.g. SAPL-0001). Payroll identifiers are optional.</p></div>' +
         '<div class="page-header-actions">' + (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') + '</div></div>' +
         '<div class="card">' +
         employeeFormHtml({}, 'create') +
@@ -493,8 +666,32 @@
       } else {
         loadManagerOptions('', '');
       }
+      loadVerticalOptions('');
+      loadSalaryStructureOptions('');
+      callServer('apiListEmployeeFieldDefs').then(function (defs) {
+        appendCustomFieldsToForm_(defs, {});
+      }).catch(function () {});
       markView_(createKey);
       $('btn-emp-cancel').addEventListener('click', function () { navigate('employees'); });
+      (function syncGoogleLoginFromWork_() {
+        var work = $('work_email');
+        var google = $('google_login_email');
+        var createUser = $('create_user');
+        if (!work || !google) return;
+        function mirror() {
+          if (createUser && !createUser.checked) return;
+          if (google.dataset.userEdited === '1') return;
+          google.value = work.value.trim();
+        }
+        work.addEventListener('input', mirror);
+        work.addEventListener('change', mirror);
+        work.addEventListener('blur', mirror);
+        if (createUser) createUser.addEventListener('change', mirror);
+        google.addEventListener('input', function () {
+          google.dataset.userEdited = google.value.trim() ? '1' : '';
+        });
+        mirror();
+      })();
       $('btn-emp-save').addEventListener('click', function () {
         clearFieldErrors();
         var btn = $('btn-emp-save');
@@ -507,8 +704,21 @@
           .then(function (result) {
             (result.warnings || []).forEach(function (w) { showToast(w); });
             invalidateEmpLists_();
-            if (setFlash) setFlash('Created ' + result.employee.employee_id, 'success', 'employee-profile');
-            navigate('employee-profile', { employeeId: result.employee.employee_id });
+            var empId = result.employee.employee_id;
+            if (empViewCache.extras[empId]) {
+              delete empViewCache.extras[empId].leave;
+            }
+            if (result.leave_balances_seeded > 0) {
+              showToast('Leave balances created (' + result.leave_balances_seeded + ').', 'success');
+            } else {
+              showToast('No leave balances were created - check active leave types in Leave admin.', 'warning');
+            }
+            if (result.welcome_delivery && result.welcome_delivery.email && result.welcome_delivery.email.ok) {
+              showToast('Welcome email sent.', 'success');
+            }
+            (result.warnings || []).forEach(function (w) { showToast(w, 'warning'); });
+            if (setFlash) setFlash('Created ' + empId, 'success', 'employee-profile');
+            navigate('employee-profile', { employeeId: empId, tab: 'leave' });
           })
           .catch(function (err) {
             showFieldErrors(err.details);
@@ -521,9 +731,13 @@
       renderProfile(null, true);
     }
 
-    function renderProfile(employeeId, isSelf) {
+    function renderProfile(employeeId, isSelf, initialTab) {
       var page = pageEl();
       if (!page) return;
+      if (initialTab && employeeId) {
+        if (!empViewCache.extras[employeeId]) empViewCache.extras[employeeId] = {};
+        empViewCache.extras[employeeId].tab = initialTab;
+      }
       var key = profileCacheKey(employeeId, isSelf);
       var cached = empViewCache.profiles[key];
       if (App.consumeModuleViewRestore && App.consumeModuleViewRestore(key) && cached && cached.emp) {
@@ -574,9 +788,10 @@
       $('page-title').textContent = title;
       var tabs = ['personal', 'employment'];
       if (emp.can_view_payroll_ids) tabs.push('payroll');
-      if (emp.view_mode !== 'TEAM_WORK') tabs.push('leave');
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) tabs.push('leave');
       if (emp.can_view_documents) tabs.push('documents');
       if (emp.can_view_payslips) tabs.push('payslips');
+      if (emp.can_manage_app_access) tabs.push('app-access');
 
       var headerActions = '';
       if (emp.can_change_status) {
@@ -586,7 +801,7 @@
           headerActions += '<button type="button" class="btn btn-primary" id="btn-activate">Reactivate</button>';
         }
       }
-      if (!isSelf && (App.getState().session.role === 'HR' || App.getState().session.role === 'ADMIN')) {
+      if (!isSelf && (App.getState().session.role === 'OWNER' || App.getState().session.role === 'HR' || App.getState().session.role === 'ADMIN')) {
         headerActions += '<button type="button" class="btn btn-secondary" id="btn-back-dir">Back to directory</button>';
       }
       var header = '<div class="page-header"><div class="page-header-text">' +
@@ -602,7 +817,10 @@
       var extras = empViewCache.extras[extrasKey] || {};
       var savedTab = extras.tab && tabs.indexOf(extras.tab) >= 0 ? extras.tab : tabs[0];
       var tabBtns = tabs.map(function (t) {
-        var labels = { personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary', documents: 'Documents', payslips: 'Payslips' };
+        var labels = {
+          personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary',
+          documents: 'Documents', payslips: 'Payslips', 'app-access': 'Login & role'
+        };
         return '<button type="button" class="emp-tab' + (t === savedTab ? ' active' : '') + '" data-tab="' + t + '">' + labels[t] + '</button>';
       }).join('');
 
@@ -612,13 +830,17 @@
       html += '<div class="tab-panel' + (savedTab === 'personal' ? ' active' : '') + '" data-panel="personal">' + personalPanel(emp) + '</div>';
       html += '<div class="tab-panel' + (savedTab === 'employment' ? ' active' : '') + '" data-panel="employment">' + employmentPanel(emp) + '</div>';
       if (emp.can_view_payroll_ids) html += '<div class="tab-panel' + (savedTab === 'payroll' ? ' active' : '') + '" data-panel="payroll">' + payrollPanel(emp) + '</div>';
-      if (emp.view_mode !== 'TEAM_WORK') {
-        html += '<div class="tab-panel" data-panel="leave"><div id="leave-summary">' +
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+        html += '<div class="tab-panel' + (savedTab === 'leave' ? ' active' : '') + '" data-panel="leave"><div id="leave-summary">' +
           '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
           '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
       }
-      if (emp.can_view_documents) html += '<div class="tab-panel" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
-      if (emp.can_view_payslips) html += '<div class="tab-panel" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
+      if (emp.can_view_documents) html += '<div class="tab-panel' + (savedTab === 'documents' ? ' active' : '') + '" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
+      if (emp.can_view_payslips) html += '<div class="tab-panel' + (savedTab === 'payslips' ? ' active' : '') + '" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
+      if (emp.can_manage_app_access) {
+        html += '<div class="tab-panel' + (savedTab === 'app-access' ? ' active' : '') + '" data-panel="app-access"><div id="app-access-panel">' +
+          loadingHtml('Loading login & role…') + '</div></div>';
+      }
       page.innerHTML = html;
 
       var tabEls = page.querySelectorAll('.emp-tab');
@@ -631,6 +853,7 @@
           var ps = page.querySelectorAll('.tab-panel');
           for (var a = 0; a < ts.length; a++) ts[a].classList.toggle('active', ts[a].getAttribute('data-tab') === id);
           for (var b = 0; b < ps.length; b++) ps[b].classList.toggle('active', ps[b].getAttribute('data-panel') === id);
+          ensureProfileExtras_(emp, id);
         });
       }
 
@@ -639,15 +862,25 @@
       if ($('btn-activate')) $('btn-activate').addEventListener('click', function () { setStatus(emp.employee_id, 'ACTIVE'); });
 
       bindProfileSaves(emp);
-      var restoring = !!(opts && opts.restore);
-      if (emp.view_mode !== 'TEAM_WORK') loadLeave(emp.employee_id, restoring);
-      if (emp.can_view_documents) loadDocs(emp, null, restoring);
-      if (emp.can_view_payslips) loadPayslips(emp.employee_id, restoring);
+      ensureProfileExtras_(emp, savedTab);
+    }
+
+    function ensureProfileExtras_(emp, tab) {
+      if (!emp || !tab) return;
+      if (tab === 'leave' && emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+        loadLeave(emp.employee_id);
+      } else if (tab === 'documents' && emp.can_view_documents) {
+        loadDocs(emp, null);
+      } else if (tab === 'payslips' && emp.can_view_payslips) {
+        loadPayslips(emp.employee_id);
+      } else if (tab === 'app-access' && emp.can_manage_app_access) {
+        loadAppAccess(emp);
+      }
     }
 
     function dl(items) {
       return '<dl class="dl-grid">' + items.map(function (it) {
-        return '<dt>' + escapeHtml(it[0]) + '</dt><dd>' + (it[2] || escapeHtml(it[1] == null || it[1] === '' ? '—' : String(it[1]))) + '</dd>';
+        return '<dt>' + escapeHtml(it[0]) + '</dt><dd>' + (it[2] || escapeHtml(it[1] == null || it[1] === '' ? '-' : String(it[1]))) + '</dd>';
       }).join('') + '</dl>';
     }
 
@@ -662,14 +895,17 @@
           html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
           html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
           html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
+          html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name));
           html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
           html += fieldGroup('gender', 'Gender', input('gender', 'text', emp.gender));
         } else {
           html += '<div class="form-span-2">' + dl([
             ['First name', emp.first_name], ['Last name', emp.last_name],
-            ['Display name', emp.display_name], ['Date of birth', emp.date_of_birth], ['Gender', emp.gender]
+            ['Display name', emp.display_name], ['Father / husband name', emp.father_husband_name],
+            ['Date of birth', emp.date_of_birth], ['Gender', emp.gender]
           ]) + '</div>';
         }
+        html += customFieldsBlockHtml_(emp, emp.can_edit);
         html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
         html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true);
         html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-personal">Save</button>';
@@ -679,15 +915,16 @@
       }
       return dl([
         ['First name', emp.first_name], ['Last name', emp.last_name], ['Display name', emp.display_name],
+        ['Father / husband name', emp.father_husband_name],
         ['Date of birth', emp.date_of_birth], ['Gender', emp.gender], ['Phone', emp.phone], ['Address', emp.address]
-      ]);
+      ]) + customFieldsBlockHtml_(emp, false);
     }
 
     function employmentPanel(emp) {
       if (emp.view_mode === 'TEAM_WORK' || !emp.can_edit) {
         return dl([
-          ['Employee ID', emp.employee_id], ['Work email', emp.work_email],
-          ['Department', emp.department], ['Designation', emp.designation],
+        ['Employee ID', emp.employee_id], ['Work email', emp.work_email],
+        ['Department', emp.department], ['Designation', emp.designation], ['Vertical', emp.vertical_name],
           ['Manager', emp.manager_employee_id], ['Joining date', emp.joining_date],
           ['Type', emp.employment_type], ['Location', emp.location], ['Status', emp.status]
         ]);
@@ -697,9 +934,10 @@
       html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
       html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
       html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
+      html += fieldGroup('vertical_name', 'Vertical', '<select class="form-select" id="vertical_name" name="vertical_name" required><option value="">Select vertical</option></select>');
       html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
       html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
-      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type, true));
       html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
       html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
       html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-employment">Save</button></div>' +
@@ -711,6 +949,11 @@
       var html = '';
       if (emp.can_edit) {
         html += '<div class="form-grid emp-form-grid">';
+        html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>');
+        html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly));
+        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no));
+        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no));
+        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no));
         html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
         html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
         html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
@@ -718,25 +961,15 @@
         html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name));
         html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-payroll">Save</button></div>' +
           '<div id="emp-save-payroll-feedback" class="action-feedback hidden" role="status"></div>';
+        html += '<p class="hint">Salary structures (component percentages) are defined in Payroll → Salary structures. Percentages apply to the Monthly CTC above.</p>';
       } else {
         html += dl([
+          ['Salary structure', emp.salary_structure_id ? (emp.salary_structure_id + (emp.salary_structure_name ? ' - ' + emp.salary_structure_name : '')) : ''],
+          ['Monthly CTC', emp.ctc_monthly],
+          ['UAN no.', emp.uan_no], ['ESI no.', emp.esi_no], ['PF no.', emp.pf_no],
           ['PAN', emp.pan], ['Account name', emp.bank_account_name],
           ['Account number', emp.bank_account_number], ['IFSC', emp.bank_ifsc], ['Bank', emp.bank_name]
         ]);
-      }
-      if (emp.can_view_salary_summary) {
-        html += '<h2 class="section-title" style="margin-top:24px">Current structure</h2>';
-        if (emp.current_structure) {
-          html += dl([
-            ['Status', emp.current_structure.status],
-            ['Effective from', emp.current_structure.effective_from],
-            ['CTC (monthly)', emp.current_structure.ctc_monthly],
-            ['Currency', emp.current_structure.currency]
-          ]);
-          html += '<p class="hint">Component lines are managed in Compensation (HR).</p>';
-        } else {
-          html += '<p class="hint">No current salary structure on file yet.</p>';
-        }
       }
       return html;
     }
@@ -745,13 +978,15 @@
       function save(btn, feedbackEl) {
         clearFieldErrors();
         var payload = {};
-        ['first_name', 'last_name', 'display_name', 'date_of_birth', 'gender', 'phone', 'address',
-          'work_email', 'department', 'designation', 'manager_employee_id', 'joining_date',
-          'employment_type', 'location', 'notes', 'pan', 'bank_account_name', 'bank_account_number',
+        ['first_name', 'last_name', 'display_name', 'father_husband_name', 'date_of_birth', 'gender', 'phone', 'address',
+          'work_email', 'department', 'designation', 'vertical_name', 'manager_employee_id', 'joining_date',
+          'employment_type', 'location', 'notes', 'salary_structure_id', 'ctc_monthly',
+          'uan_no', 'esi_no', 'pf_no', 'pan', 'bank_account_name', 'bank_account_number',
           'bank_ifsc', 'bank_name'].forEach(function (id) {
           var el = $(id);
           if (el && !el.disabled) payload[id] = el.value;
         });
+        Object.assign(payload, collectCustomFieldsPayload_());
         var route = emp.employee_id === (App.getState().session || {}).employee_id ? 'my-profile' : 'employee-profile';
         return callServer('apiUpdateEmployee', emp.employee_id, payload, {
           button: btn,
@@ -775,11 +1010,13 @@
       }
       if ($('btn-save-employment')) {
         loadManagerOptions(emp.manager_employee_id, emp.employee_id);
+        loadVerticalOptions(emp.vertical_name);
         $('btn-save-employment').addEventListener('click', function () {
           save(this, $('emp-save-employment-feedback'));
         });
       }
       if ($('btn-save-payroll')) {
+        loadSalaryStructureOptions(emp.salary_structure_id || '');
         $('btn-save-payroll').addEventListener('click', function () {
           save(this, $('emp-save-payroll-feedback'));
         });
@@ -839,7 +1076,7 @@
 
     function paintLeaveSummary_(el, rows) {
       if (!rows.length) {
-        el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances are seeded from active leave types when an employee is created.</p></div>';
+        el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances follow configured leave types from the joining year through the current leave year.</p></div>';
         return;
       }
       el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
@@ -853,21 +1090,24 @@
 
     function loadLeave(employeeId, restore) {
       var el = $('leave-summary');
-      var extras = empViewCache.extras[employeeId];
-      if (restore && extras && extras.leave && el) {
+      var extras = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+      if (extras.leave && el) {
         paintLeaveSummary_(el, extras.leave);
         return;
       }
+      if (extras.leaveLoading) return;
+      extras.leaveLoading = true;
       var seq = App.getState().navSeq;
       callServer('apiGetEmployeeLeaveSummary', employeeId)
         .then(function (rows) {
+          extras.leaveLoading = false;
           var panel = $('leave-summary');
           if (!panel || seq !== App.getState().navSeq) return;
-          empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
-          empViewCache.extras[employeeId].leave = rows;
+          extras.leave = rows;
           paintLeaveSummary_(panel, rows);
         })
         .catch(function (err) {
+          extras.leaveLoading = false;
           var panel = $('leave-summary');
           paintErr(panel, err.message || 'Leave summary unavailable', function () { loadLeave(employeeId); });
         });
@@ -875,22 +1115,28 @@
 
     function loadDocs(emp, notice, restore) {
       var seq = App.getState().navSeq;
-      var extra = empViewCache.extras[emp.employee_id];
-      var req = (restore && extra && extra.docs)
+      var extra = empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
+      if (extra.docsLoading && !notice) return;
+      extra.docsLoading = true;
+      var req = (extra.docs && !notice)
         ? Promise.resolve(extra.docs)
         : callServer('apiGetEmployeeDocuments', emp.employee_id);
       req.then(function (rows) {
+          extra.docsLoading = false;
           var el = $('docs-panel');
           if (!el || seq !== App.getState().navSeq) return;
-          empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
-          empViewCache.extras[emp.employee_id].docs = rows;
+          extra.docs = rows;
           var html = '';
           if (emp.can_upload_documents) {
-            html += '<div class="form-row"><div class="form-group"><label class="form-label" for="doc-title">Title</label>' +
-              '<input class="form-input" id="doc-title" placeholder="Offer letter"></div>' +
-              '<div class="form-group"><label class="form-label" for="doc-file">File</label><input class="form-input" type="file" id="doc-file"></div></div>' +
-              '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-upload-doc">Upload</button></div>' +
-              '<div id="emp-upload-feedback" class="action-feedback hidden" role="status"></div>';
+            html += '<div id="doc-upload-form" class="doc-upload-form">' +
+              '<h3 class="section-title">Upload documents</h3>' +
+              '<p class="hint">Use <strong>+ Add document</strong> to attach multiple files (offer letter, ID proof, etc.), then click <strong>Upload all</strong>.</p>' +
+              '<div id="doc-upload-rows"></div>' +
+              '<div class="form-actions doc-upload-actions">' +
+              '<button type="button" class="btn btn-secondary btn-add-doc-row" id="btn-add-doc-row">+ Add document</button>' +
+              '<button type="button" class="btn btn-primary" id="btn-upload-doc">Upload all</button>' +
+              '</div>' +
+              '<div id="emp-upload-feedback" class="action-feedback hidden" role="status"></div></div>';
           }
           if (!rows.length) html += '<div class="empty-state empty-state-inline"><p class="empty-state-title">No employee files yet</p><p class="empty-state-text">Upload a document to keep it with this record.</p></div>';
           else {
@@ -902,11 +1148,16 @@
             html += '</tbody></table></div>';
           }
           el.innerHTML = html;
-          if ($('btn-upload-doc')) $('btn-upload-doc').addEventListener('click', function () { uploadDoc(emp); });
+          if (emp.can_upload_documents) {
+            initDocUploadRows();
+            if ($('btn-add-doc-row')) $('btn-add-doc-row').addEventListener('click', function () { addDocUploadRow(); });
+          }
+          if ($('btn-upload-doc')) $('btn-upload-doc').addEventListener('click', function () { uploadDocs(emp); });
           bindDownloads(el);
           if (notice && setActionFeedback) setActionFeedback($('emp-upload-feedback') || el, notice, 'success');
         })
         .catch(function (err) {
+          extra.docsLoading = false;
           var el = $('docs-panel');
           paintErr(el, err.message || 'Documents unavailable', function () { loadDocs(emp); });
         });
@@ -914,28 +1165,34 @@
 
     function loadPayslips(employeeId, restore) {
       var seq = App.getState().navSeq;
-      var extra = empViewCache.extras[employeeId];
-      var req = (restore && extra && extra.payslips)
+      var extra = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+      if (extra.payslipsLoading) return;
+      extra.payslipsLoading = true;
+      var req = extra.payslips
         ? Promise.resolve(extra.payslips)
         : callServer('apiGetEmployeePayslips', employeeId);
       req.then(function (rows) {
+          extra.payslipsLoading = false;
           var el = $('payslip-panel');
           if (!el || seq !== App.getState().navSeq) return;
-          empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
-          empViewCache.extras[employeeId].payslips = rows;
+          extra.payslips = rows;
           if (!rows.length) {
-            el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No payslips yet</p><p class="empty-state-text">Files appear here after payroll is locked.</p></div>';
+            el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No payslips available yet.</p></div>';
             return;
           }
-          el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Run</th><th>Uploaded</th><th class="col-actions"></th></tr></thead><tbody>' +
+          el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Net pay</th><th>Generated</th><th class="col-actions"></th></tr></thead><tbody>' +
             rows.map(function (d) {
-              return '<tr><td>' + escapeHtml(d.title) + '</td><td>' + escapeHtml(d.payroll_run_id || '—') + '</td><td>' +
-                escapeHtml(String(d.uploaded_at || '')) + '</td><td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' +
-                escapeHtml(d.document_id) + '">Download</button></td></tr>';
+              var period = d.period_label || d.title || 'Payslip';
+              var net = d.net_pay != null && d.net_pay !== '' ? ('₹' + Number(d.net_pay).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '-';
+              return '<tr><td>' + escapeHtml(period) + '</td><td class="num">' + escapeHtml(net) + '</td><td>' +
+                escapeHtml(String(d.generated_at || d.uploaded_at || '')) + '</td><td class="col-actions">' +
+                '<button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">View</button> ' +
+                '<button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">Download</button></td></tr>';
             }).join('') + '</tbody></table></div>';
           bindDownloads(el);
         })
         .catch(function (err) {
+          extra.payslipsLoading = false;
           var el = $('payslip-panel');
           paintErr(el, err.message || 'Payslips unavailable', function () { loadPayslips(employeeId); });
         });
@@ -967,41 +1224,413 @@
       URL.revokeObjectURL(url);
     }
 
-    function uploadDoc(emp) {
-      var fileInput = $('doc-file');
-      var title = $('doc-title') ? $('doc-title').value : '';
+    var bulkState = { uploadId: null, preview: null };
+
+    function renderBulkUpload() {
+      var page = pageEl();
+      if (!page) return;
+      bulkState.uploadId = null;
+      bulkState.preview = null;
+      page.innerHTML =
+        '<div class="page-header"><div class="page-header-text">' +
+        '<h2 class="page-heading">Bulk upload employees</h2>' +
+        '<p class="page-lede">Use the <strong>new hire</strong> template for joiners with portal login, or the <strong>existing / legacy</strong> template for historical employees (usually create_login NO). Edit wording in Settings → Content templates.</p></div>' +
+        '<div class="page-header-actions">' +
+        (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-back">Back to directory</button></div></div>' +
+        '<div class="card">' +
+        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml([
+          'employee_id', 'first_name', 'last_name', 'work_email', 'department', 'designation',
+          'vertical_name', 'location', 'employment_type', 'joining_date', 'create_login'
+        ]) : '') +
+        '<p class="form-hint">When create_login is YES, google_login_email is also required.</p>' +
+        '<div class="bulk-action-bar">' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template">New hire - Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">New hire - CSV</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template">Legacy - Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="btn-bulk-legacy-template-csv">Legacy - CSV</button>' +
+        '<button type="button" class="btn btn-primary" id="btn-bulk-choose">Choose Excel/CSV file</button>' +
+        '<input type="file" id="bulk-file-input" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls,.csv">' +
+        '<button type="button" class="btn btn-primary" id="btn-bulk-validate" disabled>Validate upload</button>' +
+        '</div>' +
+        '<p id="bulk-file-name" class="form-hint">No file selected.</p>' +
+        '<div id="bulk-feedback" class="action-feedback hidden" role="status"></div>' +
+        '<div id="bulk-preview"></div></div>';
+      markView_('employee-bulk-upload');
+      $('btn-bulk-back').addEventListener('click', function () { navigate('employees'); });
+      $('btn-bulk-template').addEventListener('click', function () {
+        var btn = $('btn-bulk-template');
+        callServer('apiDownloadBulkEmployeeTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'Excel template download failed. Try CSV template.', 'error');
+          });
+      });
+      $('btn-bulk-template-csv').addEventListener('click', function () {
+        var btn = $('btn-bulk-template-csv');
+        callServer('apiDownloadBulkEmployeeCsvTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'CSV template download failed', 'error');
+          });
+      });
+      $('btn-bulk-legacy-template').addEventListener('click', function () {
+        var btn = $('btn-bulk-legacy-template');
+        callServer('apiDownloadBulkLegacyEmployeeTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'Legacy Excel template download failed', 'error');
+          });
+      });
+      $('btn-bulk-legacy-template-csv').addEventListener('click', function () {
+        var btn = $('btn-bulk-legacy-template-csv');
+        callServer('apiDownloadBulkLegacyEmployeeCsvTemplate', { button: btn, loadingText: 'Preparing...' })
+          .then(downloadBlob)
+          .catch(function (err) {
+            showToast((err && err.message) || 'Legacy CSV template download failed', 'error');
+          });
+      });
+      var selectedFile = null;
+      $('btn-bulk-choose').addEventListener('click', function () {
+        var content = document.querySelector('.content');
+        var scrollTop = content ? content.scrollTop : 0;
+        $('bulk-file-input').click();
+        if (content) requestAnimationFrame(function () { content.scrollTop = scrollTop; });
+      });
+      var bulkFileInput = $('bulk-file-input');
+      if (bulkFileInput) bulkFileInput.addEventListener('focus', function () { try { bulkFileInput.blur(); } catch (ignore) {} });
+      $('bulk-file-input').addEventListener('change', function () {
+        selectedFile = this.files && this.files[0] ? this.files[0] : null;
+        $('btn-bulk-validate').disabled = !selectedFile;
+        $('bulk-file-name').textContent = selectedFile ? selectedFile.name : 'No file selected.';
+        bulkState.uploadId = null;
+        bulkState.preview = null;
+        $('bulk-preview').innerHTML = '';
+      });
+      $('btn-bulk-validate').addEventListener('click', function () {
+        if (!selectedFile) return;
+        var btn = $('btn-bulk-validate');
+        var feedback = $('bulk-feedback');
+        readFileBase64(selectedFile).then(function (meta) {
+          return callServer('apiValidateBulkEmployeeUpload', meta, {
+            button: btn,
+            loadingText: 'Validating...',
+            feedback: feedback
+          });
+        }).then(function (preview) {
+          bulkState.uploadId = preview.uploadId;
+          bulkState.preview = preview;
+          paintBulkPreview(preview);
+        }).catch(function (err) {
+          var msg = (err && err.message) || 'Validation failed';
+          if (setActionFeedback) setActionFeedback(feedback, msg, 'error');
+          else showToast(msg, 'error');
+        });
+      });
+    }
+
+    function readFileBase64(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read file.')); };
+        reader.onload = function () {
+          var result = reader.result || '';
+          resolve({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(result).split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function paintBulkPreview(preview) {
+      var el = $('bulk-preview');
+      if (!el) return;
+      var html = '<div class="alert alert-info">Validated ' + preview.totalRows + ' row(s): ' +
+        preview.validCount + ' ready, ' + preview.errorCount + ' with errors.</div>';
+      if (preview.validCount) {
+        html += '<h3 class="section-title">Ready to import (' + preview.validCount + ')</h3>';
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Row</th><th>Employee code</th><th>Name</th><th>Email</th><th>Department</th><th>Vertical</th><th>Salary structure</th><th>Login</th>' +
+          '</tr></thead><tbody>';
+        preview.valid.forEach(function (row) {
+          html += '<tr><td>' + escapeHtml(String(row.rowNumber || '')) + '</td><td class="mono">' +
+            escapeHtml(row.employee_id) + '</td><td>' + escapeHtml(row.display_name) + '</td><td>' +
+            escapeHtml(row.work_email) + '</td><td>' + escapeHtml(row.department) + '</td><td>' +
+            escapeHtml(row.vertical_name || '') + '</td><td>' + escapeHtml(row.salary_structure || '') + '</td><td>' + escapeHtml(row.create_login) + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        html += '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-bulk-confirm">Confirm import (' +
+          preview.validCount + ')</button></div>';
+      }
+      if (preview.errorCount) {
+        html += '<h3 class="section-title">Errors (' + preview.errorCount + ')</h3>';
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Row</th><th>Employee code</th><th>Field</th><th>Message</th></tr></thead><tbody>';
+        preview.errors.forEach(function (err) {
+          (err.messages || []).forEach(function (m) {
+            html += '<tr><td>' + escapeHtml(String(err.rowNumber)) + '</td><td class="mono">' +
+              escapeHtml(err.employee_id || '') + '</td><td>' + escapeHtml(m.field || '') + '</td><td>' +
+              escapeHtml(m.message || '') + '</td></tr>';
+          });
+        });
+        html += '</tbody></table></div>';
+      }
+      el.innerHTML = html;
+      var confirmBtn = $('btn-bulk-confirm');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+          if (!bulkState.uploadId) return;
+          var btn = confirmBtn;
+          var feedback = $('bulk-feedback');
+          callServer('apiConfirmBulkEmployeeUpload', bulkState.uploadId, {
+            button: btn,
+            loadingText: 'Importing...',
+            feedback: feedback
+          }).then(function (result) {
+            invalidateEmpLists_();
+            var msg = 'Created ' + result.createdCount + ' employee(s).';
+            if (result.failedCount) msg += ' ' + result.failedCount + ' failed.';
+            if (setFlash) setFlash(msg, result.failedCount ? 'warning' : 'success', 'employees');
+            if (result.errorCsv) downloadBlob(result.errorCsv);
+            navigate('employees');
+          }).catch(function (err) {
+            if (setActionFeedback) setActionFeedback(feedback, err.message || 'Import failed', 'error');
+          });
+        });
+      }
+    }
+
+    function docUploadRowHtml(index) {
+      return '<div class="doc-upload-row form-row" data-row="' + index + '">' +
+        '<div class="form-group"><label class="form-label">Title</label>' +
+        '<input class="form-input js-doc-title" placeholder="Offer letter"></div>' +
+        '<div class="form-group"><label class="form-label">File</label>' +
+        '<input class="form-input js-doc-file" type="file"></div>' +
+        '<div class="form-group doc-upload-remove-wrap">' +
+        '<label class="form-label">&nbsp;</label>' +
+        '<button type="button" class="btn btn-secondary btn-sm js-remove-doc-row" title="Remove row">Remove</button>' +
+        '</div></div>';
+    }
+
+    function initDocUploadRows() {
+      var wrap = $('doc-upload-rows');
+      if (!wrap) return;
+      wrap.innerHTML = docUploadRowHtml(0);
+      bindDocUploadRows(wrap);
+    }
+
+    function addDocUploadRow() {
+      var wrap = $('doc-upload-rows');
+      if (!wrap) return;
+      var index = wrap.querySelectorAll('.doc-upload-row').length;
+      wrap.insertAdjacentHTML('beforeend', docUploadRowHtml(index));
+      bindDocUploadRows(wrap);
+    }
+
+    function bindDocUploadRows(wrap) {
+      var rows = wrap.querySelectorAll('.js-remove-doc-row');
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].onclick = function () {
+          var row = this.closest('.doc-upload-row');
+          if (!row || !wrap) return;
+          if (wrap.querySelectorAll('.doc-upload-row').length <= 1) {
+            row.querySelector('.js-doc-title').value = '';
+            var fileInput = row.querySelector('.js-doc-file');
+            if (fileInput) fileInput.value = '';
+            return;
+          }
+          row.parentNode.removeChild(row);
+        };
+      }
+    }
+
+    function loadAppAccess(emp, restore) {
+      var seq = App.getState().navSeq;
+      var extra = empViewCache.extras[emp.employee_id] = empViewCache.extras[emp.employee_id] || {};
+      if (extra.appAccessLoading) return;
+      extra.appAccessLoading = true;
+      var req = extra.appAccess
+        ? Promise.resolve(extra.appAccess)
+        : callServer('apiGetEmployeeAppAccess', emp.employee_id);
+      req.then(function (data) {
+        extra.appAccessLoading = false;
+        var el = $('app-access-panel');
+        if (!el || seq !== App.getState().navSeq) return;
+        extra.appAccess = data;
+        if (!data.has_login) {
+          el.innerHTML = '<div class="empty-state empty-state-inline">' +
+            '<p class="empty-state-title">No login yet</p>' +
+            '<p class="empty-state-text">Create a Google login for this employee before setting self-service access.</p></div>';
+          return;
+        }
+        var access = data.access || {};
+        var roleHtml = '';
+        if (data.role_is_owner) {
+          roleHtml = '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + ' · Role: Owner (cannot be changed)</p>';
+        } else if (data.can_edit_role && data.assignable_roles && data.assignable_roles.length) {
+          var roleOpts = data.assignable_roles.map(function (r) {
+            var sel = String(data.role || '').toUpperCase() === String(r).toUpperCase() ? ' selected' : '';
+            return '<option value="' + escapeHtml(r) + '"' + sel + '>' + escapeHtml(r) + '</option>';
+          }).join('');
+          roleHtml = '<div class="form-grid emp-form-grid">' +
+            fieldGroup('acc-role', 'HRMS role',
+              '<select class="form-select" id="acc-role">' + roleOpts + '</select>' +
+              '<p class="form-hint">Admin/Owner only. Managers and HR are assigned here after hire.</p>') +
+            '</div>' +
+            '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + '</p>';
+        } else {
+          roleHtml = '<p class="hint mono">Login: ' + escapeHtml(data.google_email || '') + ' · Role: ' + escapeHtml(data.role || '') + '</p>' +
+            '<p class="form-hint">Only Admin/Owner can change HRMS role. New employees are created as Employee.</p>';
+        }
+        var saveLabel = data.can_edit_role ? 'Save role & access' : 'Save access';
+        var welcomeActions = '';
+        if (data.can_send_welcome) {
+          welcomeActions =
+            '<div class="card" style="margin-top:16px"><h3 class="card-title">Welcome message</h3>' +
+            '<p class="hint">Send the standard professional welcome email with portal details.</p>' +
+            '<div class="form-actions" style="flex-wrap:wrap;gap:8px">' +
+            '<button type="button" class="btn btn-primary" id="btn-welcome-email">Send welcome email</button>' +
+            '</div>' +
+            '<div id="emp-welcome-feedback" class="action-feedback hidden" role="status"></div></div>';
+        }
+        el.innerHTML =
+          '<p class="hint">Control what this employee can access in the app. HR and Admin always have full access.</p>' +
+          roleHtml +
+          '<div class="form-grid emp-form-grid">' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-documents"' +
+          (access.access_documents ? ' checked' : '') + '> Download documents</label>' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-payslips"' +
+          (access.access_payslips ? ' checked' : '') + '> Download payslips</label>' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-leave"' +
+          (access.access_leave ? ' checked' : '') + '> Leave apply and history</label>' +
+          '</div>' +
+          '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-app-access">' + saveLabel + '</button></div>' +
+          '<div id="emp-app-access-feedback" class="action-feedback hidden" role="status"></div>' +
+          welcomeActions;
+        if ($('btn-save-app-access')) {
+          $('btn-save-app-access').addEventListener('click', function () {
+            saveAppAccess(emp);
+          });
+        }
+        bindWelcomeSend_(emp, data);
+      }).catch(function (err) {
+        extra.appAccessLoading = false;
+        var el = $('app-access-panel');
+        paintErr(el, err.message || 'App access unavailable', function () { loadAppAccess(emp); });
+      });
+    }
+
+    function bindWelcomeSend_(emp, data) {
+      function runSend(options) {
+        var feedback = $('emp-welcome-feedback');
+        callServer('apiSendEmployeeWelcome', emp.employee_id, options, {
+          feedback: feedback,
+          loadingText: 'Sending welcome…'
+        }).then(function (result) {
+          var parts = [];
+          if (result.email && result.email.attempted) {
+            parts.push('Email: ' + (result.email.ok ? 'sent' : result.email.status));
+          }
+          if (setActionFeedback) setActionFeedback(feedback, parts.join(' · ') || 'Done.', 'success');
+        });
+      }
+      var emailBtn = $('btn-welcome-email');
+      if (emailBtn) emailBtn.addEventListener('click', function () { runSend({ email: true }); });
+    }
+
+    function saveAppAccess(emp) {
+      var feedback = $('emp-app-access-feedback');
+      var payload = {
+        access_documents: $('acc-documents') && $('acc-documents').checked,
+        access_payslips: $('acc-payslips') && $('acc-payslips').checked,
+        access_leave: $('acc-leave') && $('acc-leave').checked
+      };
+      var roleEl = $('acc-role');
+      if (roleEl) payload.role = roleEl.value;
+      var saveBtn = $('btn-save-app-access');
+      var successMsg = roleEl ? 'Role and access saved.' : 'Access saved.';
+      callServer('apiSaveEmployeeAppAccess', emp.employee_id, payload, {
+        button: saveBtn,
+        loadingText: 'Saving…',
+        feedback: feedback
+      }).then(function (data) {
+        if (empViewCache.extras[emp.employee_id]) {
+          empViewCache.extras[emp.employee_id].appAccess = data;
+        }
+        if (setActionFeedback) setActionFeedback(feedback, successMsg, 'success');
+      });
+    }
+
+    function readFileAsUpload(file, title) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Could not read ' + (file.name || 'file'))); };
+        reader.onload = function () {
+          var result = reader.result || '';
+          resolve({
+            title: title || file.name,
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: String(result).split(',')[1] || ''
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function uploadDocs(emp) {
+      var wrap = $('doc-upload-rows');
       var btn = $('btn-upload-doc');
       var feedback = $('emp-upload-feedback');
-      if (!fileInput || !fileInput.files || !fileInput.files[0]) {
-        if (setActionFeedback) setActionFeedback(feedback, 'Choose a file to upload', 'error');
-        else showToast('Choose a file to upload', 'error');
+      if (!wrap) return;
+      var rows = wrap.querySelectorAll('.doc-upload-row');
+      var items = [];
+      for (var i = 0; i < rows.length; i++) {
+        var titleEl = rows[i].querySelector('.js-doc-title');
+        var fileEl = rows[i].querySelector('.js-doc-file');
+        var file = fileEl && fileEl.files && fileEl.files[0];
+        if (!file) continue;
+        items.push({
+          title: titleEl ? titleEl.value : '',
+          file: file
+        });
+      }
+      if (!items.length) {
+        if (setActionFeedback) setActionFeedback(feedback, 'Choose at least one file to upload', 'error');
+        else showToast('Choose at least one file to upload', 'error');
         return;
       }
       if (App.isButtonLoading && App.isButtonLoading(btn)) return;
-      if (App.setButtonLoading) App.setButtonLoading(btn, 'Uploading...');
-      var file = fileInput.files[0];
-      var reader = new FileReader();
-      reader.onerror = function () {
-        if (App.restoreButton) App.restoreButton(btn);
-        if (setActionFeedback) setActionFeedback(feedback, 'Could not read that file', 'error');
-      };
-      reader.onload = function () {
-        var result = reader.result || '';
-        var base64 = String(result).split(',')[1] || '';
-        callServer('apiUploadEmployeeDocument', emp.employee_id, {
-          title: title || file.name,
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          base64: base64
-        }, { button: btn, loadingText: 'Uploading...', feedback: feedback }).then(function () {
-          if (empViewCache.extras[emp.employee_id]) delete empViewCache.extras[emp.employee_id].docs;
-          shellInv_(emp.employee_id === (App.getState().session || {}).employee_id
-            ? 'my-profile'
-            : ('employee-profile:' + emp.employee_id));
-          loadDocs(emp, 'File uploaded.');
+      if (App.setButtonLoading) App.setButtonLoading(btn, 'Uploading…');
+      Promise.all(items.map(function (item) {
+        return readFileAsUpload(item.file, item.title);
+      })).then(function (metas) {
+        return callServer('apiUploadEmployeeDocuments', emp.employee_id, metas, {
+          button: btn,
+          loadingText: 'Uploading…',
+          feedback: feedback
         });
-      };
-      reader.readAsDataURL(file);
+      }).then(function (result) {
+        var count = (result && result.uploadedCount) || items.length;
+        if (empViewCache.extras[emp.employee_id]) delete empViewCache.extras[emp.employee_id].docs;
+        shellInv_(emp.employee_id === (App.getState().session || {}).employee_id
+          ? 'my-profile'
+          : ('employee-profile:' + emp.employee_id));
+        if (App.restoreButton) App.restoreButton(btn);
+        loadDocs(emp, count === 1 ? 'File uploaded.' : (count + ' files uploaded.'));
+      }).catch(function (err) {
+        if (App.restoreButton) App.restoreButton(btn);
+        var msg = (err && err.message) || 'Upload failed';
+        if (setActionFeedback) setActionFeedback(feedback, msg, 'error');
+        else showToast(msg, 'error');
+      });
+    }
+
+    function uploadDoc(emp) {
+      uploadDocs(emp);
     }
   });
 })();

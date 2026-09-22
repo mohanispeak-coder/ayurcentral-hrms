@@ -1,6 +1,15 @@
 .clasprc.json
-.cursor/
+.cursor/*
+!.cursor/environment.json
 node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+tests/browser/.auth/*.json
+.env
+.env.local
 .DS_Store
 Thumbs.db
 apps-script-remote-backup/
+docs/.chrome-pdf-profile/

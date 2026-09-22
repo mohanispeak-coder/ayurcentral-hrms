@@ -23,6 +23,13 @@ function apiGetEmployeePicker(sessionToken) {
   }, sessionToken);
 }
 
+function apiGetEmployeeVerticals(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listVerticals(session);
+  }, sessionToken);
+}
+
 function apiGetEmployee(employeeId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
@@ -79,6 +86,13 @@ function apiUploadEmployeeDocument(employeeId, meta, sessionToken) {
   }, sessionToken);
 }
 
+function apiUploadEmployeeDocuments(employeeId, files, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.uploadDocuments(session, employeeId, files || []);
+  }, sessionToken);
+}
+
 function apiDownloadEmployeeDocument(documentId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
@@ -90,5 +104,19 @@ function apiGetEmployeeLeaveSummary(employeeId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return EmployeeService.getLeaveSummary(session, employeeId);
+  }, sessionToken);
+}
+
+function apiListEmployeeFieldDefs(includeInactive, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeFieldDefService.listFieldDefs(!includeInactive);
+  }, sessionToken);
+}
+
+function apiSaveEmployeeFieldDefs(payload, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeFieldDefService.saveFieldDefs(payload || {});
   }, sessionToken);
 }

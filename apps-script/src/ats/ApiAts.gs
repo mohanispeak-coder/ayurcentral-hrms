@@ -2,11 +2,17 @@
  * Authenticated ATS APIs. AuthZ is re-checked in AtsService / AtsPermissionService.
  */
 
-function apiAtsGetBootstrap(sessionToken) {
+function apiAtsGetBootstrap(optionsOrToken, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return AtsService.getBootstrap(session);
-  }, sessionToken);
+    var options = {};
+    if (optionsOrToken && typeof optionsOrToken === 'object' && !Array.isArray(optionsOrToken)) {
+      options = optionsOrToken;
+    }
+    return AtsService.getBootstrap(session, options);
+  }, typeof optionsOrToken === 'string' || optionsOrToken === undefined || optionsOrToken === null
+    ? optionsOrToken
+    : sessionToken);
 }
 
 function apiAtsEnsureSchema(sessionToken) {

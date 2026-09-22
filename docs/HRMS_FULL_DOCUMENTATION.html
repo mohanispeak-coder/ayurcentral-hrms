@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AyurCentral HRMS — Full Documentation</title>
+<style>
+@page { margin: 18mm 14mm; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11pt; line-height: 1.45; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 12px; }
+h1 { font-size: 22pt; border-bottom: 2px solid #0f766e; padding-bottom: 8px; color: #0f766e; }
+h2 { font-size: 14pt; margin-top: 1.4em; color: #134e4a; page-break-after: avoid; }
+h3 { font-size: 12pt; margin-top: 1em; page-break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 9.5pt; }
+th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f1f5f9; font-weight: 600; }
+tr:nth-child(even) td { background: #f8fafc; }
+code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
+ul { margin: 0.4em 0; }
+p { margin: 0.5em 0; }
+</style>
+</head>
+<body>
+<h1>AyurCentral HRMS — Full documentation (reference PDF)</h1>
+<p><strong>Product:</strong> AyurCentral Enterprise HRMS<br />
+<strong>Stack:</strong> Google Apps Script web app + one Google Spreadsheet + Google Drive<br />
+<strong>Branch reference:</strong> <code>cursor/experiment-500f</code> (two-stage leave, bulk approvals)</p>
+<hr />
+<h2>1. What this system is</h2>
+<p>AyurCentral HRMS is a single-tenant HRMS for employees, leave, payroll, recruitment (ATS), notifications, and an <strong>Ask HR</strong> knowledge assistant. All authoritative data lives in <strong>Google Sheets</strong> tabs; files (payslips, employee documents) live in <strong>Google Drive</strong>. Users sign in with <strong>Google email + OTP</strong>; authorization is enforced on every server API via <code>PermissionService</code>.</p>
+<hr />
+<h2>2. Modules at a glance</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Purpose</th>
+<th>Main UI routes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Foundation</strong></td>
+<td>Auth, permissions, DB, config, dashboard shell</td>
+<td>Sign-in, Dashboard</td>
+</tr>
+<tr>
+<td><strong>Employee</strong></td>
+<td>Directory, profiles, bulk upload, documents</td>
+<td><code>employees</code>, <code>my-profile</code>, <code>my-team</code></td>
+</tr>
+<tr>
+<td><strong>Leave</strong></td>
+<td>Apply, multi-stage approvals, types, balances</td>
+<td><code>my-leave</code>, <code>leave-approvals</code>, <code>leave-admin</code></td>
+</tr>
+<tr>
+<td><strong>Payroll</strong></td>
+<td>Runs, inputs, calculate, lock, payslips</td>
+<td><code>payroll</code>, <code>my-payslips</code></td>
+</tr>
+<tr>
+<td><strong>Compensation</strong></td>
+<td>Salary structures &amp; components</td>
+<td><code>compensation</code> (often under Payroll nav)</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>In-app bell, preferences, email log</td>
+<td><code>notifications</code></td>
+</tr>
+<tr>
+<td><strong>Ask HR</strong></td>
+<td>RAG-style HR Q&amp;A (Knowledge Hub)</td>
+<td>Floating panel on all pages</td>
+</tr>
+<tr>
+<td><strong>ATS (Recruitment)</strong></td>
+<td>Jobs, candidates, applications, interviews</td>
+<td><code>ats</code>, <code>ats-jobs</code>, <code>ats-candidates</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>3. Roles and navigation (summary)</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Typical access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OWNER / ADMIN</strong></td>
+<td>Setup, users (placeholders), all HR modules, final leave stages, payroll</td>
+</tr>
+<tr>
+<td><strong>HR</strong></td>
+<td>Employees, leave admin, payroll, recruitment, notifications</td>
+</tr>
+<tr>
+<td><strong>MANAGER</strong></td>
+<td>My team, <strong>stage-1 leave approval</strong> for direct reports, own leave/payslips, ATS</td>
+</tr>
+<tr>
+<td><strong>EMPLOYEE</strong></td>
+<td>My profile, my leave, my payslips (if <code>Users.access_*</code> flags allow)</td>
+</tr>
+</tbody>
+</table>
+<p>Detailed matrix: see <code>03_USER_ROLES_PERMISSIONS.md</code>.</p>
+<hr />
+<h2>4. Leave workflow (current policy)</h2>
+<h3>4.1 Who approves whom</h3>
+<table>
+<thead>
+<tr>
+<th>Applicant (<code>Users.role</code>)</th>
+<th>Approval chain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Employee</strong> (with manager)</td>
+<td><strong>Manager</strong> → then <strong>HR or Admin</strong> (either one completes stage 2)</td>
+</tr>
+<tr>
+<td><strong>Employee</strong> (no manager)</td>
+<td><strong>HR or Admin</strong> (one step)</td>
+</tr>
+<tr>
+<td><strong>Manager</strong></td>
+<td><strong>HR</strong> → then <strong>Admin</strong> (both required, in order)</td>
+</tr>
+<tr>
+<td><strong>HR</strong></td>
+<td><strong>Admin only</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Statuses on <strong>LeaveRequests</strong>: <code>PENDING_MANAGER</code>, <code>PENDING_HR</code>, <code>PENDING_ADMIN</code>, then <code>APPROVED</code> / <code>REJECTED</code> / <code>CANCELLED</code>. Legacy <code>SUBMITTED</code> is treated as <code>PENDING_MANAGER</code>.</p>
+<h3>4.2 Balances</h3>
+<ul>
+<li><strong>Leave balances are not in the employee CSV.</strong> On create/bulk upload, rows are seeded on <strong>LeaveBalances</strong> from <strong>LeaveTypes</strong> <code>annual_entitlement_days</code>.</li>
+<li><strong>New leave year:</strong> Leave admin → <strong>Start leave year (grant balances)</strong>.</li>
+</ul>
+<h3>4.3 Bulk approval (UI)</h3>
+<p>On <strong>Leave Approvals</strong> and <strong>Leave admin → Requests</strong>: <strong>Select all</strong>, row checkboxes, <strong>Approve selected</strong> / <strong>Reject selected</strong> (one comment for the batch). Server runs the same rules per request.</p>
+<hr />
+<h2>5. Data storage (quick index)</h2>
+<table>
+<thead>
+<tr>
+<th>Sheet tab</th>
+<th>Primary key</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Employees</td>
+<td>employee_id</td>
+<td>Person master</td>
+</tr>
+<tr>
+<td>Users</td>
+<td>google_email</td>
+<td>Login, role, access flags</td>
+</tr>
+<tr>
+<td>LeaveTypes / LeaveBalances / LeaveRequests</td>
+<td>various</td>
+<td>Leave policy &amp; workflow</td>
+</tr>
+<tr>
+<td>SalaryStructures / SalaryComponents</td>
+<td>various</td>
+<td>Compensation</td>
+</tr>
+<tr>
+<td>PayrollRuns / PayrollInputs / PayrollRecords</td>
+<td>various</td>
+<td>Monthly payroll</td>
+</tr>
+<tr>
+<td>Documents</td>
+<td>document_id</td>
+<td>Drive file metadata</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td>notification_id</td>
+<td>Email send log</td>
+</tr>
+<tr>
+<td>NotificationInbox / NotificationPreferences</td>
+<td>various</td>
+<td>In-app bell</td>
+</tr>
+<tr>
+<td>AuditLog</td>
+<td>audit_id</td>
+<td>Audit trail</td>
+</tr>
+<tr>
+<td>Settings</td>
+<td>setting_key</td>
+<td>Config + ID sequences</td>
+</tr>
+<tr>
+<td>JobRequisitions, Candidates, Applications, Interviews, CandidateActivity</td>
+<td>ATS keys</td>
+<td>Recruitment</td>
+</tr>
+</tbody>
+</table>
+<p>Full field-level map: <code>docs/HRMS_COMPLETE_DATA_AND_FEATURES.md</code> (in workspace) or spreadsheet spec <code>02_DATABASE_SCHEMA.md</code>.</p>
+<p><strong>Not in Sheets:</strong> OTP and session tokens in <strong>CacheService</strong>.</p>
+<hr />
+<h2>6. Employee lifecycle (short)</h2>
+<ul>
+<li><strong>Create:</strong> Employees row + optional Users row + auto <strong>LeaveBalances</strong> + Drive folder + audit.</li>
+<li><strong>Deactivate:</strong> <code>Employees.status</code> = INACTIVE, <code>Users.status</code> = DISABLED — history retained.</li>
+<li><strong>No app “delete person”</strong> — do not delete sheet rows manually without fixing dependents.</li>
+</ul>
+<hr />
+<h2>7. Deploy checklist</h2>
+<ol>
+<li><code>git pull origin cursor/experiment-500f</code></li>
+<li><code>cd apps-script</code> → <code>clasp push</code> (folder with <code>.clasp.json</code>, not a nested clone)</li>
+<li>Apps Script → <strong>Deploy → Manage deployments → New version</strong></li>
+<li>Hard refresh the web app URL</li>
+</ol>
+<hr />
+<h2>Appendix A — Repository documentation files</h2>
+<p>Each file below lives in the <strong>ayurcentral-hrms</strong> Git repo. Use it for product, data, or implementation detail.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>00_MASTER_SPEC.md</strong></td>
+<td>Top-level product scope and document index for the spec set</td>
+</tr>
+<tr>
+<td><strong>01_PRODUCT_REQUIREMENTS.md</strong></td>
+<td>MUST/SHOULD requirements (notifications, payroll states, etc.)</td>
+</tr>
+<tr>
+<td><strong>02_DATABASE_SCHEMA.md</strong></td>
+<td>Canonical column list for every sheet tab</td>
+</tr>
+<tr>
+<td><strong>03_USER_ROLES_PERMISSIONS.md</strong></td>
+<td>Roles, nav matrix, permission intent</td>
+</tr>
+<tr>
+<td><strong>04_EMPLOYEE_MODULE.md</strong></td>
+<td>Employee CRUD, profile, documents behavior</td>
+</tr>
+<tr>
+<td><strong>05_LEAVE_MODULE.md</strong></td>
+<td>Leave states, validation, balance rules (update with multi-stage in code)</td>
+</tr>
+<tr>
+<td><strong>06_PAYROLL_COMPENSATION_MODULE.md</strong></td>
+<td>Payroll run workflow and compensation structures</td>
+</tr>
+<tr>
+<td><strong>07_DASHBOARD_NOTIFICATIONS.md</strong></td>
+<td>Dashboard widgets and MailApp notification events</td>
+</tr>
+<tr>
+<td><strong>08_UI_DESIGN_SYSTEM.md</strong></td>
+<td>UI patterns, components, UX conventions</td>
+</tr>
+<tr>
+<td><strong>09_APPS_SCRIPT_ARCHITECTURE.md</strong></td>
+<td>Layers, services, concurrency, no Advanced APIs</td>
+</tr>
+<tr>
+<td><strong>10_SECURITY_AUDIT.md</strong></td>
+<td>Security assumptions and review notes</td>
+</tr>
+<tr>
+<td><strong>11_TEST_PLAN.md</strong></td>
+<td>Test strategy and P0 cases</td>
+</tr>
+<tr>
+<td><strong>12_BUILD_PLAN.md</strong></td>
+<td>Build/phasing notes</td>
+</tr>
+<tr>
+<td><strong>apps-script/SETUP.md</strong></td>
+<td>clasp, script properties, first-time setup</td>
+</tr>
+<tr>
+<td><strong>docs/ATS_INTEGRATION_NOTES.md</strong></td>
+<td>How ATS connects to HRMS sheets and Drive</td>
+</tr>
+<tr>
+<td><strong>docs/BULK_UPLOAD_TESTING_GUIDE.md</strong></td>
+<td>Testing employee/payroll bulk uploads</td>
+</tr>
+<tr>
+<td><strong>docs/HRMS_GAP_ANALYSIS.md</strong></td>
+<td>Known gaps vs requirements</td>
+</tr>
+<tr>
+<td><strong>docs/NOTIFICATIONS_INTEGRATION_NOTES.md</strong></td>
+<td>Wiring leave/payroll events to NotificationEngine</td>
+</tr>
+<tr>
+<td><strong>docs/PERF_BASELINE.md</strong></td>
+<td>Performance baseline measurements</td>
+</tr>
+<tr>
+<td><strong>docs/SHEETS_PERFORMANCE_AUDIT.md</strong></td>
+<td>Spreadsheet read/write patterns</td>
+</tr>
+<tr>
+<td><strong>docs/HRMS_Bulk_Employee_Upload_Template.csv</strong></td>
+<td>CSV template for employee bulk upload</td>
+</tr>
+<tr>
+<td><strong>docs/HRMS_FULL_DOCUMENTATION.md</strong></td>
+<td>This document (source for PDF)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Appendix B — Apps Script project files (module &amp; feature)</h2>
+<p>In the Apps Script editor, files appear with a <strong>folder prefix</strong> (e.g. <code>ats/ApiAts.gs</code>). Below, <strong>Module</strong> = product area; <strong>Feature</strong> = what the file does.</p>
+<h3>B.1 Project root</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Module</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>appsscript.json</strong></td>
+<td>Project</td>
+<td>Manifest (time zone, web app, OAuth scopes)</td>
+</tr>
+</tbody>
+</table>
+<h3>B.2 foundation/ — Core platform</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Main.gs</strong></td>
+<td>Web app <code>doGet</code>, HTML <code>include()</code>, spreadsheet menu (setup, ATS/notification schema)</td>
+</tr>
+<tr>
+<td><strong>Constants.gs</strong></td>
+<td>Sheet names, roles, actions, employee/user status enums</td>
+</tr>
+<tr>
+<td><strong>ApiFoundation.gs</strong></td>
+<td>Auth OTP APIs, home dashboard bundle, lazy module UI loader, setup runners</td>
+</tr>
+<tr>
+<td><strong>AuthService.gs</strong></td>
+<td>Login, OTP issue/verify, session resolution</td>
+</tr>
+<tr>
+<td><strong>AuthSessionService.gs</strong></td>
+<td>Session token storage and validation helpers</td>
+</tr>
+<tr>
+<td><strong>PermissionService.gs</strong></td>
+<td>Role-based actions and sidebar navigation</td>
+</tr>
+<tr>
+<td><strong>UserAccessService.gs</strong></td>
+<td>Per-user flags: <code>access_leave</code>, <code>access_payslips</code>, <code>access_documents</code></td>
+</tr>
+<tr>
+<td><strong>DbService.gs</strong></td>
+<td>Spreadsheet CRUD, sequences, batch insert</td>
+</tr>
+<tr>
+<td><strong>SchemaService.gs</strong></td>
+<td>Bootstrap sheet headers and setup</td>
+</tr>
+<tr>
+<td><strong>ConfigService.gs</strong></td>
+<td>Settings key/value with cache</td>
+</tr>
+<tr>
+<td><strong>AuditService.gs</strong></td>
+<td>Append audit log rows</td>
+</tr>
+<tr>
+<td><strong>Errors.gs</strong></td>
+<td>Typed errors (validation, auth, conflict, not found)</td>
+</tr>
+<tr>
+<td><strong>DriveService.gs</strong></td>
+<td>HRMS Drive root and employee document folders</td>
+</tr>
+<tr>
+<td><strong>HomeDashboardService.gs</strong></td>
+<td>Role-scoped dashboard counts (leave queue, payroll, ATS, notifications)</td>
+</tr>
+<tr>
+<td><strong>LockUtil.gs</strong></td>
+<td>Script lock helpers</td>
+</tr>
+<tr>
+<td><strong>PerfUtil.gs</strong></td>
+<td><code>HrmsPerf</code> timing for slow-path investigation</td>
+</tr>
+</tbody>
+</table>
+<h3>B.3 employee/ — People &amp; directory</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>EmployeeService.gs</strong></td>
+<td>Create/update/status, validation, leave balance seed on hire, Drive folder</td>
+</tr>
+<tr>
+<td><strong>EmployeeRepository.gs</strong></td>
+<td>Sheet access for Employees, Users, leave types/balances lookups</td>
+</tr>
+<tr>
+<td><strong>EmployeeBulkService.gs</strong></td>
+<td>Validate/commit bulk employee CSV upload</td>
+</tr>
+<tr>
+<td><strong>ApiEmployee.gs</strong></td>
+<td>Client APIs: list, get, create, update, status</td>
+</tr>
+<tr>
+<td><strong>ApiEmployeeBulk.gs</strong></td>
+<td>Bulk upload validate/commit APIs</td>
+</tr>
+<tr>
+<td><strong>ApiEmployeeAccess.gs</strong></td>
+<td>Document access APIs for employee files</td>
+</tr>
+<tr>
+<td><strong>EmployeeClient.html</strong></td>
+<td>Employees UI: directory, create, profile client logic</td>
+</tr>
+<tr>
+<td><strong>EmployeePages.html</strong></td>
+<td>Employee page templates/partials</td>
+</tr>
+</tbody>
+</table>
+<h3>B.4 leave/ — Time off</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LeaveEngine.gs</strong></td>
+<td>Pure rules: day count, overlap, multi-stage approval auth, status labels</td>
+</tr>
+<tr>
+<td><strong>LeaveService.gs</strong></td>
+<td>Types, balances, submit/approve/reject/cancel/revoke, bulk approve/reject, calendar, year start</td>
+</tr>
+<tr>
+<td><strong>LeaveLopService.gs</strong></td>
+<td>LOP days from approved leave for open payroll runs</td>
+</tr>
+<tr>
+<td><strong>ApiLeave.gs</strong></td>
+<td>All <code>apiLeave*</code> endpoints for client</td>
+</tr>
+<tr>
+<td><strong>LeaveUi.html</strong></td>
+<td>Leave screens: apply, my leave, approvals (incl. bulk select), admin, calendar</td>
+</tr>
+<tr>
+<td><strong>LeaveClient.html</strong></td>
+<td>Leave module registration and route hooks</td>
+</tr>
+</tbody>
+</table>
+<h3>B.5 payroll/ — Payroll &amp; compensation</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PayrollEngine.gs</strong></td>
+<td>Pure pay calculation from structure + inputs</td>
+</tr>
+<tr>
+<td><strong>PayrollService.gs</strong></td>
+<td>Runs lifecycle: draft, calculate, review, approve, lock</td>
+</tr>
+<tr>
+<td><strong>PayrollBulkService.gs</strong></td>
+<td>Bulk attendance / payroll input upload</td>
+</tr>
+<tr>
+<td><strong>PayrollLeaveBridge.gs</strong></td>
+<td>Refresh LOP from leave on unlocked runs</td>
+</tr>
+<tr>
+<td><strong>CompensationService.gs</strong></td>
+<td>Salary structure CRUD and components</td>
+</tr>
+<tr>
+<td><strong>CompensationBulkService.gs</strong></td>
+<td>Bulk compensation upload</td>
+</tr>
+<tr>
+<td><strong>PayslipService.gs</strong></td>
+<td>Payslip generation and document records</td>
+</tr>
+<tr>
+<td><strong>ApiPayroll.gs</strong></td>
+<td>Client payroll and compensation APIs</td>
+</tr>
+<tr>
+<td><strong>PayrollClient.html</strong></td>
+<td>Payroll UI: runs, inputs, bulk sections, payslips</td>
+</tr>
+</tbody>
+</table>
+<h3>B.6 notifications/ — Notification center</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>NotificationEngine.gs</strong></td>
+<td>Event catalog, payloads, routing (leave, payroll, ATS)</td>
+</tr>
+<tr>
+<td><strong>NotificationService.gs</strong></td>
+<td>Create inbox rows, email via MailApp, preferences</td>
+</tr>
+<tr>
+<td><strong>NotificationSchema.gs</strong></td>
+<td>Ensure NotificationInbox / Preferences sheets</td>
+</tr>
+<tr>
+<td><strong>NotificationAdapters.gs</strong></td>
+<td><code>NotificationLeaveAdapter</code> etc. — called after business commits</td>
+</tr>
+<tr>
+<td><strong>NotificationTriggers.gs</strong></td>
+<td>Time-driven or batch trigger helpers</td>
+</tr>
+<tr>
+<td><strong>ApiNotifications.gs</strong></td>
+<td>Bell, inbox, preferences, announcements APIs</td>
+</tr>
+<tr>
+<td><strong>NotificationClient.html</strong></td>
+<td>Notifications page UI</td>
+</tr>
+<tr>
+<td><strong>NotificationBell.html</strong></td>
+<td>Header bell dropdown</td>
+</tr>
+</tbody>
+</table>
+<h3>B.7 knowledge/ — Ask HR</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AskHrService.gs</strong></td>
+<td>Orchestrates question → Knowledge Hub / grounding</td>
+</tr>
+<tr>
+<td><strong>KnowledgeHubClient.gs</strong></td>
+<td>HTTP client to external Knowledge Hub web app</td>
+</tr>
+<tr>
+<td><strong>AskHrEmployeeLookup.gs</strong></td>
+<td>Optional employee context for answers</td>
+</tr>
+<tr>
+<td><strong>AskHrDiagnostic.gs</strong></td>
+<td>Admin/diagnostic helpers for Ask HR setup</td>
+</tr>
+<tr>
+<td><strong>ApiAskHr.gs</strong></td>
+<td><code>apiAskHr*</code> client endpoints</td>
+</tr>
+</tbody>
+</table>
+<h3>B.8 ats/ — Recruitment (ATS)</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AtsConstants.gs</strong></td>
+<td>ATS sheet names and enums</td>
+</tr>
+<tr>
+<td><strong>AtsSchemaService.gs</strong></td>
+<td>ATS tab headers and ensure schema</td>
+</tr>
+<tr>
+<td><strong>AtsRepository.gs</strong></td>
+<td>CRUD for jobs, candidates, applications, interviews</td>
+</tr>
+<tr>
+<td><strong>AtsEngine.gs</strong></td>
+<td>Business rules and permissions helpers</td>
+</tr>
+<tr>
+<td><strong>AtsPermissionService.gs</strong></td>
+<td>ATS-specific role checks</td>
+</tr>
+<tr>
+<td><strong>AtsService.gs</strong></td>
+<td>Jobs, candidates, pipeline, interviews orchestration</td>
+</tr>
+<tr>
+<td><strong>AtsBulkService.gs</strong></td>
+<td>Bulk import for candidates/applications</td>
+</tr>
+<tr>
+<td><strong>AtsDriveService.gs</strong></td>
+<td>Resume and attachment folders on Drive</td>
+</tr>
+<tr>
+<td><strong>ApiAts.gs</strong></td>
+<td>Authenticated ATS APIs for HRMS UI</td>
+</tr>
+<tr>
+<td><strong>ApiAtsBulk.gs</strong></td>
+<td>Bulk ATS APIs</td>
+</tr>
+<tr>
+<td><strong>ApiAtsPublic.gs</strong></td>
+<td>Public job board / apply endpoints (unauthenticated)</td>
+</tr>
+<tr>
+<td><strong>AtsWeb.gs</strong></td>
+<td>Public <code>doGet</code> routing for careers/apply URLs</td>
+</tr>
+<tr>
+<td><strong>AtsApp.html</strong></td>
+<td>ATS shell / layout in Apps Script</td>
+</tr>
+<tr>
+<td><strong>AtsClient.html</strong></td>
+<td>ATS module UI (jobs, candidates, kanban-style flows)</td>
+</tr>
+<tr>
+<td><strong>AtsPublicApply.html</strong></td>
+<td>Public application form HTML</td>
+</tr>
+</tbody>
+</table>
+<h3>B.9 ui/ — HRMS shell (all modules)</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Index.html</strong></td>
+<td>Main SPA shell: auth gate, sidebar, route container</td>
+</tr>
+<tr>
+<td><strong>Scripts.html</strong></td>
+<td>Router, <code>callServer</code>, nav groups, dashboard, module loader</td>
+</tr>
+<tr>
+<td><strong>Styles.html</strong></td>
+<td>Global CSS, design tokens, tables, bulk toolbars</td>
+</tr>
+</tbody>
+</table>
+<h3>B.10 tests/ — Apps Script unit tests (run in editor)</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TestFoundation.gs</strong></td>
+<td>Schema, auth, permissions smoke tests</td>
+</tr>
+<tr>
+<td><strong>TestEmployee.gs</strong></td>
+<td>Employee service tests</td>
+</tr>
+<tr>
+<td><strong>TestLeave.gs</strong></td>
+<td>Leave workflow tests</td>
+</tr>
+<tr>
+<td><strong>TestPayroll.gs</strong></td>
+<td>Payroll engine/service tests</td>
+</tr>
+<tr>
+<td><strong>TestAts.gs</strong></td>
+<td>ATS tests</td>
+</tr>
+<tr>
+<td><strong>TestNotifications.gs</strong></td>
+<td>Notification tests</td>
+</tr>
+<tr>
+<td><strong>TestAskHr.gs</strong></td>
+<td>Ask HR tests</td>
+</tr>
+<tr>
+<td><strong>TestAuthOtp.gs</strong> / <strong>TestAuthDemo.gs</strong></td>
+<td>Auth flows</td>
+</tr>
+<tr>
+<td><strong>TestStartupPerf.gs</strong> / <strong>TestPerfInvestigation.gs</strong></td>
+<td>Performance</td>
+</tr>
+<tr>
+<td><strong>TestWebAppExecution.gs</strong></td>
+<td>Web app smoke</td>
+</tr>
+</tbody>
+</table>
+<h3>B.11 Repo tests/ (Node, on your PC)</h3>
+<p>Node tests under <code>tests/*.test.js</code> validate HTML/<code>.gs</code> contracts (leave, payroll, nav, notifications) without deploying. Run: <code>node tests/leave-engine.test.js</code>.</p>
+<hr />
+<h2>Appendix C — How files map to the Apps Script editor</h2>
+<ul>
+<li><strong>clasp</strong> pushes <code>apps-script/src/**</code> to the cloud project; folder names become the prefix you see (e.g. <code>ats/ApiAts.gs</code>).</li>
+<li><strong>HTML</strong> files in <code>ui/</code>, <code>leave/</code>, <code>employee/</code>, etc. are included via <code>include()</code> or lazy-loaded through <code>apiGetModuleUi</code>.</li>
+<li><strong>Entry point</strong> for employees using HRMS: <code>foundation/Main.gs</code> → <code>ui/Index.html</code>.</li>
+<li><strong>Entry point</strong> for public careers pages: <code>ats/AtsWeb.gs</code> + <code>ats/AtsPublicApply.html</code> when configured.</li>
+</ul>
+<hr />
+<p><em>Generated for AyurCentral HRMS operators and implementers. For the widest data dictionary, also keep <code>HRMS_COMPLETE_DATA_AND_FEATURES.md</code> in your docs folder.</em></p>
+</body>
+</html>

@@ -1,5 +1,5 @@
 /**
- * Foundation tests — run from Apps Script editor after setup.
+ * Foundation tests - run from Apps Script editor after setup.
  * Does not replace full 11_TEST_PLAN.md coverage.
  */
 
@@ -27,7 +27,7 @@ function testFoundation_All() {
 
   try {
     var email = AuthService.getSessionEmail();
-    record('sessionEmail', typeof email === 'string', email || '(empty — expected in editor without deploy)');
+    record('sessionEmail', typeof email === 'string', email || '(empty - expected in editor without deploy)');
   } catch (e) {
     record('sessionEmail', false, e.message);
   }
@@ -133,7 +133,7 @@ function testFoundation_All() {
   record('moduleUiLeaveFiles',
     HRMS_MODULE_UI_FILES_ && HRMS_MODULE_UI_FILES_.leave && HRMS_MODULE_UI_FILES_.leave.length === 2);
   record('moduleUiPayrollFiles',
-    HRMS_MODULE_UI_FILES_ && HRMS_MODULE_UI_FILES_.payroll && HRMS_MODULE_UI_FILES_.payroll.length === 1);
+    HRMS_MODULE_UI_FILES_ && HRMS_MODULE_UI_FILES_.payroll && HRMS_MODULE_UI_FILES_.payroll.length === 2);
 
   var failed = results.filter(function (r) { return !r.passed && !r.skipped; });
   Logger.log('Foundation tests: ' + (results.length - failed.length) + '/' + results.length + ' passed (' + failed.length + ' failed)');
