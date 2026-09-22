@@ -21,7 +21,7 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
     'google_email', 'employee_id', 'role', 'status',
-    'access_documents', 'access_payslips', 'access_leave',
+    'access_documents', 'access_upload_documents', 'access_payslips', 'access_leave',
     'created_at', 'updated_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_TYPES] = [
@@ -117,15 +117,19 @@ var SchemaService = (function () {
     ['notification_payroll', 'true', 'BOOLEAN', 'Payroll emails enabled', false],
     ['notification_employee_create', 'true', 'BOOLEAN', 'Email HR when employee is created', false],
     ['role_access_EMPLOYEE_documents', 'true', 'BOOLEAN', 'Default: employee role document download', false],
+    ['role_access_EMPLOYEE_upload_documents', 'true', 'BOOLEAN', 'Default: employee role document upload (own profile)', false],
     ['role_access_EMPLOYEE_payslips', 'true', 'BOOLEAN', 'Default: employee role payslip download', false],
     ['role_access_EMPLOYEE_leave', 'true', 'BOOLEAN', 'Default: employee role leave self-service', false],
     ['role_access_MANAGER_documents', 'true', 'BOOLEAN', 'Default: manager role document download', false],
+    ['role_access_MANAGER_upload_documents', 'true', 'BOOLEAN', 'Default: manager role document upload (own profile)', false],
     ['role_access_MANAGER_payslips', 'true', 'BOOLEAN', 'Default: manager role payslip download', false],
     ['role_access_MANAGER_leave', 'true', 'BOOLEAN', 'Default: manager role leave self-service', false],
     ['role_access_HR_documents', 'true', 'BOOLEAN', 'Default: HR role document download', false],
+    ['role_access_HR_upload_documents', 'true', 'BOOLEAN', 'Default: HR role document upload', false],
     ['role_access_HR_payslips', 'true', 'BOOLEAN', 'Default: HR role payslip download', false],
     ['role_access_HR_leave', 'true', 'BOOLEAN', 'Default: HR role leave self-service', false],
     ['role_access_ADMIN_documents', 'true', 'BOOLEAN', 'Default: admin role document download', false],
+    ['role_access_ADMIN_upload_documents', 'true', 'BOOLEAN', 'Default: admin role document upload', false],
     ['role_access_ADMIN_payslips', 'true', 'BOOLEAN', 'Default: admin role payslip download', false],
     ['role_access_ADMIN_leave', 'true', 'BOOLEAN', 'Default: admin role leave self-service', false],
     ['notification_employee_welcome', 'true', 'BOOLEAN', 'Welcome email to new employee when login is created', false],

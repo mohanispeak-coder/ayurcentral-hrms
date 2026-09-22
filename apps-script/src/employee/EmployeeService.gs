@@ -33,6 +33,23 @@ var EmployeeService = (function () {
     return String(v).trim();
   }
 
+  function empIdKey_(employeeId) {
+    return String(employeeId || '').trim().toUpperCase();
+  }
+
+  function assertCanUploadEmployeeDocuments_(session, emp) {
+    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
+    if (PermissionService.isHrOrAdmin(session)) return;
+    if (!emp || !session.employee_id || empIdKey_(session.employee_id) !== empIdKey_(emp.employee_id)) {
+      throw authorizationError_('You can only upload documents to your own employee profile.');
+    }
+    if (typeof UserAccessService !== 'undefined' && UserAccessService.hasSelfServiceAccess) {
+      if (!UserAccessService.hasSelfServiceAccess(session, 'upload_documents')) {
+        throw authorizationError_('Document upload is not enabled for your account. Contact HR.');
+      }
+    }
+  }
+
   function normalizeEmail_(email) {
     return trim_(email).toLowerCase();
   }
@@ -204,7 +221,12 @@ var EmployeeService = (function () {
     }
     var selfFlags = (typeof UserAccessService !== 'undefined')
       ? UserAccessService.getFlagsForSession(session)
-      : { access_documents: true, access_payslips: true, access_leave: true };
+      : {
+        access_documents: true,
+        access_upload_documents: true,
+        access_payslips: true,
+        access_leave: true
+      };
     out.view_mode = hr ? 'HR' : (isSelf ? 'SELF' : 'OTHER');
     out.can_edit = hr;
     out.can_edit_contact = hr || isSelf;
@@ -220,6 +242,7 @@ var EmployeeService = (function () {
       }
     } else if (isSelf) {
       out.can_view_documents = !!selfFlags.access_documents;
+      out.can_upload_documents = !!selfFlags.access_upload_documents;
       out.can_view_payslips = !!selfFlags.access_payslips;
       out.can_view_leave = !!selfFlags.access_leave;
     } else {
@@ -1025,7 +1048,7 @@ var EmployeeService = (function () {
     if (!emp) throw notFoundError_('Employee not found.');
     if (!canAccessEmployee_(session, emp)) throw authorizationError_();
     var view = sanitizeForViewer(emp, session);
-    if (!view.can_view_documents) {
+    if (!view.can_view_documents && !view.can_upload_documents) {
       throw authorizationError_('You cannot view these documents.');
     }
     return EmployeeRepository.listDocuments(emp.employee_id, HRMS.DOCUMENT_CATEGORY.EMPLOYEE_FILE).map(function (d) {
@@ -1069,15 +1092,14 @@ var EmployeeService = (function () {
   }
 
   function uploadDocuments(session, employeeId, files) {
-    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
-    if (!PermissionService.isHrOrAdmin(session)) {
-      throw authorizationError_('Only HR or Admin can upload employee files.');
-    }
     files = files || [];
     if (!files.length) throw validationError_('At least one file is required.');
     if (files.length > 20) {
       throw validationError_('Maximum 20 files per upload. Remove some files and try again.');
     }
+    var emp = EmployeeRepository.findById(trim_(employeeId));
+    if (!emp) throw notFoundError_('Employee not found.');
+    assertCanUploadEmployeeDocuments_(session, emp);
     var uploaded = [];
     files.forEach(function (meta) {
       uploaded.push(uploadDocument(session, employeeId, meta, { skipPermissionCheck: true }));
@@ -1087,15 +1109,12 @@ var EmployeeService = (function () {
 
   function uploadDocument(session, employeeId, meta, options) {
     options = options || {};
-    if (!options.skipPermissionCheck) {
-      PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DOCUMENTS);
-      if (!PermissionService.isHrOrAdmin(session)) {
-        throw authorizationError_('Only HR or Admin can upload employee files.');
-      }
-    }
     meta = meta || {};
     var emp = EmployeeRepository.findById(trim_(employeeId));
     if (!emp) throw notFoundError_('Employee not found.');
+    if (!options.skipPermissionCheck) {
+      assertCanUploadEmployeeDocuments_(session, emp);
+    }
     var title = trim_(meta.title) || trim_(meta.fileName) || 'Document';
     var fileName = trim_(meta.fileName) || 'upload';
     var mimeType = trim_(meta.mimeType) || 'application/octet-stream';

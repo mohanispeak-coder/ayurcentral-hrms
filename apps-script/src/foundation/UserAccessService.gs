@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var UserAccessService = (function () {
-  var ACCESS_COLUMNS_ = ['access_documents', 'access_payslips', 'access_leave'];
+  var ACCESS_COLUMNS_ = ['access_documents', 'access_upload_documents', 'access_payslips', 'access_leave'];
   var ASSIGNABLE_ROLES_ = [
     HRMS.ROLES.EMPLOYEE,
     HRMS.ROLES.MANAGER,
@@ -16,6 +16,7 @@ var UserAccessService = (function () {
   function defaultFlags_() {
     return {
       access_documents: true,
+      access_upload_documents: true,
       access_payslips: true,
       access_leave: true
     };
@@ -44,6 +45,7 @@ var UserAccessService = (function () {
     if (!user) return defaults;
     return {
       access_documents: parseFlag_(user.access_documents, defaults.access_documents),
+      access_upload_documents: parseFlag_(user.access_upload_documents, defaults.access_upload_documents),
       access_payslips: parseFlag_(user.access_payslips, defaults.access_payslips),
       access_leave: parseFlag_(user.access_leave, defaults.access_leave)
     };
@@ -91,6 +93,7 @@ var UserAccessService = (function () {
     }
     var flags = getFlagsForSession(session);
     if (feature === 'documents') return !!flags.access_documents;
+    if (feature === 'upload_documents') return !!flags.access_upload_documents;
     if (feature === 'payslips') return !!flags.access_payslips;
     if (feature === 'leave') return !!flags.access_leave;
     return false;
@@ -172,6 +175,7 @@ var UserAccessService = (function () {
     ensureColumns_();
     var updates = {
       access_documents: parseFlag_(payload.access_documents, true) ? 'TRUE' : 'FALSE',
+      access_upload_documents: parseFlag_(payload.access_upload_documents, true) ? 'TRUE' : 'FALSE',
       access_payslips: parseFlag_(payload.access_payslips, true) ? 'TRUE' : 'FALSE',
       access_leave: parseFlag_(payload.access_leave, true) ? 'TRUE' : 'FALSE',
       updated_at: new Date()
@@ -220,6 +224,7 @@ var UserAccessService = (function () {
     var flags = roleDefaults_(role || HRMS.ROLES.EMPLOYEE);
     return {
       access_documents: flags.access_documents ? 'TRUE' : 'FALSE',
+      access_upload_documents: flags.access_upload_documents ? 'TRUE' : 'FALSE',
       access_payslips: flags.access_payslips ? 'TRUE' : 'FALSE',
       access_leave: flags.access_leave ? 'TRUE' : 'FALSE'
     };

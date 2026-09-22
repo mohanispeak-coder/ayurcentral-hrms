@@ -24,6 +24,7 @@ var AdminSettingsService = (function () {
 
   var ROLE_ACCESS_FEATURES_ = [
     { id: 'documents', label: 'Download documents' },
+    { id: 'upload_documents', label: 'Upload documents' },
     { id: 'payslips', label: 'Download payslips' },
     { id: 'leave', label: 'Leave apply and history' }
   ];
@@ -298,6 +299,7 @@ var AdminSettingsService = (function () {
     }
     return {
       access_documents: parseBool_(ConfigService.getSetting(roleAccessKey_(role, 'documents'), true), true),
+      access_upload_documents: parseBool_(ConfigService.getSetting(roleAccessKey_(role, 'upload_documents'), true), true),
       access_payslips: parseBool_(ConfigService.getSetting(roleAccessKey_(role, 'payslips'), true), true),
       access_leave: parseBool_(ConfigService.getSetting(roleAccessKey_(role, 'leave'), true), true)
     };

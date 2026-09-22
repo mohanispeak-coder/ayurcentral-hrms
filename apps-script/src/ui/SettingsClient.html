@@ -106,7 +106,8 @@
       modHtml += '</tbody></table></div></div>';
 
       var roleHtml = '<div class="card" style="margin-top:16px"><h2>New login defaults (self-service)</h2>' +
-        '<p class="hint">Default document / payslip / leave checkboxes when creating a user login. Per-employee overrides remain on the employee profile.</p>' +
+        '<p class="hint">Default download / upload / payslip / leave flags for each role when a user login is created. ' +
+        'Per-employee overrides remain on the employee profile (Login &amp; role tab). Upload applies to the employee&apos;s own profile only.</p>' +
         '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
         '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
       features.forEach(function (f) {

@@ -789,7 +789,7 @@
       var tabs = ['personal', 'employment'];
       if (emp.can_view_payroll_ids) tabs.push('payroll');
       if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) tabs.push('leave');
-      if (emp.can_view_documents) tabs.push('documents');
+      if (emp.can_view_documents || emp.can_upload_documents) tabs.push('documents');
       if (emp.can_view_payslips) tabs.push('payslips');
       if (emp.can_manage_app_access) tabs.push('app-access');
 
@@ -835,7 +835,7 @@
           '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
           '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
       }
-      if (emp.can_view_documents) html += '<div class="tab-panel' + (savedTab === 'documents' ? ' active' : '') + '" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
+      if (emp.can_view_documents || emp.can_upload_documents) html += '<div class="tab-panel' + (savedTab === 'documents' ? ' active' : '') + '" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
       if (emp.can_view_payslips) html += '<div class="tab-panel' + (savedTab === 'payslips' ? ' active' : '') + '" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
       if (emp.can_manage_app_access) {
         html += '<div class="tab-panel' + (savedTab === 'app-access' ? ' active' : '') + '" data-panel="app-access"><div id="app-access-panel">' +
@@ -869,7 +869,7 @@
       if (!emp || !tab) return;
       if (tab === 'leave' && emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
         loadLeave(emp.employee_id);
-      } else if (tab === 'documents' && emp.can_view_documents) {
+      } else if (tab === 'documents' && (emp.can_view_documents || emp.can_upload_documents)) {
         loadDocs(emp, null);
       } else if (tab === 'payslips' && emp.can_view_payslips) {
         loadPayslips(emp.employee_id);
@@ -1526,6 +1526,8 @@
           '<div class="form-grid emp-form-grid">' +
           '<label class="checkbox-row"><input type="checkbox" id="acc-documents"' +
           (access.access_documents ? ' checked' : '') + '> Download documents</label>' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-upload-documents"' +
+          (access.access_upload_documents ? ' checked' : '') + '> Upload documents (own profile)</label>' +
           '<label class="checkbox-row"><input type="checkbox" id="acc-payslips"' +
           (access.access_payslips ? ' checked' : '') + '> Download payslips</label>' +
           '<label class="checkbox-row"><input type="checkbox" id="acc-leave"' +
@@ -1569,6 +1571,7 @@
       var feedback = $('emp-app-access-feedback');
       var payload = {
         access_documents: $('acc-documents') && $('acc-documents').checked,
+        access_upload_documents: $('acc-upload-documents') && $('acc-upload-documents').checked,
         access_payslips: $('acc-payslips') && $('acc-payslips').checked,
         access_leave: $('acc-leave') && $('acc-leave').checked
       };
