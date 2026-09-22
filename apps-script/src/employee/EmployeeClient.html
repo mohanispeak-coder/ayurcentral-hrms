@@ -1143,7 +1143,7 @@
             html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Uploaded</th><th class="col-actions"></th></tr></thead><tbody>';
             rows.forEach(function (d) {
               html += '<tr><td>' + escapeHtml(d.title) + '</td><td>' + escapeHtml(String(d.uploaded_at || '')) +
-                '</td><td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-dl" data-id="' + escapeHtml(d.document_id) + '">Download</button></td></tr>';
+                '</td><td class="col-actions"><button type="button" class="btn btn-secondary btn-sm js-dl js-dl-save" data-id="' + escapeHtml(d.document_id) + '">Download</button></td></tr>';
             });
             html += '</tbody></table></div>';
           }
@@ -1229,9 +1229,11 @@
       var url = URL.createObjectURL(blob);
       var w = window.open(url, '_blank', 'noopener,noreferrer');
       if (!w) {
-        URL.revokeObjectURL(url);
-        showToast('Allow pop-ups to view this file in a new tab.', 'error');
-        return;
+        var a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.click();
       }
       setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     }
@@ -1241,7 +1243,7 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = file.fileName || file.title || 'download';
+      a.download = file.fileName || file.title || (file.is_pdf === false ? 'payslip.html' : 'download');
       a.click();
       URL.revokeObjectURL(url);
     }

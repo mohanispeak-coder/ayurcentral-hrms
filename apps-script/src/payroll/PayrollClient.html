@@ -557,7 +557,7 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = file.fileName || file.title || 'payslip.pdf';
+      a.download = file.fileName || file.title || (file.is_pdf === false ? 'payslip.html' : 'payslip.pdf');
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -565,11 +565,23 @@
     function openBlobForView(file) {
       var blob = blobFromFilePayload_(file);
       var url = URL.createObjectURL(blob);
+      if (file && file.is_pdf === false) {
+        var w = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!w) {
+          URL.revokeObjectURL(url);
+          showToast('Allow pop-ups to view the payslip in a new tab.', 'error');
+          return;
+        }
+        setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+        return;
+      }
       var w = window.open(url, '_blank', 'noopener,noreferrer');
       if (!w) {
-        URL.revokeObjectURL(url);
-        showToast('Allow pop-ups to view the payslip in a new tab.', 'error');
-        return;
+        var a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.click();
       }
       setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     }

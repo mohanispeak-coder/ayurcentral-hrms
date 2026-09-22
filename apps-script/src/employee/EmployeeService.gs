@@ -1156,6 +1156,10 @@ var EmployeeService = (function () {
     }
     var file = DriveApp.getFileById(doc.drive_file_id);
     var blob = file.getBlob();
+    if (cat === HRMS.DOCUMENT_CATEGORY.PAYSLIP &&
+        typeof PayslipService !== 'undefined' && PayslipService.packagePayslipFileForClient) {
+      return PayslipService.packagePayslipFileForClient(blob, doc);
+    }
     return {
       fileName: blob.getName() || doc.title,
       mimeType: blob.getContentType() || 'application/octet-stream',

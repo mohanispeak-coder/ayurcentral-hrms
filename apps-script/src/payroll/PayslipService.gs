@@ -256,19 +256,47 @@ var PayslipService = (function () {
   function dedupePayslipsByCalendarMonth_(docs) {
     var byMonth = {};
     (docs || []).forEach(function (d) {
-      var key = String(d.document_id || '');
-      if (d.payroll_run_id) {
-        var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: d.payroll_run_id });
-        if (run) {
-          key = String(run.period_year) + '-' + String(run.period_month) + '-' + empKey_(d.employee_id);
-        }
-      }
+      var key = calendarMonthKeyForDoc_(d);
       var prev = byMonth[key];
       if (!prev || new Date(d.uploaded_at || 0) > new Date(prev.uploaded_at || 0)) {
         byMonth[key] = d;
       }
     });
     return Object.keys(byMonth).map(function (k) { return byMonth[k]; });
+  }
+
+  function isPdfBytes_(bytes) {
+    if (!bytes || bytes.length < 5) return false;
+    return bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70 && bytes[4] === 45;
+  }
+
+  function calendarMonthKeyForDoc_(d) {
+    var emp = empKey_(d.employee_id);
+    if (d.payroll_run_id) {
+      var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: String(d.payroll_run_id) });
+      if (run) {
+        return emp + '|' + Number(run.period_year) + '|' + Number(run.period_month);
+      }
+    }
+    return emp + '|doc|' + String(d.document_id || '');
+  }
+
+  /** Client download payload with correct MIME/extension (fixes HTML mislabeled as PDF). */
+  function packagePayslipFileForClient_(blob, doc) {
+    var bytes = blob.getBytes();
+    var isPdf = isPdfBytes_(bytes);
+    var rawName = blob.getName() || (doc && doc.title) || 'payslip';
+    var base = String(rawName).replace(/\.(pdf|html?)$/i, '');
+    var fileName = isPdf ? base + '.pdf' : base + '.html';
+    return {
+      document_id: doc.document_id,
+      employee_id: doc.employee_id,
+      title: doc.title,
+      fileName: fileName,
+      mimeType: isPdf ? 'application/pdf' : 'text/html; charset=utf-8',
+      is_pdf: isPdf,
+      base64: Utilities.base64Encode(bytes)
+    };
   }
 
   function htmlFallbackBlob_(html, fileName) {
@@ -309,6 +337,10 @@ var PayslipService = (function () {
       if (!pdfBlob || typeof pdfBlob.getBytes !== 'function' || !pdfBlob.getBytes().length) {
         throw new Error('PDF export returned empty.');
       }
+      var pdfBytes = pdfBlob.getBytes();
+      if (!isPdfBytes_(pdfBytes)) {
+        throw new Error('PDF export did not return valid PDF content.');
+      }
       return pdfBlob.setName(fileName);
     } catch (e) {
       Logger.log('htmlToPdfBlob_ failed, saving HTML payslip: ' + (e.message || e));
@@ -342,8 +374,10 @@ var PayslipService = (function () {
       var htmlIt = folder.getFilesByName(baseName + '.html');
       if (htmlIt.hasNext()) return htmlIt.next();
     }
-    var pdfBlob = htmlToPdfBlob_(html, fileName);
-    return folder.createFile(pdfBlob);
+    var outBlob = htmlToPdfBlob_(html, fileName);
+    var outBytes = outBlob.getBytes();
+    var finalName = isPdfBytes_(outBytes) ? fileName : (baseName + '.html');
+    return folder.createFile(outBlob.setName(finalName));
   }
 
   function enrichPayslipDoc_(doc, employeeId) {
@@ -395,21 +429,7 @@ var PayslipService = (function () {
       }
     }
     var file = DriveApp.getFileById(doc.drive_file_id);
-    var blob = file.getBlob();
-    var fileName = blob.getName() || doc.title || 'payslip.pdf';
-    if (fileName.indexOf('.') < 0) fileName += '.pdf';
-    var mimeType = blob.getContentType() || 'application/pdf';
-    if (mimeType.indexOf('html') >= 0 && fileName.slice(-4) !== '.pdf') {
-      fileName = fileName.replace(/\.html?$/i, '') + '.pdf';
-    }
-    return {
-      document_id: doc.document_id,
-      employee_id: doc.employee_id,
-      title: doc.title,
-      fileName: fileName,
-      mimeType: mimeType.indexOf('pdf') >= 0 ? 'application/pdf' : mimeType,
-      base64: Utilities.base64Encode(blob.getBytes())
-    };
+    return packagePayslipFileForClient_(file.getBlob(), doc);
   }
 
   function listOwnPayslips() {
@@ -621,6 +641,7 @@ var PayslipService = (function () {
     findReusableDocument: findReusableDocument,
     dedupePayslipsByRun: dedupePayslipsByRun,
     enrichPayslipDoc: enrichPayslipDoc_,
-    payslipDriveFileOk: payslipDriveFileOk_
+    payslipDriveFileOk: payslipDriveFileOk_,
+    packagePayslipFileForClient: packagePayslipFileForClient_
   };
 })();
