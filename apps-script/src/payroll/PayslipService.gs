@@ -281,12 +281,100 @@ var PayslipService = (function () {
     return emp + '|doc|' + String(d.document_id || '');
   }
 
+  function exportDriveFileAsPdf_(fileId) {
+    fileId = String(fileId || '');
+    if (!fileId) throw new Error('Missing Google Doc id for PDF export.');
+
+    function assertPdfBlob_(blob) {
+      if (!blob || typeof blob.getBytes !== 'function' || !blob.getBytes().length) {
+        throw new Error('PDF export returned empty.');
+      }
+      if (!isPdfBytes_(blob.getBytes())) {
+        throw new Error('PDF export returned non-PDF bytes.');
+      }
+      return blob;
+    }
+
+    var exportMime = encodeURIComponent('application/pdf');
+    var url = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) +
+      '/export?mimeType=' + exportMime;
+    var resp = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() === 200) {
+      try {
+        return assertPdfBlob_(resp.getBlob());
+      } catch (urlBlobErr) {
+        Logger.log('UrlFetch export blob invalid: ' + (urlBlobErr.message || urlBlobErr));
+      }
+    } else {
+      Logger.log('UrlFetch PDF export HTTP ' + resp.getResponseCode() + ': ' +
+        String(resp.getContentText()).substring(0, 400));
+    }
+
+    if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
+      return assertPdfBlob_(Drive.Files.export(fileId, 'application/pdf'));
+    }
+    throw new Error('Could not export payslip as PDF.' + driveApiHint_());
+  }
+
+  function createGoogleDocFromHtml_(html) {
+    if (typeof Drive === 'undefined' || !Drive.Files || !Drive.Files.create) {
+      throw new Error('Google Drive API is required for PDF payslips.' + driveApiHint_());
+    }
+    var htmlBlob = Utilities.newBlob(html, 'text/html', 'payslip-source.html');
+    try {
+      var direct = Drive.Files.create({
+        name: 'HRMS Payslip Doc ' + Date.now(),
+        mimeType: 'application/vnd.google-apps.document'
+      }, htmlBlob);
+      if (direct && direct.id) {
+        Utilities.sleep(900);
+        return direct.id;
+      }
+    } catch (directErr) {
+      Logger.log('Direct HTML to Doc failed: ' + (directErr.message || directErr));
+    }
+
+    var tempHtml = DriveApp.createFile(htmlBlob);
+    var tempHtmlId = tempHtml.getId();
+    try {
+      var converted = Drive.Files.create({
+        name: 'HRMS Payslip Doc ' + Date.now(),
+        mimeType: 'application/vnd.google-apps.document'
+      }, tempHtml.getBlob());
+      if (!converted || !converted.id) throw new Error('HTML upload conversion failed.');
+      Utilities.sleep(900);
+      return converted.id;
+    } finally {
+      try { DriveApp.getFileById(tempHtmlId).setTrashed(true); } catch (ignore) {}
+    }
+  }
+
   /** Client download payload with correct MIME/extension (fixes HTML mislabeled as PDF). */
   function packagePayslipFileForClient_(blob, doc) {
     var bytes = blob.getBytes();
     var isPdf = isPdfBytes_(bytes);
     var rawName = blob.getName() || (doc && doc.title) || 'payslip';
     var base = String(rawName).replace(/\.(pdf|html?)$/i, '');
+
+    if (!isPdf) {
+      try {
+        var html = blob.getDataAsString();
+        if (html && /<\s*html/i.test(html)) {
+          var pdfTry = htmlToPdfBlob_(html, base + '.pdf');
+          if (isPdfBytes_(pdfTry.getBytes())) {
+            blob = pdfTry;
+            bytes = blob.getBytes();
+            isPdf = true;
+          }
+        }
+      } catch (convErr) {
+        Logger.log('packagePayslipFileForClient_ PDF convert: ' + (convErr.message || convErr));
+      }
+    }
+
     var fileName = isPdf ? base + '.pdf' : base + '.html';
     return {
       document_id: doc.document_id,
@@ -306,48 +394,23 @@ var PayslipService = (function () {
 
   function htmlToPdfBlob_(html, fileName) {
     fileName = fileName || 'payslip.pdf';
-    if (typeof Drive === 'undefined' || !Drive.Files) {
-      Logger.log('Payslip: Drive API missing;' + driveApiHint_());
-      return htmlFallbackBlob_(html, fileName);
-    }
-    var htmlBlob = Utilities.newBlob(html, 'text/html', 'payslip-export.html');
-    var tempId = null;
+    var docId = null;
     try {
-      var resource = {
-        name: 'HRMS Payslip Export ' + Date.now(),
-        mimeType: 'application/vnd.google-apps.document'
-      };
-      var docFile;
-      if (Drive.Files.create) {
-        docFile = Drive.Files.create(resource, htmlBlob);
-      } else if (Drive.Files.insert) {
-        docFile = Drive.Files.insert({
-          title: resource.name,
-          mimeType: resource.mimeType
-        }, htmlBlob, { convert: true });
-      } else {
-        throw new Error('Drive file create is unavailable.' + driveApiHint_());
-      }
-      tempId = docFile.id;
-      if (!tempId) throw new Error('Could not create temporary Google Doc for PDF export.');
-      if (!Drive.Files.export) {
-        throw new Error('Drive export is unavailable.' + driveApiHint_());
-      }
-      var pdfBlob = Drive.Files.export(tempId, 'application/pdf');
-      if (!pdfBlob || typeof pdfBlob.getBytes !== 'function' || !pdfBlob.getBytes().length) {
-        throw new Error('PDF export returned empty.');
-      }
-      var pdfBytes = pdfBlob.getBytes();
-      if (!isPdfBytes_(pdfBytes)) {
-        throw new Error('PDF export did not return valid PDF content.');
-      }
+      docId = createGoogleDocFromHtml_(html);
+      var pdfBlob = exportDriveFileAsPdf_(docId);
       return pdfBlob.setName(fileName);
     } catch (e) {
-      Logger.log('htmlToPdfBlob_ failed, saving HTML payslip: ' + (e.message || e));
+      Logger.log('htmlToPdfBlob_ failed: ' + (e.message || e));
+      try {
+        var viaHtml = HtmlService.createHtmlOutput(html).getBlob().getAs('application/pdf');
+        if (viaHtml && isPdfBytes_(viaHtml.getBytes())) {
+          return viaHtml.setName(fileName);
+        }
+      } catch (ignoreHtml) {}
       return htmlFallbackBlob_(html, fileName);
     } finally {
-      if (tempId) {
-        try { DriveApp.getFileById(tempId).setTrashed(true); } catch (ignore) {}
+      if (docId) {
+        try { DriveApp.getFileById(docId).setTrashed(true); } catch (ignore) {}
       }
     }
   }
@@ -370,9 +433,12 @@ var PayslipService = (function () {
       trashOrphanPayslipFiles_(folder, baseName);
     } else {
       var pdfIt = folder.getFilesByName(fileName);
-      if (pdfIt.hasNext()) return pdfIt.next();
-      var htmlIt = folder.getFilesByName(baseName + '.html');
-      if (htmlIt.hasNext()) return htmlIt.next();
+      if (pdfIt.hasNext()) {
+        var existingPdf = pdfIt.next();
+        try {
+          if (isPdfBytes_(existingPdf.getBlob().getBytes())) return existingPdf;
+        } catch (ignorePdf) {}
+      }
     }
     var outBlob = htmlToPdfBlob_(html, fileName);
     var outBytes = outBlob.getBytes();
