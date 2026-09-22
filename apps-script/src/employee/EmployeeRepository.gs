@@ -33,6 +33,35 @@ var EmployeeRepository = (function () {
   }
 
   function listVerticals() {
+    return listVerticalCatalog().map(function (row) { return row.vertical_name; });
+  }
+
+  function legalNameForVertical_(verticalName, rowLegal) {
+    var legal = String(rowLegal || '').trim();
+    if (legal) return legal;
+    var map = HRMS.VERTICAL_LEGAL_NAMES_DEFAULT || {};
+    var key = String(verticalName || '').trim().toUpperCase();
+    return String(map[key] || map.OTHERS || '').trim();
+  }
+
+  function addressDefaultsForVertical_(verticalName) {
+    var key = String(verticalName || '').trim().toUpperCase();
+    var map = HRMS.VERTICAL_FORM_T_ADDRESS_DEFAULT || {};
+    return map[key] || map.OTHERS || { address_line1: '', address_line2: '' };
+  }
+
+  function catalogRowFromSheet_(name, row) {
+    row = row || {};
+    var defaults = addressDefaultsForVertical_(name);
+    return {
+      vertical_name: name,
+      legal_name: legalNameForVertical_(name, row.legal_name),
+      address_line1: String(row.address_line1 || defaults.address_line1 || '').trim(),
+      address_line2: String(row.address_line2 || defaults.address_line2 || '').trim()
+    };
+  }
+
+  function listVerticalCatalog() {
     var rows;
     try {
       rows = DbService.getAllRecords(HRMS.SHEETS.VERTICALS);
@@ -45,10 +74,19 @@ var EmployeeRepository = (function () {
       var name = String(row.vertical_name || row.name || row.value || '').trim().toUpperCase();
       if (!name || seen[name]) return;
       seen[name] = true;
-      out.push(name);
+      out.push(catalogRowFromSheet_(name, row));
     });
     if (!out.length) {
-      return (HRMS.VERTICALS || []).slice();
+      var defaults = HRMS.VERTICAL_LEGAL_NAMES_DEFAULT || {};
+      (HRMS.VERTICALS || []).forEach(function (name) {
+        var vertical = String(name || '').trim().toUpperCase();
+        if (!vertical) return;
+        out.push(catalogRowFromSheet_(vertical, {
+          legal_name: defaults[vertical],
+          address_line1: '',
+          address_line2: ''
+        }));
+      });
     }
     return out;
   }
@@ -132,6 +170,7 @@ var EmployeeRepository = (function () {
     findByWorkEmail: findByWorkEmail,
     listAll: listAll,
     listVerticals: listVerticals,
+    listVerticalCatalog: listVerticalCatalog,
     insert: insert,
     update: update,
     findUserByEmployeeId: findUserByEmployeeId,

@@ -37,6 +37,7 @@
     'payroll-run': 'payroll',
     'salary-structure': 'payroll',
     'attendance-bulk-upload': 'payroll',
+    'attendance-form-t': 'payroll',
     compensation: 'payroll',
     'my-payslips': 'payroll',
     ats: 'ats',
@@ -66,7 +67,8 @@
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
     'salary-structure': 'Salary structures',
-    'attendance-bulk-upload': 'Attendance',
+    'attendance-bulk-upload': 'Register',
+    'attendance-form-t': 'Form T',
     compensation: 'Salary structures',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
@@ -97,7 +99,8 @@
     payroll: 'Process one month: calculate on the server, review exceptions, then lock.',
     'payroll-run': 'One primary next step. Locked amounts never change.',
     'salary-structure': 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
-    'attendance-bulk-upload': 'Import working days and attendance for the payroll month before you calculate.',
+    'attendance-bulk-upload': '',
+    'attendance-form-t': '',
     compensation: 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
@@ -117,7 +120,8 @@
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'attendance-bulk-upload', 'payroll'], collapsible: true },
+    { id: 'attendance', label: 'Attendance', routes: ['attendance-bulk-upload', 'attendance-form-t'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -1364,9 +1368,10 @@
       html = sectionSkeleton({ variant: 'detail', label: 'Loading run' });
     } else if (route === 'salary-structure' || route === 'compensation') {
       html = sectionSkeleton({ variant: 'card', label: 'Loading salary structure' }) + '<div id="comp-editor"></div>';
-    } else if (route === 'attendance-bulk-upload') {
+    } else if (route === 'attendance-bulk-upload' || route === 'attendance-form-t') {
       html = skeletonKpiRow(['Period', 'Status', 'Employees']) +
-        '<div class="card"><h2>Attendance</h2>' + sectionSkeleton({ lines: 3 }) + '</div>';
+        '<div class="card"><h2>' + escapeHtml(route === 'attendance-form-t' ? 'Form T' : 'Register') + '</h2>' +
+        sectionSkeleton({ lines: 3 }) + '</div>';
     } else if (route === 'my-payslips') {
       html = '<div class="card">' + tableShell(['Title', 'Run', 'Date', ''], 'shell-ps', 4) + '</div>';
     } else if (route === 'ats-jobs') {
@@ -1656,7 +1661,8 @@
     if (!state.session || !state.session.authorized) return;
     options = options || {};
     params = params || {};
-    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'salary-structure' || route === 'compensation') {
+    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'attendance-form-t' ||
+      route === 'salary-structure' || route === 'compensation') {
       if (window.HrmsApp && window.HrmsApp.getPayrollPeriodParams) {
         var pp = window.HrmsApp.getPayrollPeriodParams();
         if (pp) {

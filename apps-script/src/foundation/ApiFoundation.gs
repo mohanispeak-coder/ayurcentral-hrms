@@ -6,7 +6,7 @@
 var HRMS_MODULE_UI_FILES_ = {
   employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient'],
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
-  payroll: ['payroll/PayrollClient', 'payroll/SalaryStructureClient', 'payroll/AttendanceClient'],
+  payroll: ['payroll/PayrollClient', 'payroll/SalaryStructureClient', 'payroll/AttendanceClient', 'payroll/FormTClient'],
   ats: ['ats/AtsClient'],
   notifications: ['notifications/NotificationClient'],
   admin: ['ui/SettingsClient']

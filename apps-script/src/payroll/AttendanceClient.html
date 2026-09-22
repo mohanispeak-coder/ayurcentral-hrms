@@ -6,14 +6,31 @@
 .att-page .att-day-cell input { width: 100%; text-align: center; text-transform: uppercase; }
 .att-page .att-codes-hint { font-size: 13px; color: var(--color-text-muted); margin: 8px 0; }
 .att-page .hidden-file { display: none !important; }
+.att-page .att-vertical-section { margin-top: 16px; }
+.att-page .att-preview-grid { font-size: 12px; overflow-x: auto; }
+.att-page .att-preview-grid td, .att-page .att-preview-grid th { padding: 4px 6px; text-align: center; }
 </style>
 <script>
 (function () {
   'use strict';
 
   var initialized_ = false;
-  var bulkState_ = { uploadId: null, preview: null, runId: null };
+  var MODULE_KEY_ = 'attendance-bulk-upload';
+  var bulkState_ = { uploadId: null, preview: null, runId: null, vertical: null, fileMeta: null, fileName: '' };
   var period_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
+  var catalog_ = [];
+  var viewCache_ = null;
+
+  function periodKey_() {
+    return period_.year + '-' + period_.month;
+  }
+
+  function skeletonMount_(App) {
+    if (App.sectionSkeleton) {
+      return App.sectionSkeleton({ variant: 'card', lines: 4, label: 'Loading register' });
+    }
+    return '<div class="hrms-loading-block" aria-busy="true"><span class="visually-hidden">Loading</span></div>';
+  }
 
   function whenAppReady(fn) {
     function run() {
@@ -53,18 +70,47 @@
       return (names[m - 1] || m) + ' ' + y;
     }
 
+    function verticalOptionsHtml_(selected) {
+      return (catalog_ || []).map(function (v) {
+        var sel = selected === v.vertical_name ? ' selected' : '';
+        return '<option value="' + esc_(v.vertical_name) + '"' + sel + '>' +
+          esc_(v.vertical_name) + ' — ' + esc_(v.legal_name) + '</option>';
+      }).join('');
+    }
+
     function render_(params) {
       params = params || {};
       if (params.year) period_.year = Number(params.year);
       if (params.month) period_.month = Number(params.month);
       var page = pageEl_();
       if (!page) return;
+
+      var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
+      var restore = !forceRefresh && App.consumeModuleViewRestore && App.consumeModuleViewRestore(MODULE_KEY_);
+      if (restore && viewCache_ && viewCache_.periodKey === periodKey_() && viewCache_.run) {
+        catalog_ = viewCache_.catalog || catalog_;
+        if (viewCache_.bulkState) {
+          bulkState_.vertical = viewCache_.bulkState.vertical || bulkState_.vertical;
+          bulkState_.fileMeta = viewCache_.bulkState.fileMeta || null;
+          bulkState_.fileName = viewCache_.bulkState.fileName || '';
+        }
+        page.innerHTML =
+          '<div class="att-page"><div class="page-header"><h2>Register</h2></div><div id="att-mount"></div></div>';
+        paintMain_(viewCache_.run, viewCache_.list || [], {});
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+        return;
+      }
+
       page.innerHTML =
-        '<div class="att-page"><div class="page-header"><h2>Attendance</h2>' +
-        '<p class="page-lede">Monthly register: one code per day (P, W/H, A, L, H, S). Bulk Excel matches the statutory grid layout. ' +
-        'The roster refreshes from HRMS when you open this page or download the template - no redeploy needed.</p></div>' +
-        '<div id="att-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
-      loadContext_();
+        '<div class="att-page"><div class="page-header"><h2>Register</h2></div>' +
+        '<div id="att-mount">' + skeletonMount_(App) + '</div></div>';
+      callServer('apiGetVerticalCatalog').then(function (cat) {
+        catalog_ = cat || [];
+        loadContext_();
+      }).catch(function () {
+        catalog_ = [];
+        loadContext_();
+      });
     }
 
     function loadContext_() {
@@ -101,6 +147,43 @@
       })[0] || null;
     }
 
+    function groupByVertical_(list) {
+      var groups = {};
+      (list || []).forEach(function (r) {
+        var v = String(r.vertical_name || 'OTHERS').toUpperCase();
+        if (!groups[v]) groups[v] = [];
+        groups[v].push(r);
+      });
+      return groups;
+    }
+
+    function renderVerticalSections_(list) {
+      var groups = groupByVertical_(list);
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
+      var verticals = Object.keys(groups).sort();
+      if (!verticals.length) return '<p class="hint">No employees in this payroll run yet.</p>';
+      return verticals.map(function (v, idx) {
+        var rows = groups[v];
+        var openAttr = idx === 0 ? ' open' : '';
+        var body = rows.map(function (r) {
+          var cc = r.code_counts || (r.summary && r.summary.code_counts) || {};
+          var codeCells = codes.map(function (c) {
+            return '<td class="num">' + esc_(cc[c] != null ? cc[c] : 0) + '</td>';
+          }).join('');
+          var complete = r.register_complete ? 'Yes' : 'No';
+          return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td>' +
+            codeCells +
+            '<td class="num">' + esc_(r.days_total != null ? r.days_total : (r.summary && r.summary.days_total)) + '</td>' +
+            '<td>' + esc_(complete) + '</td></tr>';
+        }).join('');
+        var headCodes = codes.map(function (c) { return '<th class="num">' + esc_(c) + '</th>'; }).join('');
+        return '<details class="card att-vertical-section"' + openAttr + '><summary><strong>' + esc_(v) +
+          '</strong> <span class="hint">(' + rows.length + ')</span></summary>' +
+          '<table class="data-table"><thead><tr><th>ID</th><th>Name</th>' + headCodes +
+          '<th class="num">DAYS</th><th>Complete</th></tr></thead><tbody>' + body + '</tbody></table></details>';
+      }).join('');
+    }
+
     function paintNoRun_() {
       var m = document.getElementById('att-mount');
       if (!m) return;
@@ -131,48 +214,64 @@
       if (!m) return;
       var st = String(run.status || '').toUpperCase();
       var canEdit = st === 'DRAFT' || st === 'CALCULATED';
-      var rows = (list || []).map(function (r) {
-        var complete = r.register_complete ? 'Yes' : 'No';
-        return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.vertical_name) + '</td><td>' +
-          esc_(r.display_name) + '</td><td class="num">' + esc_(r.days_present) + '</td><td class="num">' +
-          esc_(r.days_leave) + '</td><td>' + esc_(complete) + '</td><td class="col-actions">' +
-          (canEdit && r.in_payroll_run ? '<button type="button" class="btn btn-secondary btn-sm" data-att-edit="' + esc_(r.employee_id) + '">Edit days</button>' :
-            (!r.in_payroll_run ? '<span class="hint">Not in payroll month</span>' : '')) +
-          '</td></tr>';
-      }).join('');
+      var defaultVertical = bulkState_.vertical || (catalog_.length ? catalog_[0].vertical_name : '');
 
       m.innerHTML =
         '<div class="card bulk-upload-card"><div class="form-row" style="margin-bottom:12px">' +
         '<div class="form-group"><label class="form-label">Period</label><strong>' + esc_(fmtPeriod_(run.period_year, run.period_month)) +
-        '</strong> <span class="hint">(' + esc_(run.payroll_run_id) + ' · ' + esc_(st) + ')</span></div></div>' +
+        '</strong> <span class="hint">(' + esc_(run.payroll_run_id) + ' · ' + esc_(st) + ')</span></div>' +
+        '<div class="form-group"><label class="form-label" for="att-vertical">Vertical</label>' +
+        '<select class="form-select" id="att-vertical" ' + (canEdit ? '' : 'disabled') + '>' + verticalOptionsHtml_(defaultVertical) + '</select></div>' +
+        '</div>' +
         '<div class="att-list-head bulk-action-bar">' +
         (canEdit ? '<button type="button" class="btn btn-secondary" id="att-dl-template">Download register template</button>' +
           '<button type="button" class="btn btn-secondary" id="att-choose-file">Choose Excel file</button>' +
           '<input type="file" id="att-file" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls">' +
-          '<button type="button" class="btn btn-primary" id="att-validate" disabled>Validate upload</button>' : '') +
-        '<button type="button" class="btn btn-secondary" id="att-goto-payroll">Continue to Payroll</button></div>' +
-        (canEdit ? '<p id="att-file-name" class="form-hint">No file selected.</p>' : '') +
-        '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> week-off/holiday · <strong>A</strong> absent · <strong>L</strong> leave · <strong>H</strong> holiday · <strong>S</strong> sick</p>' +
-        (rows
-          ? '<table class="data-table"><thead><tr><th>Employee ID</th><th>Vertical</th><th>Name</th><th class="num">Days present</th><th class="num">Days leave</th><th>Complete</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
-          : '<p class="hint">No employees in this payroll run yet.</p>') +
+          '<button type="button" class="btn btn-primary" id="att-validate" disabled>Upload attendance</button>' : '') +
+        '<button type="button" class="btn btn-secondary" id="att-goto-payroll">Continue to Payroll</button>' +
+        '<button type="button" class="btn btn-secondary" id="att-goto-formt">Form T</button></div>' +
+        (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
+        '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · <strong>A</strong> absent · ' +
+        '<strong>L</strong> leave · <strong>WO</strong> weekly off · <strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
+        renderVerticalSections_(list) +
         '</div>' +
         '<div id="att-preview"></div><div id="att-feedback" class="action-feedback hidden"></div>';
 
       document.getElementById('att-goto-payroll').addEventListener('click', function () {
         navigate('payroll', { year: run.period_year, month: run.period_month, runId: run.payroll_run_id });
       });
+      document.getElementById('att-goto-formt').addEventListener('click', function () {
+        navigate('attendance-form-t', { year: run.period_year, month: run.period_month, runId: run.payroll_run_id });
+      });
+
+      if (canEdit) bindBulk_(run.payroll_run_id);
 
       if (canEdit) {
-        bindBulk_(run.payroll_run_id);
-        m.querySelectorAll('[data-att-edit]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            openEditor_(run, btn.getAttribute('data-att-edit'), list);
-          });
-        });
+        var validateBtn = document.getElementById('att-validate');
+        if (validateBtn) validateBtn.disabled = !(bulkState_.fileMeta && selectedVertical_());
       }
 
-      if (App.markModuleViewLoaded) App.markModuleViewLoaded('attendance-bulk-upload');
+      syncBulkViewCache_(run, list);
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+    }
+
+    function selectedVertical_() {
+      var sel = document.getElementById('att-vertical');
+      return sel ? sel.value : '';
+    }
+
+    function syncBulkViewCache_(run, list) {
+      viewCache_ = {
+        periodKey: periodKey_(),
+        run: run,
+        list: list,
+        catalog: (catalog_ || []).slice(),
+        bulkState: {
+          vertical: bulkState_.vertical || selectedVertical_(),
+          fileMeta: bulkState_.fileMeta,
+          fileName: bulkState_.fileName || ''
+        }
+      };
     }
 
     function downloadBlob_(file) {
@@ -193,11 +292,24 @@
       var fileInput = document.getElementById('att-file');
       var validateBtn = document.getElementById('att-validate');
       var nameEl = document.getElementById('att-file-name');
-      var fileMeta = null;
+      var verticalSel = document.getElementById('att-vertical');
+      if (verticalSel) {
+        verticalSel.addEventListener('change', function () {
+          bulkState_.vertical = verticalSel.value;
+          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+          if (validateBtn) validateBtn.disabled = !(bulkState_.fileMeta && verticalSel.value);
+        });
+        if (!bulkState_.vertical) bulkState_.vertical = verticalSel.value;
+      }
 
       document.getElementById('att-dl-template').addEventListener('click', function () {
+        var vertical = selectedVertical_();
+        if (!vertical) {
+          showToast('Select a vertical first.', 'error');
+          return;
+        }
         var btn = this;
-        callServer('apiDownloadAttendanceRegisterTemplate', runId, { button: btn, loadingText: 'Downloading…' })
+        callServer('apiDownloadAttendanceRegisterTemplate', runId, vertical, { button: btn, loadingText: 'Downloading…' })
           .then(function (res) {
             if (!res || !res.base64) {
               showToast('Template download returned no file. Run clasp push and redeploy the web app.', 'error');
@@ -205,8 +317,8 @@
             }
             downloadBlob_(res);
             var n = res.employeeCount != null ? res.employeeCount : '';
-            var extra = n !== '' ? ' - ' + n + ' active employee' + (n === 1 ? '' : 's') : '';
-            showToast('Attendance template downloaded' + extra + '.', 'success');
+            var extra = n !== '' ? ' - ' + n + ' employee' + (n === 1 ? '' : 's') : '';
+            showToast('Register template downloaded' + extra + '.', 'success');
           })
           .catch(function (err) {
             showToast((err && err.message) || 'Download failed', 'error');
@@ -215,124 +327,132 @@
 
       var chooseBtn = document.getElementById('att-choose-file');
       if (chooseBtn && fileInput) {
-        chooseBtn.addEventListener('click', function () { fileInput.click(); });
+        chooseBtn.addEventListener('click', function () {
+          if (!selectedVertical_()) {
+            showToast('Select a vertical first.', 'error');
+            return;
+          }
+          fileInput.click();
+        });
       }
 
       fileInput.addEventListener('change', function () {
         var f = fileInput.files && fileInput.files[0];
-        fileMeta = null;
+        bulkState_.fileMeta = null;
+        bulkState_.fileName = '';
         if (!f) {
           if (validateBtn) validateBtn.disabled = true;
           if (nameEl) nameEl.textContent = 'No file selected.';
+          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
           return;
         }
         if (nameEl) nameEl.textContent = f.name;
+        bulkState_.fileName = f.name;
         var reader = new FileReader();
         reader.onload = function () {
           var bytes = new Uint8Array(reader.result);
           var binary = '';
           for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-          fileMeta = { fileName: f.name, mimeType: f.type, base64: btoa(binary) };
-          if (validateBtn) validateBtn.disabled = false;
+          bulkState_.fileMeta = { fileName: f.name, mimeType: f.type, base64: btoa(binary) };
+          if (validateBtn) validateBtn.disabled = !selectedVertical_();
+          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
         };
         reader.readAsArrayBuffer(f);
       });
 
       validateBtn.addEventListener('click', function () {
-        if (!fileMeta) return;
-        callServer('apiValidateAttendanceRegisterUpload', runId, fileMeta, { button: validateBtn, loadingText: 'Validating…' })
+        var vertical = selectedVertical_();
+        if (!vertical || !bulkState_.fileMeta) return;
+        callServer('apiValidateAttendanceRegisterUpload', runId, vertical, bulkState_.fileMeta,
+          { button: validateBtn, loadingText: 'Uploading…' })
           .then(function (preview) {
             bulkState_.uploadId = preview.uploadId;
             bulkState_.preview = preview;
-            paintPreview_(preview, runId);
+            bulkState_.vertical = vertical;
+            if (preview.errorCount > 0 && preview.readyCount > 0) {
+              paintPreview_(preview, runId, true);
+            }
+            if (!preview.readyCount) {
+              paintPreview_(preview, runId, false);
+              showToast(preview.errorCount ? 'No valid rows to import.' : 'Nothing to import.', 'error');
+              return;
+            }
+            return callServer('apiCommitAttendanceRegisterUpload', runId, preview.uploadId,
+              { button: validateBtn, loadingText: 'Importing…' })
+              .then(function () {
+                bulkState_.uploadId = null;
+                bulkState_.fileMeta = null;
+                bulkState_.fileName = '';
+                if (fileInput) fileInput.value = '';
+                if (nameEl) nameEl.textContent = 'No file selected.';
+                if (validateBtn) validateBtn.disabled = true;
+                if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+                var prev = document.getElementById('att-preview');
+                if (prev) prev.innerHTML = '';
+                showToast('Attendance imported (' + preview.readyCount + '). Re-upload overwrites existing days.', 'success');
+                if (preview.errorCount > 0) {
+                  showToast(preview.errorCount + ' row(s) skipped — fix the file and upload again.', 'warning');
+                }
+                loadContext_();
+              });
           })
-          .catch(function (err) { showToast(err.message || 'Validation failed', 'error'); });
+          .catch(function (err) { showToast(err.message || 'Upload failed', 'error'); });
       });
     }
 
-    function paintPreview_(preview, runId) {
+    function paintPreviewGrid_(validRows, dim) {
+      if (!validRows || !validRows.length) return '';
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
+      var head = '<tr><th>ID</th><th>Name</th>';
+      for (var d = 1; d <= dim; d++) {
+        var key = (d < 10 ? '0' : '') + d;
+        head += '<th>' + key + '</th>';
+      }
+      codes.forEach(function (c) { head += '<th>' + c + '</th>'; });
+      head += '<th>DAYS</th></tr>';
+      var body = validRows.map(function (row) {
+        var reg = row.register || {};
+        var cc = row.code_counts || {};
+        var line = '<tr><td class="mono">' + esc_(row.employee_id) + '</td><td>' + esc_(row.display_name) + '</td>';
+        for (var day = 1; day <= dim; day++) {
+          var k = (day < 10 ? '0' : '') + day;
+          line += '<td>' + esc_(reg[k] || '') + '</td>';
+        }
+        codes.forEach(function (c) {
+          line += '<td class="num">' + esc_(cc[c] != null ? cc[c] : 0) + '</td>';
+        });
+        line += '<td class="num">' + esc_(row.days_total != null ? row.days_total : '') + '</td></tr>';
+        return line;
+      }).join('');
+      return '<table class="data-table att-preview-grid"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+    }
+
+    function paintPreview_(preview, runId, errorsOnly) {
       var el = document.getElementById('att-preview');
       if (!el) return;
-      var html = '<div class="card upload-preview"><h3>Upload preview</h3><p><strong>' + preview.readyCount +
-        '</strong> ready · <strong>' + preview.attentionCount + '</strong> need attention</p>';
-      if (preview.readyCount > 0) {
-        html += '<button type="button" class="btn btn-primary" id="att-commit">Confirm import (' + preview.readyCount + ')</button>';
+      if (!errorsOnly && !preview.errorCount) {
+        el.innerHTML = '';
+        return;
+      }
+      var html = '<div class="card upload-preview"><h3>Rows needing attention</h3><p><strong>' +
+        preview.errorCount + '</strong> could not be imported.</p>';
+      if (preview.errors && preview.errors.length) {
+        html += '<ul class="hint">';
+        preview.errors.slice(0, 20).forEach(function (err) {
+          html += '<li>Row ' + esc_(err.rowNumber) + (err.employee_id ? ' · ' + esc_(err.employee_id) : '') + '</li>';
+        });
+        if (preview.errors.length > 20) html += '<li>…and ' + (preview.errors.length - 20) + ' more</li>';
+        html += '</ul>';
       }
       html += '</div>';
       el.innerHTML = html;
-      var commit = document.getElementById('att-commit');
-      if (commit) {
-        commit.addEventListener('click', function () {
-          callServer('apiCommitAttendanceRegisterUpload', runId, bulkState_.uploadId, { button: commit, loadingText: 'Importing…' })
-            .then(function () {
-              showToast('Attendance imported.', 'success');
-              bulkState_.uploadId = null;
-              loadContext_();
-            })
-            .catch(function (err) { showToast(err.message || 'Import failed', 'error'); });
-        });
-      }
     }
 
     function daysInMonth_(y, m) {
       return new Date(y, m, 0).getDate();
     }
 
-    function openEditor_(run, employeeId, list) {
-      var row = (list || []).find(function (r) { return r.employee_id === employeeId; });
-      var dim = daysInMonth_(Number(run.period_year), Number(run.period_month));
-      var backdrop = document.createElement('div');
-      backdrop.className = 'modal-backdrop';
-      var cells = '';
-      for (var d = 1; d <= dim; d++) {
-        var key = (d < 10 ? '0' : '') + d;
-        cells += '<div class="att-day-cell"><label>' + key + '</label><input class="form-input att-day-code" data-day="' + key + '" maxlength="3"></div>';
-      }
-      backdrop.innerHTML =
-        '<div class="modal" style="max-width:720px"><div class="modal-header"><h3 class="modal-title">' +
-        esc_(row ? row.display_name : employeeId) + '</h3><p class="modal-desc">Enter one code per day for ' +
-        esc_(fmtPeriod_(run.period_year, run.period_month)) + '</p></div>' +
-        '<div class="att-day-grid">' + cells + '</div>' +
-        '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="att-ed-cancel">Cancel</button>' +
-        '<button type="button" class="btn btn-primary" id="att-ed-save">Save</button></div></div>';
-      document.body.appendChild(backdrop);
-
-      callServer('apiGetPayrollRun', run.payroll_run_id).then(function (detail) {
-        var inp = null;
-        (detail.rows || []).forEach(function (r) {
-          if (r.employee && r.employee.employee_id === employeeId) inp = r.input;
-        });
-        var reg = {};
-        if (inp && inp.daily_attendance_json) {
-          try { reg = JSON.parse(inp.daily_attendance_json); } catch (ignore) {}
-        }
-        backdrop.querySelectorAll('.att-day-code').forEach(function (el) {
-          var day = el.getAttribute('data-day');
-          if (reg[day]) el.value = reg[day];
-        });
-      }).catch(function () {});
-
-      backdrop.querySelector('#att-ed-cancel').addEventListener('click', function () { backdrop.remove(); });
-      backdrop.querySelector('#att-ed-save').addEventListener('click', function () {
-        var register = {};
-        backdrop.querySelectorAll('.att-day-code').forEach(function (el) {
-          var day = el.getAttribute('data-day');
-          var v = el.value.trim();
-          if (v) register[day] = v;
-        });
-        var saveBtn = backdrop.querySelector('#att-ed-save');
-        callServer('apiSaveAttendanceRegister', run.payroll_run_id, employeeId, register,
-          { button: saveBtn, loadingText: 'Saving…' })
-          .then(function () {
-            backdrop.remove();
-            showToast('Attendance saved.', 'success');
-            loadContext_();
-          })
-          .catch(function (err) { showToast(err.message || 'Save failed', 'error'); });
-      });
-    }
-
-    App.registerRoute('attendance-bulk-upload', { title: 'Attendance', render: render_ });
+    App.registerRoute('attendance-bulk-upload', { title: 'Register', render: render_ });
   });
 })();
 </script>
