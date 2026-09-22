@@ -3,6 +3,27 @@
  * One canonical generation path for Payroll, Employee Management, and My Payslips.
  */
 var PayslipService = (function () {
+  function empKey_(employeeId) {
+    return String(employeeId || '').trim().toUpperCase();
+  }
+
+  function resolveEmployee_(employeesById, employeeId) {
+    if (!employeesById || !employeeId) return {};
+    var raw = String(employeeId);
+    if (employeesById[raw]) return employeesById[raw];
+    var norm = empKey_(raw);
+    if (employeesById[norm]) return employeesById[norm];
+    var found = null;
+    Object.keys(employeesById).forEach(function (key) {
+      if (empKey_(key) === norm) found = employeesById[key];
+    });
+    return found || {};
+  }
+
+  function driveApiHint_() {
+    return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API (identifier: Drive), then redeploy.';
+  }
+
   function generateForRun(run, records, employeesById, session) {
     records = records || [];
     if (!records.length) return [];
@@ -16,6 +37,8 @@ var PayslipService = (function () {
       var eid = String(d.employee_id);
       if (!docsByEmp[eid]) docsByEmp[eid] = [];
       docsByEmp[eid].push(d);
+      var norm = empKey_(eid);
+      if (!docsByEmp[norm]) docsByEmp[norm] = docsByEmp[eid];
     });
     var now = new Date();
     var periodLabel = monthLabel_(run.period_month) + ' ' + run.period_year;
@@ -23,54 +46,68 @@ var PayslipService = (function () {
     var docUpdates = [];
     var recUpdates = [];
     var created = [];
+    var failures = [];
     for (var i = 0; i < records.length; i++) {
       var rec = records[i];
-      var emp = employeesById[rec.employee_id] || {};
-      var file = writePayslipFile_(folder, run, rec, emp);
-      var existingDocs = docsByEmp[String(rec.employee_id)] || [];
-      var reuse = findReusableDocument(existingDocs, rec);
-      var documentId;
-      if (reuse && reuse.document_id) {
-        documentId = reuse.document_id;
-        docUpdates.push({
-          pk: documentId,
-          updates: {
+      try {
+        var emp = resolveEmployee_(employeesById, rec.employee_id);
+        var file = writePayslipFile_(folder, run, rec, emp);
+        var existingDocs = docsByEmp[String(rec.employee_id)] || docsByEmp[empKey_(rec.employee_id)] || [];
+        var reuse = findReusableDocument(existingDocs, rec);
+        var documentId;
+        if (reuse && reuse.document_id) {
+          documentId = reuse.document_id;
+          docUpdates.push({
+            pk: documentId,
+            updates: {
+              title: 'Payslip - ' + periodLabel,
+              drive_file_id: file.getId(),
+              drive_folder_id: folder.getId(),
+              uploaded_at: now,
+              uploaded_by_email: session.email
+            }
+          });
+        } else {
+          documentId = DbService.generateId('DOC');
+          inserts.push({
+            document_id: documentId,
+            employee_id: rec.employee_id,
+            category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
             title: 'Payslip - ' + periodLabel,
             drive_file_id: file.getId(),
             drive_folder_id: folder.getId(),
+            payroll_run_id: run.payroll_run_id,
             uploaded_at: now,
             uploaded_by_email: session.email
-          }
+          });
+        }
+        recUpdates.push({
+          pk: rec.payroll_record_id,
+          updates: { payslip_document_id: documentId }
         });
-      } else {
-        documentId = DbService.generateId('DOC');
-        inserts.push({
+        rec.payslip_document_id = documentId;
+        created.push({
           document_id: documentId,
           employee_id: rec.employee_id,
-          category: HRMS.DOCUMENT_CATEGORY.PAYSLIP,
-          title: 'Payslip - ' + periodLabel,
           drive_file_id: file.getId(),
-          drive_folder_id: folder.getId(),
-          payroll_run_id: run.payroll_run_id,
-          uploaded_at: now,
-          uploaded_by_email: session.email
+          reused: !!reuse
         });
+      } catch (rowErr) {
+        var rowMsg = rowErr.message || String(rowErr);
+        Logger.log('Payslip row failed for ' + rec.employee_id + ': ' + rowMsg + '\n' + (rowErr.stack || ''));
+        failures.push({ employee_id: rec.employee_id, message: rowMsg });
       }
-      recUpdates.push({
-        pk: rec.payroll_record_id,
-        updates: { payslip_document_id: documentId }
-      });
-      rec.payslip_document_id = documentId;
-      created.push({
-        document_id: documentId,
-        employee_id: rec.employee_id,
-        drive_file_id: file.getId(),
-        reused: !!reuse
-      });
     }
     if (inserts.length) DbService.insertRecords(HRMS.SHEETS.DOCUMENTS, inserts);
     if (docUpdates.length) DbService.updateRecords(HRMS.SHEETS.DOCUMENTS, 'document_id', docUpdates);
     if (recUpdates.length) DbService.updateRecords(HRMS.SHEETS.PAYROLL_RECORDS, 'payroll_record_id', recUpdates);
+    if (!created.length && failures.length) {
+      var detail = failures[0].message || 'Unknown error';
+      if (failures.length > 1) {
+        detail += ' (' + failures.length + ' employees failed)';
+      }
+      throw new Error(detail);
+    }
     return created;
   }
 
@@ -78,7 +115,12 @@ var PayslipService = (function () {
     if (!record) throw validationError_('Payroll record is required.');
     var byId = {};
     byId[record.employee_id] = employee || {};
+    var norm = empKey_(record.employee_id);
+    if (norm) byId[norm] = employee || {};
     var created = generateForRun(run, [record], byId, session);
+    if (!created || !created.length) {
+      throw new Error('Payslip file could not be created.');
+    }
     return created[0];
   }
 
@@ -111,21 +153,48 @@ var PayslipService = (function () {
     });
   }
 
+  function htmlFallbackBlob_(html, fileName) {
+    var base = String(fileName || 'payslip.pdf').replace(/\.pdf$/i, '');
+    return Utilities.newBlob(html, 'text/html', base + '.html');
+  }
+
   function htmlToPdfBlob_(html, fileName) {
     fileName = fileName || 'payslip.pdf';
     if (typeof Drive === 'undefined' || !Drive.Files) {
-      throw configurationError_('Google Drive API is required for PDF payslips. Enable Drive advanced service.');
+      Logger.log('Payslip: Drive API missing;' + driveApiHint_());
+      return htmlFallbackBlob_(html, fileName);
     }
     var htmlBlob = Utilities.newBlob(html, 'text/html', 'payslip-export.html');
     var tempId = null;
     try {
-      var resource = { title: 'HRMS Payslip Export', mimeType: 'application/vnd.google-apps.document' };
-      var docFile = Drive.Files.create
-        ? Drive.Files.create(resource, htmlBlob, { convert: true })
-        : Drive.Files.insert(resource, htmlBlob, { convert: true });
+      var resource = {
+        name: 'HRMS Payslip Export ' + Date.now(),
+        mimeType: 'application/vnd.google-apps.document'
+      };
+      var docFile;
+      if (Drive.Files.create) {
+        docFile = Drive.Files.create(resource, htmlBlob);
+      } else if (Drive.Files.insert) {
+        docFile = Drive.Files.insert({
+          title: resource.name,
+          mimeType: resource.mimeType
+        }, htmlBlob, { convert: true });
+      } else {
+        throw new Error('Drive file create is unavailable.' + driveApiHint_());
+      }
       tempId = docFile.id;
+      if (!tempId) throw new Error('Could not create temporary Google Doc for PDF export.');
+      if (!Drive.Files.export) {
+        throw new Error('Drive export is unavailable.' + driveApiHint_());
+      }
       var pdfBlob = Drive.Files.export(tempId, 'application/pdf');
+      if (!pdfBlob || typeof pdfBlob.getBytes !== 'function' || !pdfBlob.getBytes().length) {
+        throw new Error('PDF export returned empty.');
+      }
       return pdfBlob.setName(fileName);
+    } catch (e) {
+      Logger.log('htmlToPdfBlob_ failed, saving HTML payslip: ' + (e.message || e));
+      return htmlFallbackBlob_(html, fileName);
     } finally {
       if (tempId) {
         try { DriveApp.getFileById(tempId).setTrashed(true); } catch (ignore) {}

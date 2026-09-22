@@ -880,7 +880,8 @@ var PayrollService = (function () {
       PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session);
     } catch (e) {
       Logger.log('PAYROLL_REGENERATE payslip generation failed for ' + runId + ': ' + (e.message || e));
-      throw systemError_('Payslip generation failed. Amounts are unchanged. Retry generate payslips.');
+      var hint = e && e.message ? String(e.message) : 'Unknown error';
+      throw systemError_('Payslip generation failed. ' + hint + ' Amounts are unchanged. Retry generate payslips.');
     }
     firePayrollNotify_(function () {
       NotificationPayrollAdapter.notifyPayslipsAvailable(snapshot.run, snapshot.records, snapshot.employees);
@@ -904,6 +905,16 @@ var PayrollService = (function () {
         payroll_run_id: runId,
         employee_id: employeeId
       });
+      if (!rec) {
+        var norm = normalizeEmployeeId_(employeeId);
+        var allRecs = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
+        for (var ri = 0; ri < allRecs.length; ri++) {
+          if (normalizeEmployeeId_(allRecs[ri].employee_id) === norm) {
+            rec = allRecs[ri];
+            break;
+          }
+        }
+      }
       if (!rec) throw notFoundError_('No payroll record for ' + employeeId + ' in this run.');
       return {
         run: run,
@@ -912,15 +923,17 @@ var PayrollService = (function () {
       };
     });
     try {
+      var empRow = resolveEmployee_(snapshot.employees, snapshot.record.employee_id) || {};
       PayslipService.generateForEmployee(
         snapshot.run,
         snapshot.record,
-        snapshot.employees[snapshot.record.employee_id] || {},
+        empRow,
         session
       );
     } catch (e) {
       Logger.log('PAYROLL_REGENERATE_ONE payslip failed for ' + runId + '/' + employeeId + ': ' + (e.message || e));
-      throw systemError_('Payslip generation failed for ' + employeeId + '. Amounts are unchanged.');
+      var oneHint = e && e.message ? String(e.message) : 'Unknown error';
+      throw systemError_('Payslip generation failed for ' + employeeId + '. ' + oneHint + ' Amounts are unchanged.');
     }
     firePayrollNotify_(function () {
       NotificationPayrollAdapter.notifyPayslipsAvailable(
