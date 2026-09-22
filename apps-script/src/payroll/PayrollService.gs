@@ -167,7 +167,7 @@ var PayrollService = (function () {
   }
 
   function enrichExceptionMessage_(flag, employeeId, employees, periodEnd) {
-    var emp = employees[employeeId] || {};
+    var emp = resolveEmployee_(employees, employeeId) || {};
     var base = humanizeExceptionFlag_(flag);
     if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE && typeof CompensationService !== 'undefined' &&
         CompensationService.explainStructureGap) {
@@ -187,34 +187,127 @@ var PayrollService = (function () {
     return base;
   }
 
-  function collectExceptionsHuman_(records, employees, periodEnd) {
-    var list = [];
+  function normalizeEmployeeId_(employeeId) {
+    return String(employeeId || '').trim().toUpperCase();
+  }
+
+  function resolveEmployee_(employees, employeeId) {
+    if (!employees || !employeeId) return null;
+    var raw = String(employeeId);
+    if (employees[raw]) return employees[raw];
+    var norm = normalizeEmployeeId_(raw);
+    if (employees[norm]) return employees[norm];
+    var found = null;
+    Object.keys(employees).forEach(function (key) {
+      if (normalizeEmployeeId_(key) === norm) found = employees[key];
+    });
+    return found;
+  }
+
+  function indexPayrollRecords_(records) {
+    var map = {};
     (records || []).forEach(function (r) {
-      if (!r.exception_flags) return;
-      var flags = String(r.exception_flags).split(';').filter(Boolean);
-      var emp = employees[r.employee_id] || {};
+      if (!r || !r.employee_id) return;
+      map[String(r.employee_id)] = r;
+      var norm = normalizeEmployeeId_(r.employee_id);
+      if (norm) map[norm] = r;
+    });
+    return map;
+  }
+
+  function resolvePayrollRecord_(recMap, employeeId) {
+    if (!recMap || !employeeId) return null;
+    return recMap[String(employeeId)] || recMap[normalizeEmployeeId_(employeeId)] || null;
+  }
+
+  function structureReadyForPayroll_(bundle) {
+    if (!bundle || !bundle.components || !bundle.components.length) return false;
+    if (typeof CompensationService !== 'undefined' && CompensationService.isPayrollStructureReady) {
+      return CompensationService.isPayrollStructureReady(bundle);
+    }
+    return true;
+  }
+
+  function liveExceptionFlags_(inp, employees, periodEnd, record) {
+    var empId = inp.employee_id;
+    var emp = resolveEmployee_(employees, empId);
+    if (!emp || !String(emp.pan || '').trim() || !String(emp.bank_account_number || '').trim()) {
+      try {
+        if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.findById) {
+          var full = EmployeeRepository.findById(empId);
+          if (full) emp = full;
+        }
+      } catch (ignoreEmp) {}
+    }
+    if (!emp) emp = { employee_id: empId };
+    var flags = [];
+    var bundle = null;
+    try {
+      if (typeof CompensationService !== 'undefined' && CompensationService.getStructureInForce) {
+        bundle = CompensationService.getStructureInForce(empId, periodEnd);
+      }
+    } catch (ignoreBundle) {}
+    if (!structureReadyForPayroll_(bundle)) {
+      flags.push(HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE);
+    }
+    if (typeof PayrollEngine !== 'undefined' && PayrollEngine.hasBank && !PayrollEngine.hasBank(emp)) {
+      flags.push(HRMS.PAYROLL_EXCEPTION.MISSING_BANK);
+    }
+    if (!String(emp.pan || '').trim()) {
+      flags.push(HRMS.PAYROLL_EXCEPTION.MISSING_PAN);
+    }
+    if (record && record.exception_flags) {
+      String(record.exception_flags).split(';').filter(Boolean).forEach(function (flag) {
+        if (flag === HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET ||
+            flag === HRMS.PAYROLL_EXCEPTION.WORKING_DAYS_ZERO) {
+          if (flags.indexOf(flag) < 0) flags.push(flag);
+        }
+      });
+    }
+    return flags;
+  }
+
+  function collectExceptionsHuman_(records, employees, periodEnd, inputs) {
+    var list = [];
+    var recMap = indexPayrollRecords_(records);
+    var rows = inputs && inputs.length ? inputs : (records || []);
+    rows.forEach(function (inp) {
+      var empId = inp.employee_id;
+      if (!empId) return;
+      var rec = resolvePayrollRecord_(recMap, empId);
+      var flags = periodEnd
+        ? liveExceptionFlags_(inp, employees, periodEnd, rec)
+        : (rec && rec.exception_flags ? String(rec.exception_flags).split(';').filter(Boolean) : []);
+      if (!flags.length) return;
+      var emp = resolveEmployee_(employees, empId) || {};
       list.push({
-        employee_id: r.employee_id,
-        display_name: emp.display_name || r.employee_id,
+        employee_id: empId,
+        display_name: emp.display_name || empId,
         flags: flags,
         messages: flags.map(function (flag) {
-          return enrichExceptionMessage_(flag, r.employee_id, employees, periodEnd);
+          return enrichExceptionMessage_(flag, empId, employees, periodEnd);
         })
       });
     });
     return list;
   }
 
-  function buildFinalizeBlockers_(records, employees) {
+  function buildFinalizeBlockers_(records, employees, periodEnd, inputs) {
     var groups = {};
-    (records || []).forEach(function (r) {
-      if (!r || !r.exception_flags) return;
-      var emp = employees[r.employee_id] || {};
+    var recMap = indexPayrollRecords_(records);
+    var rows = inputs && inputs.length ? inputs : (records || []);
+    rows.forEach(function (inp) {
+      var r = resolvePayrollRecord_(recMap, inp.employee_id);
+      var flags = periodEnd
+        ? liveExceptionFlags_(inp, employees, periodEnd, r)
+        : (r && r.exception_flags ? String(r.exception_flags).split(';').filter(Boolean) : []);
+      if (!flags.length) return;
+      var emp = resolveEmployee_(employees, inp.employee_id) || {};
       var item = {
-        employee_id: r.employee_id,
-        display_name: emp.display_name || r.employee_id
+        employee_id: inp.employee_id,
+        display_name: emp.display_name || inp.employee_id
       };
-      String(r.exception_flags).split(';').filter(Boolean).forEach(function (flag) {
+      flags.forEach(function (flag) {
         var key = String(flag || '').toUpperCase();
         if (key !== HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE &&
             key !== HRMS.PAYROLL_EXCEPTION.MISSING_BANK &&
@@ -326,11 +419,11 @@ var PayrollService = (function () {
       run: serializeRun_(run),
       rows: rows,
       summary: buildSummary_(rows),
-      exceptions: collectExceptionsHuman_(records, employees, periodEnd_(run.period_year, run.period_month)),
+      exceptions: collectExceptionsHuman_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
       exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
       lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
-      finalizeBlockers: buildFinalizeBlockers_(records, employees),
+      finalizeBlockers: buildFinalizeBlockers_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
       payslipStatus: payslipStatus_(records),
       uiPhase: uiPhase,
       uiPhaseLabel: uiPhaseLabel_(uiPhase),
@@ -544,7 +637,7 @@ var PayrollService = (function () {
       var newRecords = [];
 
       inputs.forEach(function (inp) {
-        var emp = employees[inp.employee_id] || { employee_id: inp.employee_id };
+        var emp = resolveEmployee_(employees, inp.employee_id) || { employee_id: inp.employee_id };
         var bundle = CompensationService.getStructureInForce(inp.employee_id, periodEnd);
         var result = PayrollEngine.calculateEmployee({
           structure: bundle ? bundle.structure : null,
@@ -1025,7 +1118,10 @@ var PayrollService = (function () {
     var map = {};
     DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).forEach(function (e) {
       e.display_name = e.display_name || ((e.first_name || '') + ' ' + (e.last_name || '')).trim();
-      map[e.employee_id] = e;
+      var key = String(e.employee_id || '');
+      map[key] = e;
+      var norm = normalizeEmployeeId_(key);
+      if (norm && !map[norm]) map[norm] = e;
     });
     return map;
   }
@@ -1038,11 +1134,10 @@ var PayrollService = (function () {
   }
 
   function mergeRows_(inputs, records, employees) {
-    var recMap = {};
-    (records || []).forEach(function (r) { recMap[r.employee_id] = r; });
+    var recMap = indexPayrollRecords_(records);
     return (inputs || []).map(function (inp) {
-      var emp = employees[inp.employee_id] || {};
-      var rec = recMap[inp.employee_id] || null;
+      var emp = resolveEmployee_(employees, inp.employee_id) || {};
+      var rec = resolvePayrollRecord_(recMap, inp.employee_id);
       return {
         input: inp,
         record: rec,

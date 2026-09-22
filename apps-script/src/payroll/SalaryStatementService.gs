@@ -131,33 +131,9 @@ var SalaryStatementService = (function () {
 
   function resolveStructureBundle_(emp, periodEnd) {
     if (typeof CompensationService !== 'undefined' && CompensationService.getStructureInForce) {
-      var bundle = CompensationService.getStructureInForce(emp.employee_id, periodEnd);
-      if (bundle && bundle.components && bundle.components.length) return bundle;
+      return CompensationService.getStructureInForce(emp.employee_id, periodEnd);
     }
-    var typeRow = findStructureType_(emp.salary_structure_id);
-    var ctc = Number(emp.ctc_monthly) || 0;
-    if (!typeRow || ctc <= 0) return null;
-    var raw = loadComponents_(typeRow.salary_structure_id);
-    if (!raw.length) return null;
-    var converted = raw.map(function (c) {
-      var method = String(c.calc_method || '').toUpperCase();
-      var out = {
-        component_code: c.component_code,
-        component_name: c.component_name,
-        component_kind: c.component_kind,
-        calc_method: c.calc_method,
-        amount: c.amount,
-        percent: c.percent,
-        sort_order: c.sort_order
-      };
-      if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-        out.calc_method = HRMS.CALC_METHOD.FIXED;
-        out.amount = componentMonthlyFromCtc_(c, ctc);
-        out.percent = '';
-      }
-      return out;
-    });
-    return { structure: typeRow, components: converted, from_type_template: true };
+    return null;
   }
 
   function findPayrollRun_(year, month) {
@@ -171,14 +147,22 @@ var SalaryStatementService = (function () {
     return match.length ? match[0] : null;
   }
 
+  function payrollEmpKey_(employeeId) {
+    return String(employeeId || '').trim().toUpperCase();
+  }
+
   function loadPayrollMaps_(runId) {
     var inputs = {};
     var records = {};
     if (!runId) return { inputs: inputs, records: records };
     DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      var key = payrollEmpKey_(inp.employee_id);
+      inputs[key] = inp;
       inputs[String(inp.employee_id)] = inp;
     });
     DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId }).forEach(function (rec) {
+      var key = payrollEmpKey_(rec.employee_id);
+      records[key] = rec;
       records[String(rec.employee_id)] = rec;
     });
     return { inputs: inputs, records: records };
@@ -266,8 +250,9 @@ var SalaryStatementService = (function () {
     }
 
     var fixedDays = ctx.fixedDays;
-    var input = ctx.payrollInputs[emp.employee_id] || null;
-    var record = ctx.payrollRecords[emp.employee_id] || null;
+    var empKey = payrollEmpKey_(emp.employee_id);
+    var input = ctx.payrollInputs[empKey] || ctx.payrollInputs[emp.employee_id] || null;
+    var record = ctx.payrollRecords[empKey] || ctx.payrollRecords[emp.employee_id] || null;
 
     if (input && Number(input.working_days) > 0) {
       fixedDays = Number(input.working_days);
@@ -400,7 +385,31 @@ var SalaryStatementService = (function () {
 
     var employees = listActiveEmployees_(options);
     var rows = employees.map(function (emp) {
-      return buildEmployeeRow_(emp, ctx);
+      try {
+        return buildEmployeeRow_(emp, ctx);
+      } catch (rowErr) {
+        Logger.log('Salary statement row failed for ' + emp.employee_id + ': ' + (rowErr.message || rowErr));
+        return {
+          employee_id: emp.employee_id,
+          display_name: employeeDisplayName_(emp),
+          designation: trim_(emp.designation),
+          department: trim_(emp.department),
+          gender: trim_(emp.gender),
+          joining_date: fmtDoj_(emp.joining_date),
+          vertical_name: trim_(emp.vertical_name),
+          fixed_days: ctx.fixedDays,
+          worked_days: 0,
+          rate: {},
+          rate_gross: 0,
+          earned: {},
+          earned_gross: 0,
+          deductions: {},
+          total_deductions: 0,
+          net_pay: 0,
+          employer_ctc: 0,
+          warnings: [String(rowErr.message || rowErr)]
+        };
+      }
     });
 
     return {

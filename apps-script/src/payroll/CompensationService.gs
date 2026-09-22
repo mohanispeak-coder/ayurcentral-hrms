@@ -44,6 +44,14 @@ var CompensationService = (function () {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
   }
 
+  function normalizeEmployeeId_(employeeId) {
+    return String(employeeId || '').trim().toUpperCase();
+  }
+
+  function employeeIdsMatch_(a, b) {
+    return normalizeEmployeeId_(a) === normalizeEmployeeId_(b);
+  }
+
   function getEmployee_(employeeId) {
     var emp = null;
     try {
@@ -52,8 +60,33 @@ var CompensationService = (function () {
         emp = EmployeeService.getMasterRecord(employeeId);
       }
     } catch (ignore) {}
+    if (!emp && typeof EmployeeRepository !== 'undefined' && EmployeeRepository.findById) {
+      try {
+        emp = EmployeeRepository.findById(employeeId);
+      } catch (ignoreRepo) {}
+    }
     if (emp) return emp;
-    return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    if (emp) return emp;
+    var norm = normalizeEmployeeId_(employeeId);
+    if (!norm) return null;
+    var all = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES) || [];
+    for (var i = 0; i < all.length; i++) {
+      if (normalizeEmployeeId_(all[i].employee_id) === norm) return all[i];
+    }
+    return null;
+  }
+
+  function isUsablePayrollBundle_(bundle) {
+    if (!bundle || !bundle.components || !bundle.components.length) return false;
+    for (var i = 0; i < bundle.components.length; i++) {
+      var c = bundle.components[i];
+      if (String(c.component_kind || '').toUpperCase() !== HRMS.COMPONENT_KIND.EARNING) continue;
+      var method = String(c.calc_method || '').toUpperCase();
+      if (method === HRMS.CALC_METHOD.PERCENT_OF_BASIC && Number(c.percent) > 0) return true;
+      if (Number(c.amount) > 0) return true;
+    }
+    return false;
   }
 
   function serializeClientValue_(value) {
@@ -160,14 +193,97 @@ var CompensationService = (function () {
     return sanitizeOwnStructure_(bundle);
   }
 
-  function getStructureInForce(employeeId, periodEndDate) {
+  function isTypeStructureRow_(row) {
+    return !!row && String(row.employee_id || '').trim() === '' &&
+      String(row.structure_name || '').trim() !== '';
+  }
+
+  function findTypeStructureByRef_(ref) {
+    ref = String(ref || '').trim();
+    if (!ref) return null;
+    var row = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, { salary_structure_id: ref });
+    if (row && isTypeStructureRow_(row)) return row;
+    var norm = ref.toUpperCase();
+    var types = (DbService.getAllRecords(HRMS.SHEETS.SALARY_STRUCTURES) || []).filter(isTypeStructureRow_);
+    for (var i = 0; i < types.length; i++) {
+      var t = types[i];
+      if (String(t.salary_structure_id || '').toUpperCase() === norm) return t;
+      if (String(t.structure_name || '').toUpperCase() === norm) return t;
+    }
+    return null;
+  }
+
+  function componentAmountFromCtc_(component, ctcMonthly) {
+    var method = String(component.calc_method || '').toUpperCase();
+    var ctc = Number(ctcMonthly) || 0;
+    if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
+      return Math.round(ctc * (Number(component.percent) || 0) / 100 * 100) / 100;
+    }
+    return Number(component.amount) || 0;
+  }
+
+  function componentsFromTypeTemplate_(typeStructureId, ctcMonthly) {
+    var raw = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: typeStructureId }) || [];
+    if (!raw.length) return [];
+    return raw.map(function (c) {
+      var method = String(c.calc_method || '').toUpperCase();
+      var code = String(c.component_code || '').toUpperCase();
+      if (code === 'BP') code = 'BASIC';
+      var out = {
+        component_code: code,
+        component_name: c.component_name,
+        component_kind: c.component_kind,
+        calc_method: c.calc_method,
+        amount: c.amount,
+        percent: c.percent,
+        sort_order: c.sort_order
+      };
+      if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
+        out.calc_method = HRMS.CALC_METHOD.FIXED;
+        out.amount = componentAmountFromCtc_(c, ctcMonthly);
+        out.percent = '';
+      }
+      return out;
+    });
+  }
+
+  function getStructureFromEmployeeTemplate_(employeeId) {
+    var emp = getEmployee_(employeeId);
+    if (!emp) return null;
+    var typeRow = findTypeStructureByRef_(emp.salary_structure_id);
+    var ctc = Number(emp.ctc_monthly);
+    if (!typeRow || !isFinite(ctc) || ctc <= 0) return null;
+    var components = componentsFromTypeTemplate_(typeRow.salary_structure_id, ctc);
+    if (!components.length) return null;
+    return {
+      structure: {
+        salary_structure_id: typeRow.salary_structure_id,
+        employee_id: employeeId,
+        structure_name: typeRow.structure_name,
+        status: HRMS.STRUCTURE_STATUS.CURRENT,
+        ctc_monthly: ctc,
+        effective_from: '',
+        effective_to: ''
+      },
+      components: components,
+      from_type_template: true
+    };
+  }
+
+  function getStructureInForceFromHistory_(employeeId, periodEndDate) {
     var end = toDate_(periodEndDate);
-    var rows = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
+    var rows = (DbService.getAllRecords(HRMS.SHEETS.SALARY_STRUCTURES) || []).filter(function (row) {
+      if (isTypeStructureRow_(row)) return false;
+      return employeeIdsMatch_(row.employee_id, employeeId);
+    });
     var matches = [];
     (rows || []).forEach(function (row) {
       var from = toDate_(row.effective_from);
+      if (!from) {
+        from = new Date(2000, 0, 1);
+      }
       var to = toDate_(row.effective_to);
-      if (!from || !end) return;
+      if (!end) return;
       if (from > end) return;
       if (to && to < end) return;
       matches.push(row);
@@ -186,6 +302,24 @@ var CompensationService = (function () {
     };
   }
 
+  function getStructureInForce(employeeId, periodEndDate) {
+    employeeId = String(employeeId || '').trim();
+    var ids = [employeeId];
+    var norm = normalizeEmployeeId_(employeeId);
+    if (norm && ids.indexOf(norm) < 0) ids.push(norm);
+
+    var historyBundle = null;
+    var templateBundle = null;
+    ids.forEach(function (id) {
+      if (!historyBundle) historyBundle = getStructureInForceFromHistory_(id, periodEndDate);
+      if (!templateBundle) templateBundle = getStructureFromEmployeeTemplate_(id);
+    });
+
+    if (historyBundle && isUsablePayrollBundle_(historyBundle)) return historyBundle;
+    if (templateBundle && isUsablePayrollBundle_(templateBundle)) return templateBundle;
+    return historyBundle || templateBundle;
+  }
+
   /**
    * Human hint when payroll cannot find a structure for the month (saved but wrong dates, etc.).
    */
@@ -198,7 +332,12 @@ var CompensationService = (function () {
 
     var rows = DbService.findRecords(HRMS.SHEETS.SALARY_STRUCTURES, { employee_id: employeeId });
     if (!rows.length) {
-      return 'No salary structure saved yet. Use Set up salary and include a BASIC earning line.';
+      if (getStructureFromEmployeeTemplate_(employeeId)) return '';
+      var emp = getEmployee_(employeeId);
+      if (emp && String(emp.salary_structure_id || '').trim() && Number(emp.ctc_monthly) > 0) {
+        return 'Salary structure template is set but components could not be loaded. Check the template in Salary structures.';
+      }
+      return 'Assign a salary structure template and monthly CTC on the employee, or use Set up salary with a BASIC line.';
     }
 
     var current = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, {
@@ -594,6 +733,7 @@ var CompensationService = (function () {
     getEditorBundle: getEditorBundle,
     getOwnCurrentStructure: getOwnCurrentStructure,
     getStructureInForce: getStructureInForce,
+    isPayrollStructureReady: isUsablePayrollBundle_,
     explainStructureGap: explainStructureGap,
     saveStructure: saveStructure,
     reviseStructure: reviseStructure,

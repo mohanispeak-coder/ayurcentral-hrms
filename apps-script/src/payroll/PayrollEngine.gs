@@ -31,9 +31,12 @@ var PayrollEngine = (function () {
 
   function findBasic_(components) {
     components = components || [];
-    for (var i = 0; i < components.length; i++) {
-      if (String(components[i].component_code || '').toUpperCase() === 'BASIC') {
-        return components[i];
+    var codes = ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'];
+    for (var c = 0; c < codes.length; c++) {
+      for (var i = 0; i < components.length; i++) {
+        if (String(components[i].component_code || '').toUpperCase() === codes[c]) {
+          return components[i];
+        }
       }
     }
     return null;
