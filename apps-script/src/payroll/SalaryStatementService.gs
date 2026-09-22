@@ -1,10 +1,31 @@
 /**
- * Salary statement (cost to company) - monthly breakdown per active employee.
- * Uses salary structure templates (PERCENT_OF_CTC / FIXED) and Employees.ctc_monthly.
+ * Salary statement (SAPL-style grid) - rate of pay, earned pay, deductions, net.
+ * Uses CompensationService structures + PayrollEngine; enriches from payroll run when present.
  */
 var HRMS = HRMS || {};
 
 var SalaryStatementService = (function () {
+  var TEMPLATE_VERSION_ = '2';
+
+  var RATE_EARN_KEYS_ = [
+    { label: 'Basic+Da', codes: ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'] },
+    { label: 'HRA', codes: ['HRA'] },
+    { label: 'Conveyance Allowance', codes: ['CONV', 'CONVEYANCE', 'CA', 'CONVEYANCE_ALLOWANCE'] },
+    { label: 'Medical All', codes: ['MEDICAL', 'MED', 'MA', 'MEDICAL_ALL'] },
+    { label: 'Special Allowance', codes: ['SA', 'SPECIAL', 'SPECIAL_ALLOWANCE'] }
+  ];
+
+  var DED_KEYS_ = [
+    { label: 'P.F', codes: ['PF'] },
+    { label: 'ESIC', codes: ['ESI', 'ESIC'] },
+    { label: 'P.T', codes: ['PT'] },
+    { label: 'ADVANCE', codes: ['ADVANCE', 'ADV'] },
+    { label: 'TDS', codes: ['TDS'] },
+    { label: 'LCD', codes: ['LCD'] },
+    { label: 'LWF', codes: ['LWF'] },
+    { label: 'Arrers', codes: ['ARREARS', 'ARR'] }
+  ];
+
   function trim_(v) {
     return v == null ? '' : String(v).trim();
   }
@@ -16,6 +37,35 @@ var SalaryStatementService = (function () {
     var x = Number(n);
     if (!isFinite(x)) x = 0;
     return Math.round(x * 100) / 100;
+  }
+
+  function dash_(n) {
+    if (n === '' || n == null) return '-';
+    var x = Number(n);
+    if (!isFinite(x) || x === 0) return '-';
+    return x;
+  }
+
+  function daysInMonth_(year, month) {
+    return new Date(Number(year), Number(month), 0).getDate();
+  }
+
+  function periodEnd_(year, month) {
+    var dim = daysInMonth_(year, month);
+    return new Date(Number(year), Number(month) - 1, dim);
+  }
+
+  function monthLabel_(year, month) {
+    var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return (names[Number(month) - 1] || month) + '- ' + year;
+  }
+
+  function fmtDoj_(value) {
+    var d = typeof LeaveEngine !== 'undefined' ? LeaveEngine.toDateOnly(value) : null;
+    if (!d) return trim_(value);
+    var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var yy = String(d.getFullYear());
+    return d.getDate() + '-' + names[d.getMonth()] + '-' + yy.slice(-2);
   }
 
   function isTypeRow_(row) {
@@ -70,7 +120,7 @@ var SalaryStatementService = (function () {
     return rows;
   }
 
-  function componentMonthly_(component, ctcMonthly) {
+  function componentMonthlyFromCtc_(component, ctcMonthly) {
     var method = String(component.calc_method || '').toUpperCase();
     var ctc = Number(ctcMonthly) || 0;
     if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
@@ -79,37 +129,99 @@ var SalaryStatementService = (function () {
     return round2_(Number(component.amount) || 0);
   }
 
-  function kindRank_(kind) {
-    var k = String(kind || '').toUpperCase();
-    if (k === HRMS.COMPONENT_KIND.EARNING) return 1;
-    if (k === HRMS.COMPONENT_KIND.DEDUCTION) return 2;
-    if (k === HRMS.COMPONENT_KIND.EMPLOYER) return 3;
-    return 9;
+  function resolveStructureBundle_(emp, periodEnd) {
+    if (typeof CompensationService !== 'undefined' && CompensationService.getStructureInForce) {
+      var bundle = CompensationService.getStructureInForce(emp.employee_id, periodEnd);
+      if (bundle && bundle.components && bundle.components.length) return bundle;
+    }
+    var typeRow = findStructureType_(emp.salary_structure_id);
+    var ctc = Number(emp.ctc_monthly) || 0;
+    if (!typeRow || ctc <= 0) return null;
+    var raw = loadComponents_(typeRow.salary_structure_id);
+    if (!raw.length) return null;
+    var converted = raw.map(function (c) {
+      var method = String(c.calc_method || '').toUpperCase();
+      var out = {
+        component_code: c.component_code,
+        component_name: c.component_name,
+        component_kind: c.component_kind,
+        calc_method: c.calc_method,
+        amount: c.amount,
+        percent: c.percent,
+        sort_order: c.sort_order
+      };
+      if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
+        out.calc_method = HRMS.CALC_METHOD.FIXED;
+        out.amount = componentMonthlyFromCtc_(c, ctc);
+        out.percent = '';
+      }
+      return out;
+    });
+    return { structure: typeRow, components: converted, from_type_template: true };
   }
 
-  function buildComponentCatalog_() {
-    var seen = {};
-    var catalog = [];
-    var types = (DbService.getAllRecords(HRMS.SHEETS.SALARY_STRUCTURES) || []).filter(isTypeRow_);
-    types.forEach(function (type) {
-      loadComponents_(type.salary_structure_id).forEach(function (c) {
-        var code = String(c.component_code || '').toUpperCase();
-        if (!code || seen[code]) return;
-        seen[code] = true;
-        catalog.push({
-          code: code,
-          name: String(c.component_name || code),
-          kind: String(c.component_kind || '').toUpperCase(),
-          sort_order: Number(c.sort_order || 0)
-        });
-      });
+  function findPayrollRun_(year, month) {
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    var match = runs.filter(function (r) {
+      return Number(r.period_year) === Number(year) && Number(r.period_month) === Number(month);
     });
-    catalog.sort(function (a, b) {
-      var kr = kindRank_(a.kind) - kindRank_(b.kind);
-      if (kr !== 0) return kr;
-      return a.sort_order - b.sort_order || a.code.localeCompare(b.code);
+    match.sort(function (a, b) {
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
     });
-    return catalog;
+    return match.length ? match[0] : null;
+  }
+
+  function loadPayrollMaps_(runId) {
+    var inputs = {};
+    var records = {};
+    if (!runId) return { inputs: inputs, records: records };
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      inputs[String(inp.employee_id)] = inp;
+    });
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId }).forEach(function (rec) {
+      records[String(rec.employee_id)] = rec;
+    });
+    return { inputs: inputs, records: records };
+  }
+
+  function pickFromLines_(lines, codes, field) {
+    var set = {};
+    codes.forEach(function (c) { set[String(c).toUpperCase()] = true; });
+    var total = 0;
+    var hit = false;
+    (lines || []).forEach(function (ln) {
+      var code = String(ln.component_code || '').toUpperCase();
+      if (!set[code]) return;
+      hit = true;
+      total = round2_(total + (Number(ln[field]) || 0));
+    });
+    return hit ? total : null;
+  }
+
+  function mapBuckets_(lines, field) {
+    var rate = {};
+    var earned = {};
+    RATE_EARN_KEYS_.forEach(function (col) {
+      rate[col.label] = pickFromLines_(lines, col.codes, field);
+    });
+    var ded = {};
+    DED_KEYS_.forEach(function (col) {
+      ded[col.label] = pickFromLines_(lines, col.codes, field);
+    });
+    return { rate: rate, ded: ded };
+  }
+
+  function sumRateGross_(rateMap) {
+    var t = 0;
+    RATE_EARN_KEYS_.forEach(function (col) {
+      var v = rateMap[col.label];
+      if (v != null) t = round2_(t + v);
+    });
+    return t;
+  }
+
+  function sumEarnGross_(earnMap) {
+    return sumRateGross_(earnMap);
   }
 
   function employeeDisplayName_(emp) {
@@ -119,59 +231,146 @@ var SalaryStatementService = (function () {
     return trim_((emp.first_name || '') + ' ' + (emp.last_name || '')) || trim_(emp.employee_id);
   }
 
-  function buildEmployeeRow_(emp, catalog) {
-    var ctc = Number(emp.ctc_monthly);
-    if (!isFinite(ctc) || ctc < 0) ctc = 0;
-    var typeRow = findStructureType_(emp.salary_structure_id);
-    var components = typeRow ? loadComponents_(typeRow.salary_structure_id) : [];
-    var amounts = {};
-    var gross = 0;
-    var deductions = 0;
-    var employer = 0;
+  function linesFromResult_(result) {
+    if (!result || result.skipped || !result.component_breakdown) return [];
+    try {
+      var obj = JSON.parse(result.component_breakdown);
+      return obj.lines || [];
+    } catch (ignore) {
+      return [];
+    }
+  }
+
+  function parseBreakdown_(record) {
+    if (!record || !record.component_breakdown) return null;
+    try {
+      var obj = typeof record.component_breakdown === 'string'
+        ? JSON.parse(record.component_breakdown)
+        : record.component_breakdown;
+      return obj && obj.lines ? obj.lines : null;
+    } catch (ignore) {
+      return null;
+    }
+  }
+
+  function pad2_(n) {
+    n = String(Number(n));
+    return n.length < 2 ? '0' + n : n;
+  }
+
+  function buildEmployeeRow_(emp, ctx) {
     var warnings = [];
-
-    if (!typeRow) {
-      if (trim_(emp.salary_structure_id)) {
-        warnings.push('Salary structure not found: ' + trim_(emp.salary_structure_id));
-      } else {
-        warnings.push('No salary structure assigned');
-      }
-    } else if (!components.length) {
-      warnings.push('Structure has no components');
-    }
-    if (ctc <= 0) {
-      warnings.push('Monthly CTC not set');
+    var bundle = resolveStructureBundle_(emp, ctx.periodEnd);
+    if (!bundle) {
+      warnings.push('No salary structure for this month');
     }
 
-    components.forEach(function (c) {
-      var code = String(c.component_code || '').toUpperCase();
-      var amt = componentMonthly_(c, ctc);
-      amounts[code] = amt;
-      var kind = String(c.component_kind || '').toUpperCase();
-      if (kind === HRMS.COMPONENT_KIND.EARNING) gross = round2_(gross + amt);
-      else if (kind === HRMS.COMPONENT_KIND.DEDUCTION) deductions = round2_(deductions + amt);
-      else if (kind === HRMS.COMPONENT_KIND.EMPLOYER) employer = round2_(employer + amt);
-    });
+    var fixedDays = ctx.fixedDays;
+    var input = ctx.payrollInputs[emp.employee_id] || null;
+    var record = ctx.payrollRecords[emp.employee_id] || null;
 
-    var net = round2_(gross - deductions);
-    var totalCost = round2_(gross + employer);
+    if (input && Number(input.working_days) > 0) {
+      fixedDays = Number(input.working_days);
+    } else if (ctx.run && Number(ctx.run.working_days_default) > 0) {
+      fixedDays = Number(ctx.run.working_days_default);
+    }
+
+    var paidDays = fixedDays;
+    if (input && input.paid_days !== '' && input.paid_days != null) {
+      paidDays = Number(input.paid_days);
+    }
+
+    var settings = { payroll_round: ConfigService.getSetting('payroll_round', '') };
+    var inputsFull = {
+      working_days: fixedDays,
+      paid_days: fixedDays,
+      lop_days: 0,
+      bonus: 0,
+      incentive: 0,
+      other_earnings: 0,
+      other_deductions: 0,
+      tds_amount: 0
+    };
+    var inputsEarned = {
+      working_days: fixedDays,
+      paid_days: paidDays,
+      lop_days: input ? Number(input.lop_days) || 0 : 0,
+      bonus: input ? Number(input.bonus) || 0 : 0,
+      incentive: input ? Number(input.incentive) || 0 : 0,
+      other_earnings: input ? Number(input.other_earnings) || 0 : 0,
+      other_deductions: input ? Number(input.other_deductions) || 0 : 0,
+      tds_amount: input ? Number(input.tds_amount) || 0 : 0
+    };
+
+    var rateResult = null;
+    var earnedResult = null;
+    if (bundle && typeof PayrollEngine !== 'undefined') {
+      rateResult = PayrollEngine.calculateEmployee({
+        structure: bundle.structure,
+        components: bundle.components,
+        inputs: inputsFull,
+        settings: settings,
+        employee: emp
+      });
+      earnedResult = PayrollEngine.calculateEmployee({
+        structure: bundle.structure,
+        components: bundle.components,
+        inputs: inputsEarned,
+        settings: settings,
+        employee: emp
+      });
+    }
+
+    var rateLines = linesFromResult_(rateResult);
+    var earnLines = linesFromResult_(earnedResult);
+
+    if (record) {
+      var snap = parseBreakdown_(record);
+      if (snap && snap.length) earnLines = snap;
+    }
+
+    var rateBuckets = mapBuckets_(rateLines, 'contractual');
+    var earnedBuckets = mapBuckets_(earnLines, 'amount');
+
+    var rateGross = sumRateGross_(rateBuckets.rate);
+    var earnGross = earnedResult ? round2_(earnedResult.gross_earnings) : sumEarnGross_(earnedBuckets.rate);
+
+    var tds = inputsEarned.tds_amount;
+    if (earnedBuckets.ded['TDS'] == null && tds > 0) {
+      earnedBuckets.ded['TDS'] = tds;
+    }
+    if (inputsEarned.other_deductions > 0 && earnedBuckets.ded['ADVANCE'] == null) {
+      earnedBuckets.ded['ADVANCE'] = round2_(inputsEarned.other_deductions);
+    }
+
+    var totalDed = earnedResult ? round2_(earnedResult.total_deductions) : 0;
+    if (!totalDed) {
+      DED_KEYS_.forEach(function (col) {
+        var v = earnedBuckets.ded[col.label];
+        if (v != null) totalDed = round2_(totalDed + v);
+      });
+    }
+    var netPay = earnedResult ? round2_(earnedResult.net_pay) : round2_(earnGross - totalDed);
 
     return {
       employee_id: emp.employee_id,
       display_name: employeeDisplayName_(emp),
-      vertical_name: trim_(emp.vertical_name),
-      department: trim_(emp.department),
       designation: trim_(emp.designation),
-      salary_structure_id: typeRow ? typeRow.salary_structure_id : trim_(emp.salary_structure_id),
-      structure_name: typeRow ? trim_(typeRow.structure_name) : '',
-      monthly_ctc: round2_(ctc),
-      annual_ctc: round2_(ctc * 12),
-      component_amounts: amounts,
-      gross_earnings: gross,
-      total_deductions: deductions,
-      net_pay: net,
-      employer_contributions: employer,
-      total_cost_to_company: totalCost,
+      department: trim_(emp.department),
+      gender: trim_(emp.gender),
+      joining_date: fmtDoj_(emp.joining_date),
+      vertical_name: trim_(emp.vertical_name),
+      fixed_days: fixedDays,
+      worked_days: paidDays,
+      rate: rateBuckets.rate,
+      rate_gross: rateGross,
+      earned: earnedBuckets.rate,
+      earned_gross: earnGross,
+      deductions: earnedBuckets.ded,
+      total_deductions: totalDed,
+      net_pay: netPay,
+      employer_ctc: earnedResult ? round2_((earnedResult.gross_earnings || 0) +
+        (earnedResult.employer_contributions || 0)) : rateGross,
       warnings: warnings
     };
   }
@@ -179,14 +378,39 @@ var SalaryStatementService = (function () {
   function listStatement(options) {
     PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
     options = options || {};
-    var catalog = buildComponentCatalog_();
+    var now = new Date();
+    var year = Number(options.period_year || options.year) || now.getFullYear();
+    var month = Number(options.period_month || options.month) || (now.getMonth() + 1);
+    var vertical = trim_(options.vertical_name || options.vertical);
+    var run = findPayrollRun_(year, month);
+    var maps = loadPayrollMaps_(run ? run.payroll_run_id : '');
+    var fixedDays = daysInMonth_(year, month);
+    if (run && Number(run.working_days_default) > 0) fixedDays = Number(run.working_days_default);
+
+    var ctx = {
+      year: year,
+      month: month,
+      periodEnd: periodEnd_(year, month),
+      fixedDays: fixedDays,
+      run: run,
+      payrollInputs: maps.inputs,
+      payrollRecords: maps.records,
+      verticalLabel: vertical || 'HRMS'
+    };
+
     var employees = listActiveEmployees_(options);
     var rows = employees.map(function (emp) {
-      return buildEmployeeRow_(emp, catalog);
+      return buildEmployeeRow_(emp, ctx);
     });
+
     return {
-      template_version: '1',
-      columns: catalog,
+      template_version: TEMPLATE_VERSION_,
+      period_year: year,
+      period_month: month,
+      period_label: monthLabel_(year, month),
+      payroll_run_id: run ? run.payroll_run_id : '',
+      payroll_status: run ? String(run.status || '') : '',
+      vertical_filter: vertical,
       rows: rows,
       employee_count: rows.length,
       generated_at: new Date().toISOString()
@@ -209,84 +433,94 @@ var SalaryStatementService = (function () {
       var blob = resp.getBlob();
       if (blob && blob.getBytes().length > 100) return blob;
     }
-    var docsUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
-    resp = UrlFetchApp.fetch(docsUrl, { headers: auth, muteHttpExceptions: true, followRedirects: true });
-    if (resp.getResponseCode() === 200) {
-      return resp.getBlob();
-    }
     throw configurationError_('Could not export salary statement Excel. Enable Google Drive API for the script project.');
   }
 
-  function applyHeaderStyles_(sheet, colCount) {
-    sheet.getRange(1, 1, 1, colCount)
-      .setFontWeight('bold')
+  function applySaplStyles_(sheet, dataRowCount) {
+    var lastCol = 32;
+    sheet.getRange(1, 1, 1, lastCol).merge()
       .setBackground('#2d5a3d')
       .setFontColor('#ffffff')
+      .setFontWeight('bold')
       .setHorizontalAlignment('center');
-    sheet.setFrozenRows(1);
+    sheet.getRange(2, 9, 1, 6).merge().setBackground('#ffedd5').setFontWeight('bold').setHorizontalAlignment('center');
+    sheet.getRange(2, 15, 1, 1).setBackground('#bbf7d0').setFontWeight('bold').setHorizontalAlignment('center');
+    sheet.getRange(2, 16, 1, 6).merge().setBackground('#ffedd5').setFontWeight('bold').setHorizontalAlignment('center');
+    sheet.getRange(2, 22, 1, 10).merge().setBackground('#ffedd5').setFontWeight('bold').setHorizontalAlignment('center');
+    sheet.getRange(3, 1, 1, 8).setBackground('#ffedd5').setFontWeight('bold');
+    sheet.getRange(3, 9, 1, lastCol - 8).setBackground('#ffedd5').setFontWeight('bold');
+    sheet.setFrozenRows(3);
+    if (dataRowCount > 0) {
+      sheet.getRange(4, 9, dataRowCount, lastCol - 8).setNumberFormat('#,##0.00');
+    }
   }
 
-  function buildExcel_(data) {
-    data = data || {};
-    var catalog = data.columns || [];
-    var rows = data.rows || [];
-    var earnings = catalog.filter(function (c) { return c.kind === HRMS.COMPONENT_KIND.EARNING; });
-    var deductions = catalog.filter(function (c) { return c.kind === HRMS.COMPONENT_KIND.DEDUCTION; });
-    var employers = catalog.filter(function (c) { return c.kind === HRMS.COMPONENT_KIND.EMPLOYER; });
+  function buildExcel_(meta) {
+    meta = meta || {};
+    var rows = meta.rows || [];
+    var vertical = trim_(meta.vertical_filter) || 'SAPL';
+    var title = vertical + ' Salary statement for the month of ' + (meta.period_label || '');
 
-    var header = ['S.No', 'Employee ID', 'Employee Name', 'Vertical', 'Department', 'Designation',
-      'Salary Structure', 'Monthly CTC', 'Annual CTC'];
-    earnings.forEach(function (c) { header.push(c.name + ' (' + c.code + ')'); });
-    header.push('Gross Earnings');
-    deductions.forEach(function (c) { header.push(c.name + ' (' + c.code + ')'); });
-    header.push('Total Deductions', 'Net Pay');
-    employers.forEach(function (c) { header.push(c.name + ' (' + c.code + ')'); });
-    header.push('Employer Contributions', 'Total Cost to Company', 'Notes');
+    var row3 = ['Sl.No', 'EMP ID', 'Name of the Employee', 'Designation', 'Department', 'Gender', 'DOJ', 'Fixed Days'];
+    RATE_EARN_KEYS_.forEach(function (c) { row3.push(c.label); });
+    row3.push('Gross');
+    row3.push('Days');
+    RATE_EARN_KEYS_.forEach(function (c) { row3.push(c.label); });
+    row3.push('Gross');
+    DED_KEYS_.forEach(function (c) { row3.push(c.label); });
+    row3.push('Total DED', 'Net Pay', 'TRF');
 
-    var body = [header];
+    var row2 = ['', '', '', '', '', '', '', '',
+      'RATE OF PAY', '', '', '', '', '',
+      'Worked',
+      'EARNED PAY', '', '', '', '', '',
+      'DEDUCTION', '', '', '', '', '', '', '', '', ''];
+
+    var row1 = [title];
+    while (row1.length < row3.length) row1.push('');
+
+    var body = [];
     rows.forEach(function (r, idx) {
       var line = [
         idx + 1,
         r.employee_id,
         r.display_name,
-        r.vertical_name,
-        r.department,
         r.designation,
-        r.structure_name || r.salary_structure_id,
-        r.monthly_ctc,
-        r.annual_ctc
+        r.department,
+        r.gender,
+        r.joining_date,
+        r.fixed_days
       ];
-      earnings.forEach(function (c) {
-        line.push(r.component_amounts[c.code] != null ? r.component_amounts[c.code] : '');
+      RATE_EARN_KEYS_.forEach(function (c) {
+        line.push(dash_(r.rate[c.label]));
       });
-      line.push(r.gross_earnings);
-      deductions.forEach(function (c) {
-        line.push(r.component_amounts[c.code] != null ? r.component_amounts[c.code] : '');
+      line.push(dash_(r.rate_gross));
+      line.push(r.worked_days != null ? r.worked_days : '-');
+      RATE_EARN_KEYS_.forEach(function (c) {
+        line.push(dash_(r.earned[c.label]));
       });
-      line.push(r.total_deductions, r.net_pay);
-      employers.forEach(function (c) {
-        line.push(r.component_amounts[c.code] != null ? r.component_amounts[c.code] : '');
+      line.push(dash_(r.earned_gross));
+      DED_KEYS_.forEach(function (c) {
+        line.push(dash_(r.deductions[c.label]));
       });
-      line.push(r.employer_contributions, r.total_cost_to_company,
-        (r.warnings && r.warnings.length) ? r.warnings.join('; ') : '');
+      line.push(dash_(r.total_deductions));
+      line.push(dash_(r.net_pay));
+      line.push('-');
       body.push(line);
     });
 
-    var ss = SpreadsheetApp.create('HRMS Salary Statement');
+    var all = [row1, row2, row3].concat(body);
+    var ss = SpreadsheetApp.create('Salary Statement');
     var fileId = ss.getId();
     var sheet = ss.getSheets()[0];
-    sheet.setName('Salary Statement');
-    if (body.length) {
-      sheet.getRange(1, 1, body.length, header.length).setValues(body);
-      applyHeaderStyles_(sheet, header.length);
-      if (body.length > 1) {
-        var dataRows = body.length - 1;
-        sheet.getRange(2, 8, dataRows, header.length - 1).setNumberFormat('#,##0.00');
-      }
-    }
+    sheet.setName('HO');
+    sheet.getRange(1, 1, all.length, row3.length).setValues(all);
+    applySaplStyles_(sheet, body.length);
     SpreadsheetApp.flush();
     Utilities.sleep(200);
-    var blob = exportSpreadsheetXlsx_(fileId).setName('HRMS_Salary_Statement_CTC.xlsx');
+    var fname = vertical + '_Salary_Statement_' + meta.period_year + '_' +
+      pad2_(meta.period_month) + '.xlsx';
+    var blob = exportSpreadsheetXlsx_(fileId).setName(fname);
     try { DriveApp.getFileById(fileId).setTrashed(true); } catch (ignoreTrash) {}
     return blob;
   }
@@ -296,11 +530,12 @@ var SalaryStatementService = (function () {
     var data = listStatement(options);
     var blob = buildExcel_(data);
     return {
-      fileName: blob.getName() || 'HRMS_Salary_Statement_CTC.xlsx',
+      fileName: blob.getName(),
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       base64: Utilities.base64Encode(blob.getBytes()),
       employeeCount: data.employee_count,
-      templateVersion: data.template_version
+      templateVersion: data.template_version,
+      periodLabel: data.period_label
     };
   }
 

@@ -1,12 +1,13 @@
 <style>
-.sal-stmt-page .sal-stmt-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
-.sal-stmt-page .data-table { width: 100%; }
-.sal-stmt-page th.num, .sal-stmt-page td.num { text-align: right; }
+.sal-stmt-page .sal-stmt-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.sal-stmt-page .data-table { width: 100%; font-size: 13px; }
+.sal-stmt-page th.num, .sal-stmt-page td.num { text-align: right; white-space: nowrap; }
 </style>
 <script>
 (function () {
   'use strict';
   var initialized_ = false;
+  var filter_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, vertical: '' };
 
   function whenAppReady(fn) {
     function run() {
@@ -41,25 +42,36 @@
     }
 
     function fmtNum_(v) {
-      if (v === '' || v == null) return '';
+      if (v === '' || v == null || v === '-') return '-';
       var n = Number(v);
       if (!isFinite(n)) return esc_(v);
       return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function filterPayload_() {
+      return {
+        period_year: filter_.year,
+        period_month: filter_.month,
+        vertical_name: filter_.vertical || ''
+      };
+    }
+
     function render_(params) {
+      params = params || {};
+      if (params.year) filter_.year = Number(params.year);
+      if (params.month) filter_.month = Number(params.month);
       var page = pageEl_();
       if (!page) return;
       page.innerHTML =
         '<div class="sal-stmt-page"><div class="page-header"><h2>Salary Statement</h2>' +
-        '<p class="page-lede">Monthly cost-to-company breakdown by employee from salary structure templates and monthly CTC. ' +
-        'Download matches the on-screen grid (template v1). Share your Excel layout with HRIS to align columns later.</p></div>' +
+        '<p class="page-lede">SAPL-style monthly statement: rate of pay, worked days, earned pay, deductions, and net. ' +
+        'Uses salary structures and payroll inputs when a run exists for the selected month. Download matches the Excel layout.</p></div>' +
         '<div id="sal-stmt-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
       load_();
     }
 
     function load_() {
-      callServer('apiListSalaryStatement', {}).then(function (data) {
+      callServer('apiListSalaryStatement', filterPayload_()).then(function (data) {
         paint_(data || {});
       }).catch(function (err) {
         var m = document.getElementById('sal-stmt-mount');
@@ -70,57 +82,48 @@
     function paint_(data) {
       var m = document.getElementById('sal-stmt-mount');
       if (!m) return;
-      var catalog = data.columns || [];
       var rows = data.rows || [];
-      var earnCols = catalog.filter(function (c) { return c.kind === 'EARNING'; });
-      var dedCols = catalog.filter(function (c) { return c.kind === 'DEDUCTION'; });
-      var empCols = catalog.filter(function (c) { return c.kind === 'EMPLOYER'; });
-
-      var head =
-        '<th>Employee ID</th><th>Name</th><th>Vertical</th><th>Structure</th>' +
-        '<th class="num">Monthly CTC</th><th class="num">Annual CTC</th>';
-      earnCols.forEach(function (c) { head += '<th class="num">' + esc_(c.code) + '</th>'; });
-      head += '<th class="num">Gross</th>';
-      dedCols.forEach(function (c) { head += '<th class="num">' + esc_(c.code) + '</th>'; });
-      head += '<th class="num">Deductions</th><th class="num">Net</th>';
-      empCols.forEach(function (c) { head += '<th class="num">' + esc_(c.code) + '</th>'; });
-      head += '<th class="num">Employer</th><th class="num">Total CTC</th><th>Notes</th>';
+      var runHint = data.payroll_run_id
+        ? 'Payroll run ' + esc_(data.payroll_run_id) + ' (' + esc_(data.payroll_status) + ')'
+        : 'No payroll run for this month - earned pay uses full fixed days unless you start payroll.';
 
       var body = rows.map(function (r) {
-        var notes = (r.warnings && r.warnings.length) ? r.warnings.join('; ') : '';
-        var line = '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td><td>' +
-          esc_(r.vertical_name) + '</td><td>' + esc_(r.structure_name || r.salary_structure_id) + '</td>' +
-          '<td class="num">' + fmtNum_(r.monthly_ctc) + '</td><td class="num">' + fmtNum_(r.annual_ctc) + '</td>';
-        earnCols.forEach(function (c) {
-          line += '<td class="num">' + fmtNum_(r.component_amounts[c.code]) + '</td>';
-        });
-        line += '<td class="num">' + fmtNum_(r.gross_earnings) + '</td>';
-        dedCols.forEach(function (c) {
-          line += '<td class="num">' + fmtNum_(r.component_amounts[c.code]) + '</td>';
-        });
-        line += '<td class="num">' + fmtNum_(r.total_deductions) + '</td><td class="num">' + fmtNum_(r.net_pay) + '</td>';
-        empCols.forEach(function (c) {
-          line += '<td class="num">' + fmtNum_(r.component_amounts[c.code]) + '</td>';
-        });
-        line += '<td class="num">' + fmtNum_(r.employer_contributions) + '</td><td class="num">' +
-          fmtNum_(r.total_cost_to_company) + '</td><td class="hint">' + esc_(notes) + '</td></tr>';
-        return line;
+        return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td><td>' +
+          esc_(r.designation) + '</td><td>' + esc_(r.department) + '</td><td class="num">' + esc_(r.fixed_days) +
+          '</td><td class="num">' + esc_(r.worked_days) + '</td><td class="num">' + fmtNum_(r.rate_gross) +
+          '</td><td class="num">' + fmtNum_(r.earned_gross) + '</td><td class="num">' + fmtNum_(r.total_deductions) +
+          '</td><td class="num">' + fmtNum_(r.net_pay) + '</td><td class="num">' + fmtNum_(r.employer_ctc) +
+          '</td></tr>';
       }).join('');
 
       m.innerHTML =
         '<div class="card"><div class="sal-stmt-head">' +
+        '<div class="form-group"><label class="form-label">Year</label><input class="form-input" type="number" id="sal-stmt-year" value="' + esc_(filter_.year) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Month</label><input class="form-input" type="number" min="1" max="12" id="sal-stmt-month" value="' + esc_(filter_.month) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Vertical (optional)</label><input class="form-input" id="sal-stmt-vertical" placeholder="SAPL" value="' + esc_(filter_.vertical) + '"></div>' +
+        '<button type="button" class="btn btn-secondary" id="sal-stmt-apply">Apply</button>' +
         '<button type="button" class="btn btn-primary" id="sal-stmt-dl">Download Excel</button>' +
-        '<button type="button" class="btn btn-secondary" id="sal-stmt-refresh">Refresh</button>' +
-        '<span class="hint">' + esc_(rows.length) + ' active employee(s)</span></div>' +
+        '</div>' +
+        '<p class="hint">' + esc_(data.period_label || '') + ' · ' + esc_(rows.length) + ' employee(s) · ' + runHint + '</p>' +
         (rows.length
-          ? '<div class="table-wrap"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>'
-          : '<p class="hint">No active employees found.</p>') +
+          ? '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+            '<th>EMP ID</th><th>Name</th><th>Designation</th><th>Department</th>' +
+            '<th class="num">Fixed days</th><th class="num">Worked</th><th class="num">Rate gross</th>' +
+            '<th class="num">Earned gross</th><th class="num">Total ded</th><th class="num">Net pay</th><th class="num">Cost (earn+ER)</th>' +
+            '</tr></thead><tbody>' + body + '</tbody></table></div>'
+          : '<p class="hint">No active employees for this filter.</p>') +
         '</div>';
 
-      document.getElementById('sal-stmt-refresh').addEventListener('click', function () { load_(); });
+      document.getElementById('sal-stmt-apply').addEventListener('click', function () {
+        filter_.year = Number(document.getElementById('sal-stmt-year').value);
+        filter_.month = Number(document.getElementById('sal-stmt-month').value);
+        filter_.vertical = document.getElementById('sal-stmt-vertical').value.trim();
+        load_();
+      });
+
       document.getElementById('sal-stmt-dl').addEventListener('click', function () {
         var btn = this;
-        callServer('apiDownloadSalaryStatement', {}, { button: btn, loadingText: 'Downloading…' })
+        callServer('apiDownloadSalaryStatement', filterPayload_(), { button: btn, loadingText: 'Downloading…' })
           .then(function (res) {
             if (!res || !res.base64) {
               showToast('Download returned no file.', 'error');
@@ -133,10 +136,10 @@
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = res.fileName || 'HRMS_Salary_Statement_CTC.xlsx';
+            a.download = res.fileName || 'Salary_Statement.xlsx';
             a.click();
             URL.revokeObjectURL(url);
-            showToast('Salary statement downloaded.', 'success');
+            showToast('Salary statement downloaded (' + (res.periodLabel || '') + ').', 'success');
           })
           .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
       });
