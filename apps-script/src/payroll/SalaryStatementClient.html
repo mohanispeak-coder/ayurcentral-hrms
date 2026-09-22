@@ -1,0 +1,150 @@
+<style>
+.sal-stmt-page .sal-stmt-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.sal-stmt-page .data-table { width: 100%; }
+.sal-stmt-page th.num, .sal-stmt-page td.num { text-align: right; }
+</style>
+<script>
+(function () {
+  'use strict';
+  var initialized_ = false;
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      if (run() || ++tries > 200) clearInterval(timer);
+    }, 25);
+  }
+
+  whenAppReady(function initSalaryStatementUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
+
+    function esc_(v) {
+      return escapeHtml(v == null ? '' : String(v));
+    }
+
+    function pageEl_() {
+      var p = document.getElementById('page-content');
+      if (p) p.classList.remove('hidden');
+      return p;
+    }
+
+    function fmtNum_(v) {
+      if (v === '' || v == null) return '';
+      var n = Number(v);
+      if (!isFinite(n)) return esc_(v);
+      return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function render_(params) {
+      var page = pageEl_();
+      if (!page) return;
+      page.innerHTML =
+        '<div class="sal-stmt-page"><div class="page-header"><h2>Salary Statement</h2>' +
+        '<p class="page-lede">Monthly cost-to-company breakdown by employee from salary structure templates and monthly CTC. ' +
+        'Download matches the on-screen grid (template v1). Share your Excel layout with HRIS to align columns later.</p></div>' +
+        '<div id="sal-stmt-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
+      load_();
+    }
+
+    function load_() {
+      callServer('apiListSalaryStatement', {}).then(function (data) {
+        paint_(data || {});
+      }).catch(function (err) {
+        var m = document.getElementById('sal-stmt-mount');
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load salary statement.') + '</div>';
+      });
+    }
+
+    function paint_(data) {
+      var m = document.getElementById('sal-stmt-mount');
+      if (!m) return;
+      var catalog = data.columns || [];
+      var rows = data.rows || [];
+      var earnCols = catalog.filter(function (c) { return c.kind === 'EARNING'; });
+      var dedCols = catalog.filter(function (c) { return c.kind === 'DEDUCTION'; });
+      var empCols = catalog.filter(function (c) { return c.kind === 'EMPLOYER'; });
+
+      var head =
+        '<th>Employee ID</th><th>Name</th><th>Vertical</th><th>Structure</th>' +
+        '<th class="num">Monthly CTC</th><th class="num">Annual CTC</th>';
+      earnCols.forEach(function (c) { head += '<th class="num">' + esc_(c.code) + '</th>'; });
+      head += '<th class="num">Gross</th>';
+      dedCols.forEach(function (c) { head += '<th class="num">' + esc_(c.code) + '</th>'; });
+      head += '<th class="num">Deductions</th><th class="num">Net</th>';
+      empCols.forEach(function (c) { head += '<th class="num">' + esc_(c.code) + '</th>'; });
+      head += '<th class="num">Employer</th><th class="num">Total CTC</th><th>Notes</th>';
+
+      var body = rows.map(function (r) {
+        var notes = (r.warnings && r.warnings.length) ? r.warnings.join('; ') : '';
+        var line = '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td><td>' +
+          esc_(r.vertical_name) + '</td><td>' + esc_(r.structure_name || r.salary_structure_id) + '</td>' +
+          '<td class="num">' + fmtNum_(r.monthly_ctc) + '</td><td class="num">' + fmtNum_(r.annual_ctc) + '</td>';
+        earnCols.forEach(function (c) {
+          line += '<td class="num">' + fmtNum_(r.component_amounts[c.code]) + '</td>';
+        });
+        line += '<td class="num">' + fmtNum_(r.gross_earnings) + '</td>';
+        dedCols.forEach(function (c) {
+          line += '<td class="num">' + fmtNum_(r.component_amounts[c.code]) + '</td>';
+        });
+        line += '<td class="num">' + fmtNum_(r.total_deductions) + '</td><td class="num">' + fmtNum_(r.net_pay) + '</td>';
+        empCols.forEach(function (c) {
+          line += '<td class="num">' + fmtNum_(r.component_amounts[c.code]) + '</td>';
+        });
+        line += '<td class="num">' + fmtNum_(r.employer_contributions) + '</td><td class="num">' +
+          fmtNum_(r.total_cost_to_company) + '</td><td class="hint">' + esc_(notes) + '</td></tr>';
+        return line;
+      }).join('');
+
+      m.innerHTML =
+        '<div class="card"><div class="sal-stmt-head">' +
+        '<button type="button" class="btn btn-primary" id="sal-stmt-dl">Download Excel</button>' +
+        '<button type="button" class="btn btn-secondary" id="sal-stmt-refresh">Refresh</button>' +
+        '<span class="hint">' + esc_(rows.length) + ' active employee(s)</span></div>' +
+        (rows.length
+          ? '<div class="table-wrap"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+          : '<p class="hint">No active employees found.</p>') +
+        '</div>';
+
+      document.getElementById('sal-stmt-refresh').addEventListener('click', function () { load_(); });
+      document.getElementById('sal-stmt-dl').addEventListener('click', function () {
+        var btn = this;
+        callServer('apiDownloadSalaryStatement', {}, { button: btn, loadingText: 'Downloading…' })
+          .then(function (res) {
+            if (!res || !res.base64) {
+              showToast('Download returned no file.', 'error');
+              return;
+            }
+            var binary = atob(res.base64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            var blob = new Blob([bytes], { type: res.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = res.fileName || 'HRMS_Salary_Statement_CTC.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Salary statement downloaded.', 'success');
+          })
+          .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
+      });
+
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-statement');
+    }
+
+    App.registerRoute('salary-statement', { title: 'Salary Statement', render: render_ });
+  });
+})();
+</script>

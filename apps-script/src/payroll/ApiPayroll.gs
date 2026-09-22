@@ -106,6 +106,18 @@ function apiDownloadAttendanceRegisterTemplate(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiListSalaryStatement(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStatementService.listStatement(filter || {});
+  }, sessionToken);
+}
+
+function apiDownloadSalaryStatement(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStatementService.downloadExcel(filter || {});
+  }, sessionToken);
+}
+
 function apiValidateAttendanceRegisterUpload(runId, meta, sessionToken) {
   return hrmsRun_(function () {
     return AttendanceBulkService.validateUpload(runId, meta || {});

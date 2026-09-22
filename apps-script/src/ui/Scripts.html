@@ -37,6 +37,7 @@
     'payroll-run': 'payroll',
     'salary-structure': 'payroll',
     'attendance-bulk-upload': 'payroll',
+    'salary-statement': 'payroll',
     compensation: 'payroll',
     'my-payslips': 'payroll',
     ats: 'ats',
@@ -67,6 +68,7 @@
     'payroll-run': 'Payroll run',
     'salary-structure': 'Salary structures',
     'attendance-bulk-upload': 'Attendance',
+    'salary-statement': 'Salary Statement',
     compensation: 'Salary structures',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
@@ -98,6 +100,7 @@
     'payroll-run': 'One primary next step. Locked amounts never change.',
     'salary-structure': 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
     'attendance-bulk-upload': 'Import working days and attendance for the payroll month before you calculate.',
+    'salary-statement': 'Monthly cost-to-company breakdown by employee from structure templates and CTC.',
     compensation: 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
@@ -117,7 +120,7 @@
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'attendance-bulk-upload', 'payroll'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'attendance-bulk-upload', 'salary-statement', 'payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -1656,7 +1659,8 @@
     if (!state.session || !state.session.authorized) return;
     options = options || {};
     params = params || {};
-    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'salary-structure' || route === 'compensation') {
+    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'salary-structure' ||
+        route === 'salary-statement' || route === 'compensation') {
       if (window.HrmsApp && window.HrmsApp.getPayrollPeriodParams) {
         var pp = window.HrmsApp.getPayrollPeriodParams();
         if (pp) {

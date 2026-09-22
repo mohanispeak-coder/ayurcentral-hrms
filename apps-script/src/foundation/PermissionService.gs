@@ -52,6 +52,7 @@ var PermissionService = (function () {
     { id: 'my-leave', label: 'My Leave', route: 'my-leave', icon: 'calendar', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'salary-structure', label: 'Salary structure', route: 'salary-structure', icon: 'account_balance', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'attendance-bulk-upload', label: 'Attendance', route: 'attendance-bulk-upload', icon: 'payments', roles: ['OWNER', 'ADMIN', 'HR'] },
+    { id: 'salary-statement', label: 'Salary Statement', route: 'salary-statement', icon: 'account_balance', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'payroll', label: 'Payroll', route: 'payroll', icon: 'payments', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'my-payslips', label: 'My Payslips', route: 'my-payslips', icon: 'receipt', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'ats', label: 'Recruitment', route: 'ats', icon: 'group', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
