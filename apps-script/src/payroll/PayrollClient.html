@@ -545,17 +545,33 @@
       }).join('') + '</div>';
     }
 
-    function downloadBlob(file) {
+    function blobFromFilePayload_(file) {
       var binary = atob(file.base64);
       var bytes = new Uint8Array(binary.length);
       for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      var blob = new Blob([bytes], { type: file.mimeType || 'application/pdf' });
+      return new Blob([bytes], { type: file.mimeType || 'application/pdf' });
+    }
+
+    function downloadBlob(file) {
+      var blob = blobFromFilePayload_(file);
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
       a.download = file.fileName || file.title || 'payslip.pdf';
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    function openBlobForView(file) {
+      var blob = blobFromFilePayload_(file);
+      var url = URL.createObjectURL(blob);
+      var w = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!w) {
+        URL.revokeObjectURL(url);
+        showToast('Allow pop-ups to view the payslip in a new tab.', 'error');
+        return;
+      }
+      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     }
 
     function paintErr(el, message, retry) {
@@ -2670,22 +2686,28 @@
               var period = d.period_label || d.title || 'Payslip';
               var net = d.net_pay != null && d.net_pay !== '' ? fmtMoneyInr(d.net_pay) : '-';
               return '<tr><td>' + escapeHtml(period) + '</td><td class="num">' + escapeHtml(net) + '</td><td>' +
-                '<button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">View payslip</button> ' +
+                '<button type="button" class="btn btn-secondary js-pay-view" data-id="' + escapeHtml(d.document_id) + '">View payslip</button> ' +
                 '<button type="button" class="btn btn-secondary js-pay-dl" data-id="' + escapeHtml(d.document_id) + '">Download PDF</button></td></tr>';
             }).join('') + '</tbody></table></div></div>';
         }
         html += '</div>';
         page.innerHTML = html;
-        var dls = page.querySelectorAll('.js-pay-dl');
-        for (var i = 0; i < dls.length; i++) {
-          dls[i].addEventListener('click', function () {
-            var btn = this;
+        page.querySelectorAll('.js-pay-view').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            if (!setButtonLoading(btn, 'Opening...')) return;
+            rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Opening...')
+              .then(function (file) { openBlobForView(file); })
+              .catch(function (err) { showToast(err.message || 'View denied', 'error'); });
+          });
+        });
+        page.querySelectorAll('.js-pay-dl').forEach(function (btn) {
+          btn.addEventListener('click', function () {
             if (!setButtonLoading(btn, 'Downloading...')) return;
             rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Downloading...')
               .then(function (file) { downloadBlob(file); })
               .catch(function (err) { showToast(err.message || 'Download denied', 'error'); });
           });
-        }
+        });
     }
 
     App.getPayrollPeriodParams = payrollPeriodNavParams_;

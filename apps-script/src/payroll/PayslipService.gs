@@ -89,6 +89,7 @@ var PayslipService = (function () {
       return empKey_(d.employee_id) === norm;
     });
     docs = dedupePayslipsByRun(docs);
+    docs = dedupePayslipsByCalendarMonth_(docs);
     if (options.lockedRunsOnly) {
       docs = docs.filter(function (d) {
         return isPayrollRunLocked_(d.payroll_run_id);
@@ -249,6 +250,25 @@ var PayslipService = (function () {
     return Object.keys(byKey).map(function (k) { return byKey[k]; }).sort(function (a, b) {
       return new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0);
     });
+  }
+
+  /** One row per calendar month when multiple document rows exist for the same period. */
+  function dedupePayslipsByCalendarMonth_(docs) {
+    var byMonth = {};
+    (docs || []).forEach(function (d) {
+      var key = String(d.document_id || '');
+      if (d.payroll_run_id) {
+        var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: d.payroll_run_id });
+        if (run) {
+          key = String(run.period_year) + '-' + String(run.period_month) + '-' + empKey_(d.employee_id);
+        }
+      }
+      var prev = byMonth[key];
+      if (!prev || new Date(d.uploaded_at || 0) > new Date(prev.uploaded_at || 0)) {
+        byMonth[key] = d;
+      }
+    });
+    return Object.keys(byMonth).map(function (k) { return byMonth[k]; });
   }
 
   function htmlFallbackBlob_(html, fileName) {
