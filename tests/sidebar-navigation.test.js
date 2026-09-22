@@ -42,11 +42,14 @@ check('nav-people-section', /id:\s*'people'[\s\S]*employees[\s\S]*my-team/.test(
 check('nav-time-off-section', /id:\s*'time-off'[\s\S]*leave-admin[\s\S]*leave-approvals/.test(scripts));
 check('no-nav-performance-section', !/id:\s*'performance'/.test(scripts));
 check('global-button-busy', /isGlobalActionBusy/.test(scripts) && /globalLoadingButton_/.test(scripts));
-check('nav-payroll-section', /id:\s*'payroll'[\s\S]*routes:\s*\['salary-structure',\s*'attendance-bulk-upload',\s*'payroll'\]/.test(scripts));
+check('nav-attendance-section', /id:\s*'attendance'[\s\S]*routes:\s*\['attendance-bulk-upload',\s*'attendance-form-t'\]/.test(scripts));
+check('nav-payroll-section', /id:\s*'payroll'[\s\S]*routes:\s*\['salary-structure',\s*'payroll'\]/.test(scripts));
+check('attendance-not-in-payroll-group', !/id:\s*'payroll', label: 'Payroll', routes:[^\]]*attendance/.test(scripts));
 check('salary-structure-in-payroll-group', /id:\s*'payroll'[\s\S]*salary-structure/.test(scripts));
-check('attendance-bulk-in-payroll-group', /id:\s*'payroll'[\s\S]*attendance-bulk-upload/.test(scripts));
 check('nav-recruitment-section', /id:\s*'recruitment'[\s\S]*ats[\s\S]*ats-jobs[\s\S]*ats-candidates/.test(scripts));
 check('nav-admin-section', /id:\s*'admin'[\s\S]*notifications[\s\S]*settings[\s\S]*users/.test(scripts));
+check('permission-register-label', /attendance-bulk-upload', label: 'Register'/.test(perm));
+check('permission-form-t', /attendance-form-t', label: 'Form T'/.test(perm));
 
 var timeOffBlock = scripts.match(/id:\s*'time-off'[\s\S]*?collapsible:\s*true/);
 var payrollBlock = scripts.match(/id:\s*'payroll'[\s\S]*?collapsible:\s*true/);
@@ -58,6 +61,7 @@ check('collapsible-section-state', /navSectionExpanded_/.test(scripts));
 check('no-localstorage-nav-state', !/localStorage\.(setItem|getItem|removeItem)\([^)]*navSection/.test(scripts));
 check('nav-group-toggle-ui', /nav-group-toggle/.test(scripts) && /nav-group-chevron/.test(styles));
 check('nav-auto-expand-active', /isNavGroupActive/.test(scripts) && /isNavGroupExpanded/.test(scripts));
+check('nav-attendance-route-active', /attendance-form-t' && current === 'attendance-bulk-upload'/.test(scripts));
 check('nav-collapse-css', /nav-group-items\.is-collapsed/.test(styles));
 check('nav-reduced-motion', /prefers-reduced-motion[\s\S]*nav-group-chevron/.test(styles));
 
@@ -69,6 +73,7 @@ check('browser-history-popstate', /addEventListener\('popstate'/.test(scripts));
 check('browser-history-sync', /syncBrowserRoute_/.test(scripts) && /pushState/.test(scripts));
 check('browser-history-restore', /parseRouteHash_/.test(scripts) && /fromHistory/.test(scripts));
 check('browser-history-dedupe', /routeParamsEqual_/.test(scripts) && /suppressHistoryPush_ = true/.test(scripts));
+check('navigate-form-t-payroll-period', /attendance-form-t'[\s\S]*getPayrollPeriodParams/.test(scripts));
 
 navRoutes.forEach(function (route) {
   if (route === 'dashboard') return;

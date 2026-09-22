@@ -7,6 +7,7 @@ var path = require('path');
 var vm = require('vm');
 
 var payrollDir = path.join(__dirname, '..', 'apps-script', 'src', 'payroll');
+var foundationDir = path.join(__dirname, '..', 'apps-script', 'src', 'foundation');
 var failures = [];
 var passed = 0;
 
@@ -25,10 +26,14 @@ var bulkSrc = fs.readFileSync(path.join(payrollDir, 'AttendanceBulkService.gs'),
 var payrollBulkSrc = fs.readFileSync(path.join(payrollDir, 'PayrollBulkService.gs'), 'utf8');
 var attClient = fs.readFileSync(path.join(payrollDir, 'AttendanceClient.html'), 'utf8');
 var api = fs.readFileSync(path.join(payrollDir, 'ApiPayroll.gs'), 'utf8');
+var constants = fs.readFileSync(path.join(foundationDir, 'Constants.gs'), 'utf8');
 
 function loadRegister() {
   var ctx = {
-    HRMS: { ACTIONS: { PAYROLL_RUN: 'PAYROLL_RUN' } },
+    HRMS: {
+      ACTIONS: { PAYROLL_RUN: 'PAYROLL_RUN' },
+      ATTENDANCE_LEAVE_BALANCE_MAX: { SAPL: 2, AOPL: 2, AOMS: 1, OTHERS: 2 }
+    },
     PermissionService: { require: function () {} },
     DbService: { findOne: function () { return null; }, findRecords: function () { return []; } },
     EmployeeRepository: { listAll: function () { return []; } },
@@ -42,7 +47,11 @@ function loadRegister() {
 var Reg = loadRegister();
 
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '3'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
+check('bulk-vertical-filter', /filterEmployeesByVertical_/.test(bulkSrc) && /assertVertical_/.test(bulkSrc));
+check('template-data-row-range', /getRange\(dataStartRow, 1, numEmpRows, numIdentityDayCols\)/.test(bulkSrc));
+check('template-summary-formulas-batch', /getRange\(dataStartRow, summaryStart, numEmpRows, summaryLen\)/.test(bulkSrc));
+check('vertical-id-prefix-fallback', /employeeVerticalCode_/.test(regSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
@@ -50,19 +59,28 @@ check('api-attendance-auto-sync', /apiListAttendanceRegister[\s\S]*syncEligibleE
 var payrollSvc = fs.readFileSync(path.join(payrollDir, 'PayrollService.gs'), 'utf8');
 check('payroll-sync-on-employee', /syncOpenPayrollRunsForEmployee/.test(payrollSvc));
 check('template-headers', /buildTemplateHeaders_/.test(regSrc) && /SUMMARY_HEADERS_/.test(regSrc));
-check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate/.test(api));
-check('api-attendance-validate', /apiValidateAttendanceRegisterUpload/.test(api));
+check('summary-headers-wo-ml', /'WO', 'ML', 'H', 'Leave Balance'/.test(regSrc));
+check('leave-balance-formula-embedded', /leaveBalanceFormula_[\s\S]*COUNTIF\([\s\S]*\)[\s\S]*MAX\(0,/.test(regSrc) &&
+  !/MAX\(0,[\s\S]*-\(=COUNTIF/.test(regSrc));
+check('constants-leave-balance', /ATTENDANCE_LEAVE_BALANCE_MAX/.test(constants) && /VERTICAL_LEGAL_NAMES_DEFAULT/.test(constants));
+check('api-attendance-template-vertical', /apiDownloadAttendanceRegisterTemplate\(runId, verticalName/.test(api));
+check('api-attendance-validate-vertical', /apiValidateAttendanceRegisterUpload\(runId, verticalName/.test(api));
 check('api-list-register', /apiListAttendanceRegister/.test(api));
 check('attendance-client-route', /registerRoute\('attendance-bulk-upload'/.test(attClient));
-check('attendance-list-columns', /Days present/.test(attClient) && /Days leave/.test(attClient));
+check('attendance-vertical-catalog', /apiGetVerticalCatalog/.test(attClient));
+check('attendance-preview-grid', /att-preview-grid/.test(attClient));
 check('payroll-bulk-no-attendance-columns', /'employee_id', 'display_name', 'work_email'/.test(payrollBulkSrc) &&
   !/'working_days', 'days_present'/.test(payrollBulkSrc));
 
-var sum = Reg.summarize_({ '01': 'P', '02': 'W/H', '03': 'A', '04': 'L', '05': 'S' }, 2026, 1);
+var sum = Reg.summarize_({ '01': 'P', '02': 'W/H', '03': 'A', '04': 'L', '05': 'S' }, 2026, 1, 'SAPL');
 check('summarize-present', sum.present === 1 && sum.absent === 1 && sum.leave_days === 2);
+check('summarize-s-as-ml', sum.code_counts.ML === 1 && sum.medical_leave === 1);
+check('days-total-includes-h', Reg.computeDaysTotal_({ P: 1, 'W/H': 1, L: 1, WO: 1, ML: 1, H: 1 }) === 6);
 
 var derived = Reg.derivePayrollDays_(sum);
 check('derive-paid-lop', derived.paid_days >= 1 && derived.lop_days === 1);
+
+check('leave-balance-sapl', Reg.computeLeaveBalance_({ L: 1, ML: 1 }, 'SAPL') === 0);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');
