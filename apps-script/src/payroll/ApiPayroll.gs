@@ -150,6 +150,18 @@ function apiSaveAttendanceRegister(runId, employeeId, register, sessionToken) {
   }, sessionToken);
 }
 
+function apiGetFormTStatus(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return FormTService.getStatus(runId, verticalName);
+  }, sessionToken);
+}
+
+function apiDownloadFormT(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return FormTService.download(runId, verticalName);
+  }, sessionToken);
+}
+
 function apiValidatePayrollUpload(runId, meta, sessionToken) {
   return hrmsRun_(function () {
     return PayrollBulkService.validateUpload(runId, meta || {});

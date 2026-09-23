@@ -30,6 +30,13 @@ function apiGetEmployeeVerticals(sessionToken) {
   }, sessionToken);
 }
 
+function apiGetVerticalCatalog(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listVerticalCatalog(session);
+  }, sessionToken);
+}
+
 function apiGetEmployee(employeeId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

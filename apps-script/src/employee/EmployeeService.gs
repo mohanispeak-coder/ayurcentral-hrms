@@ -431,6 +431,14 @@ var EmployeeService = (function () {
     return EmployeeRepository.listVerticals();
   }
 
+  function listVerticalCatalog(session) {
+    AuthService.requireAuth();
+    if (!PermissionService.isHrOrAdmin(session)) {
+      throw authorizationError_();
+    }
+    return EmployeeRepository.listVerticalCatalog();
+  }
+
   function normalizeEmployeeId_(value) {
     return trim_(value).toUpperCase();
   }
@@ -1295,6 +1303,7 @@ var EmployeeService = (function () {
     matchesDirectoryFilter: matchesDirectoryFilter,
     normalizeEmployeeId: normalizeEmployeeId_,
     listVerticals: listVerticals,
+    listVerticalCatalog: listVerticalCatalog,
     isValidEmployeeIdFormat: isValidEmployeeIdFormat_,
     parseCreateUserFlag: parseCreateUserFlag_
   };

@@ -42,7 +42,7 @@ function loadRegister() {
 var Reg = loadRegister();
 
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '3'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
@@ -54,7 +54,7 @@ check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate/.test(ap
 check('api-attendance-validate', /apiValidateAttendanceRegisterUpload/.test(api));
 check('api-list-register', /apiListAttendanceRegister/.test(api));
 check('attendance-client-route', /registerRoute\('attendance-bulk-upload'/.test(attClient));
-check('attendance-list-columns', /Days present/.test(attClient) && /Days leave/.test(attClient));
+check('attendance-list-columns', /<th class="num">DAYS<\/th>/.test(attClient) && /WO/.test(attClient) && /ML/.test(attClient));
 check('payroll-bulk-no-attendance-columns', /'employee_id', 'display_name', 'work_email'/.test(payrollBulkSrc) &&
   !/'working_days', 'days_present'/.test(payrollBulkSrc));
 

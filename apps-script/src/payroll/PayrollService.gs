@@ -813,7 +813,7 @@ var PayrollService = (function () {
         });
       }
     } catch (e) {
-      // Run is already LOCKED; payslip generation is idempotent on retry (trashes same file names).
+      // Run is already LOCKED; payslip generation skips employees who already have a file.
       Logger.log('PAYROLL_LOCK payslip generation failed for ' + runId + ': ' + (e.message || e));
       if (generatePayslips) {
         throw systemError_('Payroll run was locked, but payslip generation failed. Use Generate payslips to retry. Amounts stay frozen.');
@@ -879,7 +879,9 @@ var PayrollService = (function () {
       };
     });
     try {
-      PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session);
+      PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session, {
+        replaceExisting: false
+      });
     } catch (e) {
       Logger.log('PAYROLL_REGENERATE payslip generation failed for ' + runId + ': ' + (e.message || e));
       var hint = e && e.message ? String(e.message) : 'Unknown error';

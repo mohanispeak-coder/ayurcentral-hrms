@@ -1,0 +1,470 @@
+<style>
+
+.formt-page .formt-status { margin: 12px 0; min-height: 1.5em; }
+.formt-page .formt-status-loading { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); }
+
+</style>
+
+<script>
+
+(function () {
+
+  'use strict';
+
+
+
+  var initialized_ = false;
+
+  var MODULE_KEY_ = 'attendance-form-t';
+
+  var period_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
+
+  var catalog_ = [];
+
+  var viewCache_ = null;
+
+
+
+  function whenAppReady(fn) {
+
+    function run() {
+
+      var App = window.HrmsApp;
+
+      if (!App || !App.registerRoute || !App.callServer) return false;
+
+      fn(App);
+
+      return true;
+
+    }
+
+    if (run()) return;
+
+    var tries = 0;
+
+    var timer = setInterval(function () {
+
+      if (run() || ++tries > 200) clearInterval(timer);
+
+    }, 25);
+
+  }
+
+
+
+  whenAppReady(function initFormTUi(App) {
+
+    if (initialized_) return;
+
+    initialized_ = true;
+
+
+
+    var callServer = App.callServer;
+
+    var escapeHtml = App.escapeHtml;
+
+    var showToast = App.showToast;
+
+    var navigate = App.navigate;
+
+
+
+    function esc_(v) {
+
+      return escapeHtml(v == null ? '' : String(v));
+
+    }
+
+
+
+    function pageEl_() {
+
+      var p = document.getElementById('page-content');
+
+      if (p) p.classList.remove('hidden');
+
+      return p;
+
+    }
+
+
+
+    function periodKey_() {
+
+      return period_.year + '-' + period_.month;
+
+    }
+
+
+
+    function skeletonMount_() {
+
+      if (App.sectionSkeleton) {
+
+        return App.sectionSkeleton({ variant: 'card', lines: 3, label: 'Loading Form T' });
+
+      }
+
+      return '<div class="hrms-loading-block" aria-busy="true"><span class="visually-hidden">Loading</span></div>';
+
+    }
+
+
+
+    function fmtPeriod_(y, m) {
+
+      var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      return (names[m - 1] || m) + ' ' + y;
+
+    }
+
+
+
+    function findRunForPeriod_(runs, year, month) {
+
+      return (runs || []).filter(function (r) {
+
+        return Number(r.period_year) === year && Number(r.period_month) === month;
+
+      })[0] || null;
+
+    }
+
+
+
+    function verticalOptionsHtml_(selected) {
+
+      return (catalog_ || []).map(function (v) {
+
+        var sel = selected === v.vertical_name ? ' selected' : '';
+
+        return '<option value="' + esc_(v.vertical_name) + '"' + sel + '>' +
+
+          esc_(v.vertical_name) + ' — ' + esc_(v.legal_name) + '</option>';
+
+      }).join('');
+
+    }
+
+
+
+    function render_(params) {
+
+      params = params || {};
+
+      if (params.year) period_.year = Number(params.year);
+
+      if (params.month) period_.month = Number(params.month);
+
+      var page = pageEl_();
+
+      if (!page) return;
+
+
+
+      var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
+
+      var restore = !forceRefresh && App.consumeModuleViewRestore && App.consumeModuleViewRestore(MODULE_KEY_);
+
+      if (restore && viewCache_ && viewCache_.periodKey === periodKey_() && viewCache_.run) {
+
+        catalog_ = viewCache_.catalog || catalog_;
+
+        page.innerHTML =
+
+          '<div class="formt-page"><div class="page-header"><h2>Form T</h2></div><div id="formt-mount"></div></div>';
+
+        paintMain_(viewCache_.run, viewCache_.selectedVertical, viewCache_.statusHtml, viewCache_.canDownload);
+
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+
+        return;
+
+      }
+
+
+
+      page.innerHTML =
+
+        '<div class="formt-page"><div class="page-header"><h2>Form T</h2></div>' +
+
+        '<div id="formt-mount">' + skeletonMount_() + '</div></div>';
+
+      callServer('apiGetVerticalCatalog').then(function (cat) {
+
+        catalog_ = cat || [];
+
+        loadContext_();
+
+      }).catch(function () {
+
+        catalog_ = [];
+
+        loadContext_();
+
+      });
+
+    }
+
+
+
+    function loadContext_() {
+
+      callServer('apiListPayrollRuns').then(function (runs) {
+
+        var run = findRunForPeriod_(runs || [], period_.year, period_.month);
+
+        if (!run) {
+
+          paintNoRun_();
+
+          return;
+
+        }
+
+        paintMain_(run, catalog_.length ? catalog_[0].vertical_name : '', '', false, true);
+
+      }).catch(function (err) {
+
+        var m = document.getElementById('formt-mount');
+
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load.') + '</div>';
+
+      });
+
+    }
+
+
+
+    function paintNoRun_() {
+
+      var m = document.getElementById('formt-mount');
+
+      if (!m) return;
+
+      m.innerHTML =
+
+        '<div class="card"><p class="hint">No payroll run for ' + esc_(fmtPeriod_(period_.year, period_.month)) +
+
+        '. Start payroll first.</p><button type="button" class="btn btn-secondary" id="formt-goto-payroll">Open Payroll</button></div>';
+
+      document.getElementById('formt-goto-payroll').addEventListener('click', function () {
+
+        navigate('payroll', { year: period_.year, month: period_.month });
+
+      });
+
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+
+    }
+
+
+
+    function downloadBlob_(file) {
+
+      if (!file || !file.base64) return;
+
+      var binary = atob(file.base64);
+
+      var bytes = new Uint8Array(binary.length);
+
+      for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      var blob = new Blob([bytes], { type: file.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      var url = URL.createObjectURL(blob);
+
+      var a = document.createElement('a');
+
+      a.href = url;
+
+      a.download = file.fileName || 'FormT.xlsx';
+
+      a.click();
+
+      URL.revokeObjectURL(url);
+
+    }
+
+
+
+    function refreshStatus_(runId, skipCacheUpdate) {
+
+      var sel = document.getElementById('formt-vertical');
+
+      var statusEl = document.getElementById('formt-status');
+
+      var dlBtn = document.getElementById('formt-download');
+
+      if (!sel || !statusEl) return;
+
+      var vertical = sel.value;
+
+      if (!vertical) {
+
+        statusEl.textContent = 'Select a vertical.';
+
+        if (dlBtn) dlBtn.disabled = true;
+
+        return;
+
+      }
+
+      statusEl.innerHTML =
+        '<span class="formt-status-loading" aria-busy="true">' +
+        '<span class="spinner-sm" aria-hidden="true"></span> Checking attendance for ' + esc_(vertical) + '…</span>';
+      if (dlBtn) dlBtn.disabled = true;
+
+      callServer('apiGetFormTStatus', runId, vertical).then(function (st) {
+
+        var statusHtml;
+
+        var canDl = false;
+
+        if (st.canGenerate) {
+
+          statusHtml = '<span class="text-success">' + esc_(st.employeeCount) +
+
+            ' employees ready · ' + esc_(st.legalName) + '</span>';
+
+          canDl = true;
+
+        } else {
+
+          statusHtml = '<span class="text-warning">' + esc_(st.message || 'Not ready') + '</span>';
+
+        }
+
+        statusEl.innerHTML = statusHtml;
+
+        if (dlBtn) dlBtn.disabled = !canDl;
+
+        if (!skipCacheUpdate && viewCache_) {
+
+          viewCache_.selectedVertical = vertical;
+
+          viewCache_.statusHtml = statusHtml;
+
+          viewCache_.canDownload = canDl;
+
+        }
+
+      }).catch(function (err) {
+
+        statusEl.textContent = err.message || 'Status check failed.';
+
+        if (dlBtn) dlBtn.disabled = true;
+
+      });
+
+    }
+
+
+
+    function paintMain_(run, selectedVertical, statusHtml, canDownload, fetchStatus) {
+
+      var m = document.getElementById('formt-mount');
+
+      if (!m) return;
+
+      var defaultVertical = selectedVertical || (catalog_.length ? catalog_[0].vertical_name : '');
+
+      var statusContent = statusHtml || '<span class="hint">Checking status…</span>';
+
+      m.innerHTML =
+
+        '<div class="card">' +
+
+        '<p><strong>' + esc_(fmtPeriod_(run.period_year, run.period_month)) + '</strong> · ' + esc_(run.payroll_run_id) + '</p>' +
+
+        '<div class="form-row">' +
+
+        '<div class="form-group"><label class="form-label" for="formt-vertical">Vertical</label>' +
+
+        '<select class="form-select" id="formt-vertical">' + verticalOptionsHtml_(defaultVertical) + '</select></div>' +
+
+        '</div>' +
+
+        '<div id="formt-status" class="formt-status">' + statusContent + '</div>' +
+
+        '<div class="bulk-action-bar">' +
+
+        '<button type="button" class="btn btn-primary" id="formt-download"' + (canDownload ? '' : ' disabled') + '>Download Form T</button>' +
+
+        '<button type="button" class="btn btn-secondary" id="formt-goto-register">Register</button>' +
+
+        '</div></div>';
+
+
+
+      document.getElementById('formt-goto-register').addEventListener('click', function () {
+
+        navigate('attendance-bulk-upload', { year: run.period_year, month: run.period_month, runId: run.payroll_run_id });
+
+      });
+
+      document.getElementById('formt-vertical').addEventListener('change', function () {
+
+        refreshStatus_(run.payroll_run_id);
+
+      });
+
+      document.getElementById('formt-download').addEventListener('click', function () {
+
+        var vertical = document.getElementById('formt-vertical').value;
+
+        var btn = this;
+
+        callServer('apiDownloadFormT', run.payroll_run_id, vertical, { button: btn, loadingText: 'Generating…' })
+
+          .then(function (res) {
+
+            downloadBlob_(res);
+
+            showToast('Form T downloaded.', 'success');
+
+          })
+
+          .catch(function (err) { showToast(err.message || 'Download failed', 'error'); });
+
+      });
+
+
+
+      viewCache_ = {
+
+        periodKey: periodKey_(),
+
+        run: run,
+
+        catalog: (catalog_ || []).slice(),
+
+        selectedVertical: defaultVertical,
+
+        statusHtml: statusContent,
+
+        canDownload: !!canDownload
+
+      };
+
+
+
+      if (fetchStatus) refreshStatus_(run.payroll_run_id);
+
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+
+    }
+
+
+
+    App.registerRoute('attendance-form-t', { title: 'Form T', render: render_ });
+
+  });
+
+})();
+
+</script>
+

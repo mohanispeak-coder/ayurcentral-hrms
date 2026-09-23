@@ -49,6 +49,42 @@ HRMS.EMPLOYMENT_TYPES = {
 
 HRMS.VERTICALS = ['AOPL', 'SAPL', 'AOMS', 'OTHERS'];
 
+/** Max leave balance shown on attendance register / Form T (per vertical). */
+HRMS.ATTENDANCE_LEAVE_BALANCE_MAX = {
+  SAPL: 2,
+  AOPL: 2,
+  AOMS: 1,
+  OTHERS: 2
+};
+
+/** Default legal entity names for verticals (seeded on Verticals sheet). */
+HRMS.VERTICAL_LEGAL_NAMES_DEFAULT = {
+  AOPL: 'Ayurveda One Private Limited',
+  SAPL: 'Sattva Ayurveda Private Limited',
+  AOMS: 'Ayurvedaone Private Limited',
+  OTHERS: 'Others'
+};
+
+/** Form T establishment block (top-right) defaults when Verticals sheet lines are empty. */
+HRMS.VERTICAL_FORM_T_ADDRESS_DEFAULT = {
+  AOPL: {
+    address_line1: 'No 93, 23, Yeshwanthpur Industrial Suburb',
+    address_line2: 'Yeswanthpur, Bengaluru, Karnataka 560022'
+  },
+  SAPL: {
+    address_line1: 'No 93, 23, Yeshwanthpur Industrial Suburb',
+    address_line2: 'Yeswanthpur, Bengaluru, Karnataka 560022'
+  },
+  AOMS: {
+    address_line1: 'No 93, 23, Yeshwanthpur Industrial Suburb',
+    address_line2: 'Yeswanthpur, Bengaluru, Karnataka 560022'
+  },
+  OTHERS: {
+    address_line1: '',
+    address_line2: ''
+  }
+};
+
 HRMS.DOCUMENT_CATEGORY = {
   EMPLOYEE_FILE: 'EMPLOYEE_FILE',
   PAYSLIP: 'PAYSLIP'
@@ -86,7 +122,8 @@ HRMS.SETTINGS_KEYS = {
   APP_MODE: 'app_mode',
   DEMO_EMAILS: 'demo_emails',
   DEMO_DEFAULT_ROLE: 'demo_default_role',
-  DEMO_ROLES: 'demo_roles'
+  DEMO_ROLES: 'demo_roles',
+  FORM_T_TEMPLATE_DRIVE_ID: 'form_t_template_drive_id'
 };
 
 HRMS.DRIVE = {

@@ -1,5 +1,6 @@
 /**
- * Monthly attendance register - daily codes (P, W/H, A, L, H, S) and payroll day derivation.
+ * Monthly attendance register - daily codes (P, W/H, A, L, WO, ML, H) and payroll day derivation.
+ * Legacy upload alias: S maps to ML on read only.
  */
 var HRMS = HRMS || {};
 
@@ -11,11 +12,14 @@ var AttendanceRegisterService = (function () {
     W: 'W/H',
     A: 'A',
     L: 'L',
+    WO: 'WO',
+    ML: 'ML',
     H: 'H',
-    S: 'S'
+    S: 'ML'
   };
 
-  var SUMMARY_HEADERS_ = ['P', 'W/H', 'A', 'L', 'H', 'S', 'Leave Balan', 'DAYS'];
+  var SUMMARY_HEADERS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', 'Leave Balance', 'DAYS'];
+  var CODE_KEYS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
 
   function trim_(v) {
     return v == null ? '' : String(v).trim();
@@ -39,8 +43,15 @@ var AttendanceRegisterService = (function () {
     var s = trim_(raw).toUpperCase();
     if (!s) return '';
     if (s === 'W/H' || s === 'WH' || s === 'W') return 'W/H';
+    if (s === 'S') return 'ML';
     if (VALID_CODES_[s]) return VALID_CODES_[s];
     return '';
+  }
+
+  function emptyCodeCounts_() {
+    var counts = {};
+    CODE_KEYS_.forEach(function (k) { counts[k] = 0; });
+    return counts;
   }
 
   function parseRegister_(jsonOrObj) {
@@ -67,24 +78,50 @@ var AttendanceRegisterService = (function () {
     return JSON.stringify(reg || {});
   }
 
-  function summarize_(reg, year, month) {
+  function computeDaysTotal_(counts) {
+    counts = counts || {};
+    return (Number(counts.P) || 0) + (Number(counts['W/H']) || 0) + (Number(counts.L) || 0) +
+      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0);
+  }
+
+  function leaveBalanceMaxForVertical_(verticalCode) {
+    var v = trim_(verticalCode).toUpperCase();
+    var map = HRMS.ATTENDANCE_LEAVE_BALANCE_MAX || {};
+    if (map.hasOwnProperty(v)) return Number(map[v]) || 0;
+    return Number(map.OTHERS) || 0;
+  }
+
+  function computeLeaveBalance_(counts, verticalCode) {
+    counts = counts || {};
+    var max = leaveBalanceMaxForVertical_(verticalCode);
+    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0);
+    return Math.max(0, max - used);
+  }
+
+  function summarize_(reg, year, month, verticalCode) {
     reg = reg || {};
     var dim = daysInMonth_(year, month);
-    var counts = { P: 0, 'W/H': 0, A: 0, L: 0, H: 0, S: 0 };
+    var counts = emptyCodeCounts_();
     for (var d = 1; d <= dim; d++) {
-      var code = reg[pad2_(d)];
+      var code = normalizeCode_(reg[pad2_(d)]);
       if (code && counts.hasOwnProperty(code)) counts[code]++;
     }
-    var leaveDays = counts.L + counts.S;
+    var leaveDays = counts.L + counts.ML;
+    var daysTotal = computeDaysTotal_(counts);
+    var vertical = trim_(verticalCode).toUpperCase();
     return {
       present: counts.P,
       week_off_holiday: counts['W/H'],
       absent: counts.A,
       leave: counts.L,
+      week_off: counts.WO,
+      medical_leave: counts.ML,
       holiday: counts.H,
-      sick: counts.S,
       leave_days: leaveDays,
-      days_in_month: dim
+      days_total: daysTotal,
+      leave_balance: computeLeaveBalance_(counts, vertical),
+      days_in_month: dim,
+      code_counts: counts
     };
   }
 
@@ -93,6 +130,17 @@ var AttendanceRegisterService = (function () {
     var present = Number(summary.present) || 0;
     var absent = Number(summary.absent) || 0;
     var leaveDays = Number(summary.leave_days) || 0;
+    var daysTotal = Number(summary.days_total);
+    if (isFinite(daysTotal) && daysTotal >= 0) {
+      return {
+        working_days: daysTotal + absent,
+        paid_days: daysTotal,
+        lop_days: absent,
+        days_present: present,
+        days_absent: absent,
+        leave_days: leaveDays
+      };
+    }
     var dim = Number(summary.days_in_month) || 0;
     var wh = Number(summary.week_off_holiday) || 0;
     var holiday = Number(summary.holiday) || 0;
@@ -150,6 +198,13 @@ var AttendanceRegisterService = (function () {
     return s;
   }
 
+  function leaveBalanceFormula_(range, verticalCell) {
+    var l = 'COUNTIF(' + range + ',"L")';
+    var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
+    var maxExpr = 'IF(' + verticalCell + '="SAPL",2,IF(' + verticalCell + '="AOPL",2,IF(' + verticalCell + '="AOMS",1,2)))';
+    return '=MAX(0,' + maxExpr + '-(' + l + '+' + ml + '))';
+  }
+
   function summaryFormulasForRow_(sheetRow, year, month) {
     var dim = daysInMonth_(year, month);
     var firstCol = 4;
@@ -157,16 +212,30 @@ var AttendanceRegisterService = (function () {
     var start = colToLetter_(firstCol) + sheetRow;
     var end = colToLetter_(lastDayCol) + sheetRow;
     var range = start + ':' + end;
-    return {
+    var verticalCell = 'C' + sheetRow;
+    var dayParts = [];
+    ['P', 'W/H', 'L', 'WO', 'ML', 'H'].forEach(function (code) {
+      if (code === 'W/H') {
+        dayParts.push('COUNTIF(' + range + ',"W"&CHAR(47)&"H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")');
+      } else if (code === 'ML') {
+        dayParts.push('COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")');
+      } else {
+        dayParts.push('COUNTIF(' + range + ',"' + code + '")');
+      }
+    });
+    var formulas = {
       P: '=COUNTIF(' + range + ',"P")',
       'W/H': '=COUNTIF(' + range + ',"W"&CHAR(47)&"H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")',
       A: '=COUNTIF(' + range + ',"A")',
       L: '=COUNTIF(' + range + ',"L")',
+      WO: '=COUNTIF(' + range + ',"WO")',
+      ML: '=COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")',
       H: '=COUNTIF(' + range + ',"H")',
-      S: '=COUNTIF(' + range + ',"S")',
-      'Leave Balan': '=""',
-      DAYS: '=' + dim
+      'Leave Balance': leaveBalanceFormula_(range, verticalCell),
+      'Leave Balan': leaveBalanceFormula_(range, verticalCell),
+      DAYS: '=' + dayParts.join('+')
     };
+    return formulas;
   }
 
   function rowFromSheetValues_(line, headers, year, month) {
@@ -195,6 +264,26 @@ var AttendanceRegisterService = (function () {
       vertical_name: vertical,
       register: reg
     };
+  }
+
+  function normalizeVerticalCode_(code) {
+    return trim_(code).toUpperCase();
+  }
+
+  function employeeVerticalCode_(emp) {
+    var v = normalizeVerticalCode_(emp && emp.vertical_name);
+    if (!v && emp && emp.employee_id) {
+      v = normalizeVerticalCode_(String(emp.employee_id).split('-')[0]);
+    }
+    return v;
+  }
+
+  function filterEmployeesByVertical_(employees, verticalCode) {
+    var want = normalizeVerticalCode_(verticalCode);
+    if (!want) return employees || [];
+    return (employees || []).filter(function (emp) {
+      return employeeVerticalCode_(emp) === want;
+    });
   }
 
   function listEmployeesForPayrollPeriod_(year, month) {
@@ -260,7 +349,7 @@ var AttendanceRegisterService = (function () {
     return listActiveEmployees_().map(function (emp) {
       var inp = inputByEmp[emp.employee_id] || null;
       var reg = inp ? parseRegister_(inp.daily_attendance_json) : {};
-      var sum = summarize_(reg, year, month);
+      var sum = summarize_(reg, year, month, emp.vertical_name);
       return {
         employee_id: emp.employee_id,
         display_name: employeeDisplayName_(emp),
@@ -269,14 +358,17 @@ var AttendanceRegisterService = (function () {
         in_payroll_run: !!inp,
         days_present: sum.present,
         days_leave: sum.leave_days,
+        days_total: sum.days_total,
         register_complete: inp ? isRegisterComplete_(reg, year, month) : false,
+        register: reg,
+        code_counts: sum.code_counts,
         summary: sum
       };
     });
   }
 
-  function saveRegisterForInput_(inp, reg, year, month) {
-    var summary = summarize_(reg, year, month);
+  function saveRegisterForInput_(inp, reg, year, month, verticalCode) {
+    var summary = summarize_(reg, year, month, verticalCode);
     var derived = derivePayrollDays_(summary);
     return {
       daily_attendance_json: stringifyRegister_(reg),
@@ -296,12 +388,16 @@ var AttendanceRegisterService = (function () {
     parseRegister_: parseRegister_,
     stringifyRegister_: stringifyRegister_,
     summarize_: summarize_,
+    computeDaysTotal_: computeDaysTotal_,
+    leaveBalanceMaxForVertical_: leaveBalanceMaxForVertical_,
+    computeLeaveBalance_: computeLeaveBalance_,
     derivePayrollDays_: derivePayrollDays_,
     isRegisterComplete_: isRegisterComplete_,
     buildTemplateHeaders_: buildTemplateHeaders_,
     colToLetter_: colToLetter_,
     summaryFormulasForRow_: summaryFormulasForRow_,
     rowFromSheetValues_: rowFromSheetValues_,
+    filterEmployeesByVertical_: filterEmployeesByVertical_,
     employeeDisplayName_: employeeDisplayName_,
     listActiveEmployees_: listActiveEmployees_,
     listEmployeesForPayrollPeriod_: listEmployeesForPayrollPeriod_,
