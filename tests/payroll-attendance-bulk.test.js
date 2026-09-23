@@ -50,8 +50,8 @@ check('api-attendance-auto-sync', /apiListAttendanceRegister[\s\S]*syncEligibleE
 var payrollSvc = fs.readFileSync(path.join(payrollDir, 'PayrollService.gs'), 'utf8');
 check('payroll-sync-on-employee', /syncOpenPayrollRunsForEmployee/.test(payrollSvc));
 check('template-headers', /buildTemplateHeaders_/.test(regSrc) && /SUMMARY_HEADERS_/.test(regSrc));
-check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate/.test(api));
-check('api-attendance-validate', /apiValidateAttendanceRegisterUpload/.test(api));
+check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate\(runId, verticalName, sessionToken\)/.test(api));
+check('api-attendance-validate', /apiValidateAttendanceRegisterUpload\(runId, verticalName, meta, sessionToken\)/.test(api));
 check('api-list-register', /apiListAttendanceRegister/.test(api));
 check('attendance-client-route', /registerRoute\('attendance-bulk-upload'/.test(attClient));
 check('attendance-list-columns', /<th class="num">DAYS<\/th>/.test(attClient) && /WO/.test(attClient) && /ML/.test(attClient));
