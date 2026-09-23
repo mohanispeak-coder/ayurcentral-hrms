@@ -55,6 +55,7 @@ var AdminSettingsService = (function () {
     LEAVE_APPROVE: 'leave_approvals',
     LEAVE_APPLY: 'my_leave',
     PAYROLL_RUN: 'payroll',
+    ATTENDANCE_MANAGE: 'attendance',
     COMPENSATION_MANAGE: 'payroll',
     VIEW_OWN_PAYSLIP: 'my_payslips',
     ATS_ACCESS: 'ats',

@@ -28,6 +28,15 @@ var FormTService = (function () {
     return v == null ? '' : String(v).trim();
   }
 
+  function requireAttendanceAccess_() {
+    var session = AuthService.requireAuth();
+    if (PermissionService.can(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session)) {
+      PermissionService.require(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session);
+      return;
+    }
+    PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN, {}, session);
+  }
+
   function normalizeVertical_(verticalName) {
     var code = trim_(verticalName).toUpperCase();
     if (!code) throw validationError_('Vertical is required.');
@@ -155,7 +164,7 @@ var FormTService = (function () {
   }
 
   function getStatus(runId, verticalName) {
-    PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
+    requireAttendanceAccess_();
     var verticalCode = normalizeVertical_(verticalName);
     var check = canGenerateFormT_(runId, verticalCode);
     var rows = employeesForVerticalRun_(runId, verticalCode);
@@ -266,7 +275,7 @@ var FormTService = (function () {
   }
 
   function buildFormT(runId, verticalName) {
-    PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
+    requireAttendanceAccess_();
     var verticalCode = normalizeVertical_(verticalName);
     var check = canGenerateFormT_(runId, verticalCode);
     if (!check.ok) {
