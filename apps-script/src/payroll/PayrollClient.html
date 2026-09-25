@@ -1474,7 +1474,7 @@
         }
         sel.innerHTML = rows.map(function (v) {
           return '<option value="' + escapeHtml(v.vertical_name) + '">' +
-            escapeHtml(v.vertical_name) + ' — ' + escapeHtml(v.legal_name || '') + '</option>';
+            escapeHtml(v.vertical_name) + ' - ' + escapeHtml(v.legal_name || '') + '</option>';
         }).join('');
       }).catch(function () {
         sel.innerHTML = '<option value="">Could not load verticals</option>';
@@ -2122,7 +2122,7 @@
       }
 
       html += '<p class="hint" style="margin:0 0 10px">' + escapeHtml(String(allRows.length)) +
-        ' employee(s) in this payroll · showing ' + escapeHtml(String(start + 1)) + '–' +
+        ' employee(s) in this payroll · showing ' + escapeHtml(String(start + 1)) + '-' +
         escapeHtml(String(Math.min(start + PAGE_SIZE, total))) + '</p>';
 
       html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
@@ -2159,7 +2159,7 @@
       });
       html += '</tbody></table></div>';
       html += extrasEditorNote_();
-      html += '<div class="pagination"><span>Showing ' + (start + 1) + '–' + Math.min(start + PAGE_SIZE, total) + ' of ' + total + '</span>';
+      html += '<div class="pagination"><span>Showing ' + (start + 1) + '-' + Math.min(start + PAGE_SIZE, total) + ' of ' + total + '</span>';
       if (pages > 1) {
         html += '<span><button type="button" class="btn btn-secondary btn-sm" id="pr-page-prev"' + (payrollState.tablePage <= 1 ? ' disabled' : '') + '>Previous</button> ' +
           '<button type="button" class="btn btn-secondary btn-sm" id="pr-page-next"' + (payrollState.tablePage >= pages ? ' disabled' : '') + '>Next</button></span>';

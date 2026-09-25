@@ -74,7 +74,7 @@
       return (catalog_ || []).map(function (v) {
         var sel = selected === v.vertical_name ? ' selected' : '';
         return '<option value="' + esc_(v.vertical_name) + '"' + sel + '>' +
-          esc_(v.vertical_name) + ' — ' + esc_(v.legal_name) + '</option>';
+          esc_(v.vertical_name) + ' - ' + esc_(v.legal_name) + '</option>';
       }).join('');
     }
 
@@ -408,7 +408,7 @@
                 if (prev) prev.innerHTML = '';
                 showToast('Attendance imported (' + preview.readyCount + '). Re-upload overwrites existing days.', 'success');
                 if (preview.errorCount > 0) {
-                  showToast(preview.errorCount + ' row(s) skipped — fix the file and upload again.', 'warning');
+                  showToast(preview.errorCount + ' row(s) skipped - fix the file and upload again.', 'warning');
                 }
                 loadContext_();
               });
