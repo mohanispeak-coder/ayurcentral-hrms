@@ -13,6 +13,12 @@ var LeaveService = (function () {
     return String(ConfigService.getSetting('leave_count_method', HRMS.LEAVE_COUNT.WEEKDAYS_ONLY) || HRMS.LEAVE_COUNT.WEEKDAYS_ONLY).toUpperCase();
   }
 
+  function assertPositiveLeaveDays_(dates, totalDays) {
+    if (totalDays > 0) return;
+    var msg = LeaveEngine.zeroLeaveDaysMessage(dates.start, dates.end, dates.isHalf, countMethod_());
+    throw validationError_(msg || 'Leave duration must be greater than zero.');
+  }
+
   function leaveYearStartMonth_() {
     return LeaveEngine.toNumber(ConfigService.getSetting('leave_year_start_month', 1), 1);
   }
@@ -766,9 +772,7 @@ var LeaveService = (function () {
       throw validationError_('This leave type does not allow half-day requests.');
     }
     var totalDays = LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, countMethod_());
-    if (totalDays <= 0) {
-      throw validationError_('Leave duration must be greater than zero.');
-    }
+    assertPositiveLeaveDays_(dates, totalDays);
     return withScriptLock_(function () {
       var existing = payload.leave_request_id
         ? DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: payload.leave_request_id })
@@ -843,9 +847,7 @@ var LeaveService = (function () {
     var dates = parsePayloadDates_(payload);
     assertNotBeforeJoining_(emp, dates);
     var totalDays = LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, countMethod_());
-    if (totalDays <= 0) {
-      throw validationError_('Leave duration must be greater than zero.');
-    }
+    assertPositiveLeaveDays_(dates, totalDays);
     validateAgainstType_(emp, type, dates, totalDays);
     var leaveYear = LeaveEngine.getLeaveYear(dates.start, leaveYearStartMonth_());
     var proxy = String(targetId) !== String(session.employee_id);
@@ -1566,10 +1568,15 @@ var LeaveService = (function () {
   function previewDays(payload) {
     AuthService.requireAuth();
     var dates = parsePayloadDates_(payload);
+    var method = countMethod_();
+    var totalDays = LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, method);
     return {
-      total_days: LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, countMethod_()),
+      total_days: totalDays,
       leave_year: LeaveEngine.getLeaveYear(dates.start, leaveYearStartMonth_()),
-      count_method: countMethod_()
+      count_method: method,
+      zero_days_hint: totalDays <= 0
+        ? LeaveEngine.zeroLeaveDaysMessage(dates.start, dates.end, dates.isHalf, method)
+        : ''
     };
   }
 

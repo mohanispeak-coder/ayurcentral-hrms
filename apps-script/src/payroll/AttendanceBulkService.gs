@@ -18,12 +18,7 @@ var AttendanceBulkService = (function () {
   }
 
   function requireAttendanceAccess_() {
-    var session = AuthService.requireAuth();
-    if (PermissionService.can(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session)) {
-      PermissionService.require(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session);
-      return session;
-    }
-    return PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN, {}, session);
+    return PermissionService.requireAttendanceAccess();
   }
 
   function driveApiHint_() {

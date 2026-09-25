@@ -29,12 +29,7 @@ var FormTService = (function () {
   }
 
   function requireAttendanceAccess_() {
-    var session = AuthService.requireAuth();
-    if (PermissionService.can(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session)) {
-      PermissionService.require(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session);
-      return;
-    }
-    PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN, {}, session);
+    PermissionService.requireAttendanceAccess();
   }
 
   function normalizeVertical_(verticalName) {

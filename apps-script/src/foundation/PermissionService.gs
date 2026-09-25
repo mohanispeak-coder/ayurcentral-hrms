@@ -171,9 +171,31 @@ var PermissionService = (function () {
       role === HRMS.ROLES.OWNER;
   }
 
+  /**
+   * Attendance register / Form T — ATTENDANCE_MANAGE, else PAYROLL_RUN, else attendance module for HR/Admin.
+   * @param {Object=} session
+   * @return {Object} Authorized session.
+   */
+  function requireAttendanceAccess(session) {
+    session = session || AuthService.requireAuth();
+    if (can(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session)) {
+      return require(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session);
+    }
+    if (can(HRMS.ACTIONS.PAYROLL_RUN, {}, session)) {
+      return require(HRMS.ACTIONS.PAYROLL_RUN, {}, session);
+    }
+    if (isHrOrAdmin(session) &&
+        typeof AdminSettingsService !== 'undefined' &&
+        AdminSettingsService.isModuleEnabledForRole(session.role, 'attendance')) {
+      return session;
+    }
+    throw authorizationError_();
+  }
+
   return {
     can: can,
     require: require,
+    requireAttendanceAccess: requireAttendanceAccess,
     getNavForRole: getNavForRole,
     getNavForSession: getNavForSession,
     isAdmin: isAdmin,

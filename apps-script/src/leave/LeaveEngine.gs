@@ -129,6 +129,37 @@ var LeaveEngine = (function () {
   }
 
   /**
+   * User-facing explanation when computeTotalDays returns 0 (validation / preview).
+   */
+  function zeroLeaveDaysMessage(startDate, endDate, isHalfDay, countMethod) {
+    if (isTruthy(isHalfDay)) return '';
+    var start = toDateOnly(startDate);
+    var end = toDateOnly(endDate);
+    if (!start || !end) {
+      return 'Enter valid start and end dates.';
+    }
+    if (start.getTime() > end.getTime()) {
+      return 'End date cannot be before start date.';
+    }
+    var m = String(countMethod || HRMS.LEAVE_COUNT.WEEKDAYS_ONLY).toUpperCase();
+    if (m === HRMS.LEAVE_COUNT.WEEKDAYS_ONLY) {
+      var cursor = start;
+      var hasWeekday = false;
+      while (cursor.getTime() <= end.getTime()) {
+        if (!isWeekend(cursor)) {
+          hasWeekday = true;
+          break;
+        }
+        cursor = addDays(cursor, 1);
+      }
+      if (!hasWeekday) {
+        return 'No weekdays (Monday–Friday) fall in this date range. Your company counts leave on weekdays only, so these dates count as 0 days. Choose dates that include at least one weekday.';
+      }
+    }
+    return 'Leave duration must be greater than zero.';
+  }
+
+  /**
    * Leave year label (e.g. "2026") from a date and start month (1–12).
    * If start month is April (4) and date is 15 Mar 2026, year is 2025.
    */
@@ -620,6 +651,7 @@ var LeaveEngine = (function () {
     toDateOnly: toDateOnly,
     formatIsoDate: formatIsoDate,
     computeTotalDays: computeTotalDays,
+    zeroLeaveDaysMessage: zeroLeaveDaysMessage,
     getLeaveYear: getLeaveYear,
     availableDays: availableDays,
     previousLeaveYear: previousLeaveYear,

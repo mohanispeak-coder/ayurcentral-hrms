@@ -1122,25 +1122,43 @@
         });
     }
 
-    function paintLeaveSummary_(el, rows) {
+    function paintLeaveSummary_(el, rows, options) {
+      options = options || {};
+      var actionsHtml = '';
+      if (options.showApplyLeave) {
+        actionsHtml = '<div class="form-actions" style="margin-bottom:12px">' +
+          '<button type="button" class="btn btn-primary" id="btn-profile-apply-leave">Apply for leave</button>' +
+          '<span class="hint">Or use <strong>My Leave</strong> in the sidebar.</span></div>';
+      }
       if (!rows.length) {
-        el.innerHTML = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances follow configured leave types from the joining year through the current leave year.</p></div>';
+        el.innerHTML = actionsHtml +
+          '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances follow configured leave types from the joining year through the current leave year.</p></div>';
+        bindProfileApplyLeave_(el);
         return;
       }
-      el.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+      el.innerHTML = actionsHtml + '<div class="table-wrap"><table class="data-table"><thead><tr>' +
         '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
         '</tr></thead><tbody>' + rows.map(function (r) {
           return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +
             '<td class="num">' + r.entitled_days + '</td><td class="num">' + r.used_days + '</td><td class="num">' + r.pending_days + '</td>' +
             '<td class="num">' + r.carried_forward_days + '</td><td class="num">' + r.available_days + '</td></tr>';
         }).join('') + '</tbody></table></div>';
+      bindProfileApplyLeave_(el);
+    }
+
+    function bindProfileApplyLeave_(el) {
+      var btn = el && el.querySelector ? el.querySelector('#btn-profile-apply-leave') : null;
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        App.navigate('leave-apply');
+      });
     }
 
     function loadLeave(employeeId, restore) {
       var el = $('leave-summary');
       var extras = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
       if (extras.leave && el) {
-        paintLeaveSummary_(el, extras.leave);
+        paintLeaveSummary_(el, extras.leave, leaveSummaryOptions_(employeeId));
         return;
       }
       if (extras.leaveLoading) return;
@@ -1152,13 +1170,19 @@
           var panel = $('leave-summary');
           if (!panel || seq !== App.getState().navSeq) return;
           extras.leave = rows;
-          paintLeaveSummary_(panel, rows);
+          paintLeaveSummary_(panel, rows, leaveSummaryOptions_(employeeId));
         })
         .catch(function (err) {
           extras.leaveLoading = false;
           var panel = $('leave-summary');
           paintErr(panel, err.message || 'Leave summary unavailable', function () { loadLeave(employeeId); });
         });
+    }
+
+    function leaveSummaryOptions_(employeeId) {
+      var session = (App.getState().session || {});
+      var isSelf = String(employeeId) === String(session.employee_id || '');
+      return { showApplyLeave: isSelf && !!session.employee_id };
     }
 
     function loadDocs(emp, notice, restore) {

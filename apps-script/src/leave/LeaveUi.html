@@ -47,6 +47,7 @@
   var previewGen_ = 0;
   var previewBusy_ = false;
   var previewAgain_ = false;
+  var previewTotalDays_ = null;
 
   function markLeaveView_(key) {
     if (window.HrmsApp && window.HrmsApp.markModuleViewLoaded) window.HrmsApp.markModuleViewLoaded(key);
@@ -456,6 +457,7 @@
             '<div class="form-group"><label class="form-label is-required" for="leave-reason">Reason</label>' +
               '<textarea class="form-input form-textarea" id="leave-reason" name="reason" rows="3" required>' + c.escapeHtml(prefill.reason || '') + '</textarea></div>' +
             '<p class="hint" id="leave-preview">Duration will be calculated on the server.</p>' +
+            '<p class="hint hidden" id="leave-preview-hint" role="status"></p>' +
             '<div class="form-actions">' +
               '<button type="button" class="btn btn-secondary" id="btn-leave-draft">Save draft</button>' +
               '<button type="submit" class="btn btn-primary" id="btn-leave-submit">Submit</button>' +
@@ -479,6 +481,15 @@
         });
       }
 
+      function syncSubmitState_(totalDays) {
+        previewTotalDays_ = totalDays;
+        var submitBtn = document.getElementById('btn-leave-submit');
+        var draftBtn = document.getElementById('btn-leave-draft');
+        var block = totalDays !== null && Number(totalDays) <= 0;
+        if (submitBtn) submitBtn.disabled = block;
+        if (draftBtn) draftBtn.disabled = block;
+      }
+
       function runPreview_() {
         var p = readForm();
         if (!p.start_date || !p.end_date) return;
@@ -491,13 +502,29 @@
         c.callServer('apiLeavePreviewDays', p).then(function (d) {
           if (gen !== previewGen_) return;
           var el = document.getElementById('leave-preview');
+          var hintEl = document.getElementById('leave-preview-hint');
           if (el) {
             el.textContent = 'Counted days: ' + fmtDays(d.total_days) + ' (' + d.count_method + '), leave year ' + d.leave_year;
+            el.classList.toggle('text-danger', Number(d.total_days) <= 0);
           }
+          if (hintEl) {
+            var hint = d.zero_days_hint || '';
+            if (hint) {
+              hintEl.textContent = hint;
+              hintEl.classList.remove('hidden');
+              hintEl.classList.add('text-danger');
+            } else {
+              hintEl.textContent = '';
+              hintEl.classList.add('hidden');
+              hintEl.classList.remove('text-danger');
+            }
+          }
+          syncSubmitState_(d.total_days);
         }).catch(function (err) {
           if (gen !== previewGen_) return;
           var el = document.getElementById('leave-preview');
           if (el) el.textContent = err.message || 'Could not preview days';
+          syncSubmitState_(null);
         }).then(function () {
           previewBusy_ = false;
           if (previewAgain_) {
@@ -544,6 +571,16 @@
           }
           return;
         }
+        if (previewTotalDays_ !== null && Number(previewTotalDays_) <= 0) {
+          var hintEl = document.getElementById('leave-preview-hint');
+          var msg = (hintEl && hintEl.textContent) ? hintEl.textContent : 'Leave duration must be greater than zero.';
+          if (window.HrmsApp && window.HrmsApp.setActionFeedback) {
+            window.HrmsApp.setActionFeedback(feedback, msg, 'error');
+          } else {
+            helpers.showToast(msg, 'error');
+          }
+          return;
+        }
         c.callServer('apiLeaveSaveDraft', p, actionOpts(this, 'Saving...', feedback)).then(function () {
           invalidateLeaveAfterRequestMutation_();
           setFlash('Draft saved.', 'success', 'my-leave');
@@ -555,6 +592,16 @@
         var p = readForm();
         var submitBtn = document.getElementById('btn-leave-submit') || ev.target.querySelector('button[type="submit"]');
         var feedback = document.getElementById('leave-apply-feedback');
+        if (previewTotalDays_ !== null && Number(previewTotalDays_) <= 0) {
+          var hintEl = document.getElementById('leave-preview-hint');
+          var msg = (hintEl && hintEl.textContent) ? hintEl.textContent : 'Leave duration must be greater than zero.';
+          if (window.HrmsApp && window.HrmsApp.setActionFeedback) {
+            window.HrmsApp.setActionFeedback(feedback, msg, 'error');
+          } else {
+            helpers.showToast(msg, 'error');
+          }
+          return;
+        }
         c.callServer('apiLeaveSubmit', p, actionOpts(submitBtn, 'Submitting...', feedback)).then(function () {
           invalidateLeaveAfterRequestMutation_();
           setFlash('Leave submitted.', 'success', 'my-leave');

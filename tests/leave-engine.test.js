@@ -32,6 +32,13 @@ check('LV skip weekend', LeaveEngine.computeTotalDays('2026-04-10', '2026-04-13'
 check('LV calendar days', LeaveEngine.computeTotalDays('2026-04-10', '2026-04-13', false, 'CALENDAR_DAYS') === 4);
 check('LV-10 half day', LeaveEngine.computeTotalDays('2026-04-08', '2026-04-08', true, 'WEEKDAYS_ONLY') === 0.5);
 check('ERR-01 inverted range counts 0', LeaveEngine.computeTotalDays('2026-04-10', '2026-04-08', false, 'CALENDAR_DAYS') === 0);
+check('LV Sunday only counts 0', LeaveEngine.computeTotalDays('2026-09-27', '2026-09-27', false, 'WEEKDAYS_ONLY') === 0);
+check('zero days message weekend', /weekdays only/i.test(
+  LeaveEngine.zeroLeaveDaysMessage('2026-09-27', '2026-09-27', false, 'WEEKDAYS_ONLY')
+));
+check('zero days message inverted', /before start/i.test(
+  LeaveEngine.zeroLeaveDaysMessage('2026-04-10', '2026-04-08', false, 'WEEKDAYS_ONLY')
+));
 check('leave year calendar', LeaveEngine.getLeaveYear('2026-03-15', 1) === '2026');
 check('leave year FY April', LeaveEngine.getLeaveYear('2026-03-15', 4) === '2025');
 check('leave year Jan 1', LeaveEngine.getLeaveYear('2026-01-01', 1) === '2026');
