@@ -889,7 +889,8 @@
           leaveBulkToolbarHtml_('leave-admin-bulk') +
           '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
           '<tbody id="admin-req-body">' + (reqRows || '<tr class="table-empty-row"><td colspan="8"><div class="empty-state empty-state-inline"><p class="empty-state-title">No requests</p></div></td></tr>') + '</tbody></table></div>' +
-          '<p class="hint" style="margin-top:8px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' - if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
+          '<p class="hint" style="margin-top:8px">Requests awaiting a manager can be approved here by HR or Admin when the manager is not available. Use <strong>Leave Approvals</strong> for your personal queue.</p>' +
+          '<p class="hint" style="margin-top:4px">Leave UI build ' + c.escapeHtml(LEAVE_UI_BUILD_) + ' - if Name is missing, run clasp push and hard-refresh the app.</p></div>' +
         '<div id="tab-types" class="hidden">' +
           '<div class="card"><h2 class="section-title">Leave types</h2>' +
           '<p class="page-lede">Add or edit types below. Types with annual entitlement &gt; 0 track balances automatically (even if Requires balance is unchecked in the sheet).</p>' +

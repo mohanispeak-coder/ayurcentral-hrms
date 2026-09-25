@@ -58,6 +58,9 @@ check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate\(runId, 
 check('api-attendance-validate', /apiValidateAttendanceRegisterUpload\(runId, verticalName, meta, sessionToken\)/.test(api));
 check('api-list-register', /apiListAttendanceRegister/.test(api));
 check('attendance-client-route', /registerRoute\('attendance-bulk-upload'/.test(attClient));
+check('attendance-client-validate-step', /att-validate-upload/.test(attClient) &&
+  /apiValidateAttendanceRegisterUpload/.test(attClient) && /att-commit/.test(attClient) &&
+  /apiCommitAttendanceRegisterUpload/.test(attClient));
 check('attendance-list-columns', /<th class="num">DAYS<\/th>/.test(attClient) && /WO/.test(attClient) && /ML/.test(attClient));
 check('payroll-bulk-no-attendance-columns', /'employee_id', 'display_name', 'work_email'/.test(payrollBulkSrc) &&
   !/'working_days', 'days_present'/.test(payrollBulkSrc));

@@ -456,18 +456,6 @@
         });
       }
 
-      bindPreviewActions_(runId, fileInput, nameEl);
-    }
-
-    function bindPreviewActions_(runId, fileInput, nameEl) {
-      var cancelBtn = document.getElementById('att-cancel-staged');
-      if (cancelBtn) {
-        cancelBtn.addEventListener('click', function () {
-          clearStagedUpload_();
-          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
-          showToast('Validation cleared. Choose a file and validate again.', 'info');
-        });
-      }
     }
 
     function paintPreviewGrid_(validRows, dim) {
@@ -530,7 +518,15 @@
       }
       html += '</div>';
       el.innerHTML = html;
-      bindPreviewActions_(runId);
+      var cancelBtn = document.getElementById('att-cancel-staged');
+      if (cancelBtn) {
+        cancelBtn.onclick = function () {
+          clearStagedUpload_();
+          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+          showToast('Validation cleared. Choose a file and validate again.', 'info');
+        };
+      }
+      syncBulkActionButtons_();
     }
 
     function daysInMonth_(y, m) {
