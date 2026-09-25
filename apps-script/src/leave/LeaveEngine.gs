@@ -548,8 +548,12 @@ var LeaveEngine = (function () {
     var applicant = normalizeApplicantRole_(applicantUserRole);
 
     if (status === HRMS.LEAVE_STATUS.PENDING_MANAGER) {
-      if (!isAssignedReportingManager_(session, managerEmployeeId)) return false;
-      return canActManagerApprovalStage_(role);
+      if (isAssignedReportingManager_(session, managerEmployeeId)) {
+        return canActManagerApprovalStage_(role);
+      }
+      // HR / Admin may act when the assigned manager is absent or has not acted yet.
+      if (role === HRMS.ROLES.HR || isAdminRole_(role)) return true;
+      return false;
     }
     if (status === HRMS.LEAVE_STATUS.PENDING_HR) {
       if (applicant === HRMS.ROLES.MANAGER) {

@@ -107,7 +107,8 @@ check('manager stage id trim/case', LeaveEngine.canApproveRequest(mgr, 'EMP003',
 check('assigned HR manager stage 1', LeaveEngine.canApproveRequest(
   { authorized: true, role: 'HR', employee_id: 'EMP002' }, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE'
 ) === true);
-check('HR not assigned manager stage 1', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === false);
+check('HR fallback manager stage 1', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === true);
+check('admin fallback manager stage 1', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_MANAGER', 'EMPLOYEE') === true);
 check('manager cannot HR stage', LeaveEngine.canApproveRequest(mgr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === false);
 check('HR or admin can finalize employee stage 2', LeaveEngine.canApproveRequest(hr, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);
 check('admin can finalize employee stage 2', LeaveEngine.canApproveRequest(admin, 'EMP003', 'EMP002', 'PENDING_HR', 'EMPLOYEE') === true);

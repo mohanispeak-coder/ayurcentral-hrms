@@ -785,7 +785,7 @@
           '<td class="col-actions">' + approvalLeaveActionsHtml_(r) + '</td></tr>';
       }).join('');
       page.innerHTML = flashHtml('leave-approvals') +
-        pageHead('Leave approvals', 'Select one or more requests, or use Select all. Your queue is filtered to what you can act on at this stage.') +
+        pageHead('Leave approvals', 'Manager requests appear here for the reporting manager, HR, and Admin. HR/Admin can approve at the manager stage if the manager is unavailable.') +
         '<div id="leave-appr-feedback" class="action-feedback hidden" role="status"></div>' +
         leaveBulkToolbarHtml_('leave-appr-bulk') +
         '<div class="table-wrap"><table class="data-table leave-approval-table"><thead><tr><th class="col-check" scope="col"><span class="sr-only">Select</span></th><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Stage</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
