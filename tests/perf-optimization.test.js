@@ -75,6 +75,12 @@ check('no-pms-module', !/pms\//.test(api));
 check('ats-bootstrap-includes-dashboard', /dashboard:\s*dashboard/.test(ats));
 check('ats-client-reuses-bootstrap-dash', /boot && boot\.dashboard/.test(atsClient));
 
+check('payroll-module-split', /'payroll-attendance':\s*\[/.test(api) &&
+  /attendance-bulk-upload':\s*'payroll-attendance'/.test(scripts));
+check('module-ui-server-cache', /loadModuleUiPayload_/.test(api) && /moduleUiCacheKey_/.test(api));
+check('bootstrap-prefetch-initial-module', /initialModule/.test(scripts) && /ensureModule\(initialModule/.test(scripts));
+check('dashboard-leave-summary', /getApprovalQueueSummary/.test(leave) && /getApprovalQueueSummary/.test(dash));
+
 const empClient = read('employee/EmployeeClient.html');
 check('emp-search-debounce', /scheduleDirectoryLoad_\(300\)/.test(empClient));
 check('emp-search-inflight', /listLoadBusy_/.test(empClient) && /listLoadAgain_/.test(empClient));

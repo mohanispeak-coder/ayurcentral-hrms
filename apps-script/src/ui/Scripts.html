@@ -36,10 +36,10 @@
     'leave-calendar': 'leave',
     payroll: 'payroll',
     'payroll-run': 'payroll',
-    'salary-structure': 'payroll',
-    'attendance-bulk-upload': 'payroll',
-    'attendance-form-t': 'payroll',
-    'salary-statement': 'payroll',
+    'salary-structure': 'payroll-structure',
+    'attendance-bulk-upload': 'payroll-attendance',
+    'attendance-form-t': 'payroll-attendance',
+    'salary-statement': 'payroll-statement',
     compensation: 'payroll',
     'my-payslips': 'payroll',
     ats: 'ats',
@@ -1449,13 +1449,13 @@
   function waitForModuleRoutes_(moduleId, attempts) {
     attempts = attempts || 0;
     if (moduleRoutesRegistered_(moduleId)) return Promise.resolve();
-    if (attempts > 40) {
+    if (attempts > 80) {
       return Promise.reject({ message: 'Module UI did not initialize (' + moduleId + '). Refresh the page and try again.' });
     }
     return new Promise(function (resolve, reject) {
       setTimeout(function () {
         waitForModuleRoutes_(moduleId, attempts + 1).then(resolve, reject);
-      }, 25);
+      }, 10);
     });
   }
 
@@ -1527,9 +1527,9 @@
       });
     };
     if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(run, { timeout: 8000 });
+      window.requestIdleCallback(run, { timeout: 15000 });
     } else {
-      setTimeout(run, 1200);
+      setTimeout(run, 2000);
     }
   }
 
@@ -2211,11 +2211,16 @@
     hideAllMainStates();
     setAuthedChrome(true);
     updateUserChip();
+    var initial = parseRouteHash_(window.location.hash);
+    var initialRoute = (initial.route && isKnownRoute_(initial.route)) ? initial.route : 'dashboard';
+    var initialModule = ROUTE_MODULE[initialRoute];
+    if (initialModule) {
+      ensureModule(initialModule, { userInitiated: true });
+    }
     initShell();
     bindBrowserHistory_();
     bindModuleRefreshUi();
     renderNav();
-    var initial = parseRouteHash_(window.location.hash);
     if (initial.route && isKnownRoute_(initial.route)) {
       navigate(initial.route, initial.params || {}, { replaceHistory: true, fromHistory: true });
     } else {

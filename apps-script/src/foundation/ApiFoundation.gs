@@ -6,11 +6,62 @@
 var HRMS_MODULE_UI_FILES_ = {
   employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient', 'employee/EmployeeMandatoryFieldsClient'],
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
-  payroll: ['payroll/PayrollClient', 'payroll/SalaryStructureClient', 'payroll/AttendanceClient', 'payroll/SalaryStatementClient', 'payroll/FormTClient'],
+  payroll: ['payroll/PayrollClient'],
+  'payroll-attendance': ['payroll/AttendanceClient', 'payroll/FormTClient'],
+  'payroll-structure': ['payroll/SalaryStructureClient'],
+  'payroll-statement': ['payroll/SalaryStatementClient'],
   ats: ['ats/AtsClient'],
   notifications: ['notifications/NotificationClient'],
   admin: ['ui/SettingsClient']
 };
+
+var MODULE_UI_CACHE_TTL_SEC_ = 21600;
+var MODULE_UI_CACHE_MAX_CHARS_ = 95000;
+
+function moduleUiCacheKey_(moduleId) {
+  var ver = (typeof HRMS !== 'undefined' && HRMS.CLIENT_ASSETS_VERSION)
+    ? String(HRMS.CLIENT_ASSETS_VERSION)
+    : '1';
+  return 'hrms_mod_ui_' + ver + '_' + String(moduleId || '').toLowerCase();
+}
+
+function readModuleUiFromFiles_(files) {
+  var parts = [];
+  var missing = [];
+  for (var i = 0; i < files.length; i++) {
+    try {
+      parts.push(HtmlService.createHtmlOutputFromFile(files[i]).getContent());
+    } catch (fileErr) {
+      missing.push(files[i]);
+      Logger.log('readModuleUiFromFiles_: skipped ' + files[i] + ': ' +
+        (fileErr && fileErr.message ? fileErr.message : fileErr));
+    }
+  }
+  return { html: parts.join('\n'), missingFiles: missing };
+}
+
+function loadModuleUiPayload_(moduleId, files) {
+  var cacheKey = moduleUiCacheKey_(moduleId);
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get(cacheKey);
+    if (cached) {
+      return { html: cached, missingFiles: [], cacheHit: true };
+    }
+  } catch (cacheReadErr) {
+    Logger.log('loadModuleUiPayload_ cache read: ' + (cacheReadErr.message || cacheReadErr));
+  }
+  var built = readModuleUiFromFiles_(files);
+  if (built.html && built.html.length <= MODULE_UI_CACHE_MAX_CHARS_) {
+    try {
+      CacheService.getScriptCache().put(cacheKey, built.html, MODULE_UI_CACHE_TTL_SEC_);
+    } catch (cachePutErr) {
+      Logger.log('loadModuleUiPayload_ cache put: ' + (cachePutErr.message || cachePutErr));
+    }
+  }
+  built.cacheHit = false;
+  return built;
+}
 
 /** @return {Object} */
 function apiGetAppBootstrap(sessionToken) {
@@ -117,21 +168,12 @@ function apiGetModuleUi(moduleId, sessionToken) {
       throw validationError_('Unknown module UI: ' + id);
     }
     var t0 = Date.now();
-    var parts = [];
-    var missing = [];
-    for (var i = 0; i < files.length; i++) {
-      try {
-        parts.push(HtmlService.createHtmlOutputFromFile(files[i]).getContent());
-      } catch (fileErr) {
-        // A single missing/broken file must not take down the whole module.
-        // (e.g. a new client file not yet pushed to this deployment.)
-        missing.push(files[i]);
-        Logger.log('apiGetModuleUi: skipped file ' + files[i] + ' for module ' + id +
-          ': ' + (fileErr && fileErr.message ? fileErr.message : fileErr));
-      }
-    }
+    var payload = loadModuleUiPayload_(id, files);
     HrmsPerf.log('apiGetModuleUi:' + id, Date.now() - t0);
-    return { moduleId: id, html: parts.join('\n'), missingFiles: missing };
+    if (HrmsPerf.enabled() && HrmsPerf.mark) {
+      HrmsPerf.mark(payload.cacheHit ? 'moduleUiCacheHit' : 'moduleUiCacheMiss');
+    }
+    return { moduleId: id, html: payload.html, missingFiles: payload.missingFiles || [] };
   }, sessionToken);
 }
 

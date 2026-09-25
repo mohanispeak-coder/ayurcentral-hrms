@@ -1277,20 +1277,42 @@ var LeaveService = (function () {
     };
   }
 
-  function getApprovals(session) {
-    PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
-    var tmap = typeMap_();
+  function listVisibleApprovalRows_(session) {
     var emap = empMap_();
     var rows = DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).filter(function (r) {
       return LeaveEngine.isPendingApprovalStatus(r.status);
     });
-    var visible = rows.filter(function (r) {
+    return rows.filter(function (r) {
       var emp = emap[String(r.employee_id)] || emap[LeaveEngine.normalizeEmployeeId(r.employee_id)];
       var mgr = emp ? emp.manager_employee_id : '';
       var applicantRole = applicantUserRole_(r.employee_id);
       return LeaveEngine.canApproveRequest(session, r.employee_id, mgr, r.status, applicantRole);
     });
-    return visible.map(function (r) { return serializeRequest_(r, tmap, emap); });
+  }
+
+  function getApprovals(session) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
+    var tmap = typeMap_();
+    var emap = empMap_();
+    return listVisibleApprovalRows_(session).map(function (r) {
+      return serializeRequest_(r, tmap, emap);
+    });
+  }
+
+  /** Dashboard: count + small preview without serializing the full approval queue. */
+  function getApprovalQueueSummary(session, previewLimit) {
+    PermissionService.require(HRMS.ACTIONS.LEAVE_APPROVE, {}, session);
+    var limit = LeaveEngine.toNumber(previewLimit, 5);
+    if (limit < 1) limit = 5;
+    var tmap = typeMap_();
+    var emap = empMap_();
+    var visible = listVisibleApprovalRows_(session);
+    return {
+      count: visible.length,
+      preview: visible.slice(0, limit).map(function (r) {
+        return serializeRequest_(r, tmap, emap);
+      })
+    };
   }
 
   function getAdminList(session, filters) {
@@ -1615,6 +1637,7 @@ var LeaveService = (function () {
     revokeRejection: revokeRejection,
     getMyLeave: getMyLeave,
     getApprovals: getApprovals,
+    getApprovalQueueSummary: getApprovalQueueSummary,
     getAdminList: getAdminList,
     getCalendar: getCalendar,
     saveType: saveType,
