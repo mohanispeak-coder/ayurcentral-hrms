@@ -261,7 +261,8 @@
       var refreshHtml = App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '';
       var addHtml = '';
       if (!team && (session.role === 'OWNER' || session.role === 'HR' || session.role === 'ADMIN')) {
-        addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-fields">Custom fields</button> ' +
+        addHtml = '<button type="button" class="btn btn-secondary" id="btn-emp-mandatory">Mandatory fields</button> ' +
+          '<button type="button" class="btn btn-secondary" id="btn-emp-fields">Custom fields</button> ' +
           '<button type="button" class="btn btn-secondary" id="btn-emp-bulk">Bulk upload</button> ' +
           '<button type="button" class="btn btn-primary" id="btn-emp-add">Add employee</button>';
       }
@@ -269,6 +270,7 @@
       if ($('btn-emp-add')) $('btn-emp-add').addEventListener('click', function () { navigate('employee-create'); });
       if ($('btn-emp-bulk')) $('btn-emp-bulk').addEventListener('click', function () { navigate('employee-bulk-upload'); });
       if ($('btn-emp-fields')) $('btn-emp-fields').addEventListener('click', function () { navigate('employee-field-defs'); });
+      if ($('btn-emp-mandatory')) $('btn-emp-mandatory').addEventListener('click', function () { navigate('employee-mandatory-fields'); });
       ['emp-search', 'emp-filter-status', 'emp-filter-dept', 'emp-filter-loc', 'emp-filter-vertical'].forEach(function (id) {
         var el = $(id);
         if (!el) return;
