@@ -22,7 +22,6 @@ li { margin-bottom: 4px; }
 .cover { text-align: center; padding: 36px 16px 44px; page-break-after: always; }
 .cover .brand { font-size: 26pt; font-weight: 700; color: #0d47a1; }
 .cover .sub { font-size: 13pt; color: #555; margin-top: 6px; }
-.cover .meta { margin-top: 40px; font-size: 9.5pt; color: #666; }
 .toc { page-break-after: always; }
 .toc ol { line-height: 1.65; }
 table.data { width: 100%; border-collapse: collapse; font-size: 11pt; margin: 8px 0 14px; }
@@ -252,7 +251,7 @@ def build_html(export_path: Path) -> str:
     parts.append("<h3>Dashboard (Main → Dashboard)</h3>")
     parts.append("<p>The dashboard is the home page after sign-in. It shows counts and shortcuts based on your role (for example leave approvals for managers, payroll status for HR, your employee ID for staff). Use the sidebar to go to detailed screens.</p>")
     parts.append("<p>AyurCentral HRMS is a browser-based Human Resource Management System. Your company uses it to keep employee records, process leave, record attendance, run payroll, and manage hiring.</p>")
-    parts.append("<p>This manual is written in simple English. It was built by reading your actual Apps Script project export, so it matches the screens and labels in your deployed app.</p>")
+    parts.append("<p>This manual is written in simple English. It matches the screens and labels in your AyurCentral HRMS app.</p>")
     if verticals:
         parts.append(f"<p><strong>Verticals in your build:</strong> {esc(', '.join(verticals))}. Employee codes often start with these prefixes (for example SAPL-0001).</p>")
     parts.append("<h3>What you need</h3><ul>")
