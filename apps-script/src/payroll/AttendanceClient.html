@@ -147,6 +147,14 @@
       })[0] || null;
     }
 
+    function filterListByVertical_(list, vertical) {
+      if (!vertical) return list || [];
+      var want = String(vertical).toUpperCase();
+      return (list || []).filter(function (r) {
+        return String(r.vertical_name || '').toUpperCase() === want;
+      });
+    }
+
     function groupByVertical_(list) {
       var groups = {};
       (list || []).forEach(function (r) {
@@ -155,6 +163,13 @@
         groups[v].push(r);
       });
       return groups;
+    }
+
+    function refreshVerticalSections_(list) {
+      var mount = document.getElementById('att-vertical-sections');
+      if (!mount) return;
+      var vertical = selectedVertical_();
+      mount.innerHTML = renderVerticalSections_(filterListByVertical_(list, vertical));
     }
 
     function renderVerticalSections_(list) {
@@ -233,7 +248,8 @@
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
         '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · <strong>A</strong> absent · ' +
         '<strong>L</strong> leave · <strong>WO</strong> weekly off · <strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
-        renderVerticalSections_(list) +
+        '<p class="hint">Register summary below is for the selected vertical. Download template and upload for that same vertical.</p>' +
+        '<div id="att-vertical-sections">' + renderVerticalSections_(filterListByVertical_(list, defaultVertical)) + '</div>' +
         '</div>' +
         '<div id="att-preview"></div><div id="att-feedback" class="action-feedback hidden"></div>';
 
@@ -296,6 +312,7 @@
       if (verticalSel) {
         verticalSel.addEventListener('change', function () {
           bulkState_.vertical = verticalSel.value;
+          if (viewCache_ && viewCache_.list) refreshVerticalSections_(viewCache_.list);
           if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
           if (validateBtn) validateBtn.disabled = !(bulkState_.fileMeta && verticalSel.value);
         });
@@ -373,8 +390,8 @@
               paintPreview_(preview, runId, true);
             }
             if (!preview.readyCount) {
-              paintPreview_(preview, runId, false);
-              showToast(preview.errorCount ? 'No valid rows to import.' : 'Nothing to import.', 'error');
+              paintPreview_(preview, runId, true);
+              showToast(preview.errorCount ? 'No valid rows to import. See errors below.' : 'Nothing to import.', 'error');
               return;
             }
             return callServer('apiCommitAttendanceRegisterUpload', runId, preview.uploadId,
@@ -439,7 +456,9 @@
       if (preview.errors && preview.errors.length) {
         html += '<ul class="hint">';
         preview.errors.slice(0, 20).forEach(function (err) {
-          html += '<li>Row ' + esc_(err.rowNumber) + (err.employee_id ? ' · ' + esc_(err.employee_id) : '') + '</li>';
+          var msgs = (err.messages || []).map(function (m) { return m.message || m; }).join('; ');
+          html += '<li>Row ' + esc_(err.rowNumber) + (err.employee_id ? ' · ' + esc_(err.employee_id) : '') +
+            (msgs ? ': ' + esc_(msgs) : '') + '</li>';
         });
         if (preview.errors.length > 20) html += '<li>…and ' + (preview.errors.length - 20) + ' more</li>';
         html += '</ul>';

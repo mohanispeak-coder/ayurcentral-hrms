@@ -245,16 +245,19 @@ var AttendanceRegisterService = (function () {
     var displayName = '';
     var vertical = '';
     headers.forEach(function (h, i) {
-      var val = trim_(line[i]);
-      var key = trim_(h).toLowerCase().replace(/\s+/g, '_');
-      if (key === 'employee_id') empId = val;
-      else if (key === 'display_name') displayName = val;
-      else if (key === 'vertical_name' || key === 'vertical') vertical = val;
-      else if (/^\d{1,2}$/.test(key)) {
-        var day = pad2_(key);
-        if (Number(day) <= dim) {
-          var code = normalizeCode_(val);
-          if (code) reg[day] = code;
+      var valStr = trim_(line[i]);
+      var headerLabel = trim_(h);
+      var key = headerLabel.toLowerCase().replace(/\s+/g, '_');
+      if (key === 'employee_id') empId = valStr;
+      else if (key === 'display_name') displayName = valStr;
+      else if (key === 'vertical_name' || key === 'vertical') vertical = valStr;
+      else {
+        var dayKey = '';
+        if (/^\d{1,2}$/.test(key)) dayKey = pad2_(key);
+        else if (typeof h === 'number' && isFinite(h) && h >= 1 && h <= 31) dayKey = pad2_(h);
+        if (dayKey && Number(dayKey) <= dim) {
+          var code = normalizeCode_(valStr);
+          if (code) reg[dayKey] = code;
         }
       }
     });
@@ -336,17 +339,29 @@ var AttendanceRegisterService = (function () {
     return trim_((emp.first_name || '') + ' ' + (emp.last_name || '')) || trim_(emp.employee_id);
   }
 
+  function requireAttendanceAccess_() {
+    var session = AuthService.requireAuth();
+    if (PermissionService.can(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session)) {
+      PermissionService.require(HRMS.ACTIONS.ATTENDANCE_MANAGE, {}, session);
+      return;
+    }
+    PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN, {}, session);
+  }
+
   function listSummariesForRun_(runId) {
-    PermissionService.require(HRMS.ACTIONS.PAYROLL_RUN);
+    requireAttendanceAccess_();
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
     if (!run) throw notFoundError_('Payroll run not found.');
     var year = Number(run.period_year);
     var month = Number(run.period_month);
     var inputByEmp = {};
     DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
-      inputByEmp[inp.employee_id] = inp;
+      var key = trim_(inp.employee_id).toUpperCase();
+      if (key) inputByEmp[key] = inp;
     });
-    return listActiveEmployees_().map(function (emp) {
+    return listEmployeesForPayrollPeriod_(year, month).map(function (emp) {
+      var empKey = trim_(emp.employee_id).toUpperCase();
+      var inp = inputByEmp[empKey] || inputByEmp[trim_(emp.employee_id)] || null;
       var inp = inputByEmp[emp.employee_id] || null;
       var reg = inp ? parseRegister_(inp.daily_attendance_json) : {};
       var sum = summarize_(reg, year, month, emp.vertical_name);

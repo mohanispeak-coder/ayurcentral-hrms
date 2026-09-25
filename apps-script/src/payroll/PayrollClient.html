@@ -1058,16 +1058,16 @@
       st = statusKey(st);
       var openAttr = hasRun ? ' open' : '';
       var innerStart = standalone
-        ? '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Attendance bulk upload</h2><div class="collapsible-section-body">'
+        ? '<div class="card bulk-upload-card" id="attendance-bulk-card"><h2>Attendance register upload</h2><div class="collapsible-section-body">'
         : '<details class="card collapsible-section bulk-upload-card"' + openAttr + ' id="attendance-bulk-card">' +
-        '<summary>Attendance bulk upload</summary>' +
+        '<summary>Attendance register upload</summary>' +
         '<div class="collapsible-section-body">';
       var html = innerStart +
-        '<p class="page-lede">Enter attendance before calculating payroll. The template lists employee ID, name, and email only - you fill working days and attendance columns, then upload.</p>' +
-        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(
-          ['employee_id', 'working_days', 'days_present', 'days_absent', 'leave_days']
-        ) : '') +
-        '<ol class="bulk-steps"><li>Download template (ID, name, email pre-filled - attendance columns blank)</li><li>Fill working_days, days_present, days_absent, leave_days</li><li>Choose Excel/CSV file and validate</li><li>Confirm import</li></ol>';
+        '<p class="page-lede">Download the monthly register template for one vertical, fill daily codes (P, W/H, A, L, WO, ML, H), then validate and import.</p>' +
+        '<div class="form-row" style="margin-bottom:12px"><div class="form-group">' +
+        '<label class="form-label" for="att-bulk-vertical">Vertical</label>' +
+        '<select class="form-select" id="att-bulk-vertical"><option value="">Loading…</option></select></div></div>' +
+        '<ol class="bulk-steps"><li>Select vertical and download register template</li><li>Fill day columns on the Attendance sheet (from row 3)</li><li>Choose Excel file, validate, then confirm import</li></ol>';
       html += '<div class="bulk-action-bar">';
       if (hasRun && runId) {
         html += '<button type="button" class="btn btn-secondary" id="btn-dl-template">Download attendance template</button>';
@@ -1458,17 +1458,46 @@
       }
     }
 
+    function readAttendanceBulkVertical_(page) {
+      var sel = page.querySelector('#att-bulk-vertical');
+      return sel ? String(sel.value || '').trim() : '';
+    }
+
+    function populateAttendanceVerticalSelect_(page) {
+      var sel = page.querySelector('#att-bulk-vertical');
+      if (!sel) return;
+      callServer('apiGetVerticalCatalog').then(function (cat) {
+        var rows = cat || [];
+        if (!rows.length) {
+          sel.innerHTML = '<option value="">No verticals configured</option>';
+          return;
+        }
+        sel.innerHTML = rows.map(function (v) {
+          return '<option value="' + escapeHtml(v.vertical_name) + '">' +
+            escapeHtml(v.vertical_name) + ' — ' + escapeHtml(v.legal_name || '') + '</option>';
+        }).join('');
+      }).catch(function () {
+        sel.innerHTML = '<option value="">Could not load verticals</option>';
+      });
+    }
+
     function bindBulkUpload_(runId, page, detail, editable) {
+      populateAttendanceVerticalSelect_(page);
       var dlBtn = $('btn-dl-template');
       if (dlBtn) dlBtn.addEventListener('click', function () {
+        var vertical = readAttendanceBulkVertical_(page);
+        if (!vertical) {
+          showToast('Select a vertical first.', 'error');
+          return;
+        }
         if (!setButtonLoading(dlBtn, 'Downloading...')) return;
-        rpc('apiDownloadPayrollTemplate', [runId], dlBtn, 'Downloading...', $('pr-upload-feedback'))
+        rpc('apiDownloadAttendanceRegisterTemplate', [runId, vertical], dlBtn, 'Downloading...', $('pr-upload-feedback'))
           .then(function (file) {
             if (!file || !file.base64) {
-              throw { message: 'Template file was empty. Check Apps Script Drive permissions.' };
+              throw { message: 'Template file was empty. Enable Drive API in Apps Script and redeploy.' };
             }
             downloadBlob(file);
-            showToast('Attendance template downloaded (' + (file.fileName || 'file') + ').', 'success');
+            showToast('Register template downloaded (' + (file.fileName || 'file') + ').', 'success');
           })
           .catch(function (err) {
             showToast((err && err.message) || 'Download failed', 'error');
@@ -1509,6 +1538,11 @@
       if (validateBtn) validateBtn.addEventListener('click', function () {
         var file = bulkState.selectedFile;
         if (!file) return;
+        var vertical = readAttendanceBulkVertical_(page);
+        if (!vertical) {
+          showToast('Select a vertical first.', 'error');
+          return;
+        }
         var lower = (file.name || '').toLowerCase();
         if (lower.indexOf('.xlsx') < 0 && lower.indexOf('.xls') < 0 && lower.indexOf('.csv') < 0) {
           showToast('Upload an Excel (.xlsx) or CSV file.', 'error');
@@ -1517,7 +1551,7 @@
         if (!setButtonLoading(validateBtn, 'Validating...')) return;
         if (nameEl) nameEl.textContent = 'Validating ' + file.name + '…';
         readFileBase64_(file).then(function (meta) {
-          return rpc('apiValidatePayrollUpload', [runId, meta], validateBtn, 'Validating...', $('pr-upload-feedback'));
+          return rpc('apiValidateAttendanceRegisterUpload', [runId, vertical, meta], validateBtn, 'Validating...', $('pr-upload-feedback'));
         }).then(function (preview) {
           bulkState.preview = preview;
           if (nameEl) nameEl.textContent = file.name + ' - ' + preview.readyCount + ' ready, ' + preview.errorCount + ' errors';
@@ -1646,7 +1680,9 @@
       if (commitBtn) commitBtn.addEventListener('click', function () {
         if (!bulkState.preview || !bulkState.preview.uploadId) return;
         if (!setButtonLoading(commitBtn, 'Importing...')) return;
-        rpc('apiCommitPayrollUpload', [runId, bulkState.preview.uploadId], commitBtn, 'Importing...', $('pr-upload-feedback'))
+        var isAttendanceCard = !!$('attendance-bulk-card');
+        var commitFn = isAttendanceCard ? 'apiCommitAttendanceRegisterUpload' : 'apiCommitPayrollUpload';
+        rpc(commitFn, [runId, bulkState.preview.uploadId], commitBtn, 'Importing...', $('pr-upload-feedback'))
           .then(function () {
             bulkState.preview = null;
             invalidatePayrollRunPeers_(runId);
@@ -1656,7 +1692,7 @@
             payrollState.detail = nextDetail;
             homeState.overview = nextDetail;
             repaintCurrentPayrollView_(page, App.getState().navSeq, nextDetail);
-            showToast('Imported payroll data.', 'success');
+            showToast(isAttendanceCard ? 'Attendance imported.' : 'Imported payroll data.', 'success');
           })
           .catch(function (err) {
             restoreButton(commitBtn);
