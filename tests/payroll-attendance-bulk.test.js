@@ -41,6 +41,10 @@ function loadRegister() {
 
 var Reg = loadRegister();
 
+var permSrc = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'PermissionService.gs'), 'utf8');
+check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
+  /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
+check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
 check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
