@@ -28,6 +28,7 @@
     'employee-profile': 'employee',
     'employee-bulk-upload': 'employee',
     'employee-field-defs': 'employee',
+    'employee-mandatory-fields': 'employee',
     'my-leave': 'leave',
     'leave-apply': 'leave',
     'leave-approvals': 'leave',
@@ -60,6 +61,7 @@
     'employee-profile': 'Employee',
     'employee-bulk-upload': 'Bulk upload',
     'employee-field-defs': 'Employee custom fields',
+    'employee-mandatory-fields': 'Mandatory fields',
     'my-leave': 'My Leave',
     'leave-apply': 'Apply Leave',
     'leave-approvals': 'Leave Approvals',
@@ -93,6 +95,7 @@
     'employee-profile': 'Employee master record.',
     'employee-bulk-upload': 'Import many employees from Excel or CSV.',
     'employee-field-defs': 'Define optional extra columns for profiles and bulk upload.',
+    'employee-mandatory-fields': 'Choose which employee fields are required on create and bulk upload.',
     'my-leave': 'Balances for the current leave year and your requests.',
     'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
     'leave-approvals': 'Submitted requests waiting for a decision.',
@@ -121,7 +124,7 @@
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
-    { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
+    { id: 'people', label: 'People', routes: ['employees', 'employee-mandatory-fields', 'my-team'], collapsible: true },
     { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
     { id: 'attendance', label: 'Attendance', routes: ['attendance-bulk-upload', 'attendance-form-t'], collapsible: true },
     { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'salary-statement', 'payroll'], collapsible: true },
@@ -1114,7 +1117,9 @@
 
   function isNavRouteActive(itemRoute, current) {
     if (itemRoute === current) return true;
-    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
+    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create' ||
+        current === 'employee-bulk-upload' || current === 'employee-field-defs')) return true;
+    if (itemRoute === 'employee-mandatory-fields' && current === 'employee-mandatory-fields') return true;
     if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'compensation')) return true;
     if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;

@@ -38,7 +38,7 @@ if (navMatch) {
 check('nav-groups-defined', /var NAV_GROUPS = \[/.test(scripts));
 check('nav-main-section', /id:\s*'main'[\s\S]*label:\s*'Main'[\s\S]*dashboard/.test(scripts));
 check('nav-my-work-section', /id:\s*'my-work'[\s\S]*my-profile[\s\S]*my-leave[\s\S]*my-payslips/.test(scripts));
-check('nav-people-section', /id:\s*'people'[\s\S]*employees[\s\S]*my-team/.test(scripts));
+check('nav-people-section', /id:\s*'people'[\s\S]*employees[\s\S]*employee-mandatory-fields[\s\S]*my-team/.test(scripts));
 check('nav-time-off-section', /id:\s*'time-off'[\s\S]*leave-admin[\s\S]*leave-approvals/.test(scripts));
 check('no-nav-performance-section', !/id:\s*'performance'/.test(scripts));
 check('global-button-busy', /isGlobalActionBusy/.test(scripts) && /globalLoadingButton_/.test(scripts));

@@ -127,3 +127,17 @@ function apiSaveEmployeeFieldDefs(payload, sessionToken) {
     return EmployeeFieldDefService.saveFieldDefs(payload || {});
   }, sessionToken);
 }
+
+function apiGetEmployeeMandatoryFields(sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeMandatoryFieldService.listConfig();
+  }, sessionToken);
+}
+
+function apiSaveEmployeeMandatoryFields(payload, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeMandatoryFieldService.saveConfig(payload || {});
+  }, sessionToken);
+}

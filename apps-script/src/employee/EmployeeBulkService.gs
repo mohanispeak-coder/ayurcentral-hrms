@@ -21,10 +21,19 @@ var EmployeeBulkService = (function () {
     'notes', 'create_login', 'google_login_email'
   ];
 
-  var REQUIRED_HEADERS_ = [
+  var REQUIRED_HEADERS_DEFAULT_ = [
     'employee_id', 'first_name', 'last_name', 'work_email',
     'department', 'designation', 'vertical_name', 'location', 'employment_type', 'joining_date', 'create_login'
   ];
+
+  function requiredHeaders_() {
+    try {
+      if (typeof EmployeeMandatoryFieldService !== 'undefined' && EmployeeMandatoryFieldService.listMandatoryFieldIds) {
+        return EmployeeMandatoryFieldService.listMandatoryFieldIds('bulk');
+      }
+    } catch (ignore) {}
+    return REQUIRED_HEADERS_DEFAULT_.slice();
+  }
 
   var SAMPLE_ROW_NEW_HIRE_ = {
     employee_id: 'SAPL-0001',
@@ -284,8 +293,9 @@ var EmployeeBulkService = (function () {
 
     var employees = ss.insertSheet('Employees');
     var sheetHeaders = bulkHeaders_();
+    var required = requiredHeaders_();
     var headerLabels = sheetHeaders.map(function (h) {
-      return REQUIRED_HEADERS_.indexOf(h) >= 0 ? h + '*' : h;
+      return required.indexOf(h) >= 0 ? h + '*' : h;
     });
     employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
@@ -416,6 +426,7 @@ var EmployeeBulkService = (function () {
       if (row.hasOwnProperty(key)) payload[key] = row[key];
     });
     payload.employee_id = EmployeeService.normalizeEmployeeId(row.employee_id);
+    payload.create_login = trim_(row.create_login);
     payload.create_user = EmployeeService.parseCreateUserFlag(row.create_login);
     if (typeof EmployeeFieldDefService !== 'undefined' && EmployeeFieldDefService.applyBulkCustomFields_) {
       payload = EmployeeFieldDefService.applyBulkCustomFields_(payload, row);
@@ -460,9 +471,7 @@ var EmployeeBulkService = (function () {
         rowErrors.push({ field: 'employee_id', message: 'Employee code already exists in HRMS.' });
       }
 
-      if (!workEmail) {
-        rowErrors.push({ field: 'work_email', message: 'Work email is required.' });
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail)) {
+      if (workEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail)) {
         rowErrors.push({ field: 'work_email', message: 'Enter a valid work email.' });
       } else if (batchEmails[workEmail]) {
         rowErrors.push({ field: 'work_email', message: 'Duplicate work email in this file (row ' + batchEmails[workEmail] + ').' });
@@ -470,23 +479,21 @@ var EmployeeBulkService = (function () {
         rowErrors.push({ field: 'work_email', message: 'Work email already exists in HRMS.' });
       }
 
-      if (!trim_(payload.first_name)) rowErrors.push({ field: 'first_name', message: 'First name is required.' });
-      if (!trim_(payload.last_name)) rowErrors.push({ field: 'last_name', message: 'Last name is required.' });
-      if (!trim_(payload.department)) rowErrors.push({ field: 'department', message: 'Department is required.' });
-      if (!trim_(payload.designation)) rowErrors.push({ field: 'designation', message: 'Designation is required.' });
+      if (typeof EmployeeMandatoryFieldService !== 'undefined' && EmployeeMandatoryFieldService.applyMandatoryRowValidation) {
+        EmployeeMandatoryFieldService.applyMandatoryRowValidation(payload, rowErrors, {
+          isCreate: true,
+          isBulk: true,
+          createUser: payload.create_user
+        });
+      }
       var verticalName = trim_(payload.vertical_name).toUpperCase();
-      if (!verticalName) rowErrors.push({ field: 'vertical_name', message: 'Vertical is required.' });
-      else if (allowedVerticals.indexOf(verticalName) < 0) {
+      if (verticalName && allowedVerticals.indexOf(verticalName) < 0) {
         rowErrors.push({ field: 'vertical_name', message: 'Select a valid vertical.' });
       }
-      if (!trim_(payload.joining_date)) rowErrors.push({ field: 'joining_date', message: 'Joining date is required.' });
       var empType = trim_(payload.employment_type).toUpperCase();
-      if (!empType) rowErrors.push({ field: 'employment_type', message: 'Employment type is required.' });
-      else if (['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'].indexOf(empType) < 0) {
+      if (empType && ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'].indexOf(empType) < 0) {
         rowErrors.push({ field: 'employment_type', message: 'Invalid employment type.' });
       }
-      if (!trim_(payload.location)) rowErrors.push({ field: 'location', message: 'Location is required.' });
-      if (!trim_(row.create_login)) rowErrors.push({ field: 'create_login', message: 'create_login is required (YES or NO).' });
 
       var managerId = EmployeeService.normalizeEmployeeId(payload.manager_employee_id);
       if (managerId) {
@@ -497,8 +504,14 @@ var EmployeeBulkService = (function () {
 
       var bankNo = trim_(payload.bank_account_number);
       var ifsc = trim_(payload.bank_ifsc);
-      if (bankNo && !ifsc) rowErrors.push({ field: 'bank_ifsc', message: 'IFSC is required when a bank account number is provided.' });
-      if (ifsc && !bankNo) rowErrors.push({ field: 'bank_account_number', message: 'Bank account number is required when IFSC is provided.' });
+      var mandatoryIfsc = typeof EmployeeMandatoryFieldService !== 'undefined' &&
+        EmployeeMandatoryFieldService.isMandatory('bank_ifsc');
+      var mandatoryBankNo = typeof EmployeeMandatoryFieldService !== 'undefined' &&
+        EmployeeMandatoryFieldService.isMandatory('bank_account_number');
+      if (!mandatoryIfsc && !mandatoryBankNo) {
+        if (bankNo && !ifsc) rowErrors.push({ field: 'bank_ifsc', message: 'IFSC is required when a bank account number is provided.' });
+        if (ifsc && !bankNo) rowErrors.push({ field: 'bank_account_number', message: 'Bank account number is required when IFSC is provided.' });
+      }
 
       var structureRef = trim_(payload.salary_structure_id);
       var resolvedStructureId = '';

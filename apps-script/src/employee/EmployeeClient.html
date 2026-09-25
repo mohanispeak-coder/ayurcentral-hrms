@@ -31,8 +31,33 @@
       extras: {},
       picker: null,
       verticals: null,
-      salaryStructures: null
+      salaryStructures: null,
+      mandatoryMap: null,
+      mandatoryBulkList: null
     };
+
+    function loadMandatoryFieldMap_() {
+      if (empViewCache.mandatoryMap) {
+        return Promise.resolve(empViewCache.mandatoryMap);
+      }
+      return callServer('apiGetEmployeeMandatoryFields').then(function (cfg) {
+        var map = {};
+        var bulk = [];
+        (cfg.fields || []).forEach(function (f) {
+          map[f.id] = !!f.mandatory;
+          if (f.mandatory && f.bulk) bulk.push(f.id);
+        });
+        empViewCache.mandatoryMap = map;
+        empViewCache.mandatoryBulkList = bulk;
+        return map;
+      });
+    }
+
+    function reqField_(id, fallback) {
+      var map = empViewCache.mandatoryMap;
+      if (map && Object.prototype.hasOwnProperty.call(map, id)) return !!map[id];
+      return !!fallback;
+    }
 
     function listCacheKey(team) {
       return team ? 'my-team' : 'employees';
@@ -54,7 +79,9 @@
       delete empViewCache.lists.employees;
       delete empViewCache.lists['my-team'];
       empViewCache.picker = null;
-      shellInv_(['employees', 'my-team', 'employee-create', 'employee-bulk-upload', 'employee-field-defs']);
+      shellInv_(['employees', 'my-team', 'employee-create', 'employee-bulk-upload', 'employee-field-defs', 'employee-mandatory-fields']);
+      empViewCache.mandatoryMap = null;
+      empViewCache.mandatoryBulkList = null;
     }
 
     function invalidateEmpProfileLists_(employeeId, isSelf) {
@@ -78,8 +105,12 @@
         empViewCache.picker = null;
         empViewCache.verticals = null;
         empViewCache.salaryStructures = null;
+        empViewCache.mandatoryMap = null;
+        empViewCache.mandatoryBulkList = null;
       });
     }
+
+    loadMandatoryFieldMap_().catch(function () {});
 
     App.registerRoute('employees', { title: 'Employees', render: function () { renderList(false); } });
     App.registerRoute('my-team', { title: 'My Team', render: function () { renderList(true); } });
@@ -165,8 +196,8 @@
       return '<span class="' + cls + '">' + s + '</span>';
     }
 
-    function fieldGroup(id, label, inputHtml, span2) {
-      var req = /\srequired([\s>]|$)/.test(inputHtml);
+    function fieldGroup(id, label, inputHtml, span2, forceRequired) {
+      var req = forceRequired === true || (forceRequired !== false && /\srequired([\s>]|$)/.test(inputHtml));
       return '<div class="form-group' + (span2 ? ' form-span-2' : '') + '" id="fg-' + id + '">' +
         '<label class="form-label' + (req ? ' is-required' : '') + '" for="' + id + '">' + escapeHtml(label) + '</label>' +
         inputHtml +
@@ -478,42 +509,46 @@
       var readId = mode !== 'create';
       var html = '<form id="emp-form" class="form-grid emp-form-grid">';
       if (mode === 'create') {
-        html += fieldGroup('employee_id', 'Employee code', input('employee_id', 'text', emp.employee_id, true) +
-          '<p class="form-hint">Format: SAPL-0001, AOPL-0001, or AOMS-0001</p>');
+        html += fieldGroup('employee_id', 'Employee code',
+          input('employee_id', 'text', emp.employee_id, reqField_('employee_id', true)) +
+          '<p class="form-hint">Format: SAPL-0001, AOPL-0001, or AOMS-0001</p>',
+          false, reqField_('employee_id', true));
       } else if (readId) {
         html += fieldGroup('employee_id', 'Employee ID', '<input class="form-input mono" id="employee_id" value="' +
           escapeHtml(emp.employee_id || '') + '" disabled>');
       }
-      html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
-      html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
-      html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
-      html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name));
-      html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
-      html += fieldGroup('gender', 'Gender', select('gender', genders, emp.gender || ''));
-      html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
-      html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true);
-      html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
-      html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
-      html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
-      html += fieldGroup('vertical_name', 'Vertical', '<select class="form-select" id="vertical_name" name="vertical_name" required><option value="">Select vertical</option></select>');
-      html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
-      html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
-      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT', true));
-      html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
+      html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, reqField_('first_name', true)), false, reqField_('first_name', true));
+      html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, reqField_('last_name', true)), false, reqField_('last_name', true));
+      html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name, reqField_('display_name', false)), false, reqField_('display_name', false));
+      html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name, reqField_('father_husband_name', false)), false, reqField_('father_husband_name', false));
+      html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth, reqField_('date_of_birth', false)), false, reqField_('date_of_birth', false));
+      html += fieldGroup('gender', 'Gender', select('gender', genders, emp.gender || '', reqField_('gender', false)), false, reqField_('gender', false));
+      html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone, reqField_('phone', false)), false, reqField_('phone', false));
+      html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true, reqField_('address', false));
+      html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, reqField_('work_email', true)), false, reqField_('work_email', true));
+      html += fieldGroup('department', 'Department', input('department', 'text', emp.department, reqField_('department', true)), false, reqField_('department', true));
+      html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, reqField_('designation', true)), false, reqField_('designation', true));
+      html += fieldGroup('vertical_name', 'Vertical',
+        '<select class="form-select" id="vertical_name" name="vertical_name"' + (reqField_('vertical_name', true) ? ' required' : '') + '><option value="">Select vertical</option></select>',
+        false, reqField_('vertical_name', true));
+      html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>', false, reqField_('manager_employee_id', false));
+      html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, reqField_('joining_date', true)), false, reqField_('joining_date', true));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', types, emp.employment_type || 'PERMANENT', reqField_('employment_type', true)), false, reqField_('employment_type', true));
+      html += fieldGroup('location', 'Location', input('location', 'text', emp.location, reqField_('location', true)), false, reqField_('location', true));
       if (emp.can_view_payroll_ids || mode === 'create') {
-        html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>');
-        html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly));
-        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no));
-        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no));
-        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no));
-        html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
-        html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
-        html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
-        html += fieldGroup('bank_ifsc', 'IFSC', input('bank_ifsc', 'text', emp.bank_ifsc));
-        html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name));
+        html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>', false, reqField_('salary_structure_id', false));
+        html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly, reqField_('ctc_monthly', false)), false, reqField_('ctc_monthly', false));
+        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no, reqField_('uan_no', false)), false, reqField_('uan_no', false));
+        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no, reqField_('esi_no', false)), false, reqField_('esi_no', false));
+        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no, reqField_('pf_no', false)), false, reqField_('pf_no', false));
+        html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan, reqField_('pan', false)), false, reqField_('pan', false));
+        html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name, reqField_('bank_account_name', false)), false, reqField_('bank_account_name', false));
+        html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number, reqField_('bank_account_number', false)), false, reqField_('bank_account_number', false));
+        html += fieldGroup('bank_ifsc', 'IFSC', input('bank_ifsc', 'text', emp.bank_ifsc, reqField_('bank_ifsc', false)), false, reqField_('bank_ifsc', false));
+        html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name, reqField_('bank_name', false)), false, reqField_('bank_name', false));
       }
       if (mode === 'create' || (emp.view_mode === 'HR')) {
-        html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
+        html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true, reqField_('notes', false));
       }
       if (mode !== 'create' && emp.can_edit) {
         html += customFieldsBlockHtml_(emp, true);
@@ -523,8 +558,9 @@
         html += '<label class="checkbox-row"><input type="checkbox" id="create_user" checked> Create Google login</label>';
         html += '<p class="form-hint">New logins are always created as <strong>Employee</strong>. Only Admin or Owner can change HRMS role later on the employee profile.</p>';
         html += fieldGroup('google_login_email', 'Google login email',
-          input('google_login_email', 'email', emp.google_login_email) +
-          '<p class="form-hint">Required when login is enabled. Can match work email.</p>');
+          input('google_login_email', 'email', emp.google_login_email, reqField_('google_login_email', false)),
+          false, reqField_('google_login_email', false));
+        html += '<p class="form-hint">Required when login is enabled. Can match work email.</p>';
       }
       return html;
     }
@@ -654,6 +690,11 @@
       var createKey = 'employee-create';
       page.innerHTML = '<div class="page-header"><div class="page-header-text">' +
         '<h2 class="page-heading" aria-hidden="true">Add employee</h2>' +
+        '<p class="page-lede">Loading form…</p></div></div>';
+      loadMandatoryFieldMap_().then(function () {
+      if (!pageEl()) return;
+      page.innerHTML = '<div class="page-header"><div class="page-header-text">' +
+        '<h2 class="page-heading" aria-hidden="true">Add employee</h2>' +
         '<p class="page-lede">Enter the employee code (e.g. SAPL-0001). Payroll identifiers are optional.</p></div>' +
         '<div class="page-header-actions">' + (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') + '</div></div>' +
         '<div class="card">' +
@@ -724,6 +765,9 @@
             showFieldErrors(err.details);
             if (!feedback && showToast) showToast(err.message || 'Create failed', 'error');
           });
+      });
+      }).catch(function () {
+        if (showToast) showToast('Could not load mandatory field settings.', 'error');
       });
     }
 
@@ -892,12 +936,12 @@
       if (emp.can_edit || emp.can_edit_contact) {
         var html = '<div class="form-grid emp-form-grid">';
         if (emp.can_edit) {
-          html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, true));
-          html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, true));
-          html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name));
-          html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name));
-          html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth));
-          html += fieldGroup('gender', 'Gender', input('gender', 'text', emp.gender));
+          html += fieldGroup('first_name', 'First name', input('first_name', 'text', emp.first_name, reqField_('first_name', true)), false, reqField_('first_name', true));
+          html += fieldGroup('last_name', 'Last name', input('last_name', 'text', emp.last_name, reqField_('last_name', true)), false, reqField_('last_name', true));
+          html += fieldGroup('display_name', 'Display name', input('display_name', 'text', emp.display_name, reqField_('display_name', false)), false, reqField_('display_name', false));
+          html += fieldGroup('father_husband_name', 'Father / husband name', input('father_husband_name', 'text', emp.father_husband_name, reqField_('father_husband_name', false)), false, reqField_('father_husband_name', false));
+          html += fieldGroup('date_of_birth', 'Date of birth', input('date_of_birth', 'date', emp.date_of_birth, reqField_('date_of_birth', false)), false, reqField_('date_of_birth', false));
+          html += fieldGroup('gender', 'Gender', input('gender', 'text', emp.gender, reqField_('gender', false)), false, reqField_('gender', false));
         } else {
           html += '<div class="form-span-2">' + dl([
             ['First name', emp.first_name], ['Last name', emp.last_name],
@@ -906,8 +950,8 @@
           ]) + '</div>';
         }
         html += customFieldsBlockHtml_(emp, emp.can_edit);
-        html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone));
-        html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true);
+        html += fieldGroup('phone', 'Phone', input('phone', 'text', emp.phone, reqField_('phone', false)), false, reqField_('phone', false));
+        html += fieldGroup('address', 'Address', '<textarea class="form-input" id="address">' + escapeHtml(emp.address || '') + '</textarea>', true, reqField_('address', false));
         html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-personal">Save</button>';
         if (emp.updated_at) html += '<span class="hint">Last updated ' + escapeHtml(String(emp.updated_at)) + '</span>';
         html += '</div><div id="emp-save-personal-feedback" class="action-feedback hidden" role="status"></div>';
@@ -931,15 +975,17 @@
       }
       var html = '<div class="form-grid emp-form-grid">';
       html += fieldGroup('employee_id', 'Employee ID', '<input class="form-input mono" id="employee_id" value="' + escapeHtml(emp.employee_id) + '" disabled>');
-      html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, true));
-      html += fieldGroup('department', 'Department', input('department', 'text', emp.department, true));
-      html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, true));
-      html += fieldGroup('vertical_name', 'Vertical', '<select class="form-select" id="vertical_name" name="vertical_name" required><option value="">Select vertical</option></select>');
-      html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>');
-      html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, true));
-      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type, true));
-      html += fieldGroup('location', 'Location', input('location', 'text', emp.location, true));
-      html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true);
+      html += fieldGroup('work_email', 'Work email', input('work_email', 'email', emp.work_email, reqField_('work_email', true)), false, reqField_('work_email', true));
+      html += fieldGroup('department', 'Department', input('department', 'text', emp.department, reqField_('department', true)), false, reqField_('department', true));
+      html += fieldGroup('designation', 'Designation', input('designation', 'text', emp.designation, reqField_('designation', true)), false, reqField_('designation', true));
+      html += fieldGroup('vertical_name', 'Vertical',
+        '<select class="form-select" id="vertical_name" name="vertical_name"' + (reqField_('vertical_name', true) ? ' required' : '') + '><option value="">Select vertical</option></select>',
+        false, reqField_('vertical_name', true));
+      html += fieldGroup('manager_employee_id', 'Manager', '<select class="form-select" id="manager_employee_id"></select>', false, reqField_('manager_employee_id', false));
+      html += fieldGroup('joining_date', 'Joining date', input('joining_date', 'date', emp.joining_date, reqField_('joining_date', true)), false, reqField_('joining_date', true));
+      html += fieldGroup('employment_type', 'Employment type', select('employment_type', ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'], emp.employment_type, reqField_('employment_type', true)), false, reqField_('employment_type', true));
+      html += fieldGroup('location', 'Location', input('location', 'text', emp.location, reqField_('location', true)), false, reqField_('location', true));
+      html += fieldGroup('notes', 'Notes (HR only)', '<textarea class="form-input" id="notes">' + escapeHtml(emp.notes || '') + '</textarea>', true, reqField_('notes', false));
       html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-employment">Save</button></div>' +
         '<div id="emp-save-employment-feedback" class="action-feedback hidden" role="status"></div>';
       return html;
@@ -949,16 +995,16 @@
       var html = '';
       if (emp.can_edit) {
         html += '<div class="form-grid emp-form-grid">';
-        html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>');
-        html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly));
-        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no));
-        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no));
-        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no));
-        html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan));
-        html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name));
-        html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number));
-        html += fieldGroup('bank_ifsc', 'IFSC', input('bank_ifsc', 'text', emp.bank_ifsc));
-        html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name));
+        html += fieldGroup('salary_structure_id', 'Salary structure', '<select class="form-select" id="salary_structure_id" name="salary_structure_id"><option value="">None</option></select>', false, reqField_('salary_structure_id', false));
+        html += fieldGroup('ctc_monthly', 'Monthly CTC', input('ctc_monthly', 'number', emp.ctc_monthly, reqField_('ctc_monthly', false)), false, reqField_('ctc_monthly', false));
+        html += fieldGroup('uan_no', 'UAN no.', input('uan_no', 'text', emp.uan_no, reqField_('uan_no', false)), false, reqField_('uan_no', false));
+        html += fieldGroup('esi_no', 'ESI no.', input('esi_no', 'text', emp.esi_no, reqField_('esi_no', false)), false, reqField_('esi_no', false));
+        html += fieldGroup('pf_no', 'PF no.', input('pf_no', 'text', emp.pf_no, reqField_('pf_no', false)), false, reqField_('pf_no', false));
+        html += fieldGroup('pan', 'PAN', input('pan', 'text', emp.pan, reqField_('pan', false)), false, reqField_('pan', false));
+        html += fieldGroup('bank_account_name', 'Bank account name', input('bank_account_name', 'text', emp.bank_account_name, reqField_('bank_account_name', false)), false, reqField_('bank_account_name', false));
+        html += fieldGroup('bank_account_number', 'Bank account number', input('bank_account_number', 'text', emp.bank_account_number, reqField_('bank_account_number', false)), false, reqField_('bank_account_number', false));
+        html += fieldGroup('bank_ifsc', 'IFSC', input('bank_ifsc', 'text', emp.bank_ifsc, reqField_('bank_ifsc', false)), false, reqField_('bank_ifsc', false));
+        html += fieldGroup('bank_name', 'Bank name', input('bank_name', 'text', emp.bank_name, reqField_('bank_name', false)), false, reqField_('bank_name', false));
         html += '</div><div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-payroll">Save</button></div>' +
           '<div id="emp-save-payroll-feedback" class="action-feedback hidden" role="status"></div>';
         html += '<p class="hint">Salary structures (component percentages) are defined in Payroll → Salary structures. Percentages apply to the Monthly CTC above.</p>';
@@ -1255,6 +1301,13 @@
       if (!page) return;
       bulkState.uploadId = null;
       bulkState.preview = null;
+      page.innerHTML = '<div class="card">' + (App.sectionSkeleton ? App.sectionSkeleton({ lines: 3 }) : 'Loading…') + '</div>';
+      loadMandatoryFieldMap_().then(function () {
+      if (!pageEl()) return;
+      var reqCols = empViewCache.mandatoryBulkList || [
+        'employee_id', 'first_name', 'last_name', 'work_email', 'department', 'designation',
+        'vertical_name', 'location', 'employment_type', 'joining_date', 'create_login'
+      ];
       page.innerHTML =
         '<div class="page-header"><div class="page-header-text">' +
         '<h2 class="page-heading">Bulk upload employees</h2>' +
@@ -1263,10 +1316,7 @@
         (App.moduleRefreshControlsHtml ? App.moduleRefreshControlsHtml() : '') +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-back">Back to directory</button></div></div>' +
         '<div class="card">' +
-        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml([
-          'employee_id', 'first_name', 'last_name', 'work_email', 'department', 'designation',
-          'vertical_name', 'location', 'employment_type', 'joining_date', 'create_login'
-        ]) : '') +
+        (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(reqCols) : '') +
         '<p class="form-hint">When create_login is YES, google_login_email is also required.</p>' +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-template">New hire - Excel</button>' +
@@ -1350,6 +1400,7 @@
           if (setActionFeedback) setActionFeedback(feedback, msg, 'error');
           else showToast(msg, 'error');
         });
+      });
       });
     }
 

@@ -4,7 +4,7 @@
 
 /** Allowlisted module UI partials for lazy load (shell stays lean). */
 var HRMS_MODULE_UI_FILES_ = {
-  employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient'],
+  employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient', 'employee/EmployeeMandatoryFieldsClient'],
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
   payroll: ['payroll/PayrollClient', 'payroll/SalaryStructureClient', 'payroll/AttendanceClient', 'payroll/SalaryStatementClient', 'payroll/FormTClient'],
   ats: ['ats/AtsClient'],

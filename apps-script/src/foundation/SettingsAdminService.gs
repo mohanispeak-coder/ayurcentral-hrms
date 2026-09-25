@@ -34,7 +34,7 @@ var AdminSettingsService = (function () {
   var ROLE_MODULE_ITEMS_ = [
     { id: 'dashboard', label: 'Dashboard', navIds: ['dashboard'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
     { id: 'my_profile', label: 'My profile', navIds: ['my-profile'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
-    { id: 'employees', label: 'Employees', navIds: ['employees'], defaultRoles: ['HR', 'ADMIN'] },
+    { id: 'employees', label: 'Employees', navIds: ['employees', 'employee-mandatory-fields', 'employee-field-defs', 'employee-bulk-upload'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'my_team', label: 'My team', navIds: ['my-team'], defaultRoles: ['MANAGER'] },
     { id: 'leave_admin', label: 'Leave administration', navIds: ['leave-admin'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'leave_approvals', label: 'Leave approvals', navIds: ['leave-approvals'], defaultRoles: ['MANAGER', 'HR', 'ADMIN'] },

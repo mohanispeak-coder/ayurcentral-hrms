@@ -139,7 +139,8 @@ var SchemaService = (function () {
     ['app_mode', 'PRODUCTION', 'STRING', 'PRODUCTION or DEMO (admin only)', true],
     ['demo_emails', '', 'STRING', 'DEMO only: comma-separated Google emails', true],
     ['demo_default_role', 'ADMIN', 'STRING', 'DEMO only: default role for demo_emails', true],
-    ['demo_roles', '', 'STRING', 'DEMO only: email:ROLE overrides (comma-separated)', true]
+    ['demo_roles', '', 'STRING', 'DEMO only: email:ROLE overrides (comma-separated)', true],
+    ['employee_mandatory_fields_json', '', 'JSON', 'Employee field mandatory flags for create and bulk upload', false]
   ];
 
   function seedVerticals_(sheet) {

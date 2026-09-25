@@ -1,0 +1,113 @@
+<style>
+.emf-page .settings-matrix-table { width: 100%; }
+.emf-page .emf-group-title { margin: 16px 0 8px; font-size: 0.95rem; }
+.emf-page .emf-group-title:first-child { margin-top: 0; }
+</style>
+<script>
+(function () {
+  'use strict';
+
+  var initialized_ = false;
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      if (run() || ++tries > 200) clearInterval(timer);
+    }, 25);
+  }
+
+  whenAppReady(function initMandatoryFieldsUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
+
+    function esc_(v) {
+      return escapeHtml(v == null ? '' : String(v));
+    }
+
+    function pageEl_() {
+      var p = document.getElementById('page-content');
+      if (p) p.classList.remove('hidden');
+      return p;
+    }
+
+    function render_(params) {
+      var page = pageEl_();
+      if (!page) return;
+      page.innerHTML =
+        '<div class="emf-page"><div class="page-header"><h2>Set up employee mandatory fields</h2>' +
+        '<p class="page-lede">Choose which fields are required when HR adds employees (single form or bulk upload). ' +
+        'Required fields show a red asterisk on the form and a * on bulk template headers.</p></div>' +
+        '<div id="emf-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
+      load_();
+    }
+
+    function paint_(data) {
+      var mount = document.getElementById('emf-mount');
+      if (!mount) return;
+      var groups = data.groups || [];
+      var html = '<div class="card"><p class="hint">Employee code always stays mandatory. Changes apply to new creates and bulk imports after you save.</p>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Field</th><th>Mandatory</th></tr></thead><tbody>';
+      groups.forEach(function (g) {
+        html += '<tr><td colspan="2" class="emf-group-title"><strong>' + esc_(g.name) + '</strong></td></tr>';
+        (g.fields || []).forEach(function (f) {
+          var locked = !!f.locked;
+          html += '<tr><td>' + esc_(f.label) + (f.bulk && !f.form ? ' <span class="hint">(bulk)</span>' : '') + '</td>' +
+            '<td><label class="form-check">' +
+            '<input type="checkbox" data-emf-id="' + esc_(f.id) + '"' +
+            (f.mandatory ? ' checked' : '') + (locked ? ' disabled' : '') + '> Mandatory</label></td></tr>';
+        });
+      });
+      html += '</tbody></table></div>' +
+        '<div class="form-actions" style="margin-top:16px">' +
+        '<button type="button" class="btn btn-primary" id="emf-save">Save</button></div>' +
+        '<div id="emf-feedback" class="action-feedback hidden"></div></div>';
+      mount.innerHTML = html;
+      document.getElementById('emf-save').addEventListener('click', save_);
+    }
+
+    function collect_() {
+      var fields = [];
+      document.querySelectorAll('[data-emf-id]').forEach(function (el) {
+        fields.push({ id: el.getAttribute('data-emf-id'), mandatory: el.checked });
+      });
+      return { fields: fields };
+    }
+
+    function save_() {
+      var btn = document.getElementById('emf-save');
+      callServer('apiSaveEmployeeMandatoryFields', collect_(), { button: btn, loadingText: 'Saving…' })
+        .then(function () {
+          if (App.invalidateModuleViewCache) {
+            App.invalidateModuleViewCache(['employee-create', 'employee-bulk-upload', 'employees', 'employee-mandatory-fields']);
+          }
+          showToast('Mandatory field rules saved.', 'success');
+          load_();
+        })
+        .catch(function (err) {
+          showToast((err && err.message) || 'Save failed', 'error');
+        });
+    }
+
+    function load_() {
+      callServer('apiGetEmployeeMandatoryFields').then(paint_).catch(function (err) {
+        var m = document.getElementById('emf-mount');
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load.') + '</div>';
+      });
+    }
+
+    App.registerRoute('employee-mandatory-fields', { title: 'Mandatory fields', render: render_ });
+  });
+})();
+</script>

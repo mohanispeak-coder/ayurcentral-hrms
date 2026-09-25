@@ -462,29 +462,28 @@ var EmployeeService = (function () {
     }
     var first = trim_(payload.first_name);
     var last = trim_(payload.last_name);
-    if (!first) errors.first_name = 'First name is required.';
-    else if (first.length > NAME_MAX_) errors.first_name = 'First name must be 80 characters or fewer.';
-    if (!last) errors.last_name = 'Last name is required.';
-    else if (last.length > NAME_MAX_) errors.last_name = 'Last name must be 80 characters or fewer.';
+    if (first && first.length > NAME_MAX_) errors.first_name = 'First name must be 80 characters or fewer.';
+    if (last && last.length > NAME_MAX_) errors.last_name = 'Last name must be 80 characters or fewer.';
+
+    if (typeof EmployeeMandatoryFieldService !== 'undefined' && EmployeeMandatoryFieldService.applyMandatoryValidation) {
+      EmployeeMandatoryFieldService.applyMandatoryValidation(payload, errors, {
+        isCreate: !!isCreate,
+        isBulk: false,
+        createUser: !!payload.create_user
+      });
+    }
 
     var email = normalizeEmail_(payload.work_email);
-    if (!email) errors.work_email = 'Work email is required.';
-    else if (!isValidEmail_(email)) errors.work_email = 'Enter a valid work email.';
+    if (email && !isValidEmail_(email)) errors.work_email = 'Enter a valid work email.';
 
-    if (!trim_(payload.department)) errors.department = 'Department is required.';
-    if (!trim_(payload.designation)) errors.designation = 'Designation is required.';
     var verticalName = normalizeVerticalName_(payload.vertical_name);
     if (!verticalName && !isCreate && employeeIdForSelfCheck) {
       verticalName = normalizeVerticalName_(String(employeeIdForSelfCheck).split('-')[0]);
     }
     var allowedVerticals = EmployeeRepository.listVerticals();
-    if (!verticalName) errors.vertical_name = 'Vertical is required.';
-    else if (allowedVerticals.indexOf(verticalName) < 0) errors.vertical_name = 'Select a valid vertical.';
-    if (!trim_(payload.joining_date)) errors.joining_date = 'Joining date is required.';
+    if (verticalName && allowedVerticals.indexOf(verticalName) < 0) errors.vertical_name = 'Select a valid vertical.';
     var empType = trim_(payload.employment_type).toUpperCase();
-    if (!empType) errors.employment_type = 'Employment type is required.';
-    else if (EMPLOYMENT_TYPES_.indexOf(empType) < 0) errors.employment_type = 'Invalid employment type.';
-    if (!trim_(payload.location)) errors.location = 'Location is required.';
+    if (empType && EMPLOYMENT_TYPES_.indexOf(empType) < 0) errors.employment_type = 'Invalid employment type.';
 
     var managerId = trim_(payload.manager_employee_id);
     if (managerId && employeeIdForSelfCheck && managerId === employeeIdForSelfCheck) {
@@ -500,8 +499,14 @@ var EmployeeService = (function () {
 
     var bankNo = trim_(payload.bank_account_number);
     var ifsc = trim_(payload.bank_ifsc);
-    if (bankNo && !ifsc) errors.bank_ifsc = 'IFSC is required when a bank account number is provided.';
-    if (ifsc && !bankNo) errors.bank_account_number = 'Bank account number is required when IFSC is provided.';
+    var mandatoryIfsc = typeof EmployeeMandatoryFieldService !== 'undefined' &&
+      EmployeeMandatoryFieldService.isMandatory('bank_ifsc');
+    var mandatoryBankNo = typeof EmployeeMandatoryFieldService !== 'undefined' &&
+      EmployeeMandatoryFieldService.isMandatory('bank_account_number');
+    if (!mandatoryIfsc && !mandatoryBankNo) {
+      if (bankNo && !ifsc) errors.bank_ifsc = 'IFSC is required when a bank account number is provided.';
+      if (ifsc && !bankNo) errors.bank_account_number = 'Bank account number is required when IFSC is provided.';
+    }
 
     var pan = trim_(payload.pan);
     if (pan && !panLooksValid_(pan)) {
