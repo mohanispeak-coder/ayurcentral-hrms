@@ -2,12 +2,36 @@
 .emf-page .settings-matrix-table { width: 100%; }
 .emf-page .emf-group-title { margin: 16px 0 8px; font-size: 0.95rem; }
 .emf-page .emf-group-title:first-child { margin-top: 0; }
+.emf-page .emf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-top: 16px;
+}
+.emf-page .emf-saving-overlay {
+  position: relative;
+}
+.emf-page .emf-saving-overlay.is-busy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  animation: hrms-emf-fade-in 0.25s ease-out;
+}
+@keyframes hrms-emf-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 </style>
 <script>
 (function () {
   'use strict';
 
   var initialized_ = false;
+  var RELOAD_DELAY_MS_ = 650;
 
   function whenAppReady(fn) {
     function run() {
@@ -30,6 +54,9 @@
     var callServer = App.callServer;
     var escapeHtml = App.escapeHtml;
     var showToast = App.showToast;
+    var navigate = App.navigate;
+    var setActionFeedback = App.setActionFeedback;
+    var clearActionFeedback = App.clearActionFeedback;
 
     function esc_(v) {
       return escapeHtml(v == null ? '' : String(v));
@@ -41,22 +68,36 @@
       return p;
     }
 
+    function flashHtml_() {
+      if (!App.consumeFlash || !App.flashBannerHtml) return '';
+      var flash = App.consumeFlash('employee-mandatory-fields');
+      return flash ? App.flashBannerHtml(flash) : '';
+    }
+
     function render_(params) {
       var page = pageEl_();
       if (!page) return;
       page.innerHTML =
-        '<div class="emf-page"><div class="page-header"><h2>Set up employee mandatory fields</h2>' +
+        '<div class="emf-page"><div class="page-header"><h2>Employee mandatory fields</h2>' +
         '<p class="page-lede">Choose which fields are required when HR adds employees (single form or bulk upload). ' +
         'Required fields show a red asterisk on the form and a * on bulk template headers.</p></div>' +
+        flashHtml_() +
         '<div id="emf-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
       load_();
+    }
+
+    function setMatrixBusy_(busy) {
+      var card = document.querySelector('.emf-page .emf-matrix-card');
+      if (!card) return;
+      if (busy) card.classList.add('is-busy');
+      else card.classList.remove('is-busy');
     }
 
     function paint_(data) {
       var mount = document.getElementById('emf-mount');
       if (!mount) return;
       var groups = data.groups || [];
-      var html = '<div class="card"><p class="hint">Employee code always stays mandatory. Changes apply to new creates and bulk imports after you save.</p>' +
+      var html = '<div class="card emf-matrix-card emf-saving-overlay"><p class="hint">Employee code always stays mandatory. Changes apply to new creates and bulk imports after you save.</p>' +
         '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
         '<table class="data-table settings-matrix-table"><thead><tr><th>Field</th><th>Mandatory</th></tr></thead><tbody>';
       groups.forEach(function (g) {
@@ -70,11 +111,17 @@
         });
       });
       html += '</tbody></table></div>' +
-        '<div class="form-actions" style="margin-top:16px">' +
-        '<button type="button" class="btn btn-primary" id="emf-save">Save</button></div>' +
-        '<div id="emf-feedback" class="action-feedback hidden"></div></div>';
+        '<div class="emf-actions">' +
+        '<button type="button" class="btn btn-secondary" id="emf-back">Back to employees</button>' +
+        '<button type="button" class="btn btn-primary" id="emf-save">Save</button>' +
+        '</div>' +
+        '<div id="emf-feedback" class="action-feedback hidden" role="status"></div></div>';
       mount.innerHTML = html;
+      document.getElementById('emf-back').addEventListener('click', function () {
+        navigate('employees');
+      });
       document.getElementById('emf-save').addEventListener('click', save_);
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('employee-mandatory-fields');
     }
 
     function collect_() {
@@ -85,22 +132,55 @@
       return { fields: fields };
     }
 
+    function refreshAppAfterSave_() {
+      if (App.clearUserSessionViewState) {
+        App.clearUserSessionViewState();
+      } else if (App.invalidateModuleViewCache) {
+        App.invalidateModuleViewCache([
+          'employee-create', 'employee-bulk-upload', 'employees',
+          'employee-mandatory-fields', 'employee-field-defs'
+        ]);
+      }
+      if (App.setFlash) {
+        App.setFlash('Mandatory field rules saved.', 'success', 'employee-mandatory-fields');
+      }
+      var hash = '#/employee-mandatory-fields';
+      try {
+        window.location.replace(window.location.pathname + window.location.search + hash);
+      } catch (ignore) {}
+      window.location.reload();
+    }
+
     function save_() {
       var btn = document.getElementById('emf-save');
-      callServer('apiSaveEmployeeMandatoryFields', collect_(), { button: btn, loadingText: 'Saving…' })
-        .then(function () {
-          if (App.invalidateModuleViewCache) {
-            App.invalidateModuleViewCache(['employee-create', 'employee-bulk-upload', 'employees', 'employee-mandatory-fields']);
-          }
-          showToast('Mandatory field rules saved.', 'success');
-          load_();
+      var feedback = document.getElementById('emf-feedback');
+      setMatrixBusy_(true);
+      callServer('apiSaveEmployeeMandatoryFields', collect_(), {
+        button: btn,
+        loadingText: 'Saving…',
+        feedback: feedback,
+        successMessage: 'Saved successfully. Updating…'
+      })
+        .then(function (cfg) {
+          if (cfg && cfg.groups) paint_(cfg);
+          setTimeout(function () {
+            setMatrixBusy_(false);
+            if (showToast) showToast('Mandatory field rules saved.', 'success');
+            refreshAppAfterSave_();
+          }, RELOAD_DELAY_MS_);
         })
         .catch(function (err) {
-          showToast((err && err.message) || 'Save failed', 'error');
+          setMatrixBusy_(false);
+          if (setActionFeedback && feedback) {
+            setActionFeedback(feedback, (err && err.message) || 'Save failed', 'error');
+          } else if (showToast) {
+            showToast((err && err.message) || 'Save failed', 'error');
+          }
         });
     }
 
     function load_() {
+      if (clearActionFeedback) clearActionFeedback('emf-feedback');
       callServer('apiGetEmployeeMandatoryFields').then(paint_).catch(function (err) {
         var m = document.getElementById('emf-mount');
         if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load.') + '</div>';

@@ -49,7 +49,7 @@ var PermissionService = (function () {
     { id: 'dashboard', label: 'Dashboard', route: 'dashboard', icon: 'dashboard', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'my-profile', label: 'My Profile', route: 'my-profile', icon: 'person', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'employees', label: 'Employees', route: 'employees', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR'] },
-    { id: 'employee-mandatory-fields', label: 'Set up employee mandatory fields', route: 'employee-mandatory-fields', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR'] },
+    { id: 'employee-mandatory-fields', label: 'Mandatory fields', route: 'employee-mandatory-fields', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'my-team', label: 'My Team', route: 'my-team', icon: 'group', roles: ['MANAGER'] },
     { id: 'leave-admin', label: 'Leave', route: 'leave-admin', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'leave-approvals', label: 'Leave Approvals', route: 'leave-approvals', icon: 'approval', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
