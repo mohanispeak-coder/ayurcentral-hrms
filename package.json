@@ -12,7 +12,8 @@
     "test:e2e:auth": "node tests/browser/run-codegen.js",
     "test:e2e:auth:save": "node tests/browser/save-auth-manual.js",
     "test:e2e:check-storage": "node tests/browser/check-storage.js",
-    "docs:user-manual-pdf": "node scripts/generate-user-manual-pdf.js"
+    "docs:user-manual-pdf": "node scripts/generate-user-manual-pdf.js",
+    "docs:user-manual-from-export": "python3 scripts/build-user-manual-from-export.py"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0"
