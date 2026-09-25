@@ -11,11 +11,11 @@ from pathlib import Path
 
 CSS = """
 @page { size: A4; margin: 16mm 14mm 18mm 14mm; }
-body { font-family: "Segoe UI", system-ui, sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1a1a1a; }
-h1 { font-size: 20pt; color: #0d47a1; margin: 0 0 8px; page-break-after: avoid; }
-h2 { font-size: 13.5pt; color: #1565c0; margin: 20px 0 8px; border-bottom: 2px solid #e3f2fd; padding-bottom: 3px; page-break-after: avoid; }
-h3 { font-size: 11.5pt; color: #333; margin: 14px 0 6px; page-break-after: avoid; }
-h4 { font-size: 10.5pt; margin: 10px 0 4px; page-break-after: avoid; }
+body { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 11pt; line-height: 1.55; color: #1a1a1a; }
+h1 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 18pt; color: #0d47a1; margin: 0 0 10px; page-break-after: avoid; }
+h2 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 14pt; color: #1565c0; margin: 22px 0 10px; border-bottom: 1px solid #b0c4de; padding-bottom: 4px; page-break-after: avoid; }
+h3 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 12pt; color: #222; margin: 16px 0 8px; page-break-after: avoid; }
+h4 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 11pt; font-weight: bold; color: #333; margin: 12px 0 6px; page-break-after: avoid; }
 p { margin: 0 0 8px; }
 ul, ol { margin: 0 0 10px; padding-left: 20px; }
 li { margin-bottom: 4px; }
@@ -25,7 +25,7 @@ li { margin-bottom: 4px; }
 .cover .meta { margin-top: 40px; font-size: 9.5pt; color: #666; }
 .toc { page-break-after: always; }
 .toc ol { line-height: 1.65; }
-table.data { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 8px 0 14px; }
+table.data { width: 100%; border-collapse: collapse; font-size: 11pt; margin: 8px 0 14px; }
 table.data th, table.data td { border: 1px solid #bbb; padding: 5px 7px; vertical-align: top; }
 table.data th { background: #e3f2fd; font-weight: 600; }
 .tip { background: #f5f9ff; border-left: 4px solid #1976d2; padding: 8px 10px; margin: 10px 0; font-size: 10pt; }
@@ -42,11 +42,35 @@ def esc(s: str) -> str:
     return html.escape(s or "", quote=True)
 
 
+def roles_plain(roles: list[str]) -> str:
+    labels = []
+    for r in roles:
+        r = r.upper()
+        if r == "EMPLOYEE":
+            labels.append("All staff")
+        elif r == "MANAGER":
+            labels.append("Managers")
+        elif r == "HR":
+            labels.append("HR team")
+        elif r == "ADMIN":
+            labels.append("Admin")
+        elif r == "OWNER":
+            labels.append("Owner")
+        else:
+            labels.append(r)
+    return ", ".join(labels)
+
+
 def load_files(export_path: Path) -> dict[str, str]:
     return {f["name"]: f.get("source", "") for f in json.loads(export_path.read_text(encoding="utf-8"))["files"]}
 
 
-def find_source(files: dict[str, str], needle: str) -> str:
+def find_source(files: dict[str, str], needle: str, prefer: list[str] | None = None) -> str:
+    prefer = prefer or []
+    for p in prefer:
+        for name, src in files.items():
+            if name == p or name.endswith("/" + p) or name.endswith(p):
+                return src
     for name, src in files.items():
         if needle in name:
             return src
@@ -54,7 +78,9 @@ def find_source(files: dict[str, str], needle: str) -> str:
 
 
 def parse_nav_items(perm_src: str) -> list[dict]:
-    m = re.search(r"var NAV_ITEMS_ = \[([\s\S]*?)\];", perm_src)
+    m = re.search(r"var NAV_ITEMS_ = \[([\s\S]*?)\n  \];", perm_src)
+    if not m:
+        m = re.search(r"var NAV_ITEMS_ = \[([\s\S]*?)\];", perm_src)
     if not m:
         return []
     items = []
@@ -154,8 +180,8 @@ def extract_employment_types(emp_svc: str) -> list[str]:
 def build_html(export_path: Path) -> str:
     files = load_files(export_path)
     export_name = export_path.name
-    perm = find_source(files, "PermissionService")
-    scripts = find_source(files, "ui/Scripts")
+    perm = find_source(files, "PermissionService", prefer=["foundation/PermissionService"])
+    scripts = find_source(files, "Scripts", prefer=["ui/Scripts"])
     index_html = find_source(files, "ui/Index")
     settings = find_source(files, "SettingsClient")
     emf_svc = find_source(files, "EmployeeMandatoryFieldService")
@@ -273,19 +299,35 @@ def build_html(export_path: Path) -> str:
 
     # 4 Menu
     parts.append("<h2>4. Menu and screens</h2>")
+    parts.append(
+        "<p>The left menu is split into sections. Open a section to see pages inside it. "
+        "The table below lists each page, who normally uses it, and what it is for.</p>"
+    )
     for g in groups:
-        parts.append(f"<h3>{esc(g['label'])}</h3><table class='data'><tr><th>Screen</th><th>Who</th><th>Purpose</th></tr>")
+        parts.append(f"<h3>{esc(g['label'])}</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr>")
+        rows = 0
         for route in g["routes"]:
             item = nav_by_route.get(route)
             if not item:
+                title = titles.get(route, route.replace("-", " ").title())
+                lede = ledes.get(route, "Open from another screen in this section.")
+                parts.append(
+                    f"<tr><td>{esc(title)}</td><td>See HR or Admin</td><td>{esc(lede)}</td></tr>"
+                )
+                rows += 1
                 continue
             lede = ledes.get(route, titles.get(route, ""))
+            if not lede:
+                lede = "Use this page for " + item["label"].lower() + " tasks."
             ph = " (coming soon)" if item.get("placeholder") else ""
             parts.append(
                 f"<tr><td>{esc(item['label'])}{ph}</td>"
-                f"<td>{esc(', '.join(item['roles']))}</td>"
+                f"<td>{esc(roles_plain(item['roles']))}</td>"
                 f"<td>{esc(lede)}</td></tr>"
             )
+            rows += 1
+        if rows == 0:
+            parts.append("<tr><td colspan='3'>No pages listed for this section in your app export.</td></tr>")
         parts.append("</table>")
 
     # 5 Admin Settings
