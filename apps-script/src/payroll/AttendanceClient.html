@@ -93,6 +93,8 @@
           bulkState_.vertical = viewCache_.bulkState.vertical || bulkState_.vertical;
           bulkState_.fileMeta = viewCache_.bulkState.fileMeta || null;
           bulkState_.fileName = viewCache_.bulkState.fileName || '';
+          bulkState_.uploadId = viewCache_.bulkState.uploadId || null;
+          bulkState_.preview = viewCache_.bulkState.preview || null;
         }
         page.innerHTML =
           '<div class="att-page"><div class="page-header"><h2>Register</h2></div><div id="att-mount"></div></div>';
@@ -238,11 +240,15 @@
         '<div class="form-group"><label class="form-label" for="att-vertical">Vertical</label>' +
         '<select class="form-select" id="att-vertical" ' + (canEdit ? '' : 'disabled') + '>' + verticalOptionsHtml_(defaultVertical) + '</select></div>' +
         '</div>' +
+        (canEdit ? '<ol class="bulk-steps"><li>Select vertical and download register template</li>' +
+          '<li>Fill day columns on the Attendance sheet (from row 3)</li>' +
+          '<li>Choose Excel file, <strong>Validate upload</strong>, then confirm import</li></ol>' : '') +
         '<div class="att-list-head bulk-action-bar">' +
         (canEdit ? '<button type="button" class="btn btn-secondary" id="att-dl-template">Download register template</button>' +
           '<button type="button" class="btn btn-secondary" id="att-choose-file">Choose Excel file</button>' +
           '<input type="file" id="att-file" class="hidden-file" tabindex="-1" aria-hidden="true" accept=".xlsx,.xls">' +
-          '<button type="button" class="btn btn-primary" id="att-validate" disabled>Upload attendance</button>' : '') +
+          '<button type="button" class="btn btn-primary" id="att-validate-upload" disabled>Validate upload</button>' +
+          '<button type="button" class="btn btn-secondary" id="att-commit" disabled>Upload attendance</button>' : '') +
         '<button type="button" class="btn btn-secondary" id="att-goto-payroll">Continue to Payroll</button>' +
         '<button type="button" class="btn btn-secondary" id="att-goto-formt">Form T</button></div>' +
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
@@ -263,8 +269,10 @@
       if (canEdit) bindBulk_(run.payroll_run_id);
 
       if (canEdit) {
-        var validateBtn = document.getElementById('att-validate');
-        if (validateBtn) validateBtn.disabled = !(bulkState_.fileMeta && selectedVertical_());
+        syncBulkActionButtons_();
+        if (bulkState_.preview) {
+          paintPreview_(bulkState_.preview, run.payroll_run_id, false);
+        }
       }
 
       syncBulkViewCache_(run, list);
@@ -285,9 +293,28 @@
         bulkState: {
           vertical: bulkState_.vertical || selectedVertical_(),
           fileMeta: bulkState_.fileMeta,
-          fileName: bulkState_.fileName || ''
+          fileName: bulkState_.fileName || '',
+          uploadId: bulkState_.uploadId,
+          preview: bulkState_.preview
         }
       };
+    }
+
+    function clearStagedUpload_() {
+      bulkState_.uploadId = null;
+      bulkState_.preview = null;
+      var prev = document.getElementById('att-preview');
+      if (prev) prev.innerHTML = '';
+      syncBulkActionButtons_();
+    }
+
+    function syncBulkActionButtons_() {
+      var validateBtn = document.getElementById('att-validate-upload');
+      var commitBtn = document.getElementById('att-commit');
+      var hasFile = !!(bulkState_.fileMeta && selectedVertical_());
+      var ready = bulkState_.preview && Number(bulkState_.preview.readyCount) > 0 && bulkState_.uploadId;
+      if (validateBtn) validateBtn.disabled = !hasFile;
+      if (commitBtn) commitBtn.disabled = !ready;
     }
 
     function downloadBlob_(file) {
@@ -306,15 +333,17 @@
 
     function bindBulk_(runId) {
       var fileInput = document.getElementById('att-file');
-      var validateBtn = document.getElementById('att-validate');
+      var validateBtn = document.getElementById('att-validate-upload');
+      var commitBtn = document.getElementById('att-commit');
       var nameEl = document.getElementById('att-file-name');
       var verticalSel = document.getElementById('att-vertical');
       if (verticalSel) {
         verticalSel.addEventListener('change', function () {
           bulkState_.vertical = verticalSel.value;
+          clearStagedUpload_();
           if (viewCache_ && viewCache_.list) refreshVerticalSections_(viewCache_.list);
           if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
-          if (validateBtn) validateBtn.disabled = !(bulkState_.fileMeta && verticalSel.value);
+          syncBulkActionButtons_();
         });
         if (!bulkState_.vertical) bulkState_.vertical = verticalSel.value;
       }
@@ -357,10 +386,11 @@
         var f = fileInput.files && fileInput.files[0];
         bulkState_.fileMeta = null;
         bulkState_.fileName = '';
+        clearStagedUpload_();
         if (!f) {
-          if (validateBtn) validateBtn.disabled = true;
           if (nameEl) nameEl.textContent = 'No file selected.';
           if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+          syncBulkActionButtons_();
           return;
         }
         if (nameEl) nameEl.textContent = f.name;
@@ -371,50 +401,73 @@
           var binary = '';
           for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
           bulkState_.fileMeta = { fileName: f.name, mimeType: f.type, base64: btoa(binary) };
-          if (validateBtn) validateBtn.disabled = !selectedVertical_();
           if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+          syncBulkActionButtons_();
         };
         reader.readAsArrayBuffer(f);
       });
 
-      validateBtn.addEventListener('click', function () {
-        var vertical = selectedVertical_();
-        if (!vertical || !bulkState_.fileMeta) return;
-        callServer('apiValidateAttendanceRegisterUpload', runId, vertical, bulkState_.fileMeta,
-          { button: validateBtn, loadingText: 'Uploading…' })
-          .then(function (preview) {
-            bulkState_.uploadId = preview.uploadId;
-            bulkState_.preview = preview;
-            bulkState_.vertical = vertical;
-            if (preview.errorCount > 0 && preview.readyCount > 0) {
-              paintPreview_(preview, runId, true);
-            }
-            if (!preview.readyCount) {
-              paintPreview_(preview, runId, true);
-              showToast(preview.errorCount ? 'No valid rows to import. See errors below.' : 'Nothing to import.', 'error');
-              return;
-            }
-            return callServer('apiCommitAttendanceRegisterUpload', runId, preview.uploadId,
-              { button: validateBtn, loadingText: 'Importing…' })
-              .then(function () {
-                bulkState_.uploadId = null;
-                bulkState_.fileMeta = null;
-                bulkState_.fileName = '';
-                if (fileInput) fileInput.value = '';
-                if (nameEl) nameEl.textContent = 'No file selected.';
-                if (validateBtn) validateBtn.disabled = true;
-                if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
-                var prev = document.getElementById('att-preview');
-                if (prev) prev.innerHTML = '';
-                showToast('Attendance imported (' + preview.readyCount + '). Re-upload overwrites existing days.', 'success');
-                if (preview.errorCount > 0) {
-                  showToast(preview.errorCount + ' row(s) skipped - fix the file and upload again.', 'warning');
-                }
-                loadContext_();
-              });
-          })
-          .catch(function (err) { showToast(err.message || 'Upload failed', 'error'); });
-      });
+      if (validateBtn) {
+        validateBtn.addEventListener('click', function () {
+          var vertical = selectedVertical_();
+          if (!vertical || !bulkState_.fileMeta) return;
+          callServer('apiValidateAttendanceRegisterUpload', runId, vertical, bulkState_.fileMeta,
+            { button: validateBtn, loadingText: 'Validating…' })
+            .then(function (preview) {
+              bulkState_.uploadId = preview.uploadId;
+              bulkState_.preview = preview;
+              bulkState_.vertical = vertical;
+              paintPreview_(preview, runId, false);
+              syncBulkActionButtons_();
+              if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+              if (preview.readyCount > 0) {
+                showToast(preview.readyCount + ' employee(s) ready to import' +
+                  (preview.errorCount > 0 ? (' · ' + preview.errorCount + ' need attention') : '') + '.', 'success');
+              } else {
+                showToast(preview.errorCount ? 'No valid rows to import. See details below.' : 'Nothing to import.', 'error');
+              }
+            })
+            .catch(function (err) { showToast(err.message || 'Validation failed', 'error'); });
+        });
+      }
+
+      if (commitBtn) {
+        commitBtn.addEventListener('click', function () {
+          if (!bulkState_.preview || !bulkState_.uploadId || !bulkState_.preview.readyCount) return;
+          var preview = bulkState_.preview;
+          callServer('apiCommitAttendanceRegisterUpload', runId, bulkState_.uploadId,
+            { button: commitBtn, loadingText: 'Importing…' })
+            .then(function () {
+              bulkState_.uploadId = null;
+              bulkState_.preview = null;
+              bulkState_.fileMeta = null;
+              bulkState_.fileName = '';
+              if (fileInput) fileInput.value = '';
+              if (nameEl) nameEl.textContent = 'No file selected.';
+              if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+              clearStagedUpload_();
+              showToast('Attendance imported (' + preview.readyCount + '). Re-upload overwrites existing days.', 'success');
+              if (preview.errorCount > 0) {
+                showToast(preview.errorCount + ' row(s) skipped - fix the file and validate again.', 'warning');
+              }
+              loadContext_();
+            })
+            .catch(function (err) { showToast(err.message || 'Import failed', 'error'); });
+        });
+      }
+
+      bindPreviewActions_(runId, fileInput, nameEl);
+    }
+
+    function bindPreviewActions_(runId, fileInput, nameEl) {
+      var cancelBtn = document.getElementById('att-cancel-staged');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+          clearStagedUpload_();
+          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+          showToast('Validation cleared. Choose a file and validate again.', 'info');
+        });
+      }
     }
 
     function paintPreviewGrid_(validRows, dim) {
@@ -446,25 +499,38 @@
 
     function paintPreview_(preview, runId, errorsOnly) {
       var el = document.getElementById('att-preview');
-      if (!el) return;
-      if (!errorsOnly && !preview.errorCount) {
-        el.innerHTML = '';
-        return;
+      if (!el || !preview) return;
+      var ready = Number(preview.readyCount || preview.validCount || 0);
+      var errN = Number(preview.errorCount || 0);
+      var total = Number(preview.totalRows || preview.employeesFound || 0);
+      var html = '<div class="card upload-preview"><h3>Validation result</h3>' +
+        '<p><strong>' + esc_(total) + '</strong> row(s) in file · ' +
+        '<strong>' + esc_(ready) + '</strong> ready to import · ' +
+        '<strong>' + esc_(errN) + '</strong> need attention</p>';
+      if (ready > 0 && !errorsOnly) {
+        html += '<p class="hint">Click <strong>Upload attendance</strong> to import validated rows. Re-import overwrites daily codes for those employees.</p>';
       }
-      var html = '<div class="card upload-preview"><h3>Rows needing attention</h3><p><strong>' +
-        preview.errorCount + '</strong> could not be imported.</p>';
       if (preview.errors && preview.errors.length) {
-        html += '<ul class="hint">';
+        html += '<div class="' + (errN ? 'alert alert-warning' : '') + '" style="margin-top:12px">' +
+          '<strong>Rows needing attention</strong><ul class="hint" style="margin:8px 0 0">';
         preview.errors.slice(0, 20).forEach(function (err) {
           var msgs = (err.messages || []).map(function (m) { return m.message || m; }).join('; ');
           html += '<li>Row ' + esc_(err.rowNumber) + (err.employee_id ? ' · ' + esc_(err.employee_id) : '') +
             (msgs ? ': ' + esc_(msgs) : '') + '</li>';
         });
         if (preview.errors.length > 20) html += '<li>…and ' + (preview.errors.length - 20) + ' more</li>';
-        html += '</ul>';
+        html += '</ul></div>';
+      }
+      if (ready > 0) {
+        html += '<div class="primary-next" style="margin-top:12px">' +
+          '<button type="button" class="btn btn-secondary" id="att-cancel-staged">Clear validation</button></div>';
+      } else if (errN) {
+        html += '<div class="primary-next" style="margin-top:12px">' +
+          '<button type="button" class="btn btn-secondary" id="att-cancel-staged">Dismiss</button></div>';
       }
       html += '</div>';
       el.innerHTML = html;
+      bindPreviewActions_(runId);
     }
 
     function daysInMonth_(y, m) {
