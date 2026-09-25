@@ -226,8 +226,7 @@ def build_html(export_path: Path) -> str:
     parts.append("<div class='cover'><div class='brand'>AyurCentral HRMS</div>")
     parts.append("<div class='sub'>Detailed User Manual</div>")
     parts.append("<p style='margin-top:28px;font-size:15pt;font-weight:600'>For Admin, HR, Manager, and Employee</p>")
-    parts.append(f"<div class='meta'>Source: Apps Script export file<br/><strong>{esc(export_name)}</strong><br/>")
-    parts.append(f"{len(files)} project files · {len(nav_items)} menu items<br/>Simple English</div></div>")
+    parts.append("</div>")
 
     # TOC
     parts.append("<div class='toc'><h2>Table of contents</h2><ol>")
@@ -591,7 +590,7 @@ def build_html(export_path: Path) -> str:
         )
     parts.append("</table>")
 
-    parts.append(f"<footer>Detailed manual generated from {esc(export_name)}. AyurCentral HRMS - internal use.</footer></body></html>")
+    parts.append("<footer>AyurCentral HRMS - internal use.</footer></body></html>")
     return "".join(parts)
 
 
