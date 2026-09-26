@@ -382,6 +382,17 @@ var PayslipService = (function () {
 
   function htmlToPdfBlob_(html, fileName) {
     fileName = fileName || 'payslip.pdf';
+    try {
+      var htmlPdf = HtmlService.createHtmlOutput(html)
+        .setWidth(820)
+        .setHeight(1160)
+        .getAs('application/pdf');
+      if (htmlPdf && htmlPdf.getBytes && isPdfBytes_(htmlPdf.getBytes())) {
+        return htmlPdf.setName(fileName);
+      }
+    } catch (htmlPdfErr) {
+      Logger.log('HtmlService PDF export: ' + (htmlPdfErr.message || htmlPdfErr));
+    }
     if (typeof Drive === 'undefined' || !Drive.Files) {
       throw new Error('Google Drive API is required for PDF payslips.' + driveApiHint_());
     }
@@ -597,6 +608,10 @@ var PayslipService = (function () {
         break;
       }
     }
+    var payslipAddrMap = (typeof HRMS !== 'undefined' && HRMS.PAYSLIP_ADDRESS_BY_VERTICAL) || {};
+    if (vertical && payslipAddrMap[vertical]) {
+      addr = String(payslipAddrMap[vertical]);
+    }
     var logoSrc = '';
     var logoClass = 'logo';
     if (typeof PayslipLogoService !== 'undefined' && PayslipLogoService.dataUriForEmployee) {
@@ -610,13 +625,17 @@ var PayslipService = (function () {
     if (vertical && vertical !== 'OTHERS') {
       brandTitle = vertical;
     }
+    var logoW = vertical === 'SAPL' ? 132 : 168;
+    var logoH = vertical === 'SAPL' ? 44 : 50;
     return {
       name: name,
       brandTitle: brandTitle,
       address: addr,
       vertical: vertical,
       logoSrc: logoSrc,
-      logoClass: logoClass
+      logoClass: logoClass,
+      logoW: logoW,
+      logoH: logoH
     };
   }
 
@@ -722,23 +741,29 @@ var PayslipService = (function () {
     var effectiveDays = workingDays != null && workingDays !== '' ? workingDays : paidDays;
 
     var earnRows = '';
-    EARNING_ROWS_.forEach(function (row) {
-      var rate = sumFromLines_(lines, row.codes, 'contractual');
+    EARNING_ROWS_.forEach(function (row, idx) {
       var actual = sumFromLines_(lines, row.codes, 'amount');
       if (row.label === 'Other Allowance') {
         actual = round2_(actual + (Number(rec.bonus) || 0) + (Number(rec.incentive) || 0) +
           (Number(rec.other_earnings) || 0));
       }
-      earnRows += '<tr><td>' + esc_(row.label) + '</td><td class="num">' + moneyRatePayslip_(rate) +
-        '</td><td class="num">' + moneyPayslip_(actual) + '</td></tr>';
+      var stripe = idx % 2 === 1 ? ' class="stripe"' : '';
+      earnRows += '<tr' + stripe + '><td>' + esc_(row.label) + '</td><td class="num">-</td><td class="num">' +
+        moneyPayslip_(actual) + '</td></tr>';
     });
 
     var dedRows = '';
-    DEDUCTION_ROWS_.forEach(function (row) {
+    DEDUCTION_ROWS_.forEach(function (row, idx) {
       var actual = sumFromLines_(lines, row.codes, 'amount');
       if (row.label === 'TDS' && !actual) actual = Number(rec.tds_amount) || 0;
       if (row.label === 'Advance') actual = round2_(actual + (Number(rec.other_deductions) || 0));
-      dedRows += '<tr><td>' + esc_(row.label) + '</td><td class="num">' + moneyPayslip_(actual) + '</td></tr>';
+      var stripe = idx % 2 === 1 ? ' class="stripe"' : '';
+      var lbl = row.label;
+      if (lbl.indexOf('LCD') >= 0) {
+        lbl = 'Loan / Cash Deduction&nbsp;(LCD)';
+      }
+      dedRows += '<tr' + stripe + '><td class="ded-lbl">' + lbl + '</td><td class="num">' +
+        moneyPayslip_(actual) + '</td></tr>';
     });
 
     var grossA = Number(rec.gross_earnings) || 0;
@@ -746,8 +771,9 @@ var PayslipService = (function () {
     var netPay = Number(rec.net_pay) || 0;
     var generated = formatGeneratedDatePayslip_();
     var logoHtml = employer.logoSrc
-      ? '<img class="' + esc_(employer.logoClass || 'logo') + '" src="' + esc_(employer.logoSrc) + '" alt="Company logo"/>'
-      : '<div class="logo-placeholder"></div>';
+      ? '<img class="' + esc_(employer.logoClass || 'logo') + '" src="' + esc_(employer.logoSrc) + '" alt="Logo"' +
+        ' width="' + Number(employer.logoW || 140) + '" height="' + Number(employer.logoH || 44) + '"/>'
+      : '';
 
     var infoTable =
       '<table class="info-table" cellspacing="0" cellpadding="0"><tbody>' +
@@ -761,58 +787,59 @@ var PayslipService = (function () {
 
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PAY SLIP - ' + esc_(periodUpper) +
       '</title><style>' +
-      '@page{size:A4;margin:10mm}' +
-      'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:14px;background:#fff;font-size:11px}' +
-      '.sheet{max-width:800px;margin:0 auto;border:1px solid #c5ccd3;padding:14px 16px;page-break-inside:avoid}' +
+      '@page{size:A4;margin:8mm}' +
+      'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:12px;background:#fff;font-size:11px}' +
+      '.sheet{max-width:780px;margin:0 auto;border:1px solid #b8c0c8;padding:12px 14px 14px;page-break-inside:avoid}' +
       'table{border-collapse:collapse}' +
-      '.hdr{width:100%;margin-bottom:10px}' +
+      '.hdr{width:100%;border-bottom:1px solid #c5ccd3;padding-bottom:10px;margin-bottom:0}' +
       '.hdr td{vertical-align:top;border:none;padding:0}' +
-      '.hdr-brand{width:72%}' +
-      '.hdr-title{width:28%;text-align:right}' +
+      '.hdr-brand{width:70%}' +
+      '.hdr-title{width:30%;text-align:center}' +
       '.brand-inner{width:100%}' +
-      '.brand-inner td{vertical-align:top;border:none;padding:0}' +
-      '.logo-cell{width:1%;padding-right:10px!important}' +
-      '.logo{height:44px;width:auto;max-width:160px;object-fit:contain;display:block}' +
-      '.logo-sapl{height:42px;max-width:150px}' +
-      '.logo-ayurvedaone{height:50px;max-width:200px}' +
-      '.logo-placeholder{width:44px;height:44px}' +
-      '.company-name{font-size:16px;font-weight:700;color:#1b4332;margin:0 0 3px;line-height:1.2}' +
-      '.company-addr{font-size:10px;color:#4a5568;line-height:1.4;max-width:400px}' +
-      '.pay-slip-badge{display:inline-block;background:#1b4332;color:#fff;font-weight:700;font-size:13px;padding:9px 20px;letter-spacing:.08em;border-radius:4px}' +
-      '.period-label{margin-top:6px;font-size:12px;font-weight:700;color:#1b4332;text-align:center}' +
-      '.info-table{width:100%;border:1px solid #d5dbe1;margin:0}' +
-      '.info-table td{border:1px solid #d5dbe1;padding:5px 8px;font-size:10px;vertical-align:middle}' +
-      '.info-table .lbl{width:14%;background:#f2f4f5;color:#374151;font-weight:600}' +
-      '.info-table .val{width:36%;background:#fff;color:#111}' +
-      '.attn{background:#eceff2;border:1px solid #d5dbe1;border-top:none;padding:7px 10px;font-size:10px;font-weight:600;color:#222;text-align:center}' +
-      '.split{width:100%;border:1px solid #d5dbe1;border-top:none;page-break-inside:avoid}' +
-      '.split>tbody>tr>td{vertical-align:top;padding:0;border-right:1px solid #d5dbe1}' +
+      '.brand-inner td{vertical-align:middle;border:none;padding:0}' +
+      '.logo-cell{width:1%;padding-right:8px!important;vertical-align:middle}' +
+      '.logo{display:block;object-fit:contain}' +
+      '.logo-sapl{max-height:44px}' +
+      '.logo-ayurvedaone{max-height:50px}' +
+      '.company-name{font-size:17px;font-weight:700;color:#0d4a38;margin:0 0 4px;line-height:1.15}' +
+      '.company-addr{font-size:10px;color:#3d4a56;line-height:1.45;max-width:420px}' +
+      '.pay-slip-badge{display:inline-block;background:#0d4a38;color:#fff;font-weight:700;font-size:13px;padding:10px 22px;letter-spacing:.1em;border-radius:3px}' +
+      '.period-label{margin-top:7px;font-size:12px;font-weight:700;color:#0d4a38}' +
+      '.info-table{width:100%;border:1px solid #c5ccd3;margin:0}' +
+      '.info-table td{border:1px solid #c5ccd3;padding:5px 8px;font-size:10px;vertical-align:middle}' +
+      '.info-table .lbl{width:15%;background:#f3f4f6;color:#2d3748;font-weight:700}' +
+      '.info-table .val{width:35%;background:#fff;color:#111}' +
+      '.attn{background:#eceff2;border:1px solid #c5ccd3;border-top:none;padding:7px 8px;font-size:10px;font-weight:700;color:#1f2937;text-align:center}' +
+      '.split{width:100%;border:1px solid #c5ccd3;border-top:none;page-break-inside:avoid}' +
+      '.split>tbody>tr>td{vertical-align:top;padding:0;border-right:1px solid #c5ccd3}' +
       '.split>tbody>tr>td:last-child{border-right:none}' +
       '.data-table{width:100%}' +
-      '.data-table th{background:#1b4332;color:#fff;font-size:9px;font-weight:700;padding:6px 7px;text-align:left}' +
+      '.data-table th{background:#0d4a38;color:#fff;font-size:9px;font-weight:700;padding:7px 6px;text-align:left}' +
       '.data-table th.num{text-align:right}' +
-      '.data-table td{padding:5px 7px;border-bottom:1px solid #e8ecef;font-size:10px;background:#fff}' +
+      '.data-table td{padding:5px 6px;border-bottom:1px solid #dde3e8;font-size:10px;background:#fff}' +
+      '.data-table tr.stripe td{background:#f8faf9}' +
       '.data-table td.num{text-align:right;font-variant-numeric:tabular-nums}' +
-      '.data-table tr.total td{font-weight:700;color:#1b4332;background:#f2f4f5;border-top:1px solid #1b4332;border-bottom:none}' +
-      '.net-wrap{width:100%;margin-top:12px;border:1px solid #b7dfc9;background:#f4faf6;page-break-inside:avoid}' +
-      '.net-wrap td{border:none;padding:12px 14px;vertical-align:middle}' +
-      '.net-left{width:55%}' +
-      '.net-inner{width:100%}' +
+      '.data-table td.ded-lbl{font-size:9px;white-space:nowrap}' +
+      '.data-table tr.total td{font-weight:700;color:#0d4a38;background:#d4e5d8;border-top:1px solid #0d4a38;border-bottom:none}' +
+      '.net-wrap{width:100%;margin-top:10px;border:1px solid #a8d4b8;background:#e8f5ec;page-break-inside:avoid}' +
+      '.net-wrap td{vertical-align:middle;padding:12px 14px}' +
+      '.net-left{width:52%;border:none}' +
+      '.net-mid{width:48%;border-left:1px solid #a8d4b8}' +
       '.net-inner td{border:none;padding:0;vertical-align:middle}' +
-      '.coins-icon{width:40px;height:40px;display:block}' +
-      '.net-amt-label{font-size:10px;font-weight:700;color:#1b4332}' +
-      '.net-amt{font-size:24px;font-weight:700;color:#1b4332;margin-top:2px;line-height:1.1}' +
-      '.net-right{width:45%;border-left:1px solid #b7dfc9!important}' +
-      '.words-label{font-size:9px;color:#5c6670;font-weight:700;letter-spacing:.04em}' +
-      '.words-val{margin-top:5px;font-size:13px;font-weight:700;color:#1b4332;line-height:1.35}' +
-      '.foot{width:100%;margin-top:12px}' +
-      '.foot td{border:none;padding:0;vertical-align:top;font-size:9px;color:#5c6670;line-height:1.45}' +
-      '.gen-date{text-align:right;white-space:nowrap}' +
-      '@media print{body{padding:0}.sheet{border:1px solid #c5ccd3}.net-wrap,.data-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+      '.coins-icon{width:44px;height:44px;display:block}' +
+      '.net-amt-label{font-size:10px;font-weight:700;color:#0d4a38;letter-spacing:.02em}' +
+      '.net-amt{font-size:26px;font-weight:700;color:#0d4a38;margin-top:3px;line-height:1.05}' +
+      '.words-label{font-size:9px;color:#4b5563;font-weight:700;letter-spacing:.06em}' +
+      '.words-val{margin-top:6px;font-size:14px;font-weight:700;color:#0d4a38;line-height:1.35}' +
+      '.foot{width:100%;margin-top:12px;border-top:1px solid #d5dbe1;padding-top:10px}' +
+      '.foot td{border:none;padding:0;vertical-align:top;font-size:9px;color:#4b5563;line-height:1.5}' +
+      '.foot-notes{width:62%}' +
+      '.foot-gen{width:38%;border-left:1px solid #c5ccd3;padding-left:12px!important;text-align:right}' +
+      '@media print{body{padding:0}.sheet{border:1px solid #b8c0c8}.net-wrap,.data-table th,.data-table tr.total td{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
       '</style></head><body><div class="sheet">' +
       '<table class="hdr" cellspacing="0" cellpadding="0"><tr>' +
       '<td class="hdr-brand"><table class="brand-inner" cellspacing="0" cellpadding="0"><tr>' +
-      '<td class="logo-cell">' + logoHtml + '</td>' +
+      (logoHtml ? '<td class="logo-cell">' + logoHtml + '</td>' : '') +
       '<td><div class="company-name">' + esc_(employer.brandTitle || employer.name) + '</div>' +
       (employer.address ? '<div class="company-addr">' + esc_(employer.address) + '</div>' : '') +
       '</td></tr></table></td>' +
@@ -823,35 +850,35 @@ var PayslipService = (function () {
       esc_(dim) + ' &nbsp;|&nbsp; LOP Days : ' + esc_(lopDays) + ' &nbsp;|&nbsp; Paid Days : ' + esc_(paidDays) +
       '</div>' +
       '<table class="split" cellspacing="0" cellpadding="0"><tr>' +
-      '<td width="58%"><table class="data-table earn-table" cellspacing="0" cellpadding="0"><thead><tr>' +
+      '<td width="57%"><table class="data-table earn-table" cellspacing="0" cellpadding="0"><thead><tr>' +
       '<th>EARNINGS</th><th class="num">RATE (Rs.)</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
       earnRows +
       '<tr class="total"><td>TOTAL EARNINGS (A)</td><td class="num">-</td><td class="num">' + moneyPayslip_(grossA) +
       '</td></tr></tbody></table></td>' +
-      '<td width="42%"><table class="data-table ded-table" cellspacing="0" cellpadding="0"><thead><tr>' +
+      '<td width="43%"><table class="data-table ded-table" cellspacing="0" cellpadding="0"><thead><tr>' +
       '<th>DEDUCTIONS</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
       dedRows +
       '<tr class="total"><td>TOTAL DEDUCTIONS (B)</td><td class="num">' + moneyPayslip_(grossB) + '</td></tr>' +
       '</tbody></table></td></tr></table>' +
       '<table class="net-wrap" cellspacing="0" cellpadding="0"><tr>' +
       '<td class="net-left"><table class="net-inner" cellspacing="0" cellpadding="0"><tr>' +
-      '<td style="width:48px;padding-right:10px">' + COINS_ICON_SVG_ + '</td>' +
+      '<td style="width:50px;padding-right:12px">' + COINS_ICON_SVG_ + '</td>' +
       '<td><div class="net-amt-label">NET PAY (A - B)</div><div class="net-amt">Rs. ' + moneyPayslip_(netPay) + '</div></td>' +
       '</tr></table></td>' +
-      '<td class="net-right"><div class="words-label">IN WORDS</div><div class="words-val">' +
+      '<td class="net-mid"><div class="words-label">IN WORDS</div><div class="words-val">' +
       esc_(amountInWordsPayslip_(netPay)) + '</div></td></tr></table>' +
       '<table class="foot" cellspacing="0" cellpadding="0"><tr>' +
-      '<td><strong>Note:</strong><br>' +
+      '<td class="foot-notes"><strong>Note:</strong><br>' +
       '1. This is a system-generated payslip and does not require a signature.<br>' +
       '2. All payments are subject to statutory deductions and company policies.<br>' +
       '3. For any queries, please contact the HR Department.</td>' +
-      '<td class="gen-date">Generated on : ' + esc_(generated) + '</td></tr></table>' +
+      '<td class="foot-gen">Generated on : ' + esc_(generated) + '</td></tr></table>' +
       '</div></body></html>';
   }
 
   function infoTableRow_(labelL, valueL, labelR, valueR) {
-    return '<tr><td class="lbl">' + esc_(labelL) + '</td><td class="val">' + esc_(dashOr_(valueL)) +
-      '</td><td class="lbl">' + esc_(labelR) + '</td><td class="val">' + esc_(dashOr_(valueR)) + '</td></tr>';
+    return '<tr><td class="lbl">' + esc_(labelL) + ' :</td><td class="val">' + esc_(dashOr_(valueL)) +
+      '</td><td class="lbl">' + esc_(labelR) + ' :</td><td class="val">' + esc_(dashOr_(valueR)) + '</td></tr>';
   }
 
   function field_(label, value) {

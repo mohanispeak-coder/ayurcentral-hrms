@@ -85,6 +85,13 @@ HRMS.VERTICAL_FORM_T_ADDRESS_DEFAULT = {
   }
 };
 
+/** Payslip header address (single line) when vertical catalog lines are empty. */
+HRMS.PAYSLIP_ADDRESS_BY_VERTICAL = {
+  SAPL: 'Plot No 93/23, 2nd Floor, Industrial Suburb, Yeshwanthpura, Bangalore - 560022',
+  AOPL: 'Plot No 93/23, 2nd Floor, Industrial Suburb, Yeshwanthpura, Bangalore - 560022',
+  AOMS: 'Plot No 93/23, 2nd Floor, Industrial Suburb, Yeshwanthpura, Bangalore - 560022'
+};
+
 HRMS.DOCUMENT_CATEGORY = {
   EMPLOYEE_FILE: 'EMPLOYEE_FILE',
   PAYSLIP: 'PAYSLIP'
