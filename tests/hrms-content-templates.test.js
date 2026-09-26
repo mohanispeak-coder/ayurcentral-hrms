@@ -44,7 +44,9 @@ check('coerce-balance-default', /requires_balance === '' \|\| row\.requires_bala
 check('coerce-active-default', /is_active === '' \|\| row\.is_active == null/.test(leave));
 
 var ats = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ats', 'AtsService.gs'), 'utf8');
-check('offer-hook', /AtsOfferLetterService\.maybeSendOnStage/.test(ats));
+check('offer-manual-hire', /sendOfferLetterForHire/.test(ats) && /sendHireOfferLetter/.test(ats));
+check('pdf-layout-catalog', /PDF_LAYOUT_DEFINITIONS_/.test(fs.readFileSync(path.join(src, 'HrmsContentTemplateService.gs'), 'utf8')));
+check('save-templates-editable-only', /DEFINITIONS_\.forEach/.test(fs.readFileSync(path.join(src, 'HrmsContentTemplateService.gs'), 'utf8')));
 
 var empClient = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'employee', 'EmployeeClient.html'), 'utf8');
 check('legacy-template-ui', /apiDownloadBulkLegacyEmployeeTemplate/.test(empClient));

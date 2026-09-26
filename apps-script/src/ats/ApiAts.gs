@@ -158,6 +158,12 @@ function apiAtsSendHireOfferLetter(applicationId, sessionToken) {
 }
 
 function apiAtsSendHireAppointmentLetter(applicationId, joiningDate, sessionToken) {
+  // Back-compat: older web clients called (applicationId, sessionToken) before joining date param existed.
+  var jd = joiningDate == null ? '' : String(joiningDate).trim();
+  if (jd && !/^\d{4}-\d{2}-\d{2}$/.test(jd) && jd.length > 24) {
+    sessionToken = joiningDate;
+    joiningDate = '';
+  }
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return AtsService.sendHireAppointmentLetter(session, applicationId, joiningDate);

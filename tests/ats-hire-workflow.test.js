@@ -32,6 +32,7 @@ check('hire-appointment-joining', /hire_joining_date/.test(hire) && /joiningDate
 check('hire-service', /saveHireCompensation_/.test(hire) && /createEmployeeFromHire_/.test(hire));
 check('hire-schema-ensure', /ensureHireApplicationColumns_/.test(hire) && /assertHireCompensationReady_/.test(hire));
 check('hire-apis', /apiAtsSendHireOfferLetter/.test(read('ApiAts.gs')) && /apiAtsCreateEmployeeFromHire/.test(read('ApiAts.gs')));
+check('hire-appt-api-backcompat', /Back-compat/.test(read('ApiAts.gs')));
 check('hire-ui', /buildHireWorkflowCardHtml_/.test(client) && /apiAtsListHireSalaryStructures/.test(client));
 check('hire-letter-branding', /resolveLetterBranding_/.test(read('AtsLetterPdfService.gs')) &&
   /PayslipLogoService\.dataUriForVertical/.test(read('AtsLetterPdfService.gs')));
