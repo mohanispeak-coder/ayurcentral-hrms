@@ -27,6 +27,8 @@ check('correction-by-vertical', /nextCorrectionIdFromSource_/.test(payroll) && /
 check('eligible-filter-vertical', /employeeVertical_/.test(payroll) && /verticalFilter/.test(payroll));
 check('api-all-verticals', /apiCreatePayrollRunsAllVerticals/.test(api));
 check('ui-vertical-select', /id="pr-vertical"/.test(client) && /btn-create-all-verticals/.test(client));
+check('ui-legacy-vertical', /LEGACY_VERTICAL_/.test(client) && /resolveTargetRunForPeriod_/.test(client));
+check('ui-all-runs-list', /paintPreviousPayrolls_/.test(client) && /data-run-id/.test(client));
 check('att-run-vertical-match', /assertRunVerticalMatches_/.test(att));
 
 if (failures.length) {

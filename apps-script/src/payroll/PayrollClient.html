@@ -106,6 +106,7 @@
       dirty: false,
       inputDraft: {}
     };
+    var LEGACY_VERTICAL_ = '__LEGACY__';
     var homeState = { runs: [], year: 0, month: 0, vertical: '', overview: null, salaryStructureOpen: false, prevPayrollsOpen: false };
     var compState = { employeeId: '', bundle: null, employees: [], _loaded: false, _editorLoadedFor: '' };
     var bulkState = { preview: null, selectedFile: null };
@@ -194,11 +195,13 @@
             homeState.month = Number(targetRun.period_month);
           }
         }
-        if (params.vertical) homeState.vertical = String(params.vertical || '').trim().toUpperCase();
-        if (!targetRun) targetRun = latestRunForPeriod(runs, homeState.year, homeState.month, homeState.vertical);
-        if (targetRun && targetRun.vertical_name) {
-          homeState.vertical = String(targetRun.vertical_name || '').trim().toUpperCase();
+        if (params.vertical) {
+          homeState.vertical = String(params.vertical || '').trim().toUpperCase();
         }
+        if (!targetRun) {
+          targetRun = resolveTargetRunForPeriod_(runs, homeState.year, homeState.month, homeState.vertical, null);
+        }
+        syncVerticalFromRun_(targetRun);
         if (!targetRun) {
           payrollState.detail = null;
           callback(null, null);
@@ -213,9 +216,24 @@
       });
     }
 
+    function paintPeriodRunPicker_(runs, year, month, currentRunId) {
+      var list = runsForPeriod(runs, year, month);
+      if (list.length <= 1) return '';
+      var opts = list.map(function (r) {
+        var vert = r.vertical_name ? String(r.vertical_name) : 'Combined';
+        var label = r.payroll_run_id + ' · ' + vert + ' · ' + statusKey(r.status);
+        return '<option value="' + escapeHtml(r.payroll_run_id) + '"' +
+          (r.payroll_run_id === currentRunId ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      }).join('');
+      return '<div class="card" style="margin-top:12px"><h2>Runs this month</h2>' +
+        '<p class="hint">Older combined payrolls and per-vertical runs appear here. Pick the run you want to view or correct.</p>' +
+        '<label class="form-label" for="pr-run-picker">Payroll run</label>' +
+        '<select class="form-select" id="pr-run-picker" style="max-width:420px">' + opts + '</select></div>';
+    }
+
     function paintPayrollPeriodCard_(year, month) {
       return '<div class="card payroll-period-card"><h2>Payroll period</h2>' +
-        '<p class="page-lede">Choose month and vertical. Each vertical has its own payroll run, attendance, and correction cycle.</p>' +
+        '<p class="page-lede">Choose month and vertical. Use <strong>Combined (legacy)</strong> for older single-run payrolls, or SAPL / AOPL / AOMS for new runs.</p>' +
         '<div class="period-selects">' +
         '<label class="form-label" style="margin:0">Month <select class="form-select" id="pr-month" style="max-width:180px">' + monthOptions(month) + '</select></label>' +
         '<label class="form-label" style="margin:0">Year <input class="form-input narrow" id="pr-year" type="number" min="2000" max="2100" value="' + escapeHtml(year) + '"></label>' +
@@ -229,10 +247,12 @@
       selected = String(selected || homeState.vertical || '').trim().toUpperCase();
       return callServer('apiGetVerticalCatalog').then(function (cat) {
         var rows = cat || [];
+        var legacyOpt = '<option value="' + LEGACY_VERTICAL_ + '">Combined (legacy payroll)</option>';
         if (!rows.length) {
-          sel.innerHTML = '<option value="SAPL">SAPL</option><option value="AOPL">AOPL</option><option value="AOMS">AOMS</option>';
+          sel.innerHTML = legacyOpt +
+            '<option value="SAPL">SAPL</option><option value="AOPL">AOPL</option><option value="AOMS">AOMS</option>';
         } else {
-          sel.innerHTML = rows.map(function (v) {
+          sel.innerHTML = legacyOpt + rows.map(function (v) {
             var code = String(v.vertical_name || '').trim().toUpperCase();
             return '<option value="' + escapeHtml(code) + '">' + escapeHtml(code) +
               (v.legal_name ? (' - ' + escapeHtml(v.legal_name)) : '') + '</option>';
@@ -421,6 +441,7 @@
         year: opts.year != null ? opts.year : homeState.year,
         month: opts.month != null ? opts.month : homeState.month,
         runId: opts.runId,
+        vertical: opts.vertical != null ? opts.vertical : homeState.vertical
       });
     }
 
@@ -763,15 +784,20 @@
       });
     }
 
-    function latestRunForPeriod(runs, year, month, vertical) {
+    function runsForPeriodVertical_(runs, year, month, vertical) {
       var list = runsForPeriod(runs, year, month);
       vertical = String(vertical || '').trim().toUpperCase();
-      if (vertical) {
-        list = list.filter(function (r) {
-          return String(r.vertical_name || '').trim().toUpperCase() === vertical;
-        });
+      if (!vertical) return list;
+      if (vertical === LEGACY_VERTICAL_) {
+        return list.filter(function (r) { return !String(r.vertical_name || '').trim(); });
       }
-      if (!list.length) return null;
+      return list.filter(function (r) {
+        return String(r.vertical_name || '').trim().toUpperCase() === vertical;
+      });
+    }
+
+    function pickLatestFromRunList_(list) {
+      if (!list || !list.length) return null;
       var open = null;
       var locked = null;
       list.forEach(function (r) {
@@ -779,6 +805,35 @@
         else if (!locked) locked = r;
       });
       return open || locked;
+    }
+
+    function resolveTargetRunForPeriod_(runs, year, month, vertical, runId) {
+      runs = runs || [];
+      if (runId) {
+        var byId = runs.filter(function (r) { return r.payroll_run_id === runId; })[0];
+        if (byId) return byId;
+      }
+      var byVertical = pickLatestFromRunList_(runsForPeriodVertical_(runs, year, month, vertical));
+      if (byVertical) return byVertical;
+      var legacy = pickLatestFromRunList_(runsForPeriodVertical_(runs, year, month, LEGACY_VERTICAL_));
+      if (legacy) return legacy;
+      return pickLatestFromRunList_(runsForPeriod(runs, year, month));
+    }
+
+    function syncVerticalFromRun_(run) {
+      if (!run) return;
+      var v = String(run.vertical_name || '').trim().toUpperCase();
+      homeState.vertical = v || LEGACY_VERTICAL_;
+    }
+
+    function verticalLabel_(code) {
+      code = String(code || '').trim().toUpperCase();
+      if (!code || code === LEGACY_VERTICAL_) return 'Combined (legacy)';
+      return code;
+    }
+
+    function latestRunForPeriod(runs, year, month, vertical) {
+      return resolveTargetRunForPeriod_(runs, year, month, vertical, null);
     }
 
     function startPayrollForPeriod_(p, vertical, btn, feedbackEl, onDone) {
@@ -830,7 +885,8 @@
       if (App.consumeModuleViewRestore && App.consumeModuleViewRestore('payroll') &&
           cachedDetail && cachedDetail.run &&
           Number(cachedDetail.run.period_year) === year &&
-          Number(cachedDetail.run.period_month) === month) {
+          Number(cachedDetail.run.period_month) === month &&
+          (!params.runId || cachedDetail.run.payroll_run_id === params.runId)) {
         paintUnifiedPayroll_(page, seq, cachedDetail);
         return;
       }
@@ -997,10 +1053,10 @@
       var year = homeState.year;
       var month = homeState.month;
       var runs = homeState.runs || [];
-      var periodRuns = runsForPeriod(runs, year, month).filter(function (r) {
-        if (!homeState.vertical) return true;
-        return String(r.vertical_name || '').trim().toUpperCase() === homeState.vertical;
-      });
+      var periodRuns = runsForPeriodVertical_(runs, year, month, homeState.vertical);
+      if (!periodRuns.length) {
+        periodRuns = runsForPeriod(runs, year, month);
+      }
       var openRun = periodRuns.filter(function (r) { return statusKey(r.status) !== 'LOCKED'; })[0];
       var lockedRun = periodRuns.filter(function (r) { return statusKey(r.status) === 'LOCKED'; })[0];
       var currentRun = detail && detail.run ? detail.run : (openRun || lockedRun || null);
@@ -1012,8 +1068,9 @@
       var html = '<div class="payroll-page">';
       var homeFlash = consumeFlash ? (consumeFlash('payroll') || consumeFlash('payroll-run')) : null;
       if (flashBannerHtml && homeFlash) html += flashBannerHtml(homeFlash);
-      var vertLabel = (currentRun && currentRun.vertical_name) ? String(currentRun.vertical_name) :
-        (homeState.vertical || '');
+      var vertLabel = currentRun
+        ? (currentRun.vertical_name ? String(currentRun.vertical_name) : 'Combined')
+        : verticalLabel_(homeState.vertical);
       html += '<div class="page-header"><h2>Payroll - ' + escapeHtml(fmtPeriod(year, month)) +
         (vertLabel ? ' <span class="phase-chip">' + escapeHtml(vertLabel) + '</span>' : '') +
         (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
@@ -1021,6 +1078,9 @@
 
       html += paintPayrollPipelineNav_('payroll', detail, year, month);
       html += paintPayrollPeriodCard_(year, month);
+      if (currentRun && runsForPeriod(runs, year, month).length > 1) {
+        html += paintPeriodRunPicker_(runs, year, month, currentRun.payroll_run_id);
+      }
 
       if (detail) html += hrPhaseStepper(detail);
 
@@ -1364,20 +1424,36 @@
 
     function paintPreviousPayrolls_(runs, currentYear, currentMonth) {
       var others = (runs || []).filter(function (r) {
-        return statusKey(r.status) === 'LOCKED' &&
-          (Number(r.period_year) !== Number(currentYear) || Number(r.period_month) !== Number(currentMonth));
+        var st = statusKey(r.status);
+        var sameMonth = Number(r.period_year) === Number(currentYear) &&
+          Number(r.period_month) === Number(currentMonth);
+        if (sameMonth) return false;
+        return st === 'LOCKED' || st === 'DRAFT' || st === 'CALCULATED' || st === 'UNDER_REVIEW' || st === 'APPROVED';
+      });
+      others.sort(function (a, b) {
+        var ya = Number(b.period_year) - Number(a.period_year);
+        if (ya !== 0) return ya;
+        var ma = Number(b.period_month) - Number(a.period_month);
+        if (ma !== 0) return ma;
+        return String(b.payroll_run_id).localeCompare(String(a.payroll_run_id));
       });
       var openAttr = homeState.prevPayrollsOpen ? ' open' : '';
-      var html = '<details class="card section-details collapsible-section" id="prev-payrolls"' + openAttr + '><summary>Previous payrolls</summary>';
+      var html = '<details class="card section-details collapsible-section" id="prev-payrolls"' + openAttr +
+        '><summary>All payroll runs</summary>';
       if (!others.length) {
-        html += '<div class="empty-state"><p>No other finalized payrolls yet.</p></div>';
+        html += '<div class="empty-state"><p>No other payroll runs yet.</p></div>';
       } else {
-        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Month</th><th>Status</th><th></th></tr></thead><tbody>';
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Run</th><th>Vertical</th><th>Status</th><th></th></tr></thead><tbody>';
         others.forEach(function (r) {
+          var vert = r.vertical_name ? String(r.vertical_name) : 'Combined';
+          var vKey = r.vertical_name ? String(r.vertical_name).toUpperCase() : LEGACY_VERTICAL_;
           html += '<tr><td>' + escapeHtml(fmtPeriod(r.period_year, r.period_month)) + '</td>' +
-            '<td><span class="phase-chip">Finalized</span></td>' +
+            '<td class="mono">' + escapeHtml(r.payroll_run_id) + '</td>' +
+            '<td>' + escapeHtml(vert) + '</td>' +
+            '<td><span class="phase-chip">' + escapeHtml(statusKey(r.status)) + '</span></td>' +
             '<td><button type="button" class="btn btn-secondary btn-sm js-view-period" data-year="' + r.period_year +
-            '" data-month="' + r.period_month + '">View</button></td></tr>';
+            '" data-month="' + r.period_month + '" data-run-id="' + escapeHtml(r.payroll_run_id) +
+            '" data-vertical="' + escapeHtml(vKey) + '">Open</button></td></tr>';
         });
         html += '</tbody></table></div>';
       }
@@ -1553,9 +1629,18 @@
         viewers[vi].addEventListener('click', function () {
           var y = Number(this.getAttribute('data-year'));
           var m = Number(this.getAttribute('data-month'));
-          refreshPayrollPage_({ year: y, month: m });
+          refreshPayrollPage_({
+            year: y,
+            month: m,
+            runId: this.getAttribute('data-run-id') || '',
+            vertical: this.getAttribute('data-vertical') || ''
+          });
         });
       }
+      var runPicker = $('pr-run-picker');
+      if (runPicker) runPicker.addEventListener('change', function () {
+        refreshPayrollPage_({ runId: runPicker.value });
+      });
 
       if (detail && currentRun) {
         var editable = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
