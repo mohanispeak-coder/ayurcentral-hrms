@@ -30,6 +30,8 @@ check('hire-service', /saveHireCompensation_/.test(hire) && /createEmployeeFromH
 check('hire-schema-ensure', /ensureHireApplicationColumns_/.test(hire) && /assertHireCompensationReady_/.test(hire));
 check('hire-apis', /apiAtsSendHireOfferLetter/.test(read('ApiAts.gs')) && /apiAtsCreateEmployeeFromHire/.test(read('ApiAts.gs')));
 check('hire-ui', /buildHireWorkflowCardHtml_/.test(client) && /apiAtsListHireSalaryStructures/.test(client));
+check('hire-letter-branding', /resolveLetterBranding_/.test(read('AtsLetterPdfService.gs')) &&
+  /PayslipLogoService\.dataUriForVertical/.test(read('AtsLetterPdfService.gs')));
 check('appointment-template', /ats_appointment/.test(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'HrmsContentTemplateService.gs'), 'utf8')));
 
 if (failures.length) {

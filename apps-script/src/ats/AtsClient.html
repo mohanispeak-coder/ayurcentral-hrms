@@ -479,6 +479,16 @@
       return '<div class="card" id="ats-hire-workflow"><h2>Hired – compensation &amp; onboarding</h2>' + blocks + '</div>';
     }
 
+    function formatHrmsError_(err, fallback) {
+      var msg = (err && err.message) || fallback || 'Request failed';
+      if (err && err.fields && typeof err.fields === 'object') {
+        var bits = [];
+        Object.keys(err.fields).forEach(function (k) { bits.push(err.fields[k]); });
+        if (bits.length) msg = bits.join(' ');
+      }
+      return msg;
+    }
+
     function bindHireWorkflowHandlers_(page, candidateId, seq) {
       if (!page || !canManage()) return;
       Array.prototype.forEach.call(page.querySelectorAll('[data-hire-save]'), function (btn) {
@@ -494,7 +504,7 @@
             if (!stillOn(seq, 'ats-candidate')) return;
             invalidateAtsCandidate_(candidateId);
             showToast('Compensation saved.');
-          }).catch(function (err) { showToast((err && err.message) || 'Save failed', 'error'); });
+          }).catch(function (err) { showToast(formatHrmsError_(err, 'Save failed'), 'error'); });
         });
       });
       Array.prototype.forEach.call(page.querySelectorAll('[data-hire-offer]'), function (btn) {
@@ -507,7 +517,7 @@
             invalidateAtsCandidate_(candidateId);
             showToast('Offer letter sent.');
             renderCandidate(candidateId);
-          }).catch(function (err) { showToast((err && err.message) || 'Send failed', 'error'); });
+          }).catch(function (err) { showToast(formatHrmsError_(err, 'Send failed'), 'error'); });
         });
       });
       Array.prototype.forEach.call(page.querySelectorAll('[data-hire-appt]'), function (btn) {
@@ -520,13 +530,13 @@
             invalidateAtsCandidate_(candidateId);
             showToast('Appointment letter sent.');
             renderCandidate(candidateId);
-          }).catch(function (err) { showToast((err && err.message) || 'Send failed', 'error'); });
+          }).catch(function (err) { showToast(formatHrmsError_(err, 'Send failed'), 'error'); });
         });
       });
       Array.prototype.forEach.call(page.querySelectorAll('[data-hire-employee]'), function (btn) {
         btn.addEventListener('click', function () {
           var appId = btn.getAttribute('data-hire-employee');
-          var eid = window.prompt('Enter new employee ID (e.g. AOPL-0010):', '');
+          var eid = window.prompt('Enter new employee ID (e.g. SAPL-0090):', '');
           if (!eid || !String(eid).trim()) return;
           var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
           rpc('apiAtsCreateEmployeeFromHire', [appId, String(eid).trim()], btn, 'Creating…', fb).then(function (res) {
@@ -534,7 +544,7 @@
             invalidateAtsCandidate_(candidateId);
             showToast('Employee created: ' + (res.hired_employee_id || res.employee_id || eid));
             renderCandidate(candidateId);
-          }).catch(function (err) { showToast((err && err.message) || 'Create failed', 'error'); });
+          }).catch(function (err) { showToast(formatHrmsError_(err, 'Create failed'), 'error'); });
         });
       });
     }

@@ -927,9 +927,12 @@
                 return;
               }
               if (result && result.error) {
+                var errDetails = result.error.details || null;
                 reject({
                   message: result.error.message || 'Request failed',
-                  code: result.error.code || ''
+                  code: result.error.code || '',
+                  details: errDetails,
+                  fields: errDetails && errDetails.fields ? errDetails.fields : null
                 });
                 return;
               }
@@ -986,7 +989,13 @@
     }
     if (!ok) {
       if (feedback && !(value && value.silent) && !(value && value.code === 'IN_PROGRESS')) {
-        setActionFeedback(feedback, (value && value.message) || 'Request failed', 'error');
+        var fbMsg = (value && value.message) || 'Request failed';
+        if (value && value.fields && typeof value.fields === 'object') {
+          var fieldBits = [];
+          Object.keys(value.fields).forEach(function (k) { fieldBits.push(value.fields[k]); });
+          if (fieldBits.length) fbMsg = fieldBits.join(' ');
+        }
+        setActionFeedback(feedback, fbMsg, 'error');
       }
       return Promise.reject(value);
     }

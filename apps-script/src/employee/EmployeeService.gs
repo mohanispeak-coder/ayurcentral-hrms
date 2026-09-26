@@ -477,12 +477,16 @@ var EmployeeService = (function () {
     if (email && !isValidEmail_(email)) errors.work_email = 'Enter a valid work email.';
 
     var verticalName = normalizeVerticalName_(payload.vertical_name);
+    if (!verticalName && isCreate) {
+      verticalName = normalizeVerticalName_(String(payload.employee_id || '').split('-')[0]);
+    }
     if (!verticalName && !isCreate && employeeIdForSelfCheck) {
       verticalName = normalizeVerticalName_(String(employeeIdForSelfCheck).split('-')[0]);
     }
     var allowedVerticals = EmployeeRepository.listVerticals();
     if (verticalName && allowedVerticals.indexOf(verticalName) < 0) errors.vertical_name = 'Select a valid vertical.';
     var empType = trim_(payload.employment_type).toUpperCase();
+    if (empType === 'FULL_TIME' || empType === 'PART_TIME') empType = 'PERMANENT';
     if (empType && EMPLOYMENT_TYPES_.indexOf(empType) < 0) errors.employment_type = 'Invalid employment type.';
 
     var managerId = trim_(payload.manager_employee_id);

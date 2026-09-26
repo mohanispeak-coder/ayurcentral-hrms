@@ -49,6 +49,7 @@ var PayslipLogoService = (function () {
 
   return {
     resolveVertical: resolveVertical_,
+    dataUriForVertical: dataUriForVertical_,
     dataUriForEmployee: dataUriForEmployee_,
     logoCssClassForVertical: logoCssClassForVertical_
   };

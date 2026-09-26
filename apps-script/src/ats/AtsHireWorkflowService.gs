@@ -147,8 +147,56 @@ var AtsHireWorkflowService = (function () {
   function splitName_(fullName) {
     var parts = trim_(fullName).split(/\s+/).filter(Boolean);
     if (!parts.length) return { first_name: 'New', last_name: 'Hire' };
-    if (parts.length === 1) return { first_name: parts[0], last_name: '-' };
+    if (parts.length === 1) return { first_name: parts[0], last_name: parts[0] };
     return { first_name: parts[0], last_name: parts.slice(1).join(' ') };
+  }
+
+  function normalizeEmploymentType_(raw) {
+    var t = String(raw || '').trim().toUpperCase();
+    if (t === 'FULL_TIME' || t === 'PART_TIME') return 'PERMANENT';
+    if (t === 'PERMANENT' || t === 'CONTRACT' || t === 'INTERN' || t === 'CONSULTANT') return t;
+    return 'PERMANENT';
+  }
+
+  function resolveVerticalForHire_(app, employeeId) {
+    var structureId = trim_(app.hire_salary_structure_id);
+    if (structureId) {
+      var row = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, { salary_structure_id: structureId });
+      if (row && trim_(row.vertical_name)) return trim_(row.vertical_name).toUpperCase();
+    }
+    return trim_(employeeId).split('-')[0].toUpperCase();
+  }
+
+  function buildEmployeePayloadFromHire_(candidate, job, app, employeeId) {
+    var names = splitName_(candidate.full_name);
+    var vertical = resolveVerticalForHire_(app, employeeId);
+    var mgr = trim_(job.hiring_manager_employee_id);
+    if (mgr && typeof EmployeeRepository !== 'undefined' && EmployeeRepository.findById) {
+      if (!EmployeeRepository.findById(mgr)) mgr = '';
+    }
+    var email = trim_(candidate.email);
+    if (!email) {
+      throw validationError_('Candidate email is required to create an employee record.', { fields: { work_email: 'Required.' } });
+    }
+    return {
+      employee_id: employeeId,
+      first_name: names.first_name,
+      last_name: names.last_name,
+      display_name: trim_(candidate.full_name) || employeeId,
+      work_email: email,
+      phone: trim_(candidate.phone),
+      location: trim_(candidate.location) || trim_(job.location) || 'Bengaluru',
+      department: trim_(job.department) || 'General',
+      designation: trim_(job.title) || 'Associate',
+      vertical_name: vertical,
+      manager_employee_id: mgr,
+      joining_date: Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'yyyy-MM-dd'),
+      employment_type: normalizeEmploymentType_(job.employment_type),
+      salary_structure_id: trim_(app.hire_salary_structure_id),
+      ctc_monthly: app.hire_monthly_salary,
+      create_user: false,
+      notes: 'Created from ATS application ' + app.application_id
+    };
   }
 
   function hireCompensationReady_(app) {
@@ -182,28 +230,7 @@ var AtsHireWorkflowService = (function () {
     if (!employeeId) {
       throw validationError_('Employee ID is required.', { fields: { employee_id: 'Required.' } });
     }
-    var names = splitName_(candidate.full_name);
-    var vertical = employeeId.split('-')[0] || '';
-    var joining = Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'yyyy-MM-dd');
-    var payload = {
-      employee_id: employeeId,
-      first_name: names.first_name,
-      last_name: names.last_name,
-      display_name: trim_(candidate.full_name) || employeeId,
-      work_email: trim_(candidate.email),
-      phone: trim_(candidate.phone),
-      location: trim_(candidate.location) || trim_(job.location),
-      department: trim_(job.department),
-      designation: trim_(job.title),
-      vertical_name: vertical,
-      manager_employee_id: trim_(job.hiring_manager_employee_id),
-      joining_date: joining,
-      employment_type: trim_(job.employment_type) || 'PERMANENT',
-      salary_structure_id: trim_(app.hire_salary_structure_id),
-      ctc_monthly: app.hire_monthly_salary,
-      create_user: false,
-      notes: 'Created from ATS application ' + app.application_id
-    };
+    var payload = buildEmployeePayloadFromHire_(candidate, job, app, employeeId);
     var created;
     if (typeof EmployeeService !== 'undefined' && EmployeeService.createEmployee) {
       created = EmployeeService.createEmployee(session, payload, {});

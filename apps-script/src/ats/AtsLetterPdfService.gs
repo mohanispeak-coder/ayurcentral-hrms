@@ -41,38 +41,85 @@ var AtsLetterPdfService = (function () {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function resolveLetterBranding_(application) {
+    var vertical = '';
+    var structureId = trim_(application.hire_salary_structure_id);
+    if (structureId) {
+      var row = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, { salary_structure_id: structureId });
+      if (row && trim_(row.vertical_name)) vertical = trim_(row.vertical_name).toUpperCase();
+    }
+    var brandTitle = company_();
+    var addr = companyAddress_();
+    if (vertical && typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listVerticalCatalog) {
+      var catalog = EmployeeRepository.listVerticalCatalog() || [];
+      for (var i = 0; i < catalog.length; i++) {
+        if (String(catalog[i].vertical_name || '').toUpperCase() !== vertical) continue;
+        if (catalog[i].legal_name) brandTitle = catalog[i].legal_name;
+        var parts = [];
+        if (catalog[i].address_line1) parts.push(String(catalog[i].address_line1).trim());
+        if (catalog[i].address_line2) parts.push(String(catalog[i].address_line2).trim());
+        if (parts.length) addr = parts.join(', ');
+        break;
+      }
+    }
+    var payslipAddr = (typeof HRMS !== 'undefined' && HRMS.PAYSLIP_ADDRESS_BY_VERTICAL)
+      ? HRMS.PAYSLIP_ADDRESS_BY_VERTICAL[vertical] : '';
+    if (payslipAddr) addr = payslipAddr;
+    var logoSrc = '';
+    if (typeof PayslipLogoService !== 'undefined' && PayslipLogoService.dataUriForVertical) {
+      logoSrc = PayslipLogoService.dataUriForVertical(vertical);
+    }
+    return {
+      vertical: vertical,
+      brandTitle: brandTitle,
+      legalName: brandTitle,
+      address: addr,
+      logoSrc: logoSrc
+    };
+  }
+
   function buildLetterHtml_(opts) {
     opts = opts || {};
     var title = opts.title || 'Letter';
     var ref = opts.ref || '';
     var bodyHtml = opts.bodyHtml || '';
+    var brand = opts.branding || {};
+    var brandTitle = brand.brandTitle || company_();
+    var addr = brand.address || companyAddress_();
+    var logoSrc = brand.logoSrc || '';
+    var logoHtml = logoSrc
+      ? '<img src="' + esc_(logoSrc) + '" alt="Logo" style="height:44px;max-width:160px;display:block;margin-bottom:6px"/>'
+      : '';
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
       'body{font-family:Arial,Helvetica,sans-serif;color:#222;margin:0;padding:28px 32px;font-size:12px;line-height:1.55}' +
       '.hdr{border-bottom:2px solid #0d4a38;padding-bottom:12px;margin-bottom:18px}' +
       '.co{font-size:18px;font-weight:700;color:#0d4a38}' +
-      '.addr{font-size:10px;color:#555;margin-top:4px}' +
+      '.addr{font-size:10px;color:#555;margin-top:4px;max-width:480px}' +
       'h1{font-size:16px;color:#0d4a38;margin:16px 0 12px;text-transform:uppercase;letter-spacing:.04em}' +
       '.meta{font-size:11px;margin-bottom:14px}' +
       '.sign{margin-top:28px}' +
       '</style></head><body>' +
-      '<div class="hdr"><div class="co">' + esc_(company_()) + '</div>' +
-      (companyAddress_() ? '<div class="addr">' + esc_(companyAddress_()) + '</div>' : '') +
+      '<div class="hdr">' + logoHtml +
+      '<div class="co">' + esc_(brandTitle) + '</div>' +
+      (addr ? '<div class="addr">' + esc_(addr) + '</div>' : '') +
       '</div>' +
       '<h1>' + esc_(title) + '</h1>' +
       '<div class="meta">Date: ' + esc_(fmtDate_(new Date())) +
       (ref ? ' &nbsp;|&nbsp; Ref: ' + esc_(ref) : '') + '</div>' +
       bodyHtml +
-      '<div class="sign"><p>For ' + esc_(company_()) + '</p>' +
+      '<div class="sign"><p>For ' + esc_(brandTitle) + '</p>' +
       '<p><strong>Authorised Signatory</strong><br>Human Resources Department</p>' +
       '<p class="addr">This is a system-generated document and does not require a physical signature.</p></div>' +
       '</body></html>';
   }
 
-  function offerBodyHtml_(candidate, job, application, comp) {
+  function offerBodyHtml_(candidate, job, application, comp, branding) {
     comp = comp || {};
+    branding = branding || {};
+    var org = branding.brandTitle || company_();
     return '<p>Dear ' + esc_(trim_(candidate.full_name) || 'Candidate') + ',</p>' +
       '<p>With reference to your application <strong>' + esc_(application.application_id) + '</strong>, ' +
-      'we are pleased to offer you employment with <strong>' + esc_(company_()) + '</strong> ' +
+      'we are pleased to offer you employment with <strong>' + esc_(org) + '</strong> ' +
       'in the position of <strong>' + esc_(trim_(job.title) || 'the role') + '</strong>' +
       (trim_(job.department) ? ' (' + esc_(job.department) + ')' : '') + '.</p>' +
       '<p><strong>Compensation</strong></p><ul>' +
@@ -85,11 +132,13 @@ var AtsLetterPdfService = (function () {
       '<p>We look forward to welcoming you to our team.</p>';
   }
 
-  function appointmentBodyHtml_(candidate, job, application, comp) {
+  function appointmentBodyHtml_(candidate, job, application, comp, branding) {
     comp = comp || {};
+    branding = branding || {};
+    var org = branding.brandTitle || company_();
     return '<p>Dear ' + esc_(trim_(candidate.full_name) || 'Candidate') + ',</p>' +
       '<p>Further to our offer of employment, this is to confirm your <strong>appointment</strong> ' +
-      'with <strong>' + esc_(company_()) + '</strong> as <strong>' + esc_(trim_(job.title) || 'the role') + '</strong>.</p>' +
+      'with <strong>' + esc_(org) + '</strong> as <strong>' + esc_(trim_(job.title) || 'the role') + '</strong>.</p>' +
       '<p><strong>Terms of appointment</strong></p><ul>' +
       '<li>Employee name: ' + esc_(trim_(candidate.full_name)) + '</li>' +
       '<li>Designation: ' + esc_(trim_(job.title)) + '</li>' +
@@ -127,20 +176,24 @@ var AtsLetterPdfService = (function () {
 
   function buildOfferPdf_(candidate, job, application) {
     var comp = compFromApplication_(application);
+    var branding = resolveLetterBranding_(application);
     var html = buildLetterHtml_({
       title: 'Offer of Employment',
       ref: application.application_id,
-      bodyHtml: offerBodyHtml_(candidate, job, application, comp)
+      branding: branding,
+      bodyHtml: offerBodyHtml_(candidate, job, application, comp, branding)
     });
     return htmlToPdf_(html, 'Offer_Letter_' + trim_(application.application_id) + '.pdf');
   }
 
   function buildAppointmentPdf_(candidate, job, application) {
     var comp = compFromApplication_(application);
+    var branding = resolveLetterBranding_(application);
     var html = buildLetterHtml_({
       title: 'Appointment Letter',
       ref: application.application_id,
-      bodyHtml: appointmentBodyHtml_(candidate, job, application, comp)
+      branding: branding,
+      bodyHtml: appointmentBodyHtml_(candidate, job, application, comp, branding)
     });
     return htmlToPdf_(html, 'Appointment_Letter_' + trim_(application.application_id) + '.pdf');
   }
