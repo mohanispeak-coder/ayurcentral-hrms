@@ -606,8 +606,13 @@ var PayslipService = (function () {
     if (!logoSrc) {
       logoSrc = String(ConfigService.getSetting('payslip_logo_url', '') || '').trim();
     }
+    var brandTitle = name;
+    if (vertical && vertical !== 'OTHERS') {
+      brandTitle = vertical;
+    }
     return {
       name: name,
+      brandTitle: brandTitle,
       address: addr,
       vertical: vertical,
       logoSrc: logoSrc,
@@ -635,6 +640,18 @@ var PayslipService = (function () {
     if (!isFinite(x)) x = 0;
     return Math.round(x).toLocaleString('en-IN');
   }
+
+  function moneyRatePayslip_(n) {
+    var x = Number(n);
+    if (!isFinite(x) || x === 0) return '-';
+    return moneyPayslip_(x);
+  }
+
+  var COINS_ICON_SVG_ = '<svg class="coins-icon" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<ellipse cx="18" cy="30" rx="14" ry="5" fill="#40916c" opacity=".35"/>' +
+    '<ellipse cx="30" cy="26" rx="14" ry="5" fill="#40916c" opacity=".55"/>' +
+    '<ellipse cx="24" cy="20" rx="14" ry="5" fill="#2d6a4f"/>' +
+    '<ellipse cx="24" cy="17" rx="10" ry="3.5" fill="#52b788" opacity=".9"/></svg>';
 
   function amountInWordsPayslip_(amount) {
     return amountInWords_(amount).replace(/\s*Rupees\s*/i, ' ').replace(/\s+/g, ' ').trim();
@@ -712,7 +729,7 @@ var PayslipService = (function () {
         actual = round2_(actual + (Number(rec.bonus) || 0) + (Number(rec.incentive) || 0) +
           (Number(rec.other_earnings) || 0));
       }
-      earnRows += '<tr><td>' + esc_(row.label) + '</td><td class="num">' + moneyPayslip_(rate) +
+      earnRows += '<tr><td>' + esc_(row.label) + '</td><td class="num">' + moneyRatePayslip_(rate) +
         '</td><td class="num">' + moneyPayslip_(actual) + '</td></tr>';
     });
 
@@ -732,91 +749,109 @@ var PayslipService = (function () {
       ? '<img class="' + esc_(employer.logoClass || 'logo') + '" src="' + esc_(employer.logoSrc) + '" alt="Company logo"/>'
       : '<div class="logo-placeholder"></div>';
 
+    var infoTable =
+      '<table class="info-table" cellspacing="0" cellpadding="0"><tbody>' +
+      infoTableRow_('Name', name, 'Bank Name', bankName) +
+      infoTableRow_('Employee ID', rec.employee_id, 'Account No.', bankDisplay) +
+      infoTableRow_('Designation', desig, 'IFSC', ifsc) +
+      infoTableRow_('Department', dept, 'PF No.', pfNo) +
+      infoTableRow_('Date of Joining', joiningDate, 'UAN', uan) +
+      infoTableRow_('Location', location, 'ESI No.', esiNo) +
+      '</tbody></table>';
+
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PAY SLIP - ' + esc_(periodUpper) +
       '</title><style>' +
-      '@page{size:A4;margin:12mm}' +
-      'body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#222;margin:0;padding:18px;background:#fff;font-size:12px}' +
-      '.sheet{max-width:820px;margin:0 auto;border:1px solid #d8dde3;padding:16px 18px}' +
-      '.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}' +
-      '.brand{display:flex;gap:12px;align-items:flex-start;flex:1}' +
-      '.logo{height:42px;width:auto;object-fit:contain;display:block}' +
-      '.logo-sapl{height:40px;max-width:150px}' +
-      '.logo-ayurvedaone{height:52px;max-width:220px}' +
-      '.logo-placeholder{width:42px;height:42px;border:1px dashed #c5cec8;border-radius:4px}' +
-      '.company-name{font-size:18px;font-weight:700;color:#2f5f3f;margin:0 0 4px}' +
-      '.company-addr{font-size:11px;color:#4a5568;line-height:1.45;max-width:420px}' +
-      '.title-block{text-align:right;min-width:160px}' +
-      '.pay-slip-badge{background:#2f5f3f;color:#fff;font-weight:700;font-size:14px;padding:10px 18px;letter-spacing:.06em}' +
-      '.period-label{margin-top:8px;font-size:13px;font-weight:600;color:#2f5f3f}' +
-      '.info{border:1px solid #e2e6ea;display:flex;margin-bottom:0}' +
-      '.info-col{flex:1;padding:10px 12px}' +
-      '.info-col:first-child{border-right:1px solid #e2e6ea}' +
-      '.info-row{display:flex;margin-bottom:5px;font-size:11px}' +
-      '.info-row label{width:118px;color:#5c6670;font-weight:600}' +
-      '.info-row span{flex:1;color:#111}' +
-      '.attn{background:#eceff2;border:1px solid #e2e6ea;border-top:none;padding:8px 12px;font-size:11px;font-weight:600;color:#333}' +
-      '.tables{display:flex;gap:0;border:1px solid #e2e6ea;border-top:none}' +
-      '.tbl-wrap{flex:1}' +
-      '.tbl-wrap:first-child{border-right:1px solid #e2e6ea}' +
-      'table{width:100%;border-collapse:collapse}' +
-      'th{background:#2f5f3f;color:#fff;font-size:10px;font-weight:600;padding:7px 8px;text-align:left}' +
-      'th.num{text-align:right}' +
-      'td{padding:6px 8px;border-bottom:1px solid #eef1f4;font-size:11px}' +
-      'td.num{text-align:right;font-variant-numeric:tabular-nums}' +
-      'tr.total td{font-weight:700;color:#2f5f3f;border-top:2px solid #2f5f3f;border-bottom:none}' +
-      '.net-wrap{margin-top:14px;display:flex;border:1px solid #c8e6d0;background:#f4faf6}' +
-      '.net-left{flex:1;padding:14px 16px;display:flex;align-items:center;gap:12px}' +
-      '.net-coins{font-size:22px;line-height:1}' +
-      '.net-amt-label{font-size:11px;font-weight:600;color:#2f5f3f}' +
-      '.net-amt{font-size:26px;font-weight:700;color:#1f4330;margin-top:2px}' +
-      '.net-right{flex:1;padding:14px 16px;border-left:1px solid #c8e6d0}' +
-      '.words-label{font-size:10px;color:#5c6670;font-weight:600;text-transform:uppercase}' +
-      '.words-val{margin-top:6px;font-size:14px;font-weight:700;color:#2f5f3f}' +
-      '.foot{display:flex;justify-content:space-between;margin-top:16px;font-size:10px;color:#5c6670;gap:20px}' +
-      '.notes{flex:1;line-height:1.5}' +
+      '@page{size:A4;margin:10mm}' +
+      'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:14px;background:#fff;font-size:11px}' +
+      '.sheet{max-width:800px;margin:0 auto;border:1px solid #c5ccd3;padding:14px 16px;page-break-inside:avoid}' +
+      'table{border-collapse:collapse}' +
+      '.hdr{width:100%;margin-bottom:10px}' +
+      '.hdr td{vertical-align:top;border:none;padding:0}' +
+      '.hdr-brand{width:72%}' +
+      '.hdr-title{width:28%;text-align:right}' +
+      '.brand-inner{width:100%}' +
+      '.brand-inner td{vertical-align:top;border:none;padding:0}' +
+      '.logo-cell{width:1%;padding-right:10px!important}' +
+      '.logo{height:44px;width:auto;max-width:160px;object-fit:contain;display:block}' +
+      '.logo-sapl{height:42px;max-width:150px}' +
+      '.logo-ayurvedaone{height:50px;max-width:200px}' +
+      '.logo-placeholder{width:44px;height:44px}' +
+      '.company-name{font-size:16px;font-weight:700;color:#1b4332;margin:0 0 3px;line-height:1.2}' +
+      '.company-addr{font-size:10px;color:#4a5568;line-height:1.4;max-width:400px}' +
+      '.pay-slip-badge{display:inline-block;background:#1b4332;color:#fff;font-weight:700;font-size:13px;padding:9px 20px;letter-spacing:.08em;border-radius:4px}' +
+      '.period-label{margin-top:6px;font-size:12px;font-weight:700;color:#1b4332;text-align:center}' +
+      '.info-table{width:100%;border:1px solid #d5dbe1;margin:0}' +
+      '.info-table td{border:1px solid #d5dbe1;padding:5px 8px;font-size:10px;vertical-align:middle}' +
+      '.info-table .lbl{width:14%;background:#f2f4f5;color:#374151;font-weight:600}' +
+      '.info-table .val{width:36%;background:#fff;color:#111}' +
+      '.attn{background:#eceff2;border:1px solid #d5dbe1;border-top:none;padding:7px 10px;font-size:10px;font-weight:600;color:#222;text-align:center}' +
+      '.split{width:100%;border:1px solid #d5dbe1;border-top:none;page-break-inside:avoid}' +
+      '.split>tbody>tr>td{vertical-align:top;padding:0;border-right:1px solid #d5dbe1}' +
+      '.split>tbody>tr>td:last-child{border-right:none}' +
+      '.data-table{width:100%}' +
+      '.data-table th{background:#1b4332;color:#fff;font-size:9px;font-weight:700;padding:6px 7px;text-align:left}' +
+      '.data-table th.num{text-align:right}' +
+      '.data-table td{padding:5px 7px;border-bottom:1px solid #e8ecef;font-size:10px;background:#fff}' +
+      '.data-table td.num{text-align:right;font-variant-numeric:tabular-nums}' +
+      '.data-table tr.total td{font-weight:700;color:#1b4332;background:#f2f4f5;border-top:1px solid #1b4332;border-bottom:none}' +
+      '.net-wrap{width:100%;margin-top:12px;border:1px solid #b7dfc9;background:#f4faf6;page-break-inside:avoid}' +
+      '.net-wrap td{border:none;padding:12px 14px;vertical-align:middle}' +
+      '.net-left{width:55%}' +
+      '.net-inner{width:100%}' +
+      '.net-inner td{border:none;padding:0;vertical-align:middle}' +
+      '.coins-icon{width:40px;height:40px;display:block}' +
+      '.net-amt-label{font-size:10px;font-weight:700;color:#1b4332}' +
+      '.net-amt{font-size:24px;font-weight:700;color:#1b4332;margin-top:2px;line-height:1.1}' +
+      '.net-right{width:45%;border-left:1px solid #b7dfc9!important}' +
+      '.words-label{font-size:9px;color:#5c6670;font-weight:700;letter-spacing:.04em}' +
+      '.words-val{margin-top:5px;font-size:13px;font-weight:700;color:#1b4332;line-height:1.35}' +
+      '.foot{width:100%;margin-top:12px}' +
+      '.foot td{border:none;padding:0;vertical-align:top;font-size:9px;color:#5c6670;line-height:1.45}' +
       '.gen-date{text-align:right;white-space:nowrap}' +
-      '@media print{body{padding:0}.sheet{border:none}.net-wrap{-webkit-print-color-adjust:exact;print-color-adjust:exact}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+      '@media print{body{padding:0}.sheet{border:1px solid #c5ccd3}.net-wrap,.data-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
       '</style></head><body><div class="sheet">' +
-      '<div class="top"><div class="brand">' + logoHtml +
-      '<div><div class="company-name">' + esc_(employer.name) + '</div>' +
+      '<table class="hdr" cellspacing="0" cellpadding="0"><tr>' +
+      '<td class="hdr-brand"><table class="brand-inner" cellspacing="0" cellpadding="0"><tr>' +
+      '<td class="logo-cell">' + logoHtml + '</td>' +
+      '<td><div class="company-name">' + esc_(employer.brandTitle || employer.name) + '</div>' +
       (employer.address ? '<div class="company-addr">' + esc_(employer.address) + '</div>' : '') +
-      '</div></div><div class="title-block"><div class="pay-slip-badge">PAY SLIP</div>' +
-      '<div class="period-label">' + esc_(periodUpper) + '</div></div></div>' +
-      '<div class="info"><div class="info-col">' +
-      infoRow_('Name', name) + infoRow_('Employee ID', rec.employee_id) +
-      infoRow_('Designation', desig) + infoRow_('Department', dept) +
-      infoRow_('Date of Joining', joiningDate) + infoRow_('Location', location) +
-      '</div><div class="info-col">' +
-      infoRow_('Bank Name', bankName) + infoRow_('Account No.', bankDisplay) +
-      infoRow_('IFSC', ifsc) + infoRow_('PF No.', pfNo) +
-      infoRow_('UAN', uan) + infoRow_('ESI No.', esiNo) +
-      '</div></div>' +
+      '</td></tr></table></td>' +
+      '<td class="hdr-title"><div class="pay-slip-badge">PAY SLIP</div><div class="period-label">' + esc_(periodUpper) + '</div></td>' +
+      '</tr></table>' +
+      infoTable +
       '<div class="attn">Effective Work Days : ' + esc_(effectiveDays) + ' &nbsp;|&nbsp; Days in Month : ' +
       esc_(dim) + ' &nbsp;|&nbsp; LOP Days : ' + esc_(lopDays) + ' &nbsp;|&nbsp; Paid Days : ' + esc_(paidDays) +
       '</div>' +
-      '<div class="tables"><div class="tbl-wrap"><table><thead><tr>' +
+      '<table class="split" cellspacing="0" cellpadding="0"><tr>' +
+      '<td width="58%"><table class="data-table earn-table" cellspacing="0" cellpadding="0"><thead><tr>' +
       '<th>EARNINGS</th><th class="num">RATE (Rs.)</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
       earnRows +
-      '<tr class="total"><td>TOTAL EARNINGS (A)</td><td class="num"></td><td class="num">' + moneyPayslip_(grossA) +
-      '</td></tr></tbody></table></div><div class="tbl-wrap"><table><thead><tr>' +
+      '<tr class="total"><td>TOTAL EARNINGS (A)</td><td class="num">-</td><td class="num">' + moneyPayslip_(grossA) +
+      '</td></tr></tbody></table></td>' +
+      '<td width="42%"><table class="data-table ded-table" cellspacing="0" cellpadding="0"><thead><tr>' +
       '<th>DEDUCTIONS</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
       dedRows +
       '<tr class="total"><td>TOTAL DEDUCTIONS (B)</td><td class="num">' + moneyPayslip_(grossB) + '</td></tr>' +
-      '</tbody></table></div></div>' +
-      '<div class="net-wrap"><div class="net-left"><div class="net-coins" aria-hidden="true">🪙</div><div>' +
-      '<div class="net-amt-label">NET PAY (A - B)</div><div class="net-amt">Rs. ' + moneyPayslip_(netPay) + '</div></div></div>' +
-      '<div class="net-right"><div class="words-label">IN WORDS</div><div class="words-val">' +
-      esc_(amountInWordsPayslip_(netPay)) + '</div></div></div>' +
-      '<div class="foot"><div class="notes"><strong>Note:</strong><br>' +
+      '</tbody></table></td></tr></table>' +
+      '<table class="net-wrap" cellspacing="0" cellpadding="0"><tr>' +
+      '<td class="net-left"><table class="net-inner" cellspacing="0" cellpadding="0"><tr>' +
+      '<td style="width:48px;padding-right:10px">' + COINS_ICON_SVG_ + '</td>' +
+      '<td><div class="net-amt-label">NET PAY (A - B)</div><div class="net-amt">Rs. ' + moneyPayslip_(netPay) + '</div></td>' +
+      '</tr></table></td>' +
+      '<td class="net-right"><div class="words-label">IN WORDS</div><div class="words-val">' +
+      esc_(amountInWordsPayslip_(netPay)) + '</div></td></tr></table>' +
+      '<table class="foot" cellspacing="0" cellpadding="0"><tr>' +
+      '<td><strong>Note:</strong><br>' +
       '1. This is a system-generated payslip and does not require a signature.<br>' +
       '2. All payments are subject to statutory deductions and company policies.<br>' +
-      '3. For any queries, please contact the HR Department.</div>' +
-      '<div class="gen-date">Generated on : ' + esc_(generated) + '</div></div>' +
+      '3. For any queries, please contact the HR Department.</td>' +
+      '<td class="gen-date">Generated on : ' + esc_(generated) + '</td></tr></table>' +
       '</div></body></html>';
   }
 
-  function infoRow_(label, value) {
-    return '<div class="info-row"><label>' + esc_(label) + ' :</label><span>' + esc_(dashOr_(value)) + '</span></div>';
+  function infoTableRow_(labelL, valueL, labelR, valueR) {
+    return '<tr><td class="lbl">' + esc_(labelL) + '</td><td class="val">' + esc_(dashOr_(valueL)) +
+      '</td><td class="lbl">' + esc_(labelR) + '</td><td class="val">' + esc_(dashOr_(valueR)) + '</td></tr>';
   }
 
   function field_(label, value) {

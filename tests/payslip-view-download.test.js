@@ -43,6 +43,8 @@ const logoData = read('payroll/PayslipLogos.gs');
 check('payslip-logo-service-verticals', /SAPL/.test(logoSvc) && /AYURVEDAONE/.test(logoSvc) && /resolveVertical_/.test(logoSvc));
 check('payslip-logo-embedded', /HRMS_PAYSLIP_LOGO_B64_/.test(logoData) && /dataUriForEmployee_/.test(logoSvc));
 check('payslip-logo-by-employee-id', /PayslipLogoService\.dataUriForEmployee/.test(payslip) && /split\('-'\)/.test(payslip));
+check('payslip-template-table-layout', /info-table/.test(payslip) && /class="split"/.test(payslip) && /coins-icon/.test(payslip));
+check('payslip-rate-dash', /moneyRatePayslip_/.test(payslip));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
