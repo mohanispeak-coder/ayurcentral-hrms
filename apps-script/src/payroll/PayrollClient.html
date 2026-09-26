@@ -73,7 +73,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.18-attendance-v3';
+  var PAYROLL_CLIENT_BUILD_ = '2026.09.26.14';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -91,6 +91,14 @@
     var setFlash = App.setFlash;
     var consumeFlash = App.consumeFlash;
     var flashBannerHtml = App.flashBannerHtml;
+
+    function payrollClientBuild_() {
+      try {
+        var st = App.getState && App.getState();
+        if (st && st.clientAssetsVersion) return String(st.clientAssetsVersion);
+      } catch (ignore) {}
+      return PAYROLL_CLIENT_BUILD_;
+    }
 
     var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'];
@@ -956,7 +964,7 @@
         '<p class="page-lede">Search an employee to view or edit their salary structure. Revisions create history.</p>' +
         '<div id="salary-structure-mount">' + spinner('Loading employees…') + '</div></div>' +
         paintPayrollFlowFooter_('salary') +
-        '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
+        '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(payrollClientBuild_()) + '</p></div>';
       page.innerHTML = html;
       if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
       bindPayrollPipelineNav_(page);
@@ -1011,7 +1019,7 @@
         if (detail) html += paintPayrollDataSection_(detail, editableAtt);
       }
       html += paintPayrollFlowFooter_('attendance');
-      html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p></div>';
+      html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(payrollClientBuild_()) + '</p></div>';
       page.innerHTML = html;
       if (App.markModuleViewLoaded) App.markModuleViewLoaded('attendance-bulk-upload');
       bindAttendanceBulkPage_(page, seq, detail, currentRun);
@@ -1093,6 +1101,9 @@
         html += paintPeriodRunPicker_(runs, year, month, currentRun.payroll_run_id);
       }
       if (detail) html += paintLegacyImportBanner_(detail);
+      if (detail && currentRun) {
+        html += paintRunSwitchHint_(detail, runs, year, month, currentRun);
+      }
 
       if (detail) html += hrPhaseStepper(detail);
 
@@ -1127,8 +1138,8 @@
       }
 
       html += paintPayrollFlowFooter_('payroll');
-      html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(PAYROLL_CLIENT_BUILD_) + '</p>';
-      html += paintPreviousPayrolls_(runs, year, month);
+      html += '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(payrollClientBuild_()) + '</p>';
+      html += paintPreviousPayrolls_(runs, year, month, currentRun && currentRun.payroll_run_id);
       if (detail && currentRun) html += paintAdvancedSection_(detail, editable, st);
       html += '</div>';
 
@@ -1428,21 +1439,46 @@
       var disabled = (st === 'DRAFT' || blocks) ? ' disabled' : '';
       var hint = st === 'DRAFT' ? 'Calculate payroll before finalizing.' :
         (blocks ? 'Resolve all issues in Payroll check first.' : 'Finalizing locks amounts permanently.');
+      var gotoCalc = st === 'DRAFT'
+        ? '<p class="hint"><button type="button" class="btn btn-link" id="btn-goto-calculate">↑ Go to Calculate payroll</button></p>'
+        : '';
       return '<div class="card" id="finalize-card"><h2>Finalize payroll</h2>' +
-        '<p class="page-lede">' + escapeHtml(hint) + '</p>' +
+        '<p class="page-lede">' + escapeHtml(hint) + '</p>' + gotoCalc +
         '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-finalize"' + disabled +
         '>Finalize payroll</button></div></div>';
     }
 
-    function paintPreviousPayrolls_(runs, currentYear, currentMonth) {
-      var others = (runs || []).filter(function (r) {
+    function paintRunSwitchHint_(detail, runs, year, month, currentRun) {
+      if (!detail || !currentRun) return '';
+      var att = attendanceStats_(detail);
+      if (att.total > 0 && att.ready === att.total) return '';
+      var legacy = pickLatestFromRunList_(runsForPeriodVertical_(runs, year, month, LEGACY_VERTICAL_));
+      if (!legacy || legacy.payroll_run_id === currentRun.payroll_run_id) return '';
+      var legacyCount = runAttendanceCount_(legacy);
+      var thisCount = runAttendanceCount_(currentRun);
+      if (legacyCount <= thisCount && att.ready >= att.total) return '';
+      return '<div class="card alert alert-warning" id="run-switch-hint">' +
+        '<p><strong>Attendance may be on the combined payroll run.</strong> ' +
+        escapeHtml(legacy.payroll_run_id) + ' has ' + legacyCount + ' employee' + (legacyCount === 1 ? '' : 's') +
+        ' with days entered. This run (' + escapeHtml(currentRun.payroll_run_id) + ') has ' + att.ready +
+        ' of ' + att.total + ' ready.</p>' +
+        '<div class="primary-next" style="flex-wrap:wrap;gap:8px">' +
+        '<button type="button" class="btn btn-primary btn-sm js-open-legacy-run" data-run-id="' +
+        escapeHtml(legacy.payroll_run_id) + '">Open combined payroll</button>' +
+        (detail.legacyImportHint && detail.legacyImportHint.source_run_id
+          ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-import-legacy-hint" data-source-run-id="' +
+            escapeHtml(detail.legacyImportHint.source_run_id) + '">Import into this run</button>'
+          : '') +
+        '</div></div>';
+    }
+
+    function paintPreviousPayrolls_(runs, currentYear, currentMonth, activeRunId) {
+      activeRunId = String(activeRunId || '');
+      var list = (runs || []).filter(function (r) {
         var st = statusKey(r.status);
-        var sameMonth = Number(r.period_year) === Number(currentYear) &&
-          Number(r.period_month) === Number(currentMonth);
-        if (sameMonth) return false;
         return st === 'LOCKED' || st === 'DRAFT' || st === 'CALCULATED' || st === 'UNDER_REVIEW' || st === 'APPROVED';
       });
-      others.sort(function (a, b) {
+      list.sort(function (a, b) {
         var ya = Number(b.period_year) - Number(a.period_year);
         if (ya !== 0) return ya;
         var ma = Number(b.period_month) - Number(a.period_month);
@@ -1452,20 +1488,21 @@
       var openAttr = homeState.prevPayrollsOpen ? ' open' : '';
       var html = '<details class="card section-details collapsible-section" id="prev-payrolls"' + openAttr +
         '><summary>All payroll runs</summary>';
-      if (!others.length) {
-        html += '<div class="empty-state"><p>No other payroll runs yet.</p></div>';
+      if (!list.length) {
+        html += '<div class="empty-state"><p>No payroll runs yet.</p></div>';
       } else {
         html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Run</th><th>Vertical</th><th>Status</th><th></th></tr></thead><tbody>';
-        others.forEach(function (r) {
+        list.forEach(function (r) {
           var vert = r.vertical_name ? String(r.vertical_name) : 'Combined';
           var vKey = r.vertical_name ? String(r.vertical_name).toUpperCase() : LEGACY_VERTICAL_;
-          html += '<tr><td>' + escapeHtml(fmtPeriod(r.period_year, r.period_month)) + '</td>' +
-            '<td class="mono">' + escapeHtml(r.payroll_run_id) + '</td>' +
+          var isActive = activeRunId && r.payroll_run_id === activeRunId;
+          html += '<tr' + (isActive ? ' class="row-active"' : '') + '><td>' + escapeHtml(fmtPeriod(r.period_year, r.period_month)) + '</td>' +
+            '<td class="mono">' + escapeHtml(r.payroll_run_id) + (isActive ? ' <span class="phase-chip">Current</span>' : '') + '</td>' +
             '<td>' + escapeHtml(vert) + '</td>' +
             '<td><span class="phase-chip">' + escapeHtml(statusKey(r.status)) + '</span></td>' +
             '<td><button type="button" class="btn btn-secondary btn-sm js-view-period" data-year="' + r.period_year +
             '" data-month="' + r.period_month + '" data-run-id="' + escapeHtml(r.payroll_run_id) +
-            '" data-vertical="' + escapeHtml(vKey) + '">Open</button></td></tr>';
+            '" data-vertical="' + escapeHtml(vKey) + '">' + (isActive ? 'Viewing' : 'Open') + '</button></td></tr>';
         });
         html += '</tbody></table></div>';
       }
@@ -2125,6 +2162,13 @@
       }
       bindLegacyImport_($('btn-import-legacy'));
       bindLegacyImport_($('btn-import-legacy-advanced'));
+      bindLegacyImport_($('btn-import-legacy-hint'));
+
+      var gotoCalc = $('btn-goto-calculate');
+      if (gotoCalc) gotoCalc.addEventListener('click', function () {
+        var el = document.getElementById('calculate-card');
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
 
       page.querySelectorAll('.js-open-legacy-run').forEach(function (btn) {
         btn.addEventListener('click', function () {
