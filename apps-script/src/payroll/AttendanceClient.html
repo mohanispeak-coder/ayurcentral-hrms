@@ -216,7 +216,7 @@
       document.getElementById('att-month').addEventListener('change', function () { period_.month = Number(this.value); });
       document.getElementById('att-start-run').addEventListener('click', function () {
         var btn = this;
-        callServer('apiCreatePayrollRun', period_.year, period_.month, '', { button: btn, loadingText: 'Starting…' })
+        callServer('apiCreatePayrollRunsAllVerticals', period_.year, period_.month, '', { button: btn, loadingText: 'Starting…' })
           .then(function () {
             showToast('Payroll started.', 'success');
             loadContext_();

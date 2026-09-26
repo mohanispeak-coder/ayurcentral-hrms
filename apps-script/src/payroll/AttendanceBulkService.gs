@@ -25,6 +25,16 @@ var AttendanceBulkService = (function () {
     return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API → Add (identifier: Drive), then redeploy.';
   }
 
+  function assertRunVerticalMatches_(run, verticalName) {
+    var runV = normalizeVertical_(run && run.vertical_name);
+    if (!runV) return;
+    var uploadV = normalizeVertical_(verticalName);
+    if (runV !== uploadV) {
+      throw validationError_('This payroll run is for vertical ' + runV +
+        '. Select the same vertical for attendance upload.');
+    }
+  }
+
   function assertRunEditable_(runId) {
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
     if (!run) throw notFoundError_('Payroll run not found.');
@@ -308,6 +318,7 @@ var AttendanceBulkService = (function () {
     if (!runId) throw validationError_('runId is required.');
     var verticalCode = assertVertical_(verticalName);
     var run = assertRunEditable_(runId);
+    assertRunVerticalMatches_(run, verticalCode);
     var year = Number(run.period_year);
     var month = Number(run.period_month);
     var fileName = 'HRMS_Attendance_Register_' + verticalCode + '_' + year + '_' +
@@ -480,6 +491,7 @@ var AttendanceBulkService = (function () {
     var session = requireAttendanceAccess_();
     var verticalCode = assertVertical_(verticalName);
     var run = assertRunEditable_(runId);
+    assertRunVerticalMatches_(run, verticalCode);
     var parsed = parseUpload_(meta);
     if (!parsed.rows.length) throw validationError_('No attendance rows found. Use the Attendance sheet (data from row 3).');
     var result = validateRows_(parsed, run, verticalCode);

@@ -41,6 +41,76 @@ var PayrollService = (function () {
     return m;
   }
 
+  function ensurePayrollRunSchema_() {
+    if (typeof SchemaService !== 'undefined' && SchemaService.ensureSheetHeaders) {
+      try {
+        SchemaService.ensureSheetHeaders(HRMS.SHEETS.PAYROLL_RUNS);
+      } catch (ignore) {}
+    }
+  }
+
+  function normalizeVerticalCode_(value) {
+    return String(value == null ? '' : value).trim().toUpperCase();
+  }
+
+  function listConfiguredVerticals_() {
+    var rows = [];
+    try {
+      if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listVerticalCatalog) {
+        rows = EmployeeRepository.listVerticalCatalog() || [];
+      }
+    } catch (ignore) {}
+    if (!rows.length) return ['SAPL', 'AOPL', 'AOMS'];
+    return rows.map(function (r) {
+      return normalizeVerticalCode_(r.vertical_name);
+    }).filter(Boolean);
+  }
+
+  function assertPayrollVertical_(verticalName) {
+    var code = normalizeVerticalCode_(verticalName);
+    if (!code) {
+      throw validationError_('Select a vertical for this payroll run.', { fields: { vertical_name: 'Required.' } });
+    }
+    var allowed = listConfiguredVerticals_();
+    if (allowed.indexOf(code) < 0) {
+      throw validationError_('Unknown vertical: ' + code);
+    }
+    return code;
+  }
+
+  function runVertical_(run) {
+    return normalizeVerticalCode_(run && run.vertical_name);
+  }
+
+  function employeeVertical_(emp) {
+    if (!emp) return '';
+    var v = normalizeVerticalCode_(emp.vertical_name);
+    if (!v && emp.employee_id) {
+      v = normalizeVerticalCode_(String(emp.employee_id).split('-')[0]);
+    }
+    return v;
+  }
+
+  function primaryRunIdFor_(year, month, vertical) {
+    var base = 'PR-' + year + '-' + padMonth_(month);
+    if (vertical) return base + '-' + vertical;
+    return base;
+  }
+
+  function nextCorrectionIdFromSource_(source) {
+    var sourceId = String(source.payroll_run_id || '');
+    var base = sourceId.replace(/-C\d+$/i, '');
+    var prefix = base + '-C';
+    var max = 0;
+    DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).forEach(function (r) {
+      var id = String(r.payroll_run_id || '');
+      if (id.indexOf(prefix) !== 0) return;
+      var n = Number(id.substring(prefix.length));
+      if (n > max) max = n;
+    });
+    return prefix + (max + 1);
+  }
+
   function num_(v) {
     var n = Number(v);
     return isFinite(n) ? n : 0;
@@ -428,7 +498,7 @@ var PayrollService = (function () {
       uiPhase: uiPhase,
       uiPhaseLabel: uiPhaseLabel_(uiPhase),
       syncMeta: syncMeta,
-      eligibleCount: eligibleEmployees_(run.period_year, run.period_month).length
+      eligibleCount: eligibleEmployees_(run.period_year, run.period_month, runVertical_(run)).length
     };
   }
 
@@ -438,51 +508,90 @@ var PayrollService = (function () {
     return run;
   }
 
-  function createRun(periodYear, periodMonth, notes) {
+  function createRunInsideLock_(session, year, month, vertical, notes) {
+    var open = findOpenRun_(year, month, vertical);
+    if (open) {
+      var scope = vertical ? ('vertical ' + vertical) : 'this month';
+      throw conflictError_('A non-LOCKED run already exists for ' + scope + ': ' + open.payroll_run_id);
+    }
+    var runId = primaryRunIdFor_(year, month, vertical);
+    if (DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId })) {
+      throw conflictError_('Run ID ' + runId + ' already exists. Use a correction run after lock.');
+    }
+    var workingDefault = Number(ConfigService.getSetting('default_working_days', 26)) || 26;
+    var now = new Date();
+    var run = {
+      payroll_run_id: runId,
+      period_year: year,
+      period_month: month,
+      vertical_name: vertical,
+      status: HRMS.PAYROLL_STATUS.DRAFT,
+      working_days_default: workingDefault,
+      currency: 'INR',
+      calculated_at: '',
+      approved_at: '',
+      approved_by_email: '',
+      locked_at: '',
+      locked_by_email: '',
+      correction_of_run_id: '',
+      notes: notes || '',
+      created_at: now,
+      created_by_email: session.email
+    };
+    DbService.insertRecord(HRMS.SHEETS.PAYROLL_RUNS, run);
+    seedInputs_(run);
+    AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', runId,
+      'Created payroll run ' + runId, session.employee_id);
+    return run;
+  }
+
+  function createRun(periodYear, periodMonth, verticalName, notes) {
     var session = requireHr_();
+    ensurePayrollRunSchema_();
+    var year = Number(periodYear);
+    var month = Number(periodMonth);
+    if (!year || month < 1 || month > 12) {
+      throw validationError_('Valid period_year and period_month (1–12) are required.');
+    }
+    var vertical = normalizeVerticalCode_(verticalName);
+    if (vertical) vertical = assertPayrollVertical_(vertical);
+    return withScriptLock_(function () {
+      var run = createRunInsideLock_(session, year, month, vertical, notes);
+      return getRunDetail(run.payroll_run_id, DETAIL_AFTER_MUTATION_);
+    });
+  }
+
+  function createRunsForAllVerticals(periodYear, periodMonth, notes) {
+    var session = requireHr_();
+    ensurePayrollRunSchema_();
     var year = Number(periodYear);
     var month = Number(periodMonth);
     if (!year || month < 1 || month > 12) {
       throw validationError_('Valid period_year and period_month (1–12) are required.');
     }
     return withScriptLock_(function () {
-      var open = findOpenRun_(year, month);
-      if (open) {
-        throw conflictError_('A non-LOCKED run already exists for this month: ' + open.payroll_run_id);
-      }
-      var runId = 'PR-' + year + '-' + padMonth_(month);
-      if (DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId })) {
-        throw conflictError_('Run ID ' + runId + ' already exists. Use a correction run after lock.');
-      }
-      var workingDefault = Number(ConfigService.getSetting('default_working_days', 26)) || 26;
-      var now = new Date();
-      var run = {
-        payroll_run_id: runId,
-        period_year: year,
-        period_month: month,
-        status: HRMS.PAYROLL_STATUS.DRAFT,
-        working_days_default: workingDefault,
-        currency: 'INR',
-        calculated_at: '',
-        approved_at: '',
-        approved_by_email: '',
-        locked_at: '',
-        locked_by_email: '',
-        correction_of_run_id: '',
-        notes: notes || '',
-        created_at: now,
-        created_by_email: session.email
-      };
-      DbService.insertRecord(HRMS.SHEETS.PAYROLL_RUNS, run);
-      seedInputs_(run);
-      AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', runId,
-        'Created payroll run ' + runId, session.employee_id);
-      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
+      var verticals = listConfiguredVerticals_();
+      var created = [];
+      var skipped = [];
+      verticals.forEach(function (v) {
+        try {
+          var run = createRunInsideLock_(session, year, month, assertPayrollVertical_(v), notes);
+          created.push(serializeRun_(run));
+        } catch (e) {
+          if (e && e.hrmsCode === HRMS.ERROR_CODES.CONFLICT) {
+            skipped.push({ vertical: v, reason: e.message });
+          } else {
+            throw e;
+          }
+        }
+      });
+      return { created: created, skipped: skipped, verticals: verticals };
     });
   }
 
   function createCorrectionRun(sourceRunId, notes) {
     var session = requireHr_();
+    ensurePayrollRunSchema_();
     return withScriptLock_(function () {
       var source = getRun_(sourceRunId);
       if (String(source.status).toUpperCase() !== HRMS.PAYROLL_STATUS.LOCKED) {
@@ -490,16 +599,19 @@ var PayrollService = (function () {
       }
       var year = Number(source.period_year);
       var month = Number(source.period_month);
-      var open = findOpenRun_(year, month);
+      var vertical = runVertical_(source);
+      var open = findOpenRun_(year, month, vertical);
       if (open) {
-        throw conflictError_('A non-LOCKED run already exists for this month: ' + open.payroll_run_id);
+        var scope = vertical ? ('vertical ' + vertical) : 'this month';
+        throw conflictError_('A non-LOCKED run already exists for ' + scope + ': ' + open.payroll_run_id);
       }
-      var runId = nextCorrectionId_(year, month);
+      var runId = nextCorrectionIdFromSource_(source);
       var now = new Date();
       var run = {
         payroll_run_id: runId,
         period_year: year,
         period_month: month,
+        vertical_name: vertical,
         status: HRMS.PAYROLL_STATUS.DRAFT,
         working_days_default: source.working_days_default,
         currency: 'INR',
@@ -950,28 +1062,19 @@ var PayrollService = (function () {
     return getRunDetail(runId, { skipSync: true });
   }
 
-  function findOpenRun_(year, month) {
+  function findOpenRun_(year, month, verticalName) {
+    var vertical = normalizeVerticalCode_(verticalName);
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS);
     for (var i = 0; i < runs.length; i++) {
-      if (Number(runs[i].period_year) === Number(year) &&
-          Number(runs[i].period_month) === Number(month) &&
-          String(runs[i].status).toUpperCase() !== HRMS.PAYROLL_STATUS.LOCKED) {
-        return runs[i];
-      }
+      if (Number(runs[i].period_year) !== Number(year) ||
+          Number(runs[i].period_month) !== Number(month)) continue;
+      if (String(runs[i].status).toUpperCase() === HRMS.PAYROLL_STATUS.LOCKED) continue;
+      var rv = runVertical_(runs[i]);
+      if (vertical && rv !== vertical) continue;
+      if (!vertical && rv) continue;
+      return runs[i];
     }
     return null;
-  }
-
-  function nextCorrectionId_(year, month) {
-    var prefix = 'PR-' + year + '-' + padMonth_(month) + '-C';
-    var max = 0;
-    DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).forEach(function (r) {
-      if (String(r.payroll_run_id).indexOf(prefix) === 0) {
-        var n = Number(String(r.payroll_run_id).substring(prefix.length));
-        if (n > max) max = n;
-      }
-    });
-    return prefix + (max + 1);
   }
 
   function lopFromMap_(lopMap, employeeId) {
@@ -1010,7 +1113,7 @@ var PayrollService = (function () {
       if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) {
         return { added: 0, total: DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).length };
       }
-      var eligible = eligibleEmployees_(run.period_year, run.period_month);
+      var eligible = eligibleEmployees_(run.period_year, run.period_month, runVertical_(run));
       var existing = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
       var existingIds = {};
       existing.forEach(function (inp) { existingIds[inp.employee_id] = true; });
@@ -1045,7 +1148,7 @@ var PayrollService = (function () {
     runs.forEach(function (run) {
       var st = String(run.status || '').toUpperCase();
       if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) return;
-      if (!isEmployeeEligibleForPeriod(employeeId, run.period_year, run.period_month)) return;
+      if (!isEmployeeEligibleForPeriod(employeeId, run.period_year, run.period_month, runVertical_(run))) return;
       try {
         var meta = syncEligibleEmployees(run.payroll_run_id);
         runsSynced++;
@@ -1058,7 +1161,7 @@ var PayrollService = (function () {
     return { runsSynced: runsSynced, inputsAdded: inputsAdded };
   }
 
-  function isEmployeeEligibleForPeriod(employeeId, periodYear, periodMonth) {
+  function isEmployeeEligibleForPeriod(employeeId, periodYear, periodMonth, verticalFilter) {
     requireHr_();
     var emp = null;
     try {
@@ -1070,13 +1173,13 @@ var PayrollService = (function () {
       emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
     }
     if (!emp) return false;
-    return eligibleEmployees_(periodYear, periodMonth).some(function (e) {
+    return eligibleEmployees_(periodYear, periodMonth, verticalFilter).some(function (e) {
       return e.employee_id === employeeId;
     });
   }
 
   function seedInputs_(run) {
-    var employees = eligibleEmployees_(run.period_year, run.period_month);
+    var employees = eligibleEmployees_(run.period_year, run.period_month, runVertical_(run));
     var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(run.period_year, run.period_month);
     var rows = employees.map(function (emp) {
       return buildInputRowForEmployee_(run, emp, lopMap);
@@ -1110,8 +1213,9 @@ var PayrollService = (function () {
     DbService.insertRecords(HRMS.SHEETS.PAYROLL_INPUTS, rows);
   }
 
-  function eligibleEmployees_(year, month) {
+  function eligibleEmployees_(year, month, verticalFilter) {
     var end = periodEnd_(year, month);
+    var vertical = normalizeVerticalCode_(verticalFilter);
     var all = null;
     try {
       if (typeof EmployeeService !== 'undefined' && EmployeeService &&
@@ -1128,6 +1232,7 @@ var PayrollService = (function () {
       if (String(e.status || '').toUpperCase() !== 'ACTIVE') return false;
       var join = toDate_(e.joining_date);
       if (join && join > end) return false;
+      if (vertical && employeeVertical_(e) !== vertical) return false;
       return true;
     });
   }
@@ -1326,7 +1431,9 @@ var PayrollService = (function () {
     listRuns: listRuns,
     getRunDetail: getRunDetail,
     createRun: createRun,
+    createRunsForAllVerticals: createRunsForAllVerticals,
     createCorrectionRun: createCorrectionRun,
+    listConfiguredVerticals: listConfiguredVerticals_,
     saveInputs: saveInputs,
     syncEligibleEmployees: syncEligibleEmployees,
     syncOpenPayrollRunsForEmployee: syncOpenPayrollRunsForEmployee,

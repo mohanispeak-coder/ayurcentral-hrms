@@ -54,7 +54,7 @@ var SchemaService = (function () {
     'component_kind', 'calc_method', 'amount', 'percent', 'sort_order'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_RUNS] = [
-    'payroll_run_id', 'period_year', 'period_month', 'status', 'working_days_default',
+    'payroll_run_id', 'period_year', 'period_month', 'vertical_name', 'status', 'working_days_default',
     'currency', 'calculated_at', 'approved_at', 'approved_by_email', 'locked_at',
     'locked_by_email', 'correction_of_run_id', 'notes', 'created_at', 'created_by_email'
   ];

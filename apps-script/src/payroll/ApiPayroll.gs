@@ -22,9 +22,27 @@ function apiSyncPayrollEmployees(runId, sessionToken) {
   }, sessionToken);
 }
 
-function apiCreatePayrollRun(periodYear, periodMonth, notes, sessionToken) {
+function apiCreatePayrollRun(periodYear, periodMonth, verticalOrNotes, notesOrToken, sessionToken) {
+  var vertical = '';
+  var notes = '';
+  var token = sessionToken;
+  var arg3 = verticalOrNotes == null ? '' : String(verticalOrNotes).trim();
+  if (/^(SAPL|AOPL|AOMS|OTHERS)$/i.test(arg3)) {
+    vertical = arg3.toUpperCase();
+    notes = notesOrToken == null ? '' : String(notesOrToken);
+    token = sessionToken;
+  } else {
+    notes = arg3;
+    token = notesOrToken;
+  }
   return hrmsRun_(function () {
-    return PayrollService.createRun(periodYear, periodMonth, notes);
+    return PayrollService.createRun(periodYear, periodMonth, vertical, notes);
+  }, token);
+}
+
+function apiCreatePayrollRunsAllVerticals(periodYear, periodMonth, notes, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.createRunsForAllVerticals(periodYear, periodMonth, notes);
   }, sessionToken);
 }
 
