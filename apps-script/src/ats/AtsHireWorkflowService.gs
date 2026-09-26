@@ -52,6 +52,36 @@ var AtsHireWorkflowService = (function () {
       });
   }
 
+  var HIRE_APP_COLUMNS_ = [
+    'hire_salary_structure_id',
+    'hire_monthly_salary',
+    'offer_letter_sent_at',
+    'appointment_letter_sent_at'
+  ];
+
+  function ensureHireApplicationColumns_() {
+    if (typeof AtsSchemaService === 'undefined' || !AtsSchemaService.ensureSheets) return;
+    try {
+      AtsSchemaService.ensureSheets();
+    } catch (e) {
+      Logger.log('ensureHireApplicationColumns_: ' + (e.message || e));
+    }
+  }
+
+  function applicationHasHireColumns_() {
+    try {
+      var rows = DbService.getAllRecords(ATS.SHEETS.APPLICATIONS);
+      if (!rows || !rows.length) return true;
+      var sample = rows[0];
+      for (var i = 0; i < HIRE_APP_COLUMNS_.length; i++) {
+        if (!sample.hasOwnProperty(HIRE_APP_COLUMNS_[i])) return false;
+      }
+      return true;
+    } catch (ignore) {
+      return false;
+    }
+  }
+
   function structureLabel_(structureId) {
     structureId = trim_(structureId);
     if (!structureId) return '';
@@ -62,6 +92,7 @@ var AtsHireWorkflowService = (function () {
 
   function loadHireContext_(session, applicationId) {
     AtsPermissionService.requireManage(session);
+    ensureHireApplicationColumns_();
     var app = AtsRepository.findApplication(applicationId);
     if (!app) throw notFoundError_('Application not found.');
     var job = AtsRepository.findJob(app.job_id);
@@ -78,6 +109,7 @@ var AtsHireWorkflowService = (function () {
 
   function saveHireCompensation_(session, applicationId, payload) {
     payload = payload || {};
+    ensureHireApplicationColumns_();
     var ctx = loadHireContext_(session, applicationId);
     var structureId = trim_(payload.salary_structure_id);
     var monthly = trim_(payload.monthly_salary);
@@ -94,14 +126,22 @@ var AtsHireWorkflowService = (function () {
       throw validationError_('Monthly salary must be a valid number.', { fields: { monthly_salary: 'Invalid.' } });
     }
     var now = new Date();
-    var updated = AtsRepository.updateApplication(applicationId, {
+    AtsRepository.updateApplication(applicationId, {
       hire_salary_structure_id: structureId,
       hire_monthly_salary: monthlyNum,
       updated_at: now
     });
+    var saved = AtsRepository.findApplication(applicationId);
+    if (!hireCompensationReady_(saved)) {
+      if (!applicationHasHireColumns_()) {
+        throw configurationError_(
+          'Applications sheet is missing hire columns. In the spreadsheet, run menu Ensure ATS schema, or ask an admin to open Recruitment setup once, then save compensation again.');
+      }
+      throw configurationError_('Compensation could not be saved. Please try Save compensation again.');
+    }
     audit_(ATS.AUDIT.HIRE_OFFER, 'Application', applicationId,
       'Hire compensation saved: ' + structureId + ' @ ' + monthlyNum);
-    return { application: updated };
+    return { application: saved };
   }
 
   function splitName_(fullName) {
@@ -112,7 +152,21 @@ var AtsHireWorkflowService = (function () {
   }
 
   function hireCompensationReady_(app) {
-    return trim_(app.hire_salary_structure_id) && trim_(app.hire_monthly_salary) !== '';
+    if (!app) return false;
+    if (!trim_(app.hire_salary_structure_id)) return false;
+    var sal = app.hire_monthly_salary;
+    if (sal === '' || sal == null) return false;
+    var n = Number(sal);
+    return isFinite(n) && n >= 0;
+  }
+
+  function assertHireCompensationReady_(app) {
+    if (hireCompensationReady_(app)) return;
+    if (!applicationHasHireColumns_()) {
+      throw configurationError_(
+        'Applications sheet is missing hire columns. Run Ensure ATS schema from the spreadsheet menu, then save compensation again before sending letters.');
+    }
+    throw validationError_('Save salary structure and monthly salary before sending letters or creating the employee.');
   }
 
   function createEmployeeFromHire_(session, applicationId, employeeId) {
@@ -123,9 +177,7 @@ var AtsHireWorkflowService = (function () {
     if (trim_(candidate.hired_employee_id)) {
       throw conflictError_('Employee already linked: ' + candidate.hired_employee_id);
     }
-    if (!hireCompensationReady_(app)) {
-      throw validationError_('Save salary structure and monthly salary before creating the employee.');
-    }
+    assertHireCompensationReady_(app);
     employeeId = trim_(employeeId).toUpperCase();
     if (!employeeId) {
       throw validationError_('Employee ID is required.', { fields: { employee_id: 'Required.' } });
@@ -195,6 +247,8 @@ var AtsHireWorkflowService = (function () {
     enrichApplicationHireFields: enrichApplicationHireFields_,
     loadHireContext: loadHireContext_,
     structureLabel: structureLabel_,
-    hireCompensationReady: hireCompensationReady_
+    hireCompensationReady: hireCompensationReady_,
+    assertHireCompensationReady: assertHireCompensationReady_,
+    ensureHireApplicationColumns: ensureHireApplicationColumns_
   };
 })();

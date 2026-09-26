@@ -41,13 +41,13 @@ var AtsAppointmentLetterService = (function () {
 
   function sendAppointmentLetter_(session, applicationId) {
     var ctx = AtsHireWorkflowService.loadHireContext(session, applicationId);
-    if (!AtsHireWorkflowService.hireCompensationReady(ctx.application)) {
-      throw validationError_('Save salary structure and monthly salary before sending the appointment letter.');
-    }
+    var appFresh = AtsRepository.findApplication(applicationId);
+    AtsHireWorkflowService.assertHireCompensationReady(appFresh || ctx.application);
     var email = trim_(ctx.candidate.email);
     if (!email) throw validationError_('Candidate email is missing.');
-    var content = buildEmail_(ctx.candidate, ctx.job, ctx.application);
-    var pdf = AtsLetterPdfService.buildAppointmentPdf(ctx.candidate, ctx.job, ctx.application);
+    var appRow = appFresh || ctx.application;
+    var content = buildEmail_(ctx.candidate, ctx.job, appRow);
+    var pdf = AtsLetterPdfService.buildAppointmentPdf(ctx.candidate, ctx.job, appRow);
     MailApp.sendEmail({
       to: email,
       subject: content.subject,

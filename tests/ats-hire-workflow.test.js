@@ -27,6 +27,7 @@ const schema = read('AtsSchemaService.gs');
 
 check('hire-schema-columns', /hire_salary_structure_id/.test(schema) && /appointment_letter_sent_at/.test(schema));
 check('hire-service', /saveHireCompensation_/.test(hire) && /createEmployeeFromHire_/.test(hire));
+check('hire-schema-ensure', /ensureHireApplicationColumns_/.test(hire) && /assertHireCompensationReady_/.test(hire));
 check('hire-apis', /apiAtsSendHireOfferLetter/.test(read('ApiAts.gs')) && /apiAtsCreateEmployeeFromHire/.test(read('ApiAts.gs')));
 check('hire-ui', /buildHireWorkflowCardHtml_/.test(client) && /apiAtsListHireSalaryStructures/.test(client));
 check('appointment-template', /ats_appointment/.test(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'HrmsContentTemplateService.gs'), 'utf8')));
