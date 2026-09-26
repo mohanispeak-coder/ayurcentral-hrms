@@ -46,6 +46,13 @@ function apiCreatePayrollRunsAllVerticals(periodYear, periodMonth, notes, sessio
   }, sessionToken);
 }
 
+function apiPayrollImportLegacyInputs(runId, sourceRunId, sessionToken) {
+  var source = sourceRunId == null ? '' : String(sourceRunId).trim();
+  return hrmsRun_(function () {
+    return PayrollService.importInputsFromLegacyRun(runId, source || undefined);
+  }, sessionToken);
+}
+
 function apiCreatePayrollCorrection(sourceRunId, notes, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.createCorrectionRun(sourceRunId, notes);

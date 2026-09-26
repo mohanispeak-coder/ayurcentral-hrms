@@ -446,7 +446,11 @@ var PayrollService = (function () {
       if (ma !== 0) return ma > 0 ? -1 : 1;
       return serializeDateTime_(b.created_at).localeCompare(serializeDateTime_(a.created_at));
     });
-    return runs.map(serializeRun_);
+    return runs.map(function (r) {
+      var ser = serializeRun_(r);
+      ser.attendance_input_count = countAttendanceInputs_(r.payroll_run_id);
+      return ser;
+    });
   }
 
   /**
@@ -498,7 +502,8 @@ var PayrollService = (function () {
       uiPhase: uiPhase,
       uiPhaseLabel: uiPhaseLabel_(uiPhase),
       syncMeta: syncMeta,
-      eligibleCount: eligibleEmployees_(run.period_year, run.period_month, runVertical_(run)).length
+      eligibleCount: eligibleEmployees_(run.period_year, run.period_month, runVertical_(run)).length,
+      legacyImportHint: buildLegacyImportHint_(run)
     };
   }
 
@@ -540,6 +545,7 @@ var PayrollService = (function () {
     };
     DbService.insertRecord(HRMS.SHEETS.PAYROLL_RUNS, run);
     seedInputs_(run);
+    tryAutoImportFromLegacy_(run);
     AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', runId,
       'Created payroll run ' + runId, session.employee_id);
     return run;
@@ -1062,6 +1068,178 @@ var PayrollService = (function () {
     return getRunDetail(runId, { skipSync: true });
   }
 
+  function inputHasAttendance_(inp) {
+    if (!inp) return false;
+    if (num_(inp.working_days) > 0 || num_(inp.paid_days) > 0) return true;
+    return !!String(inp.daily_attendance_json || '').trim();
+  }
+
+  function countAttendanceInputs_(runId) {
+    var n = 0;
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      if (inputHasAttendance_(inp)) n++;
+    });
+    return n;
+  }
+
+  function findLegacyRunForPeriod_(year, month) {
+    var primaryId = primaryRunIdFor_(year, month, '');
+    var primary = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: primaryId });
+    if (primary && !runVertical_(primary)) return primary;
+    var matches = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).filter(function (r) {
+      return Number(r.period_year) === Number(year) &&
+        Number(r.period_month) === Number(month) &&
+        !runVertical_(r);
+    });
+    if (!matches.length) return null;
+    matches.sort(function (a, b) {
+      return serializeDateTime_(b.created_at).localeCompare(serializeDateTime_(a.created_at));
+    });
+    return matches[0];
+  }
+
+  function copyInputFieldsFromSource_(sourceInp) {
+    return {
+      working_days: sourceInp.working_days,
+      paid_days: sourceInp.paid_days,
+      lop_days: sourceInp.lop_days,
+      daily_attendance_json: sourceInp.daily_attendance_json || '',
+      bonus: sourceInp.bonus,
+      incentive: sourceInp.incentive,
+      other_earnings: sourceInp.other_earnings,
+      other_deductions: sourceInp.other_deductions,
+      tds_amount: sourceInp.tds_amount,
+      remarks: sourceInp.remarks || ''
+    };
+  }
+
+  function countCopyableLegacyInputs_(legacyRunId, vertical) {
+    var sourceInputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, {
+      payroll_run_id: legacyRunId
+    });
+    var employees = indexEmployees_();
+    var copyable = 0;
+    sourceInputs.forEach(function (inp) {
+      if (!inputHasAttendance_(inp)) return;
+      var emp = resolveEmployee_(employees, inp.employee_id);
+      if (employeeVertical_(emp) === vertical) copyable++;
+    });
+    return copyable;
+  }
+
+  function buildLegacyImportHint_(run) {
+    var vertical = runVertical_(run);
+    if (!vertical) return null;
+    var st = String(run.status).toUpperCase();
+    if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) return null;
+    var legacy = findLegacyRunForPeriod_(run.period_year, run.period_month);
+    if (!legacy || legacy.payroll_run_id === run.payroll_run_id) return null;
+    var copyable = countCopyableLegacyInputs_(legacy.payroll_run_id, vertical);
+    if (!copyable) return null;
+    var targetCount = countAttendanceInputs_(run.payroll_run_id);
+    if (targetCount >= copyable) return null;
+    return {
+      source_run_id: legacy.payroll_run_id,
+      copyable_count: copyable,
+      target_attendance_count: targetCount,
+      vertical: vertical,
+      message: 'Combined payroll ' + legacy.payroll_run_id + ' has attendance for ' + copyable + ' ' +
+        vertical + ' employee' + (copyable === 1 ? '' : 's') + '. This run has ' + targetCount +
+        ' with attendance. Import to copy working days, LOP, and daily register data, then calculate.'
+    };
+  }
+
+  /**
+   * Copy attendance and payroll input fields from a combined legacy run into a vertical run.
+   * @param {string} targetRunId
+   * @param {string=} sourceRunId
+   */
+  function importInputsFromLegacyRun(targetRunId, sourceRunId) {
+    var session = requireHr_();
+    return withScriptLock_(function () {
+      var result = importInputsFromLegacyRun_(targetRunId, sourceRunId);
+      AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', targetRunId,
+        'Imported ' + result.updated + ' inputs from legacy ' + result.source_run_id, session.employee_id);
+      return getRunDetail(targetRunId, DETAIL_AFTER_MUTATION_);
+    });
+  }
+
+  function importInputsFromLegacyRun_(targetRunId, sourceRunId) {
+    var target = getRun_(targetRunId);
+    assertMutableInputs_(target);
+    var vertical = runVertical_(target);
+    if (!vertical) {
+      throw validationError_('Import is only for vertical runs. Open the combined legacy payroll run to view older data.');
+    }
+    var source = sourceRunId ? getRun_(sourceRunId) : findLegacyRunForPeriod_(target.period_year, target.period_month);
+    if (!source) {
+      throw notFoundError_('No combined legacy payroll run found for this month.');
+    }
+    if (runVertical_(source)) {
+      throw validationError_('Source run must be a combined legacy payroll (no vertical).');
+    }
+    var sourceInputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, {
+      payroll_run_id: source.payroll_run_id
+    });
+    var employees = indexEmployees_();
+    var existing = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: targetRunId });
+    var byEmp = {};
+    existing.forEach(function (inp) { byEmp[inp.employee_id] = inp; });
+    var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(target.period_year, target.period_month);
+    var updates = [];
+    var inserts = [];
+    var imported = 0;
+    sourceInputs.forEach(function (src) {
+      if (!inputHasAttendance_(src)) return;
+      var emp = resolveEmployee_(employees, src.employee_id);
+      if (employeeVertical_(emp) !== vertical) return;
+      var fields = copyInputFieldsFromSource_(src);
+      fields.lop_from_leave = lopFromMap_(lopMap, src.employee_id);
+      var ex = byEmp[src.employee_id];
+      if (ex) {
+        updates.push({ pk: ex.payroll_input_id, updates: fields });
+        imported++;
+      } else if (isEmployeeEligibleForPeriod(src.employee_id, target.period_year, target.period_month, vertical)) {
+        inserts.push({
+          payroll_input_id: DbService.generateId('PI'),
+          payroll_run_id: targetRunId,
+          employee_id: src.employee_id,
+          working_days: fields.working_days,
+          paid_days: fields.paid_days,
+          lop_days: fields.lop_days,
+          daily_attendance_json: fields.daily_attendance_json,
+          bonus: fields.bonus,
+          incentive: fields.incentive,
+          other_earnings: fields.other_earnings,
+          other_deductions: fields.other_deductions,
+          tds_amount: fields.tds_amount,
+          lop_from_leave: fields.lop_from_leave,
+          remarks: fields.remarks
+        });
+        imported++;
+      }
+    });
+    if (updates.length) DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', updates);
+    if (inserts.length) DbService.insertRecords(HRMS.SHEETS.PAYROLL_INPUTS, inserts);
+    if (!imported) {
+      throw validationError_('No attendance rows found to import for vertical ' + vertical + ' on ' + source.payroll_run_id + '.');
+    }
+    return {
+      source_run_id: source.payroll_run_id,
+      updated: imported
+    };
+  }
+
+  function tryAutoImportFromLegacy_(targetRun) {
+    if (!runVertical_(targetRun)) return { imported: 0 };
+    try {
+      return importInputsFromLegacyRun_(targetRun.payroll_run_id, null);
+    } catch (e) {
+      Logger.log('tryAutoImportFromLegacy_: ' + (e.message || e));
+      return { imported: 0 };
+    }
+  }
+
   function findOpenRun_(year, month, verticalName) {
     var vertical = normalizeVerticalCode_(verticalName);
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS);
@@ -1201,6 +1379,7 @@ var PayrollService = (function () {
         working_days: inp.working_days,
         paid_days: inp.paid_days,
         lop_days: inp.lop_days,
+        daily_attendance_json: inp.daily_attendance_json || '',
         bonus: inp.bonus,
         incentive: inp.incentive,
         other_earnings: inp.other_earnings,
@@ -1432,6 +1611,8 @@ var PayrollService = (function () {
     getRunDetail: getRunDetail,
     createRun: createRun,
     createRunsForAllVerticals: createRunsForAllVerticals,
+    importInputsFromLegacyRun: importInputsFromLegacyRun,
+    findLegacyRunForPeriod: findLegacyRunForPeriod_,
     createCorrectionRun: createCorrectionRun,
     listConfiguredVerticals: listConfiguredVerticals_,
     saveInputs: saveInputs,

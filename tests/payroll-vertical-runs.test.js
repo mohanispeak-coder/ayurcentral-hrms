@@ -30,6 +30,10 @@ check('ui-vertical-select', /id="pr-vertical"/.test(client) && /btn-create-all-v
 check('ui-legacy-vertical', /LEGACY_VERTICAL_/.test(client) && /resolveTargetRunForPeriod_/.test(client));
 check('ui-all-runs-list', /paintPreviousPayrolls_/.test(client) && /data-run-id/.test(client));
 check('att-run-vertical-match', /assertRunVerticalMatches_/.test(att));
+check('legacy-import-service', /importInputsFromLegacyRun/.test(payroll) && /findLegacyRunForPeriod_/.test(payroll));
+check('legacy-import-api', /apiPayrollImportLegacyInputs/.test(api));
+check('legacy-import-ui', /paintLegacyImportBanner_/.test(client) && /apiPayrollImportLegacyInputs/.test(client));
+check('legacy-attendance-count', /attendance_input_count/.test(payroll) && /runAttendanceCount_/.test(client));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

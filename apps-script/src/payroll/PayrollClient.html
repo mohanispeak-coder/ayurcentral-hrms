@@ -807,6 +807,10 @@
       return open || locked;
     }
 
+    function runAttendanceCount_(r) {
+      return Number(r && r.attendance_input_count) || 0;
+    }
+
     function resolveTargetRunForPeriod_(runs, year, month, vertical, runId) {
       runs = runs || [];
       if (runId) {
@@ -814,6 +818,12 @@
         if (byId) return byId;
       }
       var byVertical = pickLatestFromRunList_(runsForPeriodVertical_(runs, year, month, vertical));
+      if (byVertical && vertical && vertical !== LEGACY_VERTICAL_) {
+        var legacyPick = pickLatestFromRunList_(runsForPeriodVertical_(runs, year, month, LEGACY_VERTICAL_));
+        if (legacyPick && runAttendanceCount_(byVertical) === 0 && runAttendanceCount_(legacyPick) > 0) {
+          return legacyPick;
+        }
+      }
       if (byVertical) return byVertical;
       var legacy = pickLatestFromRunList_(runsForPeriodVertical_(runs, year, month, LEGACY_VERTICAL_));
       if (legacy) return legacy;
@@ -996,6 +1006,7 @@
           '<button type="button" class="btn btn-secondary" id="btn-create-all-verticals">Start all verticals</button></div></div>';
       } else {
         html += paintAttendanceLockedBanner_(st);
+        if (detail) html += paintLegacyImportBanner_(detail);
         html += paintAttendanceBulkSection_(currentRun.payroll_run_id, canUploadAttendance_(st), true, st, true);
         if (detail) html += paintPayrollDataSection_(detail, editableAtt);
       }
@@ -1081,6 +1092,7 @@
       if (currentRun && runsForPeriod(runs, year, month).length > 1) {
         html += paintPeriodRunPicker_(runs, year, month, currentRun.payroll_run_id);
       }
+      if (detail) html += paintLegacyImportBanner_(detail);
 
       if (detail) html += hrPhaseStepper(detail);
 
@@ -1461,10 +1473,28 @@
       return html;
     }
 
+    function paintLegacyImportBanner_(detail) {
+      var hint = detail && detail.legacyImportHint;
+      if (!hint || !hint.source_run_id) return '';
+      return '<div class="card alert alert-warning legacy-import-banner" id="legacy-import-banner">' +
+        '<p><strong>Previous combined payroll has attendance.</strong> ' + escapeHtml(hint.message || '') + '</p>' +
+        '<div class="primary-next" style="flex-wrap:wrap;gap:8px">' +
+        '<button type="button" class="btn btn-primary btn-sm" id="btn-import-legacy" data-source-run-id="' +
+        escapeHtml(hint.source_run_id) + '">Import from ' + escapeHtml(hint.source_run_id) + '</button>' +
+        '<button type="button" class="btn btn-secondary btn-sm js-open-legacy-run" data-run-id="' +
+        escapeHtml(hint.source_run_id) + '">Open combined payroll</button></div></div>';
+    }
+
     function paintAdvancedSection_(detail, editable, st) {
+      var hint = detail && detail.legacyImportHint;
+      var importBtn = (editable && hint && hint.source_run_id)
+        ? '<button type="button" class="btn btn-secondary" id="btn-import-legacy-advanced" data-source-run-id="' +
+          escapeHtml(hint.source_run_id) + '">Import attendance from combined payroll</button> '
+        : '';
       return '<details class="card section-details collapsible-section" id="payroll-advanced-details">' +
         '<summary>More actions</summary>' +
         '<div class="advanced-actions" id="payroll-advanced">' +
+        importBtn +
         (editable ? '<button type="button" class="btn btn-secondary" id="btn-refresh-lop">Refresh leave LOP</button> ' +
           '<button type="button" class="btn btn-secondary" id="btn-apply-lop">Apply leave LOP to days</button> ' : '') +
         (canReturnPayrollToDraft_(st) ?
@@ -2069,6 +2099,39 @@
       bindCorrectionRun_($('btn-attendance-correction'));
       bindCorrectionRun_($('btn-attendance-gate-correction'));
       bindCorrectionRun_($('btn-correct'));
+
+      function bindLegacyImport_(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          var sourceId = String(btn.getAttribute('data-source-run-id') || '').trim();
+          confirmModal({
+            title: 'Import attendance from combined payroll?',
+            body: 'This copies working days, LOP, daily register, and variable pay inputs from the older combined run into this vertical run for matching employees. You can recalculate after import.',
+            okLabel: 'Import'
+          }).then(function (ok) {
+            if (!ok) return;
+            if (!setButtonLoading(btn, 'Importing...')) return;
+            rpc('apiPayrollImportLegacyInputs', [runId, sourceId], btn, 'Importing...', $('pr-action-feedback'))
+              .then(function (next) {
+                invalidateAllPayrollViews_();
+                afterUpdate(next, 'Attendance imported from combined payroll. Calculate to generate payroll.');
+              })
+              .catch(function (err) {
+                restoreButton(btn);
+                showToast(err.message || 'Import failed', 'error');
+              });
+          });
+        });
+      }
+      bindLegacyImport_($('btn-import-legacy'));
+      bindLegacyImport_($('btn-import-legacy-advanced'));
+
+      page.querySelectorAll('.js-open-legacy-run').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var rid = this.getAttribute('data-run-id');
+          if (rid && App.navigate) App.navigate('payroll', { runId: rid, vertical: LEGACY_VERTICAL_ });
+        });
+      });
 
       var lop = $('btn-refresh-lop');
       if (lop) lop.addEventListener('click', function () {
