@@ -573,10 +573,17 @@ var PayslipService = (function () {
     return v == null ? 0 : v;
   }
 
-  function resolveEmployerBlock_(emp) {
+  function resolveEmployerBlock_(emp, employeeId) {
     var name = ConfigService.getCompanyName();
     var addr = String(ConfigService.getSetting('company_address', '') || '').trim();
-    var vertical = String(emp.vertical_name || '').trim().toUpperCase();
+    var vertical = '';
+    if (typeof PayslipLogoService !== 'undefined' && PayslipLogoService.resolveVertical) {
+      vertical = PayslipLogoService.resolveVertical(emp, employeeId);
+    }
+    if (!vertical) vertical = String(emp.vertical_name || '').trim().toUpperCase();
+    if (!vertical && employeeId) {
+      vertical = String(employeeId).split('-')[0].trim().toUpperCase();
+    }
     if (vertical && typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listVerticalCatalog) {
       var catalog = EmployeeRepository.listVerticalCatalog() || [];
       for (var i = 0; i < catalog.length; i++) {
@@ -590,10 +597,21 @@ var PayslipService = (function () {
         break;
       }
     }
+    var logoSrc = '';
+    var logoClass = 'logo';
+    if (typeof PayslipLogoService !== 'undefined' && PayslipLogoService.dataUriForEmployee) {
+      logoSrc = PayslipLogoService.dataUriForEmployee(emp, employeeId);
+      logoClass = PayslipLogoService.logoCssClassForVertical(vertical);
+    }
+    if (!logoSrc) {
+      logoSrc = String(ConfigService.getSetting('payslip_logo_url', '') || '').trim();
+    }
     return {
       name: name,
       address: addr,
-      logoUrl: String(ConfigService.getSetting('payslip_logo_url', '') || '').trim()
+      vertical: vertical,
+      logoSrc: logoSrc,
+      logoClass: logoClass
     };
   }
 
@@ -657,7 +675,7 @@ var PayslipService = (function () {
   }
 
   function buildHtml_(run, rec, emp) {
-    var employer = resolveEmployerBlock_(emp);
+    var employer = resolveEmployerBlock_(emp, rec.employee_id);
     var periodUpper = periodLabelUpper_(run);
     var breakdown = {};
     try {
@@ -710,8 +728,8 @@ var PayslipService = (function () {
     var grossB = Number(rec.total_deductions) || 0;
     var netPay = Number(rec.net_pay) || 0;
     var generated = formatGeneratedDatePayslip_();
-    var logoHtml = employer.logoUrl
-      ? '<img class="logo" src="' + esc_(employer.logoUrl) + '" alt="Company logo"/>'
+    var logoHtml = employer.logoSrc
+      ? '<img class="' + esc_(employer.logoClass || 'logo') + '" src="' + esc_(employer.logoSrc) + '" alt="Company logo"/>'
       : '<div class="logo-placeholder"></div>';
 
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PAY SLIP - ' + esc_(periodUpper) +
@@ -721,7 +739,9 @@ var PayslipService = (function () {
       '.sheet{max-width:820px;margin:0 auto;border:1px solid #d8dde3;padding:16px 18px}' +
       '.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}' +
       '.brand{display:flex;gap:12px;align-items:flex-start;flex:1}' +
-      '.logo{height:42px;width:auto;object-fit:contain}' +
+      '.logo{height:42px;width:auto;object-fit:contain;display:block}' +
+      '.logo-sapl{height:40px;max-width:150px}' +
+      '.logo-ayurvedaone{height:52px;max-width:220px}' +
       '.logo-placeholder{width:42px;height:42px;border:1px dashed #c5cec8;border-radius:4px}' +
       '.company-name{font-size:18px;font-weight:700;color:#2f5f3f;margin:0 0 4px}' +
       '.company-addr{font-size:11px;color:#4a5568;line-height:1.45;max-width:420px}' +

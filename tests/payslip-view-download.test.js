@@ -36,8 +36,13 @@ check('profile-view-arg', /apiDownloadEmployeeDocument', id, 'view'/.test(empCli
 check('sapl-pay-slip-title', /PAY SLIP/.test(payslip) && /pay-slip-badge/.test(payslip));
 check('sapl-earnings-rate-actual', /RATE \(Rs\.\)/.test(payslip) && /TOTAL EARNINGS \(A\)/.test(payslip));
 check('sapl-deductions-total-b', /TOTAL DEDUCTIONS \(B\)/.test(payslip));
-check('sapl-logo-setting', /payslip_logo_url/.test(payslip));
+check('sapl-logo-fallback-setting', /payslip_logo_url/.test(payslip));
 check('sapl-vertical-employer', /resolveEmployerBlock_/.test(payslip) && /listVerticalCatalog/.test(payslip));
+const logoSvc = read('payroll/PayslipLogoService.gs');
+const logoData = read('payroll/PayslipLogos.gs');
+check('payslip-logo-service-verticals', /SAPL/.test(logoSvc) && /AYURVEDAONE/.test(logoSvc) && /resolveVertical_/.test(logoSvc));
+check('payslip-logo-embedded', /HRMS_PAYSLIP_LOGO_B64_/.test(logoData) && /dataUriForEmployee_/.test(logoSvc));
+check('payslip-logo-by-employee-id', /PayslipLogoService\.dataUriForEmployee/.test(payslip) && /split\('-'\)/.test(payslip));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
