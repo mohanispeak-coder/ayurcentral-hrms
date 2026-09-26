@@ -550,13 +550,13 @@ var PayslipService = (function () {
   ];
 
   var DEDUCTION_ROWS_ = [
-    { label: 'Provident Fund (PF)', codes: ['PF', 'EPF'] },
+    { label: 'PF', codes: ['PF', 'EPF'] },
     { label: 'Professional Tax', codes: ['PT', 'PROFESSIONAL_TAX'] },
     { label: 'TDS', codes: ['TDS'] },
     { label: 'ESI', codes: ['ESI', 'ESIC'] },
     { label: 'Advance', codes: ['ADVANCE', 'ADV'] },
-    { label: 'Loan / Cash Deduction (LCD)', codes: ['LCD', 'LOAN'] },
-    { label: 'Leave Without Pay (LWF)', codes: ['LWF', 'LOP', 'LOP_DED'] }
+    { label: 'LCD', codes: ['LCD', 'LOAN'] },
+    { label: 'LWF', codes: ['LWF', 'LOP', 'LOP_DED'] }
   ];
 
   function round2_(n) {
@@ -758,11 +758,7 @@ var PayslipService = (function () {
       if (row.label === 'TDS' && !actual) actual = Number(rec.tds_amount) || 0;
       if (row.label === 'Advance') actual = round2_(actual + (Number(rec.other_deductions) || 0));
       var stripe = idx % 2 === 1 ? ' class="stripe"' : '';
-      var lbl = row.label;
-      if (lbl.indexOf('LCD') >= 0) {
-        lbl = 'Loan / Cash Deduction&nbsp;(LCD)';
-      }
-      dedRows += '<tr' + stripe + '><td class="ded-lbl">' + lbl + '</td><td class="num">' +
+      dedRows += '<tr' + stripe + '><td class="ded-lbl">' + esc_(row.label) + '</td><td class="num">' +
         moneyPayslip_(actual) + '</td></tr>';
     });
 
