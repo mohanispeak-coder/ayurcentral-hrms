@@ -44,7 +44,9 @@ check('payslip-logo-service-verticals', /SAPL/.test(logoSvc) && /AYURVEDAONE/.te
 check('payslip-logo-embedded', /HRMS_PAYSLIP_LOGO_B64_/.test(logoData) && /dataUriForEmployee_/.test(logoSvc));
 check('payslip-logo-by-employee-id', /PayslipLogoService\.dataUriForEmployee/.test(payslip) && /split\('-'\)/.test(payslip));
 check('payslip-template-table-layout', /info-table/.test(payslip) && /class="split"/.test(payslip) && /coins-icon/.test(payslip));
-check('payslip-rate-dash', /moneyRatePayslip_/.test(payslip));
+check('payslip-rate-dash-column', /class="num">-<\/td><td class="num">/.test(payslip));
+check('payslip-htmlservice-pdf', /HtmlService\.createHtmlOutput/.test(payslip));
+check('payslip-address-by-vertical', /PAYSLIP_ADDRESS_BY_VERTICAL/.test(read('foundation/Constants.gs')));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
