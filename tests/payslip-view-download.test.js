@@ -33,6 +33,11 @@ check('api-employee-doc-intent', /apiDownloadEmployeeDocument\(documentId, inten
 check('client-view-arg', /apiGetPayslipDownload', \[btn\.getAttribute\('data-id'\), 'view'\]/.test(payrollClient));
 check('client-download-arg', /apiGetPayslipDownload', \[btn\.getAttribute\('data-id'\), 'download'\]/.test(payrollClient));
 check('profile-view-arg', /apiDownloadEmployeeDocument', id, 'view'/.test(empClient));
+check('sapl-pay-slip-title', /PAY SLIP/.test(payslip) && /pay-slip-badge/.test(payslip));
+check('sapl-earnings-rate-actual', /RATE \(Rs\.\)/.test(payslip) && /TOTAL EARNINGS \(A\)/.test(payslip));
+check('sapl-deductions-total-b', /TOTAL DEDUCTIONS \(B\)/.test(payslip));
+check('sapl-logo-setting', /payslip_logo_url/.test(payslip));
+check('sapl-vertical-employer', /resolveEmployerBlock_/.test(payslip) && /listVerticalCatalog/.test(payslip));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

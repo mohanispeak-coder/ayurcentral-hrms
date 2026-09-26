@@ -528,6 +528,105 @@ var PayslipService = (function () {
     return isNaN(d.getTime()) ? null : d;
   }
 
+  var EARNING_ROWS_ = [
+    { label: 'Basic', codes: ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'] },
+    { label: 'HRA', codes: ['HRA'] },
+    { label: 'Conveyance', codes: ['CONV', 'CONVEYANCE', 'CA', 'CONVEYANCE_ALLOWANCE'] },
+    { label: 'Medical Allowance', codes: ['MEDICAL', 'MED', 'MA', 'MEDICAL_ALL', 'MEDICAL_ALLOWANCE'] },
+    { label: 'Special Allowance', codes: ['SA', 'SPECIAL', 'SPECIAL_ALLOWANCE'] },
+    { label: 'Other Allowance', codes: ['OTHER', 'OTHER_ALLOWANCE', 'OA', 'OTHER_EARNING'] },
+    { label: 'Arrears', codes: ['ARREARS', 'ARR'] }
+  ];
+
+  var DEDUCTION_ROWS_ = [
+    { label: 'Provident Fund (PF)', codes: ['PF', 'EPF'] },
+    { label: 'Professional Tax', codes: ['PT', 'PROFESSIONAL_TAX'] },
+    { label: 'TDS', codes: ['TDS'] },
+    { label: 'ESI', codes: ['ESI', 'ESIC'] },
+    { label: 'Advance', codes: ['ADVANCE', 'ADV'] },
+    { label: 'Loan / Cash Deduction (LCD)', codes: ['LCD', 'LOAN'] },
+    { label: 'Leave Without Pay (LWF)', codes: ['LWF', 'LOP', 'LOP_DED'] }
+  ];
+
+  function round2_(n) {
+    var x = Number(n);
+    if (!isFinite(x)) x = 0;
+    return Math.round(x * 100) / 100;
+  }
+
+  function pickFromLines_(lines, codes, field) {
+    var set = {};
+    (codes || []).forEach(function (c) { set[String(c).toUpperCase()] = true; });
+    var total = 0;
+    var hit = false;
+    (lines || []).forEach(function (ln) {
+      var code = String(ln.component_code || '').toUpperCase();
+      if (!set[code]) return;
+      hit = true;
+      total = round2_(total + (Number(ln[field]) || 0));
+    });
+    return hit ? total : null;
+  }
+
+  function sumFromLines_(lines, codes, field) {
+    var v = pickFromLines_(lines, codes, field);
+    return v == null ? 0 : v;
+  }
+
+  function resolveEmployerBlock_(emp) {
+    var name = ConfigService.getCompanyName();
+    var addr = String(ConfigService.getSetting('company_address', '') || '').trim();
+    var vertical = String(emp.vertical_name || '').trim().toUpperCase();
+    if (vertical && typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listVerticalCatalog) {
+      var catalog = EmployeeRepository.listVerticalCatalog() || [];
+      for (var i = 0; i < catalog.length; i++) {
+        var row = catalog[i];
+        if (String(row.vertical_name || '').toUpperCase() !== vertical) continue;
+        if (row.legal_name) name = row.legal_name;
+        var parts = [];
+        if (row.address_line1) parts.push(String(row.address_line1).trim());
+        if (row.address_line2) parts.push(String(row.address_line2).trim());
+        if (parts.length) addr = parts.join(', ');
+        break;
+      }
+    }
+    return {
+      name: name,
+      address: addr,
+      logoUrl: String(ConfigService.getSetting('payslip_logo_url', '') || '').trim()
+    };
+  }
+
+  function periodLabelUpper_(run) {
+    return monthLabel_(run.period_month).toUpperCase() + ' - ' + run.period_year;
+  }
+
+  function formatDojPayslip_(value) {
+    var d = toDate_(value);
+    if (!d) return value ? String(value) : '-';
+    var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return d.getDate() + '-' + names[d.getMonth()] + '-' + d.getFullYear();
+  }
+
+  function formatGeneratedDatePayslip_() {
+    return Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'dd-MMM-yyyy');
+  }
+
+  function moneyPayslip_(n) {
+    var x = Number(n);
+    if (!isFinite(x)) x = 0;
+    return Math.round(x).toLocaleString('en-IN');
+  }
+
+  function amountInWordsPayslip_(amount) {
+    return amountInWords_(amount).replace(/\s*Rupees\s*/i, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function dashOr_(value) {
+    var s = value == null ? '' : String(value).trim();
+    return s ? s : '-';
+  }
+
   function amountInWords_(amount) {
     var n = Math.round(Number(amount) || 0);
     if (n === 0) return 'Zero Rupees Only';
@@ -558,9 +657,8 @@ var PayslipService = (function () {
   }
 
   function buildHtml_(run, rec, emp) {
-    var company = ConfigService.getCompanyName();
-    var companyAddress = ConfigService.getSetting('company_address', '');
-    var period = monthLabel_(run.period_month) + ' ' + run.period_year;
+    var employer = resolveEmployerBlock_(emp);
+    var periodUpper = periodLabelUpper_(run);
     var breakdown = {};
     try {
       breakdown = JSON.parse(rec.component_breakdown || '{}');
@@ -568,111 +666,137 @@ var PayslipService = (function () {
       breakdown = {};
     }
     var meta = breakdown.meta || {};
+    var lines = breakdown.lines || [];
     var name = meta.display_name || emp.display_name || rec.employee_id;
     var dept = meta.department || emp.department || '';
     var desig = meta.designation || emp.designation || '';
     var location = emp.location || meta.location || '';
-    var joiningDate = formatDate_(emp.joining_date || meta.joining_date);
+    var joiningDate = formatDojPayslip_(emp.joining_date || meta.joining_date);
     var bankName = emp.bank_name || meta.bank_name || '';
-    var bankAccount = emp.bank_account_number || '';
-    var bankMasked = meta.bank_masked || PayrollEngine.maskBank(bankAccount);
-    var pan = emp.pan || meta.pan || '';
-    var workingDays = rec.working_days != null ? rec.working_days : '';
-    var paidDays = rec.paid_days != null ? rec.paid_days : '';
-    var lopDays = rec.lop_days != null ? rec.lop_days : '';
+    var bankAccount = emp.bank_account_number || meta.bank_account_number || '';
+    var bankDisplay = bankAccount ? String(bankAccount) : (meta.bank_masked || PayrollEngine.maskBank(bankAccount));
+    var ifsc = emp.bank_ifsc || meta.bank_ifsc || '';
+    var pfNo = emp.pf_no || meta.pf_no || '';
+    var uan = emp.uan_no || meta.uan_no || emp.uan || meta.uan || '';
+    var esiNo = emp.esi_no || meta.esi_no || '';
+
+    var workingDays = rec.working_days != null && rec.working_days !== '' ? rec.working_days : 0;
+    var paidDays = rec.paid_days != null && rec.paid_days !== '' ? rec.paid_days : 0;
+    var lopDays = rec.lop_days != null && rec.lop_days !== '' ? rec.lop_days : 0;
     var dim = daysInMonth_(run.period_year, run.period_month);
-    var lines = breakdown.lines || [];
+    var effectiveDays = workingDays != null && workingDays !== '' ? workingDays : paidDays;
+
     var earnRows = '';
-    var dedRows = '';
-    var pfNumber = '';
-    var uan = '';
-    var esi = '';
-    lines.forEach(function (line) {
-      var code = String(line.component_code || '').toUpperCase();
-      var row = '<tr><td>' + esc_(line.component_name || line.component_code) +
-        '</td><td class="num">' + moneyDisplay_(line.amount) + '</td></tr>';
-      if (line.component_kind === 'EARNING') earnRows += row;
-      else if (line.component_kind === 'DEDUCTION') {
-        dedRows += row;
-        if (code === 'PF' || code.indexOf('PF') >= 0) pfNumber = pfNumber || 'On record';
-        if (code === 'ESI') esi = esi || moneyDisplay_(line.amount);
+    EARNING_ROWS_.forEach(function (row) {
+      var rate = sumFromLines_(lines, row.codes, 'contractual');
+      var actual = sumFromLines_(lines, row.codes, 'amount');
+      if (row.label === 'Other Allowance') {
+        actual = round2_(actual + (Number(rec.bonus) || 0) + (Number(rec.incentive) || 0) +
+          (Number(rec.other_earnings) || 0));
       }
+      earnRows += '<tr><td>' + esc_(row.label) + '</td><td class="num">' + moneyPayslip_(rate) +
+        '</td><td class="num">' + moneyPayslip_(actual) + '</td></tr>';
     });
-    if (Number(rec.bonus) > 0) {
-      earnRows += '<tr><td>Bonus</td><td class="num">' + moneyDisplay_(rec.bonus) + '</td></tr>';
-    }
-    if (Number(rec.incentive) > 0) {
-      earnRows += '<tr><td>Incentive</td><td class="num">' + moneyDisplay_(rec.incentive) + '</td></tr>';
-    }
-    if (Number(rec.other_earnings) > 0) {
-      earnRows += '<tr><td>Other earnings</td><td class="num">' + moneyDisplay_(rec.other_earnings) + '</td></tr>';
-    }
-    if (Number(rec.tds_amount) > 0) {
-      dedRows += '<tr><td>TDS</td><td class="num">' + moneyDisplay_(rec.tds_amount) + '</td></tr>';
-    }
-    if (Number(rec.other_deductions) > 0) {
-      dedRows += '<tr><td>Other deductions</td><td class="num">' + moneyDisplay_(rec.other_deductions) + '</td></tr>';
-    }
 
-    var generated = Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'dd MMM yyyy HH:mm');
+    var dedRows = '';
+    DEDUCTION_ROWS_.forEach(function (row) {
+      var actual = sumFromLines_(lines, row.codes, 'amount');
+      if (row.label === 'TDS' && !actual) actual = Number(rec.tds_amount) || 0;
+      if (row.label === 'Advance') actual = round2_(actual + (Number(rec.other_deductions) || 0));
+      dedRows += '<tr><td>' + esc_(row.label) + '</td><td class="num">' + moneyPayslip_(actual) + '</td></tr>';
+    });
+
+    var grossA = Number(rec.gross_earnings) || 0;
+    var grossB = Number(rec.total_deductions) || 0;
     var netPay = Number(rec.net_pay) || 0;
+    var generated = formatGeneratedDatePayslip_();
+    var logoHtml = employer.logoUrl
+      ? '<img class="logo" src="' + esc_(employer.logoUrl) + '" alt="Company logo"/>'
+      : '<div class="logo-placeholder"></div>';
 
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payslip - ' + esc_(period) +
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>PAY SLIP - ' + esc_(periodUpper) +
       '</title><style>' +
-      '@page{size:A4;margin:16mm}' +
-      'body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:24px;background:#fff}' +
-      '.sheet{max-width:780px;margin:0 auto}' +
-      '.header{border-bottom:3px solid #2d5a3d;padding-bottom:16px;margin-bottom:20px}' +
-      '.company{font-size:22px;font-weight:700;color:#2d5a3d;margin:0}' +
-      '.address{font-size:12px;color:#5a6b5e;margin-top:4px;white-space:pre-line}' +
-      '.title-row{display:flex;justify-content:space-between;align-items:flex-end;margin:18px 0 12px}' +
-      '.title{font-size:18px;font-weight:600;margin:0}' +
-      '.period{font-size:13px;color:#5a6b5e}' +
-      '.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-bottom:18px}' +
-      '.field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;margin-bottom:2px}' +
-      '.field div{font-size:14px;font-weight:500}' +
-      '.section{margin-top:18px}' +
-      '.section h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#2d5a3d;margin:0 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}' +
-      'table{width:100%;border-collapse:collapse;font-size:13px}' +
-      'th,td{padding:8px 10px;border-bottom:1px solid #eef0f2;text-align:left}' +
-      'th{font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600}' +
-      '.num{text-align:right;font-variant-numeric:tabular-nums}' +
-      '.totals td{font-weight:700;border-top:2px solid #2d5a3d}' +
-      '.net-box{margin-top:20px;padding:16px 18px;background:#f3faf5;border:1px solid #c8e6d0;border-radius:8px}' +
-      '.net-label{font-size:12px;color:#2d5a3d;text-transform:uppercase;letter-spacing:.05em}' +
-      '.net-value{font-size:28px;font-weight:700;color:#1f4330;margin-top:4px}' +
-      '.words{font-size:12px;color:#4b5563;margin-top:6px;font-style:italic}' +
-      '.statutory{margin-top:16px;font-size:12px;color:#374151}' +
-      '.footer{margin-top:28px;padding-top:12px;border-top:1px dashed #d1d5db;font-size:11px;color:#6b7280}' +
-      '@media print{body{padding:0}.net-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+      '@page{size:A4;margin:12mm}' +
+      'body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#222;margin:0;padding:18px;background:#fff;font-size:12px}' +
+      '.sheet{max-width:820px;margin:0 auto;border:1px solid #d8dde3;padding:16px 18px}' +
+      '.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px}' +
+      '.brand{display:flex;gap:12px;align-items:flex-start;flex:1}' +
+      '.logo{height:42px;width:auto;object-fit:contain}' +
+      '.logo-placeholder{width:42px;height:42px;border:1px dashed #c5cec8;border-radius:4px}' +
+      '.company-name{font-size:18px;font-weight:700;color:#2f5f3f;margin:0 0 4px}' +
+      '.company-addr{font-size:11px;color:#4a5568;line-height:1.45;max-width:420px}' +
+      '.title-block{text-align:right;min-width:160px}' +
+      '.pay-slip-badge{background:#2f5f3f;color:#fff;font-weight:700;font-size:14px;padding:10px 18px;letter-spacing:.06em}' +
+      '.period-label{margin-top:8px;font-size:13px;font-weight:600;color:#2f5f3f}' +
+      '.info{border:1px solid #e2e6ea;display:flex;margin-bottom:0}' +
+      '.info-col{flex:1;padding:10px 12px}' +
+      '.info-col:first-child{border-right:1px solid #e2e6ea}' +
+      '.info-row{display:flex;margin-bottom:5px;font-size:11px}' +
+      '.info-row label{width:118px;color:#5c6670;font-weight:600}' +
+      '.info-row span{flex:1;color:#111}' +
+      '.attn{background:#eceff2;border:1px solid #e2e6ea;border-top:none;padding:8px 12px;font-size:11px;font-weight:600;color:#333}' +
+      '.tables{display:flex;gap:0;border:1px solid #e2e6ea;border-top:none}' +
+      '.tbl-wrap{flex:1}' +
+      '.tbl-wrap:first-child{border-right:1px solid #e2e6ea}' +
+      'table{width:100%;border-collapse:collapse}' +
+      'th{background:#2f5f3f;color:#fff;font-size:10px;font-weight:600;padding:7px 8px;text-align:left}' +
+      'th.num{text-align:right}' +
+      'td{padding:6px 8px;border-bottom:1px solid #eef1f4;font-size:11px}' +
+      'td.num{text-align:right;font-variant-numeric:tabular-nums}' +
+      'tr.total td{font-weight:700;color:#2f5f3f;border-top:2px solid #2f5f3f;border-bottom:none}' +
+      '.net-wrap{margin-top:14px;display:flex;border:1px solid #c8e6d0;background:#f4faf6}' +
+      '.net-left{flex:1;padding:14px 16px;display:flex;align-items:center;gap:12px}' +
+      '.net-coins{font-size:22px;line-height:1}' +
+      '.net-amt-label{font-size:11px;font-weight:600;color:#2f5f3f}' +
+      '.net-amt{font-size:26px;font-weight:700;color:#1f4330;margin-top:2px}' +
+      '.net-right{flex:1;padding:14px 16px;border-left:1px solid #c8e6d0}' +
+      '.words-label{font-size:10px;color:#5c6670;font-weight:600;text-transform:uppercase}' +
+      '.words-val{margin-top:6px;font-size:14px;font-weight:700;color:#2f5f3f}' +
+      '.foot{display:flex;justify-content:space-between;margin-top:16px;font-size:10px;color:#5c6670;gap:20px}' +
+      '.notes{flex:1;line-height:1.5}' +
+      '.gen-date{text-align:right;white-space:nowrap}' +
+      '@media print{body{padding:0}.sheet{border:none}.net-wrap{-webkit-print-color-adjust:exact;print-color-adjust:exact}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
       '</style></head><body><div class="sheet">' +
-      '<header class="header"><h1 class="company">' + esc_(company) + '</h1>' +
-      (companyAddress ? '<div class="address">' + esc_(companyAddress) + '</div>' : '') +
-      '</header>' +
-      '<div class="title-row"><h2 class="title">Salary Payslip</h2><div class="period">' + esc_(period) + '</div></div>' +
-      '<div class="grid">' +
-      field_('Employee name', name) + field_('Employee ID', rec.employee_id) +
-      field_('Designation', desig) + field_('Department', dept) +
-      field_('Location', location) + field_('Date of joining', joiningDate) +
-      field_('Days in month', dim) + field_('Effective work days', paidDays) +
-      field_('Working days', workingDays) + field_('LOP days', lopDays) +
+      '<div class="top"><div class="brand">' + logoHtml +
+      '<div><div class="company-name">' + esc_(employer.name) + '</div>' +
+      (employer.address ? '<div class="company-addr">' + esc_(employer.address) + '</div>' : '') +
+      '</div></div><div class="title-block"><div class="pay-slip-badge">PAY SLIP</div>' +
+      '<div class="period-label">' + esc_(periodUpper) + '</div></div></div>' +
+      '<div class="info"><div class="info-col">' +
+      infoRow_('Name', name) + infoRow_('Employee ID', rec.employee_id) +
+      infoRow_('Designation', desig) + infoRow_('Department', dept) +
+      infoRow_('Date of Joining', joiningDate) + infoRow_('Location', location) +
+      '</div><div class="info-col">' +
+      infoRow_('Bank Name', bankName) + infoRow_('Account No.', bankDisplay) +
+      infoRow_('IFSC', ifsc) + infoRow_('PF No.', pfNo) +
+      infoRow_('UAN', uan) + infoRow_('ESI No.', esiNo) +
+      '</div></div>' +
+      '<div class="attn">Effective Work Days : ' + esc_(effectiveDays) + ' &nbsp;|&nbsp; Days in Month : ' +
+      esc_(dim) + ' &nbsp;|&nbsp; LOP Days : ' + esc_(lopDays) + ' &nbsp;|&nbsp; Paid Days : ' + esc_(paidDays) +
       '</div>' +
-      '<div class="section"><h3>Earnings</h3><table><thead><tr><th>Component</th><th class="num">Amount (₹)</th></tr></thead><tbody>' +
-      (earnRows || '<tr><td colspan="2">None</td></tr>') +
-      '<tr class="totals"><td>Total earnings</td><td class="num">' + moneyDisplay_(rec.gross_earnings) + '</td></tr></tbody></table></div>' +
-      '<div class="section"><h3>Deductions</h3><table><thead><tr><th>Component</th><th class="num">Amount (₹)</th></tr></thead><tbody>' +
-      (dedRows || '<tr><td colspan="2">None</td></tr>') +
-      '<tr class="totals"><td>Total deductions</td><td class="num">' + moneyDisplay_(rec.total_deductions) + '</td></tr></tbody></table></div>' +
-      '<div class="net-box"><div class="net-label">Net pay</div><div class="net-value">₹ ' + moneyDisplay_(netPay) + '</div>' +
-      '<div class="words">' + esc_(amountInWords_(netPay)) + '</div></div>' +
-      '<div class="statutory"><strong>Bank &amp; statutory details</strong><br>' +
-      'Bank: ' + esc_(bankName || '-') + ' · Account: ' + esc_(bankMasked || '-') + '<br>' +
-      'PAN: ' + esc_(pan || '-') + ' · PF: ' + esc_(pfNumber || '-') + ' · UAN: ' + esc_(uan || '-') +
-      (esi ? ' · ESI: ₹ ' + esc_(esi) : '') +
-      '</div>' +
-      '<div class="footer">This is a system-generated payslip. Generated on ' + esc_(generated) +
-      '. Confidential - for the intended recipient only.</div>' +
+      '<div class="tables"><div class="tbl-wrap"><table><thead><tr>' +
+      '<th>EARNINGS</th><th class="num">RATE (Rs.)</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
+      earnRows +
+      '<tr class="total"><td>TOTAL EARNINGS (A)</td><td class="num"></td><td class="num">' + moneyPayslip_(grossA) +
+      '</td></tr></tbody></table></div><div class="tbl-wrap"><table><thead><tr>' +
+      '<th>DEDUCTIONS</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
+      dedRows +
+      '<tr class="total"><td>TOTAL DEDUCTIONS (B)</td><td class="num">' + moneyPayslip_(grossB) + '</td></tr>' +
+      '</tbody></table></div></div>' +
+      '<div class="net-wrap"><div class="net-left"><div class="net-coins" aria-hidden="true">🪙</div><div>' +
+      '<div class="net-amt-label">NET PAY (A - B)</div><div class="net-amt">Rs. ' + moneyPayslip_(netPay) + '</div></div></div>' +
+      '<div class="net-right"><div class="words-label">IN WORDS</div><div class="words-val">' +
+      esc_(amountInWordsPayslip_(netPay)) + '</div></div></div>' +
+      '<div class="foot"><div class="notes"><strong>Note:</strong><br>' +
+      '1. This is a system-generated payslip and does not require a signature.<br>' +
+      '2. All payments are subject to statutory deductions and company policies.<br>' +
+      '3. For any queries, please contact the HR Department.</div>' +
+      '<div class="gen-date">Generated on : ' + esc_(generated) + '</div></div>' +
       '</div></body></html>';
+  }
+
+  function infoRow_(label, value) {
+    return '<div class="info-row"><label>' + esc_(label) + ' :</label><span>' + esc_(dashOr_(value)) + '</span></div>';
   }
 
   function field_(label, value) {
