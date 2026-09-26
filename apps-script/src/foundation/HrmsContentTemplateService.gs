@@ -111,13 +111,42 @@ var HrmsContentTemplateService = (function () {
           'Dear {{candidate_name}},',
           '',
           'Please find attached your appointment letter for the position of {{job_title}} at {{company}}.',
+          'Your date of joining is {{joining_date}}.',
           '',
           'Regards,',
           'Human Resources',
           '{{company}}'
         ].join('\n')
       },
-      placeholders: ['{{candidate_name}}', '{{job_title}}', '{{company}}', '{{application_id}}']
+      placeholders: ['{{candidate_name}}', '{{job_title}}', '{{company}}', '{{application_id}}', '{{joining_date}}']
+    }
+  ];
+
+  /** PDF layouts (HTML → PDF). Wording for emails is editable above; layout/branding is code-managed today. */
+  var PDF_LAYOUT_DEFINITIONS_ = [
+    {
+      id: 'pdf_payslip',
+      kind: 'pdf_layout',
+      label: 'Payroll - payslip PDF',
+      description: 'Monthly payslip PDF for locked payroll runs. Uses vertical logo (SAPL / AyurvedaOne) and SAPL-style layout.',
+      managedIn: 'PayslipService.gs + PayslipLogoService.gs',
+      placeholders: ['Employee, period, earnings/deductions from payroll run']
+    },
+    {
+      id: 'pdf_ats_offer',
+      kind: 'pdf_layout',
+      label: 'Recruitment - offer letter PDF',
+      description: 'Attached when HR sends offer from a HIRED application. Includes CTC summary and monthly salary breakup from the selected structure.',
+      managedIn: 'AtsLetterPdfService.gs',
+      placeholders: ['Candidate, role, structure, CTC, component breakup, vertical logo']
+    },
+    {
+      id: 'pdf_ats_appointment',
+      kind: 'pdf_layout',
+      label: 'Recruitment - appointment letter PDF',
+      description: 'Attached when HR sends appointment letter. Includes joining date, role, and compensation summary.',
+      managedIn: 'AtsLetterPdfService.gs',
+      placeholders: ['Candidate, joining date, role, structure, CTC, vertical logo']
     }
   ];
 
@@ -187,19 +216,32 @@ var HrmsContentTemplateService = (function () {
   }
 
   function listForClient_() {
-    return DEFINITIONS_.map(function (def) {
+    var editable = DEFINITIONS_.map(function (def) {
       var fields = {};
       Object.keys(def.keys).forEach(function (part) {
         fields[part] = getPart_(def, part);
       });
       return {
         id: def.id,
+        kind: 'content',
         label: def.label,
         description: def.description,
         placeholders: def.placeholders || [],
         fields: fields
       };
     });
+    var pdfLayouts = PDF_LAYOUT_DEFINITIONS_.map(function (def) {
+      return {
+        id: def.id,
+        kind: def.kind || 'pdf_layout',
+        label: def.label,
+        description: def.description,
+        managedIn: def.managedIn || '',
+        placeholders: def.placeholders || [],
+        fields: {}
+      };
+    });
+    return editable.concat(pdfLayouts);
   }
 
   function upsertSetting_(settingKey, value, session) {

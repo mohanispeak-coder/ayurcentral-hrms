@@ -15,11 +15,13 @@ var AtsAppointmentLetterService = (function () {
   }
 
   function buildEmail_(candidate, job, application) {
+    var joining = trim_(application.hire_joining_date);
     var map = {
       '{{candidate_name}}': trim_(candidate.full_name) || 'Candidate',
       '{{job_title}}': trim_(job.title) || 'Role',
       '{{company}}': company_(),
-      '{{application_id}}': trim_(application.application_id)
+      '{{application_id}}': trim_(application.application_id),
+      '{{joining_date}}': joining || 'As per appointment letter'
     };
     if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.render) {
       var rendered = HrmsContentTemplateService.render('ats_appointment', map);
@@ -39,10 +41,19 @@ var AtsAppointmentLetterService = (function () {
     };
   }
 
-  function sendAppointmentLetter_(session, applicationId) {
+  function sendAppointmentLetter_(session, applicationId, joiningDate) {
     var ctx = AtsHireWorkflowService.loadHireContext(session, applicationId);
+    if (joiningDate) {
+      AtsHireWorkflowService.saveHireJoiningDate(session, applicationId, joiningDate);
+    }
     var appFresh = AtsRepository.findApplication(applicationId);
     AtsHireWorkflowService.assertHireCompensationReady(appFresh || ctx.application);
+    appFresh = AtsRepository.findApplication(applicationId) || appFresh;
+    if (!trim_(appFresh.hire_joining_date)) {
+      throw validationError_('Joining date is required before sending the appointment letter.', {
+        fields: { joining_date: 'Select joining date.' }
+      });
+    }
     var email = trim_(ctx.candidate.email);
     if (!email) throw validationError_('Candidate email is missing.');
     var appRow = appFresh || ctx.application;

@@ -157,10 +157,10 @@ function apiAtsSendHireOfferLetter(applicationId, sessionToken) {
   }, sessionToken);
 }
 
-function apiAtsSendHireAppointmentLetter(applicationId, sessionToken) {
+function apiAtsSendHireAppointmentLetter(applicationId, joiningDate, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return AtsService.sendHireAppointmentLetter(session, applicationId);
+    return AtsService.sendHireAppointmentLetter(session, applicationId, joiningDate);
   }, sessionToken);
 }
 

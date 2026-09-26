@@ -126,31 +126,40 @@
       roleHtml += '</tbody></table></div></div>';
 
       var templates = data.content_templates || [];
-      var tplHtml = '<div class="card" style="margin-top:16px"><h2>Content templates</h2>' +
-        '<p class="hint">Edit welcome email, bulk-upload instruction text, and ATS offer letter wording. ' +
-        'Placeholders are listed per template. Save applies to new emails and newly downloaded bulk templates.</p>';
+      var tplHtml = '<div class="card" style="margin-top:16px"><h2>Content &amp; document templates</h2>' +
+        '<p class="hint">Edit email bodies and instruction text below. PDF layouts used across HRMS are listed for reference; ' +
+        'they are generated from HTML in code (not uploaded PDF files). Email wording applies when letters are sent; ' +
+        're-send a letter after changing ATS email templates.</p>';
       if (!templates.length) {
         tplHtml += '<p class="alert alert-warning">Template rows are missing from the Settings sheet. ' +
           'Open the spreadsheet → run <strong>HRMS → Database setup</strong> (or run <span class="mono">runDatabaseSetupFromEditor</span> in Apps Script), then refresh this page.</p>';
       }
       templates.forEach(function (tpl) {
+        var isPdf = tpl.kind === 'pdf_layout';
         tplHtml += '<div class="template-block" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border,#e2e8f0)">' +
-          '<h3 style="margin:0 0 6px;font-size:1rem">' + escapeHtml(tpl.label) + '</h3>' +
+          '<h3 style="margin:0 0 6px;font-size:1rem">' + escapeHtml(tpl.label) +
+          (isPdf ? ' <span class="badge badge-applied">PDF layout</span>' : '') + '</h3>' +
           '<p class="hint" style="margin:0 0 8px">' + escapeHtml(tpl.description || '') + '</p>';
+        if (isPdf && tpl.managedIn) {
+          tplHtml += '<p class="hint" style="margin:0 0 8px">Maintained in: <span class="mono">' +
+            escapeHtml(tpl.managedIn) + '</span>. Layout changes require a developer deploy; logos follow payroll vertical rules.</p>';
+        }
         if (tpl.placeholders && tpl.placeholders.length) {
-          tplHtml += '<p class="hint" style="margin:0 0 8px">Placeholders: ' +
+          tplHtml += '<p class="hint" style="margin:0 0 8px">' + (isPdf ? 'Includes: ' : 'Placeholders: ') +
             escapeHtml(tpl.placeholders.join(', ')) + '</p>';
         }
-        var fields = tpl.fields || {};
-        if (fields.subject !== undefined) {
-          tplHtml += '<div class="form-group"><label class="form-label">Subject</label>' +
-            '<input class="form-input" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="subject" type="text" value="' +
-            escapeHtml(fields.subject || '') + '"></div>';
-        }
-        if (fields.body !== undefined) {
-          tplHtml += '<div class="form-group"><label class="form-label">Body</label>' +
-            '<textarea class="form-input" rows="8" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="body">' +
-            escapeHtml(fields.body || '') + '</textarea></div>';
+        if (!isPdf) {
+          var fields = tpl.fields || {};
+          if (fields.subject !== undefined) {
+            tplHtml += '<div class="form-group"><label class="form-label">Subject</label>' +
+              '<input class="form-input" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="subject" type="text" value="' +
+              escapeHtml(fields.subject || '') + '"></div>';
+          }
+          if (fields.body !== undefined) {
+            tplHtml += '<div class="form-group"><label class="form-label">Body</label>' +
+              '<textarea class="form-input" rows="8" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="body">' +
+              escapeHtml(fields.body || '') + '</textarea></div>';
+          }
         }
         tplHtml += '</div>';
       });

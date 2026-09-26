@@ -25,7 +25,10 @@ const api = read('../ats/ApiAts.gs'.replace('../ats/', ''));
 const client = read('AtsClient.html');
 const schema = read('AtsSchemaService.gs');
 
-check('hire-schema-columns', /hire_salary_structure_id/.test(schema) && /appointment_letter_sent_at/.test(schema));
+check('hire-schema-columns', /hire_salary_structure_id/.test(schema) && /hire_joining_date/.test(schema) &&
+  /appointment_letter_sent_at/.test(schema));
+check('hire-offer-breakup', /salaryBreakupTableHtml_/.test(read('AtsLetterPdfService.gs')));
+check('hire-appointment-joining', /hire_joining_date/.test(hire) && /joiningDate/.test(read('AtsAppointmentLetterService.gs')));
 check('hire-service', /saveHireCompensation_/.test(hire) && /createEmployeeFromHire_/.test(hire));
 check('hire-schema-ensure', /ensureHireApplicationColumns_/.test(hire) && /assertHireCompensationReady_/.test(hire));
 check('hire-apis', /apiAtsSendHireOfferLetter/.test(read('ApiAts.gs')) && /apiAtsCreateEmployeeFromHire/.test(read('ApiAts.gs')));

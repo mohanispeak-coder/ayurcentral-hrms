@@ -1208,8 +1208,8 @@ var AtsService = (function () {
       AtsOfferLetterService.sendOfferLetterForHire(session, applicationId);
       return hireActionResponse_(session, applicationId);
     },
-    sendHireAppointmentLetter: function (session, applicationId) {
-      AtsAppointmentLetterService.sendAppointmentLetter(session, applicationId);
+    sendHireAppointmentLetter: function (session, applicationId, joiningDate) {
+      AtsAppointmentLetterService.sendAppointmentLetter(session, applicationId, joiningDate);
       return hireActionResponse_(session, applicationId);
     },
     createEmployeeFromHire: function (session, applicationId, employeeId) {

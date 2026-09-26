@@ -726,6 +726,7 @@ var CompensationService = (function () {
   }
 
   return {
+    expandTypeTemplateComponents: componentsFromTypeTemplate_,
     listStructures: listStructures,
     listEmployeeOptions: listEmployeeOptions,
     getStructure: getStructure,

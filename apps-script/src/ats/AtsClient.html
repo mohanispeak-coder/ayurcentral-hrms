@@ -456,16 +456,20 @@
       var blocks = hiredApps.map(function (a) {
         var appId = a.application_id;
         var sal = a.hire_monthly_salary != null && a.hire_monthly_salary !== '' ? String(a.hire_monthly_salary) : '';
+        var joinDate = a.hire_joining_date ? String(a.hire_joining_date) : '';
         return '<div class="ats-hire-panel" data-hire-app="' + escapeHtml(appId) + '" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border,#e5e7eb)">' +
           '<h3 style="margin:0 0 8px;font-size:1rem">' + escapeHtml(a.job_title || a.job_id) +
           ' <span class="mono muted">' + escapeHtml(appId) + '</span></h3>' +
-          '<p class="hint">Select salary structure and monthly CTC, save, then send letters when ready. Create employee with the new employee code.</p>' +
+          '<p class="hint">Save compensation first. Offer letter includes salary breakup. Set joining date before appointment letter. Create employee last with a new HR code.</p>' +
           '<div class="form-row">' +
           '<div class="form-group"><label class="form-label">Salary structure ID</label>' +
           '<select class="form-select" data-hire-structure="' + escapeHtml(appId) + '">' +
           structureOptionsHtml_(structureOptions, a.hire_salary_structure_id) + '</select></div>' +
           '<div class="form-group"><label class="form-label">Monthly salary (Rs.)</label>' +
-          '<input class="form-input" type="number" min="0" step="1" data-hire-salary="' + escapeHtml(appId) + '" value="' + escapeHtml(sal) + '"></div></div>' +
+          '<input class="form-input" type="number" min="0" step="1" data-hire-salary="' + escapeHtml(appId) + '" value="' + escapeHtml(sal) + '"></div>' +
+          '<div class="form-group"><label class="form-label">Joining date</label>' +
+          '<input class="form-input" type="date" data-hire-joining="' + escapeHtml(appId) + '" value="' + escapeHtml(joinDate) + '">' +
+          '<p class="hint" style="margin:4px 0 0;font-size:11px">Required for appointment letter PDF and employee record.</p></div></div>' +
           '<p class="action-feedback hidden" data-hire-fb="' + escapeHtml(appId) + '"></p>' +
           '<div class="btn-row" style="flex-wrap:wrap;gap:8px;margin:8px 0">' +
           '<button type="button" class="btn btn-secondary btn-sm" data-hire-save="' + escapeHtml(appId) + '">Save compensation</button>' +
@@ -497,9 +501,11 @@
           var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
           var structureEl = page.querySelector('[data-hire-structure="' + appId + '"]');
           var salaryEl = page.querySelector('[data-hire-salary="' + appId + '"]');
+          var joiningEl = page.querySelector('[data-hire-joining="' + appId + '"]');
           rpc('apiAtsSaveHireCompensation', [appId, {
             salary_structure_id: structureEl ? structureEl.value : '',
-            monthly_salary: salaryEl ? salaryEl.value : ''
+            monthly_salary: salaryEl ? salaryEl.value : '',
+            joining_date: joiningEl ? joiningEl.value : ''
           }], btn, 'Saving…', fb).then(function () {
             if (!stillOn(seq, 'ats-candidate')) return;
             invalidateAtsCandidate_(candidateId);
@@ -522,10 +528,17 @@
       });
       Array.prototype.forEach.call(page.querySelectorAll('[data-hire-appt]'), function (btn) {
         btn.addEventListener('click', function () {
-          if (!window.confirm('Send appointment letter email with PDF to the candidate?')) return;
           var appId = btn.getAttribute('data-hire-appt');
+          var joiningEl = page.querySelector('[data-hire-joining="' + appId + '"]');
+          var joining = joiningEl ? String(joiningEl.value || '').trim() : '';
+          if (!joining) {
+            showToast('Select joining date before sending the appointment letter.', 'error');
+            if (joiningEl) joiningEl.focus();
+            return;
+          }
+          if (!window.confirm('Send appointment letter (joining ' + joining + ') with PDF to the candidate?')) return;
           var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
-          rpc('apiAtsSendHireAppointmentLetter', [appId], btn, 'Sending…', fb).then(function () {
+          rpc('apiAtsSendHireAppointmentLetter', [appId, joining], btn, 'Sending…', fb).then(function () {
             if (!stillOn(seq, 'ats-candidate')) return;
             invalidateAtsCandidate_(candidateId);
             showToast('Appointment letter sent.');
@@ -536,17 +549,58 @@
       Array.prototype.forEach.call(page.querySelectorAll('[data-hire-employee]'), function (btn) {
         btn.addEventListener('click', function () {
           var appId = btn.getAttribute('data-hire-employee');
-          var eid = window.prompt('Enter new employee ID (e.g. SAPL-0090):', '');
-          if (!eid || !String(eid).trim()) return;
           var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
-          rpc('apiAtsCreateEmployeeFromHire', [appId, String(eid).trim()], btn, 'Creating…', fb).then(function (res) {
-            if (!stillOn(seq, 'ats-candidate')) return;
-            invalidateAtsCandidate_(candidateId);
-            showToast('Employee created: ' + (res.hired_employee_id || res.employee_id || eid));
-            renderCandidate(candidateId);
-          }).catch(function (err) { showToast(formatHrmsError_(err, 'Create failed'), 'error'); });
+          var structureEl = page.querySelector('[data-hire-structure="' + appId + '"]');
+          var structureLabel = structureEl && structureEl.selectedOptions && structureEl.selectedOptions[0]
+            ? structureEl.selectedOptions[0].textContent : '';
+          openHireCreateEmployeeModal_(appId, structureLabel, function (eid) {
+            rpc('apiAtsCreateEmployeeFromHire', [appId, eid], btn, 'Creating…', fb).then(function (res) {
+              if (!stillOn(seq, 'ats-candidate')) return;
+              invalidateAtsCandidate_(candidateId);
+              showToast('Employee created: ' + (res.hired_employee_id || res.employee_id || eid));
+              renderCandidate(candidateId);
+            }).catch(function (err) { showToast(formatHrmsError_(err, 'Create failed'), 'error'); });
+          });
         });
       });
+    }
+
+    function openHireCreateEmployeeModal_(appId, structureLabel, onConfirm) {
+      var backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      var structHint = structureLabel ? ('Selected structure: ' + structureLabel) : 'Use a code prefix that matches the salary structure vertical (SAPL, AOPL, or AOMS).';
+      backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="ats-hire-emp-title">' +
+        '<div class="modal-header"><h3 class="modal-title" id="ats-hire-emp-title">Create employee from hire</h3>' +
+        '<p class="modal-desc">This creates an HRMS employee record from application <span class="mono">' + escapeHtml(appId) + '</span>. ' +
+        'Compensation and joining date from this panel are copied to the employee. Portal login is not created automatically.</p></div>' +
+        '<div class="modal-body">' +
+        '<ul class="hint" style="margin:0 0 12px 18px;line-height:1.45">' +
+        '<li>Employee code format: <strong>SAPL-0090</strong>, <strong>AOPL-0012</strong>, or <strong>AOMS-0003</strong> (four digits).</li>' +
+        '<li>' + escapeHtml(structHint) + '</li>' +
+        '<li>Candidate must have a valid email on file.</li>' +
+        '<li>Run this after offer/appointment letters if your process requires it.</li>' +
+        '</ul>' +
+        '<div class="form-group"><label class="form-label" for="ats-hire-emp-id">New employee code</label>' +
+        '<input class="form-input mono" id="ats-hire-emp-id" type="text" placeholder="SAPL-0090" autocomplete="off"></div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+        '<button type="button" class="btn btn-secondary" id="ats-hire-emp-cancel">Cancel</button>' +
+        '<button type="button" class="btn btn-primary" id="ats-hire-emp-ok">Create employee</button></div></div>';
+      document.body.appendChild(backdrop);
+      var input = backdrop.querySelector('#ats-hire-emp-id');
+      var close = function () { backdrop.remove(); };
+      backdrop.querySelector('#ats-hire-emp-cancel').addEventListener('click', close);
+      backdrop.querySelector('#ats-hire-emp-ok').addEventListener('click', function () {
+        var eid = input ? String(input.value || '').trim().toUpperCase() : '';
+        if (!eid) {
+          showToast('Enter an employee code.', 'error');
+          if (input) input.focus();
+          return;
+        }
+        close();
+        if (typeof onConfirm === 'function') onConfirm(eid);
+      });
+      if (input) input.focus();
     }
 
     function syncScheduleAppSelect_(apps) {

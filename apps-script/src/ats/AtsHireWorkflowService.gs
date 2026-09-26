@@ -55,6 +55,7 @@ var AtsHireWorkflowService = (function () {
   var HIRE_APP_COLUMNS_ = [
     'hire_salary_structure_id',
     'hire_monthly_salary',
+    'hire_joining_date',
     'offer_letter_sent_at',
     'appointment_letter_sent_at'
   ];
@@ -125,12 +126,15 @@ var AtsHireWorkflowService = (function () {
     if (!isFinite(monthlyNum) || monthlyNum < 0) {
       throw validationError_('Monthly salary must be a valid number.', { fields: { monthly_salary: 'Invalid.' } });
     }
+    var joiningDate = normalizeJoiningDate_(payload.joining_date);
     var now = new Date();
-    AtsRepository.updateApplication(applicationId, {
+    var patch = {
       hire_salary_structure_id: structureId,
       hire_monthly_salary: monthlyNum,
       updated_at: now
-    });
+    };
+    if (joiningDate) patch.hire_joining_date = joiningDate;
+    AtsRepository.updateApplication(applicationId, patch);
     var saved = AtsRepository.findApplication(applicationId);
     if (!hireCompensationReady_(saved)) {
       if (!applicationHasHireColumns_()) {
@@ -142,6 +146,33 @@ var AtsHireWorkflowService = (function () {
     audit_(ATS.AUDIT.HIRE_OFFER, 'Application', applicationId,
       'Hire compensation saved: ' + structureId + ' @ ' + monthlyNum);
     return { application: saved };
+  }
+
+  function normalizeJoiningDate_(value) {
+    var s = trim_(value);
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var d = new Date(s);
+    if (Object.prototype.toString.call(d) === '[object Date]' && !isNaN(d.getTime())) {
+      return Utilities.formatDate(d, ConfigService.getTimezone(), 'yyyy-MM-dd');
+    }
+    return '';
+  }
+
+  function saveHireJoiningDate_(session, applicationId, joiningDate) {
+    ensureHireApplicationColumns_();
+    var ctx = loadHireContext_(session, applicationId);
+    var normalized = normalizeJoiningDate_(joiningDate);
+    if (!normalized) {
+      throw validationError_('Enter a valid joining date (YYYY-MM-DD).', { fields: { joining_date: 'Required.' } });
+    }
+    var now = new Date();
+    AtsRepository.updateApplication(applicationId, {
+      hire_joining_date: normalized,
+      updated_at: now
+    });
+    audit_(ATS.AUDIT.HIRE_OFFER, 'Application', applicationId, 'Hire joining date set: ' + normalized);
+    return { application: AtsRepository.findApplication(applicationId) };
   }
 
   function splitName_(fullName) {
@@ -190,7 +221,8 @@ var AtsHireWorkflowService = (function () {
       designation: trim_(job.title) || 'Associate',
       vertical_name: vertical,
       manager_employee_id: mgr,
-      joining_date: Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'yyyy-MM-dd'),
+      joining_date: normalizeJoiningDate_(app.hire_joining_date) ||
+        Utilities.formatDate(new Date(), ConfigService.getTimezone(), 'yyyy-MM-dd'),
       employment_type: normalizeEmploymentType_(job.employment_type),
       salary_structure_id: trim_(app.hire_salary_structure_id),
       ctc_monthly: app.hire_monthly_salary,
@@ -263,6 +295,7 @@ var AtsHireWorkflowService = (function () {
       : Number(row.hire_monthly_salary);
     view.offer_letter_sent_at = row.offer_letter_sent_at ? String(row.offer_letter_sent_at) : '';
     view.appointment_letter_sent_at = row.appointment_letter_sent_at ? String(row.appointment_letter_sent_at) : '';
+    view.hire_joining_date = trim_(row.hire_joining_date);
     view.hire_salary_structure_name = structureLabel_(view.hire_salary_structure_id);
     return view;
   }
@@ -270,6 +303,7 @@ var AtsHireWorkflowService = (function () {
   return {
     listSalaryStructureOptions: listSalaryStructureOptions_,
     saveHireCompensation: saveHireCompensation_,
+    saveHireJoiningDate: saveHireJoiningDate_,
     createEmployeeFromHire: createEmployeeFromHire_,
     enrichApplicationHireFields: enrichApplicationHireFields_,
     loadHireContext: loadHireContext_,

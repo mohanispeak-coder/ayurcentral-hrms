@@ -98,6 +98,10 @@ var AtsLetterPdfService = (function () {
       'h1{font-size:16px;color:#0d4a38;margin:16px 0 12px;text-transform:uppercase;letter-spacing:.04em}' +
       '.meta{font-size:11px;margin-bottom:14px}' +
       '.sign{margin-top:28px}' +
+      'table.sal{width:100%;border-collapse:collapse;margin:10px 0 14px;font-size:11px}' +
+      'table.sal th,table.sal td{border:1px solid #ccc;padding:5px 8px;text-align:left}' +
+      'table.sal th{background:#f4f6f5;font-weight:600}' +
+      'table.sal td.amt{text-align:right;font-variant-numeric:tabular-nums}' +
       '</style></head><body>' +
       '<div class="hdr">' + logoHtml +
       '<div class="co">' + esc_(brandTitle) + '</div>' +
@@ -113,6 +117,59 @@ var AtsLetterPdfService = (function () {
       '</body></html>';
   }
 
+  function salaryBreakupTableHtml_(application) {
+    var structureId = trim_(application.hire_salary_structure_id);
+    var ctc = Number(application.hire_monthly_salary);
+    if (!structureId || !isFinite(ctc) || ctc <= 0) return '';
+    var components = [];
+    if (typeof CompensationService !== 'undefined' && CompensationService.expandTypeTemplateComponents) {
+      components = CompensationService.expandTypeTemplateComponents(structureId, ctc) || [];
+    }
+    if (!components.length) return '';
+    var calc = null;
+    if (typeof PayrollEngine !== 'undefined' && PayrollEngine.calculateEmployee) {
+      calc = PayrollEngine.calculateEmployee({
+        structure: { salary_structure_id: structureId },
+        components: components,
+        inputs: { working_days: 30, paid_days: 30 },
+        settings: { payroll_round: 'NEAREST_RUPEE' },
+        employee: { employee_id: 'OFFER' }
+      });
+    }
+    var lines = [];
+    if (calc && calc.component_breakdown) {
+      try {
+        var parsed = JSON.parse(calc.component_breakdown);
+        lines = parsed.lines || [];
+      } catch (ignore) {}
+    }
+    if (!lines.length) return '';
+    var earnings = [];
+    var deductions = [];
+    lines.forEach(function (ln) {
+      var kind = String(ln.component_kind || '').toUpperCase();
+      if (kind === 'EMPLOYER') return;
+      var row = '<tr><td>' + esc_(ln.component_name || ln.component_code) + '</td>' +
+        '<td class="amt">Rs. ' + esc_(money_(ln.contractual != null ? ln.contractual : ln.amount)) + '</td></tr>';
+      if (kind === 'DEDUCTION') deductions.push(row);
+      else earnings.push(row);
+    });
+    var html = '<p><strong>Monthly salary breakup</strong> (based on selected structure and CTC)</p>' +
+      '<table class="sal"><thead><tr><th>Component</th><th class="amt">Amount (Rs.)</th></tr></thead><tbody>';
+    if (earnings.length) {
+      html += '<tr><td colspan="2"><strong>Earnings</strong></td></tr>' + earnings.join('');
+    }
+    if (deductions.length) {
+      html += '<tr><td colspan="2"><strong>Deductions</strong></td></tr>' + deductions.join('');
+    }
+    html += '<tr><td><strong>Net pay (indicative)</strong></td><td class="amt"><strong>Rs. ' +
+      esc_(money_(calc.net_pay)) + '</strong></td></tr>';
+    html += '</tbody></table>' +
+      '<p class="addr">Breakup is computed from the salary structure template at full-month attendance. ' +
+      'Actual payroll may vary with attendance, statutory rules, and revisions.</p>';
+    return html;
+  }
+
   function offerBodyHtml_(candidate, job, application, comp, branding) {
     comp = comp || {};
     branding = branding || {};
@@ -122,14 +179,28 @@ var AtsLetterPdfService = (function () {
       'we are pleased to offer you employment with <strong>' + esc_(org) + '</strong> ' +
       'in the position of <strong>' + esc_(trim_(job.title) || 'the role') + '</strong>' +
       (trim_(job.department) ? ' (' + esc_(job.department) + ')' : '') + '.</p>' +
-      '<p><strong>Compensation</strong></p><ul>' +
+      '<p><strong>Compensation summary</strong></p><ul>' +
       '<li>Salary structure: ' + esc_(comp.structure_name || comp.structure_id || '-') + '</li>' +
       '<li>Monthly CTC (Cost to Company): Rs. ' + esc_(money_(comp.monthly_salary)) + '</li>' +
       '<li>Location: ' + esc_(trim_(job.location) || trim_(candidate.location) || 'As communicated by HR') + '</li>' +
       '</ul>' +
+      salaryBreakupTableHtml_(application) +
       '<p>This offer is subject to satisfactory verification of documents, background checks, and company policies. ' +
       'Please confirm acceptance in writing. Your formal appointment letter will follow separately.</p>' +
       '<p>We look forward to welcoming you to our team.</p>';
+  }
+
+  function fmtJoiningDate_(application) {
+    var raw = trim_(application.hire_joining_date);
+    if (!raw) return '-';
+    try {
+      var parts = raw.split('-');
+      if (parts.length === 3) {
+        var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (!isNaN(d.getTime())) return fmtDate_(d);
+      }
+    } catch (ignore) {}
+    return raw;
   }
 
   function appointmentBodyHtml_(candidate, job, application, comp, branding) {
@@ -143,6 +214,7 @@ var AtsLetterPdfService = (function () {
       '<li>Employee name: ' + esc_(trim_(candidate.full_name)) + '</li>' +
       '<li>Designation: ' + esc_(trim_(job.title)) + '</li>' +
       '<li>Department: ' + esc_(trim_(job.department) || '-') + '</li>' +
+      '<li>Date of joining: ' + esc_(fmtJoiningDate_(application)) + '</li>' +
       '<li>Salary structure: ' + esc_(comp.structure_name || '-') + '</li>' +
       '<li>Monthly CTC: Rs. ' + esc_(money_(comp.monthly_salary)) + '</li>' +
       '<li>Place of work: ' + esc_(trim_(job.location) || 'As per company requirement') + '</li>' +

@@ -23,7 +23,8 @@ var AtsSchemaService = (function () {
   SHEET_HEADERS_[ATS.SHEETS.APPLICATIONS] = [
     'application_id', 'job_id', 'candidate_id', 'stage', 'cover_letter', 'source',
     'applied_at', 'updated_at', 'stage_changed_at', 'stage_changed_by_email',
-    'hire_salary_structure_id', 'hire_monthly_salary', 'offer_letter_sent_at', 'appointment_letter_sent_at'
+    'hire_salary_structure_id', 'hire_monthly_salary', 'hire_joining_date',
+    'offer_letter_sent_at', 'appointment_letter_sent_at'
   ];
   SHEET_HEADERS_[ATS.SHEETS.INTERVIEWS] = [
     'interview_id', 'application_id', 'candidate_id', 'job_id', 'stage',
