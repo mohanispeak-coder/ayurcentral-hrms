@@ -430,6 +430,10 @@ var AtsService = (function () {
     var includeDashboard = options.includeDashboard !== false;
     var s = AtsPermissionService.requireAccess(session);
     var ready = AtsSchemaService.sheetsExist();
+    if (ready && AtsEngine.canManageAts(s) && typeof AtsHireWorkflowService !== 'undefined' &&
+      AtsHireWorkflowService.ensureHireApplicationColumns) {
+      AtsHireWorkflowService.ensureHireApplicationColumns();
+    }
     var dashboard = null;
     if (includeDashboard && ready) {
       try {
