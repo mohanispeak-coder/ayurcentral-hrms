@@ -319,62 +319,17 @@ var PayslipService = (function () {
     throw new Error('Could not export payslip as PDF.' + driveApiHint_());
   }
 
-  function createGoogleDocFromHtml_(html) {
-    if (typeof Drive === 'undefined' || !Drive.Files || !Drive.Files.create) {
-      throw new Error('Google Drive API is required for PDF payslips.' + driveApiHint_());
-    }
-    var htmlBlob = Utilities.newBlob(html, 'text/html', 'payslip-source.html');
-    try {
-      var direct = Drive.Files.create({
-        name: 'HRMS Payslip Doc ' + Date.now(),
-        mimeType: 'application/vnd.google-apps.document'
-      }, htmlBlob);
-      if (direct && direct.id) {
-        Utilities.sleep(900);
-        return direct.id;
-      }
-    } catch (directErr) {
-      Logger.log('Direct HTML to Doc failed: ' + (directErr.message || directErr));
-    }
-
-    var tempHtml = DriveApp.createFile(htmlBlob);
-    var tempHtmlId = tempHtml.getId();
-    try {
-      var converted = Drive.Files.create({
-        name: 'HRMS Payslip Doc ' + Date.now(),
-        mimeType: 'application/vnd.google-apps.document'
-      }, tempHtml.getBlob());
-      if (!converted || !converted.id) throw new Error('HTML upload conversion failed.');
-      Utilities.sleep(900);
-      return converted.id;
-    } finally {
-      try { DriveApp.getFileById(tempHtmlId).setTrashed(true); } catch (ignore) {}
-    }
+  /** Client download payload with correct MIME/extension (fixes HTML mislabeled as PDF). */
+  function payslipIntent_(intent) {
+    var s = String(intent || '').trim().toLowerCase();
+    return s === 'view' ? 'view' : 'download';
   }
 
-  /** Client download payload with correct MIME/extension (fixes HTML mislabeled as PDF). */
-  function packagePayslipFileForClient_(blob, doc) {
-    var bytes = blob.getBytes();
-    var isPdf = isPdfBytes_(bytes);
-    var rawName = blob.getName() || (doc && doc.title) || 'payslip';
+  function payslipPayload_(bytes, doc, opts) {
+    opts = opts || {};
+    var isPdf = opts.is_pdf != null ? !!opts.is_pdf : isPdfBytes_(bytes);
+    var rawName = opts.fileName || (doc && doc.title) || 'payslip';
     var base = String(rawName).replace(/\.(pdf|html?)$/i, '');
-
-    if (!isPdf) {
-      try {
-        var html = blob.getDataAsString();
-        if (html && /<\s*html/i.test(html)) {
-          var pdfTry = htmlToPdfBlob_(html, base + '.pdf');
-          if (isPdfBytes_(pdfTry.getBytes())) {
-            blob = pdfTry;
-            bytes = blob.getBytes();
-            isPdf = true;
-          }
-        }
-      } catch (convErr) {
-        Logger.log('packagePayslipFileForClient_ PDF convert: ' + (convErr.message || convErr));
-      }
-    }
-
     var fileName = isPdf ? base + '.pdf' : base + '.html';
     return {
       document_id: doc.document_id,
@@ -387,6 +342,39 @@ var PayslipService = (function () {
     };
   }
 
+  /** View: serve stored HTML in browser. Download: PDF when possible from HTML source. */
+  function packagePayslipFileForClient_(blob, doc, options) {
+    options = options || {};
+    var intent = payslipIntent_(options.intent);
+    var bytes = blob.getBytes();
+    if (isPdfBytes_(bytes)) {
+      return payslipPayload_(bytes, doc, { is_pdf: true, fileName: blob.getName() });
+    }
+    var html = '';
+    try {
+      html = blob.getDataAsString();
+    } catch (readErr) {
+      Logger.log('packagePayslipFileForClient_ read: ' + (readErr.message || readErr));
+    }
+    var looksHtml = html && /<\s*html/i.test(html);
+    if (intent === 'view' && looksHtml) {
+      return payslipPayload_(bytes, doc, { is_pdf: false, fileName: blob.getName() });
+    }
+    if (looksHtml) {
+      var base = String(blob.getName() || (doc && doc.title) || 'payslip').replace(/\.(pdf|html?)$/i, '');
+      try {
+        var pdfBlob = htmlToPdfBlob_(html, base + '.pdf');
+        if (pdfBlob && isPdfBytes_(pdfBlob.getBytes())) {
+          return payslipPayload_(pdfBlob.getBytes(), doc, { is_pdf: true, fileName: base + '.pdf' });
+        }
+      } catch (convErr) {
+        Logger.log('packagePayslipFileForClient_ PDF convert: ' + (convErr.message || convErr));
+      }
+      return payslipPayload_(bytes, doc, { is_pdf: false, fileName: blob.getName() });
+    }
+    return payslipPayload_(bytes, doc, { is_pdf: isPdfBytes_(bytes), fileName: blob.getName() });
+  }
+
   function htmlFallbackBlob_(html, fileName) {
     var base = String(fileName || 'payslip.pdf').replace(/\.pdf$/i, '');
     return Utilities.newBlob(html, 'text/html', base + '.html');
@@ -394,23 +382,38 @@ var PayslipService = (function () {
 
   function htmlToPdfBlob_(html, fileName) {
     fileName = fileName || 'payslip.pdf';
-    var docId = null;
+    if (typeof Drive === 'undefined' || !Drive.Files) {
+      throw new Error('Google Drive API is required for PDF payslips.' + driveApiHint_());
+    }
+    var htmlBlob = Utilities.newBlob(html, 'text/html', 'payslip-export.html');
+    var tempId = null;
     try {
-      docId = createGoogleDocFromHtml_(html);
-      var pdfBlob = exportDriveFileAsPdf_(docId);
+      var resource = {
+        name: 'HRMS Payslip Export ' + Date.now(),
+        mimeType: 'application/vnd.google-apps.document'
+      };
+      var docFile;
+      if (Drive.Files.create) {
+        docFile = Drive.Files.create(resource, htmlBlob);
+      } else if (Drive.Files.insert) {
+        docFile = Drive.Files.insert({
+          title: resource.name,
+          mimeType: resource.mimeType
+        }, htmlBlob, { convert: true });
+      } else {
+        throw new Error('Drive file create is unavailable.' + driveApiHint_());
+      }
+      tempId = docFile.id;
+      if (!tempId) throw new Error('Could not create temporary Google Doc for PDF export.');
+      Utilities.sleep(600);
+      var pdfBlob = exportDriveFileAsPdf_(tempId);
       return pdfBlob.setName(fileName);
     } catch (e) {
       Logger.log('htmlToPdfBlob_ failed: ' + (e.message || e));
-      try {
-        var viaHtml = HtmlService.createHtmlOutput(html).getBlob().getAs('application/pdf');
-        if (viaHtml && isPdfBytes_(viaHtml.getBytes())) {
-          return viaHtml.setName(fileName);
-        }
-      } catch (ignoreHtml) {}
-      return htmlFallbackBlob_(html, fileName);
+      throw e;
     } finally {
-      if (docId) {
-        try { DriveApp.getFileById(docId).setTrashed(true); } catch (ignore) {}
+      if (tempId) {
+        try { DriveApp.getFileById(tempId).setTrashed(true); } catch (ignore) {}
       }
     }
   }
@@ -428,11 +431,13 @@ var PayslipService = (function () {
     writeOpts = writeOpts || {};
     var html = buildHtml_(run, rec, emp);
     var baseName = rec.employee_id + '-' + run.payroll_run_id + '-payslip';
-    var fileName = baseName + '.pdf';
+    var htmlName = baseName + '.html';
     if (writeOpts.replaceExisting) {
       trashOrphanPayslipFiles_(folder, baseName);
     } else {
-      var pdfIt = folder.getFilesByName(fileName);
+      var htmlIt = folder.getFilesByName(htmlName);
+      if (htmlIt.hasNext()) return htmlIt.next();
+      var pdfIt = folder.getFilesByName(baseName + '.pdf');
       if (pdfIt.hasNext()) {
         var existingPdf = pdfIt.next();
         try {
@@ -440,10 +445,7 @@ var PayslipService = (function () {
         } catch (ignorePdf) {}
       }
     }
-    var outBlob = htmlToPdfBlob_(html, fileName);
-    var outBytes = outBlob.getBytes();
-    var finalName = isPdfBytes_(outBytes) ? fileName : (baseName + '.html');
-    return folder.createFile(outBlob.setName(finalName));
+    return folder.createFile(Utilities.newBlob(html, 'text/html; charset=utf-8', htmlName));
   }
 
   function enrichPayslipDoc_(doc, employeeId) {
@@ -480,7 +482,7 @@ var PayslipService = (function () {
     return String(value);
   }
 
-  function getPayslipForDownload(documentId) {
+  function getPayslipForDownload(documentId, intent) {
     var session = PermissionService.require(HRMS.ACTIONS.VIEW_OWN_PAYSLIP);
     var doc = DbService.findOne(HRMS.SHEETS.DOCUMENTS, { document_id: documentId });
     if (!doc || String(doc.category).toUpperCase() !== HRMS.DOCUMENT_CATEGORY.PAYSLIP) {
@@ -495,7 +497,7 @@ var PayslipService = (function () {
       }
     }
     var file = DriveApp.getFileById(doc.drive_file_id);
-    return packagePayslipFileForClient_(file.getBlob(), doc);
+    return packagePayslipFileForClient_(file.getBlob(), doc, { intent: payslipIntent_(intent) });
   }
 
   function listOwnPayslips() {

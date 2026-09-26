@@ -1274,7 +1274,7 @@
       root.querySelectorAll('.js-dl-view').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-id');
-          callServer('apiDownloadEmployeeDocument', id, { button: btn, loadingText: 'Opening...' })
+          callServer('apiDownloadEmployeeDocument', id, 'view', { button: btn, loadingText: 'Opening...' })
             .then(openBlobForView)
             .catch(function (err) { showToast(err.message || 'View failed', 'error'); });
         });
@@ -1282,7 +1282,7 @@
       root.querySelectorAll('.js-dl-save').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-id');
-          callServer('apiDownloadEmployeeDocument', id, { button: btn, loadingText: 'Downloading...' })
+          callServer('apiDownloadEmployeeDocument', id, 'download', { button: btn, loadingText: 'Downloading...' })
             .then(downloadBlob)
             .catch(function (err) { showToast(err.message || 'Download failed', 'error'); });
         });
@@ -1299,6 +1299,16 @@
     function openBlobForView(file) {
       var blob = blobFromFilePayload_(file);
       var url = URL.createObjectURL(blob);
+      if (file && file.is_pdf === false) {
+        var wHtml = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!wHtml) {
+          URL.revokeObjectURL(url);
+          showToast('Allow pop-ups to view the payslip in a new tab.', 'error');
+          return;
+        }
+        setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+        return;
+      }
       var w = window.open(url, '_blank', 'noopener,noreferrer');
       if (!w) {
         var a = document.createElement('a');

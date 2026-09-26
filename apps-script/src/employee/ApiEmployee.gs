@@ -100,10 +100,12 @@ function apiUploadEmployeeDocuments(employeeId, files, sessionToken) {
   }, sessionToken);
 }
 
-function apiDownloadEmployeeDocument(documentId, sessionToken) {
+function apiDownloadEmployeeDocument(documentId, intent, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return EmployeeService.downloadDocument(session, documentId);
+    var mode = 'download';
+    if (intent === 'view' || intent === 'download') mode = intent;
+    return EmployeeService.downloadDocument(session, documentId, mode);
   }, sessionToken);
 }
 

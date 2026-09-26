@@ -234,9 +234,11 @@ function apiListOwnPayslips(sessionToken) {
   }, sessionToken);
 }
 
-function apiGetPayslipDownload(documentId, sessionToken) {
+function apiGetPayslipDownload(documentId, intent, sessionToken) {
   return hrmsRun_(function () {
-    return PayslipService.getPayslipForDownload(documentId);
+    var mode = 'download';
+    if (intent === 'view' || intent === 'download') mode = intent;
+    return PayslipService.getPayslipForDownload(documentId, mode);
   }, sessionToken);
 }
 

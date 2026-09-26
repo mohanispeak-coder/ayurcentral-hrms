@@ -2743,7 +2743,7 @@
         page.querySelectorAll('.js-pay-view').forEach(function (btn) {
           btn.addEventListener('click', function () {
             if (!setButtonLoading(btn, 'Opening...')) return;
-            rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Opening...')
+            rpc('apiGetPayslipDownload', [btn.getAttribute('data-id'), 'view'], btn, 'Opening...')
               .then(function (file) { openBlobForView(file); })
               .catch(function (err) { showToast(err.message || 'View denied', 'error'); });
           });
@@ -2751,7 +2751,7 @@
         page.querySelectorAll('.js-pay-dl').forEach(function (btn) {
           btn.addEventListener('click', function () {
             if (!setButtonLoading(btn, 'Downloading...')) return;
-            rpc('apiGetPayslipDownload', [btn.getAttribute('data-id')], btn, 'Downloading...')
+            rpc('apiGetPayslipDownload', [btn.getAttribute('data-id'), 'download'], btn, 'Downloading...')
               .then(function (file) { downloadBlob(file); })
               .catch(function (err) { showToast(err.message || 'Download denied', 'error'); });
           });

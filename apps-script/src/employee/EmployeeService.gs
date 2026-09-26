@@ -1172,7 +1172,7 @@ var EmployeeService = (function () {
     };
   }
 
-  function downloadDocument(session, documentId) {
+  function downloadDocument(session, documentId, intent) {
     AuthService.requireAuth();
     var doc = EmployeeRepository.findDocument(trim_(documentId));
     if (!doc) throw notFoundError_('Document not found.');
@@ -1190,7 +1190,7 @@ var EmployeeService = (function () {
     var blob = file.getBlob();
     if (cat === HRMS.DOCUMENT_CATEGORY.PAYSLIP &&
         typeof PayslipService !== 'undefined' && PayslipService.packagePayslipFileForClient) {
-      return PayslipService.packagePayslipFileForClient(blob, doc);
+      return PayslipService.packagePayslipFileForClient(blob, doc, { intent: intent || 'download' });
     }
     return {
       fileName: blob.getName() || doc.title,
