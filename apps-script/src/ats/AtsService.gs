@@ -345,7 +345,24 @@ var AtsService = (function () {
     var cand = candidateIndex && candidateIndex[app.candidate_id];
     view.candidate_name = cand ? (cand.full_name || '') : '';
     view.candidate_email = cand ? (cand.email || '') : '';
+    if (typeof AtsHireWorkflowService !== 'undefined' && AtsHireWorkflowService.enrichApplicationHireFields) {
+      AtsHireWorkflowService.enrichApplicationHireFields(view, app);
+    }
     return view;
+  }
+
+  function hireActionResponse_(session, applicationId) {
+    var app = AtsRepository.findApplication(applicationId);
+    if (!app) throw notFoundError_('Application not found.');
+    var job = AtsRepository.findJob(app.job_id);
+    var cand = AtsRepository.findCandidate(app.candidate_id);
+    var idx = {};
+    if (cand) idx[cand.candidate_id] = cand;
+    return {
+      application: enrichApplicationView_(app, job, idx),
+      candidate_id: app.candidate_id,
+      hired_employee_id: cand ? (cand.hired_employee_id || '') : ''
+    };
   }
 
   function interviewStatus_(row) {
@@ -689,11 +706,13 @@ var AtsService = (function () {
     var activity = AtsRepository.activityForCandidate(candidate.candidate_id);
     var jobById = {};
     packed.jobs.forEach(function (j) { jobById[j.job_id] = j; });
+    var candidateIndex = {};
+    candidateIndex[candidate.candidate_id] = candidate;
     return {
       candidate: sanitizeCandidate_(candidate),
       applications: packed.applications.map(function (app) {
         var job = jobById[app.job_id] || AtsRepository.findJob(app.job_id);
-        return sanitizeApplication_(app, job);
+        return enrichApplicationView_(app, job, candidateIndex);
       }),
       interviews: interviews.map(sanitizeInterview_),
       activity: activity.map(function (row) {
@@ -783,10 +802,6 @@ var AtsService = (function () {
           NotificationAtsAdapter.notifyShortlisted(packed, recips);
         } else if (target === ATS.STAGE.SELECTED) {
           NotificationAtsAdapter.notifySelected(packed, recips);
-        }
-        if (target === ATS.STAGE.OFFER && typeof AtsOfferLetterService !== 'undefined') {
-          var candOffer = AtsRepository.findCandidate(app.candidate_id);
-          AtsOfferLetterService.maybeSendOnStage(target, updated, job, candOffer);
         }
       });
       return {
@@ -1178,6 +1193,27 @@ var AtsService = (function () {
     scheduleInterview: scheduleInterview,
     updateInterview: updateInterview,
     downloadResume: downloadResume,
+    listHireSalaryStructures: function (session) {
+      return AtsHireWorkflowService.listSalaryStructureOptions(session);
+    },
+    saveHireCompensation: function (session, applicationId, payload) {
+      AtsHireWorkflowService.saveHireCompensation(session, applicationId, payload || {});
+      return hireActionResponse_(session, applicationId);
+    },
+    sendHireOfferLetter: function (session, applicationId) {
+      AtsOfferLetterService.sendOfferLetterForHire(session, applicationId);
+      return hireActionResponse_(session, applicationId);
+    },
+    sendHireAppointmentLetter: function (session, applicationId) {
+      AtsAppointmentLetterService.sendAppointmentLetter(session, applicationId);
+      return hireActionResponse_(session, applicationId);
+    },
+    createEmployeeFromHire: function (session, applicationId, employeeId) {
+      var created = AtsHireWorkflowService.createEmployeeFromHire(session, applicationId, employeeId);
+      var refresh = hireActionResponse_(session, applicationId);
+      refresh.employee = created.employee;
+      return refresh;
+    },
     listPublicJobs: listPublicJobs,
     getPublicJob: getPublicJob,
     submitPublicApplication: submitPublicApplication

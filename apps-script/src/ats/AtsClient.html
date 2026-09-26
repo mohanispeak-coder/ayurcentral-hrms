@@ -442,6 +442,103 @@
       }).join('');
     }
 
+    function structureOptionsHtml_(options, selected) {
+      var sel = String(selected || '');
+      return '<option value="">Select structure</option>' + (options || []).map(function (s) {
+        var id = String(s.salary_structure_id || '');
+        var label = id + ' - ' + (s.structure_name || '') + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
+        return '<option value="' + escapeHtml(id) + '"' + (id === sel ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      }).join('');
+    }
+
+    function buildHireWorkflowCardHtml_(hiredApps, structureOptions) {
+      if (!hiredApps.length || !canManage()) return '';
+      var blocks = hiredApps.map(function (a) {
+        var appId = a.application_id;
+        var sal = a.hire_monthly_salary != null && a.hire_monthly_salary !== '' ? String(a.hire_monthly_salary) : '';
+        return '<div class="ats-hire-panel" data-hire-app="' + escapeHtml(appId) + '" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border,#e5e7eb)">' +
+          '<h3 style="margin:0 0 8px;font-size:1rem">' + escapeHtml(a.job_title || a.job_id) +
+          ' <span class="mono muted">' + escapeHtml(appId) + '</span></h3>' +
+          '<p class="hint">Select salary structure and monthly CTC, save, then send letters when ready. Create employee with the new employee code.</p>' +
+          '<div class="form-row">' +
+          '<div class="form-group"><label class="form-label">Salary structure ID</label>' +
+          '<select class="form-select" data-hire-structure="' + escapeHtml(appId) + '">' +
+          structureOptionsHtml_(structureOptions, a.hire_salary_structure_id) + '</select></div>' +
+          '<div class="form-group"><label class="form-label">Monthly salary (Rs.)</label>' +
+          '<input class="form-input" type="number" min="0" step="1" data-hire-salary="' + escapeHtml(appId) + '" value="' + escapeHtml(sal) + '"></div></div>' +
+          '<p class="action-feedback hidden" data-hire-fb="' + escapeHtml(appId) + '"></p>' +
+          '<div class="btn-row" style="flex-wrap:wrap;gap:8px;margin:8px 0">' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-hire-save="' + escapeHtml(appId) + '">Save compensation</button>' +
+          '<button type="button" class="btn btn-primary btn-sm" data-hire-offer="' + escapeHtml(appId) + '">Send offer letter</button>' +
+          '<button type="button" class="btn btn-primary btn-sm" data-hire-appt="' + escapeHtml(appId) + '">Send appointment letter</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-hire-employee="' + escapeHtml(appId) + '">Create employee</button>' +
+          '</div>' +
+          '<p class="muted" style="font-size:12px">Offer letter: ' + escapeHtml(a.offer_letter_sent_at ? fmtWhen(a.offer_letter_sent_at) : 'Not sent') +
+          ' · Appointment: ' + escapeHtml(a.appointment_letter_sent_at ? fmtWhen(a.appointment_letter_sent_at) : 'Not sent') + '</p></div>';
+      }).join('');
+      return '<div class="card" id="ats-hire-workflow"><h2>Hired – compensation &amp; onboarding</h2>' + blocks + '</div>';
+    }
+
+    function bindHireWorkflowHandlers_(page, candidateId, seq) {
+      if (!page || !canManage()) return;
+      Array.prototype.forEach.call(page.querySelectorAll('[data-hire-save]'), function (btn) {
+        btn.addEventListener('click', function () {
+          var appId = btn.getAttribute('data-hire-save');
+          var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
+          var structureEl = page.querySelector('[data-hire-structure="' + appId + '"]');
+          var salaryEl = page.querySelector('[data-hire-salary="' + appId + '"]');
+          rpc('apiAtsSaveHireCompensation', [appId, {
+            salary_structure_id: structureEl ? structureEl.value : '',
+            monthly_salary: salaryEl ? salaryEl.value : ''
+          }], btn, 'Saving…', fb).then(function () {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            invalidateAtsCandidate_(candidateId);
+            showToast('Compensation saved.');
+          }).catch(function (err) { showToast((err && err.message) || 'Save failed', 'error'); });
+        });
+      });
+      Array.prototype.forEach.call(page.querySelectorAll('[data-hire-offer]'), function (btn) {
+        btn.addEventListener('click', function () {
+          if (!window.confirm('Send offer letter email with PDF to the candidate?')) return;
+          var appId = btn.getAttribute('data-hire-offer');
+          var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
+          rpc('apiAtsSendHireOfferLetter', [appId], btn, 'Sending…', fb).then(function () {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            invalidateAtsCandidate_(candidateId);
+            showToast('Offer letter sent.');
+            renderCandidate(candidateId);
+          }).catch(function (err) { showToast((err && err.message) || 'Send failed', 'error'); });
+        });
+      });
+      Array.prototype.forEach.call(page.querySelectorAll('[data-hire-appt]'), function (btn) {
+        btn.addEventListener('click', function () {
+          if (!window.confirm('Send appointment letter email with PDF to the candidate?')) return;
+          var appId = btn.getAttribute('data-hire-appt');
+          var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
+          rpc('apiAtsSendHireAppointmentLetter', [appId], btn, 'Sending…', fb).then(function () {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            invalidateAtsCandidate_(candidateId);
+            showToast('Appointment letter sent.');
+            renderCandidate(candidateId);
+          }).catch(function (err) { showToast((err && err.message) || 'Send failed', 'error'); });
+        });
+      });
+      Array.prototype.forEach.call(page.querySelectorAll('[data-hire-employee]'), function (btn) {
+        btn.addEventListener('click', function () {
+          var appId = btn.getAttribute('data-hire-employee');
+          var eid = window.prompt('Enter new employee ID (e.g. AOPL-0010):', '');
+          if (!eid || !String(eid).trim()) return;
+          var fb = page.querySelector('[data-hire-fb="' + appId + '"]');
+          rpc('apiAtsCreateEmployeeFromHire', [appId, String(eid).trim()], btn, 'Creating…', fb).then(function (res) {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            invalidateAtsCandidate_(candidateId);
+            showToast('Employee created: ' + (res.hired_employee_id || res.employee_id || eid));
+            renderCandidate(candidateId);
+          }).catch(function (err) { showToast((err && err.message) || 'Create failed', 'error'); });
+        });
+      });
+    }
+
     function syncScheduleAppSelect_(apps) {
       var sel = $('ats-iv-app');
       if (!sel) return;
@@ -1230,7 +1327,10 @@
         var appRows = candidateApplicationsBodyHtml_(apps, stages);
         var ivHtml = candidateInterviewListHtml_(ivs);
         var actHtml = candidateActivityHtml_(act);
-        $('ats-cand-detail').innerHTML =
+        var hiredApps = (apps || []).filter(function (a) { return String(a.stage || '').toUpperCase() === 'HIRED'; });
+        function paintCandidateDetail_(structureOptions) {
+          var hireCard = buildHireWorkflowCardHtml_(hiredApps, structureOptions || []);
+          $('ats-cand-detail').innerHTML =
           '<div class="card"><div class="profile-header"><div>' +
             '<h2>' + escapeHtml(c.full_name) + '</h2>' +
             '<p class="muted mono">' + escapeHtml(c.candidate_id) + ' · not an employee ID</p></div>' +
@@ -1244,11 +1344,12 @@
             '<dt>Education</dt><dd>' + escapeHtml(c.education || '-') + '</dd>' +
             '<dt>Experience</dt><dd>' + escapeHtml(c.experience_summary || '-') + '</dd>' +
             '<dt>Skills</dt><dd>' + escapeHtml(c.skills || '-') + '</dd>' +
-            '<dt>Linked employee</dt><dd>' + escapeHtml(c.hired_employee_id || 'None - hiring does not create an employee') + '</dd>' +
+            '<dt>Linked employee</dt><dd id="ats-linked-employee">' + escapeHtml(c.hired_employee_id || 'None yet') + '</dd>' +
           '</dl></div>' +
           '<div class="card"><h2>Applications</h2>' +
             (appRows ? '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job</th><th>Title</th><th>Stage</th><th>Applied</th><th>Action</th></tr></thead><tbody id="ats-cand-apps-body">' + appRows + '</tbody></table></div>' : '<p class="muted">None</p>') +
           '</div>' +
+          hireCard +
           '<div class="card"><h2>Schedule interview</h2>' +
             '<p class="hint">Scheduling sends calendar-style notifications to the interviewer and candidate. Feedback is collected after the interview.</p>' +
             '<div class="form-row">' +
@@ -1273,7 +1374,49 @@
             '<p class="action-feedback hidden" id="ats-comment-fb"></p>' +
             '<button type="button" class="btn btn-secondary" id="ats-comment-save">Add comment</button></div>' +
           '<div class="card"><h2>Activity</h2><div id="ats-cand-activity">' + actHtml + '</div></div>';
+          wireCandidateDetailHandlers_(seq, c, apps, stages, candidateId, {
+            keepRefresh: keepRefresh,
+            restoreCand: restoreCand,
+            candKey: candKey,
+            candidateId: candidateId
+          });
+        }
+        if (hiredApps.length && canManage()) {
+          rpc('apiAtsListHireSalaryStructures', []).then(function (opts) {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            paintCandidateDetail_(opts || []);
+          }).catch(function () {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            paintCandidateDetail_([]);
+          });
+        } else {
+          paintCandidateDetail_([]);
+        }
+        if (keepRefresh && !restoreCand) {
+          rpc('apiAtsGetCandidate', [candidateId]).then(function (fresh) {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            atsView.candidate[candidateId] = fresh;
+            if (App.markModuleViewLoaded) App.markModuleViewLoaded(candKey);
+            renderCandidate(candidateId);
+          }).catch(function (err) {
+            if (!stillOn(seq, 'ats-candidate')) return;
+            if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+            showToast((err && err.message) || 'Could not refresh candidate', 'error');
+          });
+        }
+      }).catch(function (err) {
+        if (!stillOn(seq, 'ats-candidate')) return;
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        if (keepRefresh && cachedCand) {
+          showToast((err && err.message) || 'Could not refresh candidate', 'error');
+          return;
+        }
+        paintErr($('ats-cand-detail'), (err && err.message) || 'Candidate not found.', function () { App.navigate('ats-candidates'); });
+      });
+    }
 
+    function wireCandidateDetailHandlers_(seq, c, apps, stages, candidateId, refreshCtx) {
+      refreshCtx = refreshCtx || {};
         var page = pageEl();
         if ($('ats-dl-resume')) $('ats-dl-resume').addEventListener('click', function () {
           rpc('apiAtsDownloadResume', [c.candidate_id], $('ats-dl-resume'), 'Preparing…')
@@ -1281,6 +1424,7 @@
             .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
         });
         bindCandidateApplicationMoveHandlers_(page, c.candidate_id, apps, stages, seq);
+        bindHireWorkflowHandlers_(page, c.candidate_id, seq);
         bindCandidateInterviewCompleteHandlers_(page, c.candidate_id, seq);
         if ($('ats-iv-save')) $('ats-iv-save').addEventListener('click', function () {
           if (!apps.length) { showToast('No application to attach an interview to.', 'error'); return; }
@@ -1307,27 +1451,6 @@
             })
             .catch(function (err) { showToast((err && err.message) || 'Comment failed', 'error'); });
         });
-        if (keepRefresh && !restoreCand) {
-          rpc('apiAtsGetCandidate', [candidateId]).then(function (fresh) {
-            if (!stillOn(seq, 'ats-candidate')) return;
-            atsView.candidate[candidateId] = fresh;
-            if (App.markModuleViewLoaded) App.markModuleViewLoaded(candKey);
-            renderCandidate(candidateId);
-          }).catch(function (err) {
-            if (!stillOn(seq, 'ats-candidate')) return;
-            if (App.finishModuleRefresh) App.finishModuleRefresh(true);
-            showToast((err && err.message) || 'Could not refresh candidate', 'error');
-          });
-        }
-      }).catch(function (err) {
-        if (!stillOn(seq, 'ats-candidate')) return;
-        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
-        if (keepRefresh && cachedCand) {
-          showToast((err && err.message) || 'Could not refresh candidate', 'error');
-          return;
-        }
-        paintErr($('ats-cand-detail'), (err && err.message) || 'Candidate not found.', function () { App.navigate('ats-candidates'); });
-      });
     }
   });
 })();

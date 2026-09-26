@@ -73,7 +73,7 @@ var HrmsContentTemplateService = (function () {
     {
       id: 'ats_offer',
       label: 'Recruitment - offer letter email',
-      description: 'Sent to the candidate when the application reaches the OFFER stage (email + PDF attachment).',
+      description: 'Email body when HR sends the offer letter from a HIRED application (PDF attached).',
       keys: {
         subject: 'template_ats_offer_subject',
         body: 'template_ats_offer_body'
@@ -89,6 +89,28 @@ var HrmsContentTemplateService = (function () {
           'Our HR team will contact you with next steps regarding documentation and joining.',
           '',
           'We look forward to welcoming you to the team.',
+          '',
+          'Regards,',
+          'Human Resources',
+          '{{company}}'
+        ].join('\n')
+      },
+      placeholders: ['{{candidate_name}}', '{{job_title}}', '{{company}}', '{{application_id}}']
+    },
+    {
+      id: 'ats_appointment',
+      label: 'Recruitment - appointment letter email',
+      description: 'Sent manually when HR pushes the appointment letter from a HIRED application.',
+      keys: {
+        subject: 'template_ats_appointment_subject',
+        body: 'template_ats_appointment_body'
+      },
+      defaults: {
+        subject: 'Appointment letter - {{job_title}} - {{company}}',
+        body: [
+          'Dear {{candidate_name}},',
+          '',
+          'Please find attached your appointment letter for the position of {{job_title}} at {{company}}.',
           '',
           'Regards,',
           'Human Resources',

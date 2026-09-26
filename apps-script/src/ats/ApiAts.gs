@@ -136,6 +136,41 @@ function apiAtsDownloadResume(candidateId, sessionToken) {
   }, sessionToken);
 }
 
+function apiAtsListHireSalaryStructures(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.listHireSalaryStructures(session);
+  }, sessionToken);
+}
+
+function apiAtsSaveHireCompensation(applicationId, payload, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.saveHireCompensation(session, applicationId, payload || {});
+  }, sessionToken);
+}
+
+function apiAtsSendHireOfferLetter(applicationId, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.sendHireOfferLetter(session, applicationId);
+  }, sessionToken);
+}
+
+function apiAtsSendHireAppointmentLetter(applicationId, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.sendHireAppointmentLetter(session, applicationId);
+  }, sessionToken);
+}
+
+function apiAtsCreateEmployeeFromHire(applicationId, employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.createEmployeeFromHire(session, applicationId, employeeId);
+  }, sessionToken);
+}
+
 function menuEnsureAtsSchema() {
   var session = AuthService.requireAuth();
   if (!AtsEngine.canManageAts(session)) {

@@ -1,12 +1,9 @@
 /**
- * Offer letter email + PDF (manual send from HIRED hire workflow).
+ * Manual appointment letter email when HR triggers from HIRED workflow.
  */
-var HRMS = HRMS || {};
-
-var AtsOfferLetterService = (function () {
+var AtsAppointmentLetterService = (function () {
   function trim_(v) {
-    if (v === null || v === undefined) return '';
-    return String(v).trim();
+    return v == null ? '' : String(v).trim();
   }
 
   function company_() {
@@ -25,16 +22,15 @@ var AtsOfferLetterService = (function () {
       '{{application_id}}': trim_(application.application_id)
     };
     if (typeof HrmsContentTemplateService !== 'undefined' && HrmsContentTemplateService.render) {
-      return HrmsContentTemplateService.render('ats_offer', map);
+      var rendered = HrmsContentTemplateService.render('ats_appointment', map);
+      if (rendered) return rendered;
     }
     return {
-      subject: 'Offer of employment - ' + map['{{job_title}}'] + ' - ' + map['{{company}}'],
+      subject: 'Appointment letter - ' + map['{{job_title}}'] + ' - ' + map['{{company}}'],
       body: [
         'Dear ' + map['{{candidate_name}}'] + ',',
         '',
-        'Congratulations. We are pleased to offer you the position of ' + map['{{job_title}}'] + '.',
-        '',
-        'Please find your offer letter attached as a PDF.',
+        'Please find attached your appointment letter for the position of ' + map['{{job_title}}'] + '.',
         '',
         'Regards,',
         'Human Resources',
@@ -43,15 +39,15 @@ var AtsOfferLetterService = (function () {
     };
   }
 
-  function sendOfferLetterForHire_(session, applicationId) {
+  function sendAppointmentLetter_(session, applicationId) {
     var ctx = AtsHireWorkflowService.loadHireContext(session, applicationId);
     if (!AtsHireWorkflowService.hireCompensationReady(ctx.application)) {
-      throw validationError_('Save salary structure and monthly salary before sending the offer letter.');
+      throw validationError_('Save salary structure and monthly salary before sending the appointment letter.');
     }
     var email = trim_(ctx.candidate.email);
     if (!email) throw validationError_('Candidate email is missing.');
     var content = buildEmail_(ctx.candidate, ctx.job, ctx.application);
-    var pdf = AtsLetterPdfService.buildOfferPdf(ctx.candidate, ctx.job, ctx.application);
+    var pdf = AtsLetterPdfService.buildAppointmentPdf(ctx.candidate, ctx.job, ctx.application);
     MailApp.sendEmail({
       to: email,
       subject: content.subject,
@@ -60,23 +56,17 @@ var AtsOfferLetterService = (function () {
     });
     var now = new Date();
     AtsRepository.updateApplication(applicationId, {
-      offer_letter_sent_at: now,
+      appointment_letter_sent_at: now,
       updated_at: now
     });
     try {
-      AuditService.log(ATS.AUDIT.HIRE_OFFER, 'Application', applicationId,
-        'Offer letter emailed to ' + email, '');
+      AuditService.log(ATS.AUDIT.HIRE_APPOINTMENT, 'Application', applicationId,
+        'Appointment letter emailed to ' + email, '');
     } catch (ignore) {}
     return { ok: true, status: 'SENT', to: email, sent_at: now.toISOString() };
   }
 
-  /** Legacy hook - offer letters are sent manually from the HIRED workflow. */
-  function maybeSendOnStage_(targetStage, application, job, candidate) {
-    return null;
-  }
-
   return {
-    sendOfferLetterForHire: sendOfferLetterForHire_,
-    maybeSendOnStage: maybeSendOnStage_
+    sendAppointmentLetter: sendAppointmentLetter_
   };
 })();
