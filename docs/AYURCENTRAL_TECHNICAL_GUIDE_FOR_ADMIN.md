@@ -1,8 +1,7 @@
-# AyurCentral HRMS — Technical Guide (for system owner / developer)
+# AyurCentral HRMS - Technical Guide (for system owner / developer)
 
-**Audience:** Mohan and technical admins — complements the HR-facing manual.  
-**Pair with:** `docs/AYURCENTRAL_HR_USER_MANUAL.md` (share only that one with HR).  
-**Branch reference:** `shiva-branch` (integration / deploy).
+**Audience:** System owners and technical administrators. Complements the HR-facing manual.  
+**Pair with:** `docs/AYURCENTRAL_HR_USER_MANUAL.md` (share only that one with HR).
 
 ---
 
@@ -35,7 +34,7 @@ tests/            Node-based string/regression tests (not full E2E)
 docs/             Integration notes + user manuals
 ```
 
-Deploy: `apps-script/SETUP.md` — `clasp push`, `clasp deploy`, set web app URL.
+Deploy: `apps-script/SETUP.md` - `clasp push`, `clasp deploy`, set web app URL.
 
 **Client cache bust:** `HRMS.CLIENT_ASSETS_VERSION` in `Constants.gs`; bootstrap returns `clientAssetsVersion` to the browser.
 
@@ -66,11 +65,11 @@ Navigation items: `PermissionService.NAV_ITEMS_` filtered by role; optional **Se
 | `notifications` | notifications | Inbox + email log |
 | `settings` | settings | Admin configuration |
 
-Sidebar groups (`NAV_GROUPS`) differ slightly from flat nav list — HR sees **Attendance** and **Payroll** as separate collapsible sections on `shiva-branch`.
+The sidebar groups **Attendance** and **Payroll** as separate collapsible sections for HR users.
 
 ---
 
-## 5. Payroll — backend design (what HR screens depend on)
+## 5. Payroll - backend design (what HR screens depend on)
 
 ### 5.1 Data flow
 
@@ -95,20 +94,20 @@ LOCK → PayslipService → Drive + Documents
 | Per vertical | `PR-2026-09-SAPL` | `SAPL` |
 | Correction | `PR-2026-09-SAPL-C1` | same as source |
 
-- `findOpenRun_(year, month, vertical)` — only one open draft per vertical per month.
+- `findOpenRun_(year, month, vertical)` - only one open draft per vertical per month.
 - `eligibleEmployees_` filters by employee `vertical_name` (or ID prefix) when run has a vertical.
 - `AttendanceBulkService.assertRunVerticalMatches_` blocks uploading SAPL register into AOPL run.
 
-### 5.3 Legacy import (shiva-branch)
+### 5.3 Legacy import
 
-- `importInputsFromLegacyRun` / `apiPayrollImportLegacyInputs` — copies inputs (including `daily_attendance_json`) from combined run to vertical run for matching employees.
+- `importInputsFromLegacyRun` / `apiPayrollImportLegacyInputs` - copies inputs (including `daily_attendance_json`) from combined run to vertical run for matching employees.
 - `tryAutoImportFromLegacy_` on `createRunInsideLock_` after `seedInputs_`.
 - Client: `legacyImportHint`, `attendance_input_count` on run list, banners, `resolveTargetRunForPeriod_` fallback to legacy when vertical draft has zero attendance.
 
 ### 5.4 Workflow states
 
 `DRAFT → CALCULATED → UNDER_REVIEW → APPROVED → LOCKED`  
-No unlock in Phase 1 — `createCorrectionRun` from LOCKED source seeds inputs from source (including `daily_attendance_json` on corrections).
+No unlock in Phase 1 - `createCorrectionRun` from LOCKED source seeds inputs from source (including `daily_attendance_json` on corrections).
 
 ### 5.5 Key APIs (Payroll)
 
@@ -132,7 +131,7 @@ Full list: `ApiPayroll.gs`.
 ## 6. Leave ↔ payroll bridge
 
 - `PayrollLeaveBridge.getApprovedLopMapForPayroll` → `lop_from_leave` on inputs.
-- `refreshLopFromLeave` / `applyLeaveLopToDays` — HR opt-in to copy into `lop_days` and recompute `paid_days`.
+- `refreshLopFromLeave` / `applyLeaveLopToDays` - HR opt-in to copy into `lop_days` and recompute `paid_days`.
 - Approved leave changes do **not** alter LOCKED runs.
 
 ---
@@ -169,7 +168,7 @@ See `docs/NOTIFICATIONS_INTEGRATION_NOTES.md`.
 ## 10. Settings and schema maintenance
 
 - **Settings** sheet: booleans, role module matrix, content templates, company emails.
-- **Database setup:** HRMS menu in spreadsheet or `SchemaService.ensureSheetHeaders` — adds columns such as `PayrollRuns.vertical_name`, template rows.
+- **Database setup:** HRMS menu in spreadsheet or `SchemaService.ensureSheetHeaders` - adds columns such as `PayrollRuns.vertical_name`, template rows.
 - If Settings templates missing, UI shows warning to run database setup.
 
 ---
@@ -177,23 +176,23 @@ See `docs/NOTIFICATIONS_INTEGRATION_NOTES.md`.
 ## 11. Deploy and verify
 
 ```bash
-git checkout shiva-branch && git pull origin shiva-branch
 cd apps-script
 clasp push
 clasp deploy   # or update existing deployment
 ```
 
+Pull the latest application source from your repository before deploying, if your team uses version control.
+
 **Verify in browser:**
 
-1. Footer on payroll pages shows `clientAssetsVersion` (e.g. `2026.09.26.14`).
-2. Sidebar shows Attendance + Payroll sections.
-3. Combined legacy + import banner on vertical runs with old data.
+1. Footer on payroll pages shows `clientAssetsVersion` (version string updates when IT deploys a new build).
+2. Sidebar shows Attendance + Payroll sections for HR roles.
+3. Combined legacy + import banner on vertical runs when older combined data exists.
 
 **Tests (local):**
 
 ```bash
 node tests/payroll-vertical-runs.test.js
-# other tests in tests/ — some need env paths
 ```
 
 ---
@@ -225,12 +224,16 @@ node tests/payroll-vertical-runs.test.js
 
 ---
 
-## 14. Git workflow (your preference)
+## 14. Regenerating the PDF manuals
 
-- **Integration branch:** `shiva-branch` — push feature work here; avoid long-lived `cursor/*` branches unless experimenting.
-- **Deploy from:** latest `shiva-branch` after `clasp push`.
-- HR manual: only `docs/AYURCENTRAL_HR_USER_MANUAL.md`.
+From the `docs` folder:
+
+```bash
+python3 build-ayurcentral-manuals-pdf.py
+```
+
+This writes `AYURCENTRAL_HR_USER_MANUAL.pdf` and `AYURCENTRAL_TECHNICAL_GUIDE_FOR_ADMIN.pdf` next to the markdown sources.
 
 ---
 
-*Internal technical guide — not for distribution to end-user HR staff.*
+*Internal technical guide - not for distribution to end-user HR staff.*

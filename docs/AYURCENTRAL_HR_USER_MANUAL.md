@@ -1,8 +1,8 @@
-# AyurCentral Enterprise HRMS — HR User Manual
+# AyurCentral Enterprise HRMS - HR User Manual
 
 **Who this is for:** HR and Admin staff who use the web app every day.  
 **What this covers:** Screens, buttons, and step-by-step tasks only (no technical setup).  
-**Last updated:** September 2026 (matches `shiva-branch` web app).
+**Last updated:** September 2026.
 
 ---
 
@@ -12,7 +12,7 @@
 
 1. Open the **AyurCentral HRMS** link your IT team shared (it runs in the browser, usually via Google).
 2. Sign in with your **company Google account** (the same email that was added as an HR/Admin user).
-3. If you see “not authorized,” your email is not linked to an active user record — contact your system owner.
+3. If you see “not authorized,” your email is not linked to an active user record - contact your system owner.
 
 ### 1.2 Layout you will see every day
 
@@ -31,7 +31,7 @@ After you sign in, use a **hard refresh** (Ctrl+Shift+R or Cmd+Shift+R) if the s
 | --- | --- |
 | **ADMIN / OWNER** | Everything HR can do, plus **Settings**, user access, and sensitive configuration. |
 | **HR** | Employees, leave, attendance, payroll, recruitment, notifications. |
-| **MANAGER** | Team list, leave approvals — **no payroll or salary screens**. |
+| **MANAGER** | Team list, leave approvals - **no payroll or salary screens**. |
 | **EMPLOYEE** | Own profile, own leave, own payslips only. |
 
 The menu only shows items your role is allowed to see. If something is missing, an Admin can adjust **Settings → HRMS module access by role** (then you refresh the page).
@@ -53,7 +53,7 @@ For HR/Admin you will typically see:
 - **Alerts** (for example missing bank details, missing salary structure, failed emails)
 - **Recent activity** (audit-style list of important actions)
 
-**Quick actions** (when shown): jump to leave approvals, payroll, add employee, or apply leave — depending on your role.
+**Quick actions** (when shown): jump to leave approvals, payroll, add employee, or apply leave - depending on your role.
 
 ---
 
@@ -104,13 +104,13 @@ View and update **your** contact details where the app allows self-edit (phone, 
 
 ### 4.3 My Team (managers only)
 
-Managers see **direct reports** only — no salary. HR uses **Employees** for the full directory.
+Managers see **direct reports** only - no salary. HR uses **Employees** for the full directory.
 
 ---
 
 ## 5. Time off (leave)
 
-### 5.1 Leave (company view) — HR
+### 5.1 Leave (company view) - HR
 
 **Menu:** Time Off → **Leave**
 
@@ -130,7 +130,7 @@ Managers see **direct reports** only — no salary. HR uses **Employees** for th
 
 - Approved leave may suggest **LOP (loss of pay)** on open payroll months.
 - On payroll screens you can **refresh leave LOP** or **apply leave LOP to days** (see Payroll section).
-- **Locked** payroll months are never changed by new leave — use a **correction run** if needed.
+- **Locked** payroll months are never changed by new leave - use a **correction run** if needed.
 
 ### 5.4 Leave calendar
 
@@ -140,7 +140,7 @@ Shows approved leave in a calendar view (scope depends on role).
 
 ## 6. Attendance
 
-Attendance in HRMS means **working days, paid days, and LOP** for payroll — not a biometric device link.
+Attendance in HRMS means **working days, paid days, and LOP** for payroll - not a biometric device link.
 
 ### 6.1 Register (attendance upload)
 
@@ -175,9 +175,9 @@ If attendance was entered on an **older combined** run but you opened an empty *
 
 Payroll is a **three-step path** shown at the top of salary-related pages:
 
-1. **Salary structure** — employee packages (CTC / components).  
-2. **Attendance** — working days and LOP for the month.  
-3. **Payroll** — calculate net pay, review, finalize, payslips.
+1. **Salary structure** - employee packages (CTC / components).  
+2. **Attendance** - working days and LOP for the month.  
+3. **Payroll** - calculate net pay, review, finalize, payslips.
 
 Use the **pipeline buttons** (1 → 2 → 3) to move between steps without losing the selected month.
 
@@ -200,7 +200,7 @@ Employees must have a **current** structure effective for the payroll month befo
 - Monthly **cost-to-company / salary breakdown** report from structures (for HR review, not the same as payslip PDF).
 - Filter by period and export/download as provided on screen.
 
-### 7.3 Payroll — main run screen
+### 7.3 Payroll - main run screen
 
 **Menu:** Payroll → **Payroll**
 
@@ -208,8 +208,8 @@ Employees must have a **current** structure effective for the payroll month befo
 
 1. Set **year** and **month**.
 2. Set **vertical**:
-   - **Combined (legacy payroll)** — use for months that were always run as one company-wide payroll.
-   - **SAPL / AOPL / AOMS** — use when you run payroll separately per vertical.
+   - **Combined (legacy payroll)** - use for months that were always run as one company-wide payroll.
+   - **SAPL / AOPL / AOMS** - use when you run payroll separately per vertical.
 3. If several runs exist for the same month, use **Runs this month** dropdown or **All payroll runs** at the bottom → **Open** the correct run ID.
 
 **Run status labels you will see:**
@@ -225,7 +225,7 @@ Employees must have a **current** structure effective for the payroll month befo
 
 Shows employee count, gross, deductions, net (after calculate), and LOP summary.
 
-#### C. Step 2 — Calculate payroll
+#### C. Step 2 - Calculate payroll
 
 1. Fix any **attendance incomplete** warning (all employees need valid working/paid/LOP days).
 2. Click **Calculate payroll** (or **Recalculate**).
@@ -308,7 +308,7 @@ On the hired application you will typically:
 2. Set **joining date** (needed for appointment letter).  
 3. **Send offer letter** (email with PDF).  
 4. **Send appointment letter** (after joining date is set).  
-5. **Create employee** — opens a form with a **new employee ID**; completes onboarding into the employee directory.
+5. **Create employee** - opens a form with a **new employee ID**; completes onboarding into the employee directory.
 
 Do steps in the order your HR policy requires; the screen hints remind you about joining date before appointment letter.
 
@@ -318,9 +318,9 @@ Do steps in the order your HR policy requires; the screen hints remind you about
 
 **Menu:** System → **Notifications**
 
-- **Inbox** — messages and links to related screens.  
-- **Email log** (HR) — whether system emails were sent, failed, or skipped.  
-- **Preferences** — where available, control how you receive alerts.
+- **Inbox** - messages and links to related screens.  
+- **Email log** (HR) - whether system emails were sent, failed, or skipped.  
+- **Preferences** - where available, control how you receive alerts.
 
 ---
 
@@ -338,7 +338,7 @@ Do steps in the order your HR policy requires; the screen hints remind you about
 
 Click **Save settings** after changes. Users should **refresh** the browser to see menu changes.
 
-**Users** (Admin): role assignment screen — may show “coming soon” depending on deployment; user mapping is often done in the master spreadsheet by IT.
+**Users** (Admin): role assignment screen - may show “coming soon” depending on deployment; user mapping is often done in the master spreadsheet by IT.
 
 ---
 
@@ -349,11 +349,11 @@ Use this every month:
 1. [ ] New joiners: employee record + salary structure + bank/PAN.  
 2. [ ] Leavers: mark **inactive** (after last working day process).  
 3. [ ] Leave: clear pending approvals that affect the month.  
-4. [ ] **Salary structure** — revisions effective for this month are in place.  
-5. [ ] **Attendance / Register** — upload or enter days for the correct **vertical** (or combined legacy).  
-6. [ ] **Payroll** — **Calculate** → fix exceptions → **Finalize**.  
-7. [ ] **Payslips** — confirm generated; spot-check a few employees.  
-8. [ ] **Salary Statement** / **Form T** — export if your compliance calendar needs them.
+4. [ ] **Salary structure** - revisions effective for this month are in place.  
+5. [ ] **Attendance / Register** - upload or enter days for the correct **vertical** (or combined legacy).  
+6. [ ] **Payroll** - **Calculate** → fix exceptions → **Finalize**.  
+7. [ ] **Payslips** - confirm generated; spot-check a few employees.  
+8. [ ] **Salary Statement** / **Form T** - export if your compliance calendar needs them.
 
 ---
 
@@ -362,7 +362,7 @@ Use this every month:
 | Problem | What to try |
 | --- | --- |
 | Finalize button disabled | Scroll up → **Calculate payroll** first; fix attendance incomplete banner. |
-| No employees on payroll | Wrong run or vertical — open **Combined (legacy)** or **Import from combined payroll**. |
+| No employees on payroll | Wrong run or vertical - open **Combined (legacy)** or **Import from combined payroll**. |
 | “Attendance incomplete” | Every row needs working days &gt; 0 and valid paid/LOP; finish register upload. |
 | Missing structure / bank on check list | Open employee → salary structure or payroll tab. |
 | Old month was wrong after finalize | **Create correction run** from locked run (do not edit locked month). |
@@ -375,8 +375,8 @@ Use this every month:
 
 - **Ask HR** chat: usage questions inside the app.  
 - **IT / system owner:** login issues, deployment, spreadsheet access, new users.  
-- **Accounts:** statutory interpretation, TDS amounts, PF/ESI policy — amounts you enter must match your company’s rules.
+- **Accounts:** statutory interpretation, TDS amounts, PF/ESI policy - amounts you enter must match your company’s rules.
 
 ---
 
-*AyurCentral Enterprise HRMS — HR User Manual. For internal training and operations.*
+*AyurCentral Enterprise HRMS - HR User Manual. For internal training and operations.*
