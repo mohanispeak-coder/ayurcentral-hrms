@@ -1,18 +1,19 @@
-# AyurCentral HRMS — documentation
+# HRMS documentation artifacts
 
-## User manuals (start here)
+## AyurCentral user manuals (latest)
 
-| Document | Audience |
-|----------|----------|
-| [AYURCENTRAL_HR_USER_MANUAL.md](./AYURCENTRAL_HR_USER_MANUAL.md) | **HR team** — how to use the web app (frontend only). |
-| [AYURCENTRAL_TECHNICAL_GUIDE_FOR_ADMIN.md](./AYURCENTRAL_TECHNICAL_GUIDE_FOR_ADMIN.md) | **Admin / developer** — deploy, architecture, payroll notes. |
+| File | Who should read it |
+|------|-------------------|
+| **[AYURCENTRAL_HR_USER_MANUAL.md](./AYURCENTRAL_HR_USER_MANUAL.md)** | **Share with HR** — step-by-step web app guide (screens only, simple English). |
+| **[AYURCENTRAL_TECHNICAL_GUIDE_FOR_ADMIN.md](./AYURCENTRAL_TECHNICAL_GUIDE_FOR_ADMIN.md)** | **System owner / developer** — deploy, payroll verticals, APIs, troubleshooting. |
 
-The HR manual is written for the app on **`shiva-branch`** (production deploy branch).
+---
 
-## Other notes in this folder
+| File | Description |
+|------|-------------|
+| **HRMS_FULL_DOCUMENTATION.pdf** | **Main operator PDF** — modules, leave workflow, data index, **Appendix A** (every repo `.md` doc explained), **Appendix B** (every Apps Script file → module & feature) |
+| **HRMS_FULL_DOCUMENTATION.md** | Source for the PDF (edit this, then run `python3 build-full-doc-pdf.py`) |
+| **HRMS_FULL_DOCUMENTATION.html** | HTML export (intermediate for PDF) |
+| **build-full-doc-pdf.py** | Regenerates HTML + PDF from the markdown |
 
-- [ATS_INTEGRATION_NOTES.md](./ATS_INTEGRATION_NOTES.md)
-- [NOTIFICATIONS_INTEGRATION_NOTES.md](./NOTIFICATIONS_INTEGRATION_NOTES.md)
-- [HRMS_GAP_ANALYSIS.md](./HRMS_GAP_ANALYSIS.md)
-
-Product specifications live in the repo root: `00_MASTER_SPEC.md` through `12_BUILD_PLAN.md`.
+Other docs live in the repo root (`00_MASTER_SPEC.md` … `12_BUILD_PLAN.md`) and in this folder (`ATS_INTEGRATION_NOTES.md`, etc.) — all listed in Appendix A of the PDF.
