@@ -214,6 +214,14 @@
           callback(null, null);
           return;
         }
+        if (App.persistPayrollPeriodContext) {
+          App.persistPayrollPeriodContext({
+            year: Number(targetRun.period_year),
+            month: Number(targetRun.period_month),
+            runId: targetRun.payroll_run_id,
+            vertical: homeState.vertical
+          });
+        }
         return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
           if (!routeGuard()) return;
           payrollState.detail = detail;

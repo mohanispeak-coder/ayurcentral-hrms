@@ -22,8 +22,18 @@
   var viewCache_ = null;
   var runsCache_ = [];
 
+  function verticalFromRunId_(runId) {
+    var parts = String(runId || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var vert = parts[3];
+    if (!vert || /^C\d+$/i.test(vert)) return '';
+    return vert.toUpperCase();
+  }
+
   function verticalFromRun_(run) {
-    return String(run && run.vertical_name || '').trim().toUpperCase();
+    var v = String(run && run.vertical_name || '').trim().toUpperCase();
+    if (v) return v;
+    return verticalFromRunId_(run && run.payroll_run_id);
   }
 
   function periodKey_() {
@@ -85,6 +95,15 @@
 
     function mergePayrollNavParams_(params) {
       params = params || {};
+      if (App.readPayrollPeriodContext) {
+        var ctx = App.readPayrollPeriodContext();
+        if (ctx) {
+          if (ctx.year != null && params.year == null) params.year = ctx.year;
+          if (ctx.month != null && params.month == null) params.month = ctx.month;
+          if (ctx.runId && params.runId == null) params.runId = ctx.runId;
+          if (ctx.vertical && params.vertical == null) params.vertical = ctx.vertical;
+        }
+      }
       if (App.getPayrollPeriodParams) {
         var pp = App.getPayrollPeriodParams();
         if (pp) {
@@ -123,9 +142,35 @@
       return findRunForPeriod_(runs, period_.year, period_.month, bulkState_.vertical);
     }
 
+    function runsForMonth_(year, month) {
+      return (runsCache_ || []).filter(function (r) {
+        return Number(r.period_year) === year && Number(r.period_month) === month;
+      });
+    }
+
+    function paintRunPickerHtml_(run) {
+      var list = runsForMonth_(run.period_year, run.period_month);
+      if (list.length <= 1) return '';
+      var opts = list.map(function (r) {
+        var vert = verticalFromRun_(r) || 'Combined';
+        var st = String(r.status || '').toUpperCase();
+        var label = r.payroll_run_id + ' · ' + vert + ' · ' + st;
+        var sel = r.payroll_run_id === run.payroll_run_id ? ' selected' : '';
+        return '<option value="' + esc_(r.payroll_run_id) + '"' + sel + '>' + esc_(label) + '</option>';
+      }).join('');
+      return '<div class="form-group" style="margin-top:8px"><label class="form-label" for="att-run-picker">Payroll run</label>' +
+        '<p class="hint">Multiple runs exist this month. Pick the same run as on Payroll before downloading the template.</p>' +
+        '<select class="form-select" id="att-run-picker" style="max-width:420px">' + opts + '</select></div>';
+    }
+
     function render_(params) {
       params = mergePayrollNavParams_(params || {});
       applyRouteParams_(params);
+      if (params.runId && viewCache_ && viewCache_.run &&
+          viewCache_.run.payroll_run_id !== String(params.runId).trim()) {
+        viewCache_ = null;
+      }
+      if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(params);
       var page = pageEl_();
       if (!page) return;
 
@@ -179,6 +224,14 @@
           callServer('apiListAttendanceRegister', run.payroll_run_id),
           callServer('apiGetPayrollRun', run.payroll_run_id)
         ]).then(function (res) {
+          if (App.persistPayrollPeriodContext) {
+            App.persistPayrollPeriodContext({
+              year: run.period_year,
+              month: run.period_month,
+              runId: run.payroll_run_id,
+              vertical: bulkState_.vertical || verticalFromRun_(run)
+            });
+          }
           paintMain_(run, res[0] || [], res[1] || {});
         }).catch(function (err) {
           var m = document.getElementById('att-mount');
@@ -339,7 +392,7 @@
         (runVert ? ' · ' + esc_(runVert) : '') + ')</span></div>' +
         '<div class="form-group"><label class="form-label" for="att-vertical">Vertical</label>' +
         '<select class="form-select" id="att-vertical" ' + (canEdit ? '' : 'disabled') + '>' + verticalOptionsHtml_(defaultVertical) + '</select></div>' +
-        '</div>' +
+        '</div>' + paintRunPickerHtml_(run) +
         (canEdit ? '<ol class="bulk-steps"><li>Select vertical and download register template</li>' +
           '<li>Fill day columns on the Attendance sheet (from row 3)</li>' +
           '<li>Choose Excel file, <strong>Validate upload</strong>, then confirm import</li></ol>' : '') +
@@ -354,7 +407,7 @@
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
         '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · <strong>A</strong> absent · ' +
         '<strong>L</strong> leave · <strong>WO</strong> weekly off · <strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
-        '<p class="hint">Register summary below is for the selected vertical. Download template and upload for that same vertical.</p>' +
+        '<p class="hint">Payroll run, vertical, and template must all match (e.g. PR-2026-10-AOPL with AOPL).</p>' +
         '<div id="att-vertical-sections">' + renderVerticalSections_(filterListByVertical_(list, defaultVertical)) + '</div>' +
         '</div>' +
         '<div id="att-preview"></div><div id="att-feedback" class="action-feedback hidden"></div>';
@@ -437,6 +490,27 @@
       var commitBtn = document.getElementById('att-commit');
       var nameEl = document.getElementById('att-file-name');
       var verticalSel = document.getElementById('att-vertical');
+      var runPicker = document.getElementById('att-run-picker');
+      if (runPicker) {
+        runPicker.addEventListener('change', function () {
+          bulkState_.runId = runPicker.value;
+          var picked = (runsCache_ || []).filter(function (r) { return r.payroll_run_id === bulkState_.runId; })[0];
+          if (!picked) return;
+          if (App.persistPayrollPeriodContext) {
+            App.persistPayrollPeriodContext({
+              year: picked.period_year,
+              month: picked.period_month,
+              runId: picked.payroll_run_id,
+              vertical: verticalFromRun_(picked) || bulkState_.vertical
+            });
+          }
+          clearStagedUpload_();
+          reloadRunData_(picked).catch(function (err) {
+            showToast((err && err.message) || 'Failed to switch payroll run', 'error');
+          });
+        });
+      }
+
       if (verticalSel) {
         verticalSel.addEventListener('change', function () {
           bulkState_.vertical = verticalSel.value;
