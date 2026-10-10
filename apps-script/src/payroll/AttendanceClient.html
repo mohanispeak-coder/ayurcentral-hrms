@@ -20,6 +20,11 @@
   var period_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
   var catalog_ = [];
   var viewCache_ = null;
+  var runsCache_ = [];
+
+  function verticalFromRun_(run) {
+    return String(run && run.vertical_name || '').trim().toUpperCase();
+  }
 
   function periodKey_() {
     return period_.year + '-' + period_.month;
@@ -117,12 +122,14 @@
 
     function loadContext_() {
       callServer('apiListPayrollRuns').then(function (runs) {
-        var run = findRunForPeriod_(runs || [], period_.year, period_.month);
+        runsCache_ = runs || [];
+        var run = findRunForPeriod_(runsCache_, period_.year, period_.month, bulkState_.vertical);
         if (!run) {
           paintNoRun_();
           return;
         }
         bulkState_.runId = run.payroll_run_id;
+        if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
         Promise.all([
           callServer('apiListAttendanceRegister', run.payroll_run_id),
           callServer('apiGetPayrollRun', run.payroll_run_id)
@@ -138,15 +145,60 @@
       });
     }
 
-    function findRunForPeriod_(runs, year, month) {
-      var open = runs.filter(function (r) {
-        return Number(r.period_year) === year && Number(r.period_month) === month &&
-          String(r.status || '').toUpperCase() !== 'LOCKED';
-      });
-      if (open.length) return open[0];
-      return runs.filter(function (r) {
+    function findRunForPeriod_(runs, year, month, vertical) {
+      var list = (runs || []).filter(function (r) {
         return Number(r.period_year) === year && Number(r.period_month) === month;
-      })[0] || null;
+      });
+      var want = vertical ? String(vertical).trim().toUpperCase() : '';
+      if (want) {
+        var openMatch = list.filter(function (r) {
+          return String(r.status || '').toUpperCase() !== 'LOCKED' && verticalFromRun_(r) === want;
+        });
+        if (openMatch.length) return openMatch[0];
+        var anyMatch = list.filter(function (r) { return verticalFromRun_(r) === want; });
+        if (anyMatch.length) return anyMatch[0];
+      }
+      var open = list.filter(function (r) {
+        return String(r.status || '').toUpperCase() !== 'LOCKED';
+      });
+      if (open.length === 1) return open[0];
+      if (!want && open.length) {
+        var legacy = open.filter(function (r) { return !verticalFromRun_(r); });
+        if (legacy.length) return legacy[0];
+        return open[0];
+      }
+      return list[0] || null;
+    }
+
+    function activeRunId_(fallbackRunId) {
+      return bulkState_.runId || fallbackRunId;
+    }
+
+    function resolveRunIdForVertical_(vertical, fallbackRunId) {
+      var want = String(vertical || '').trim().toUpperCase();
+      if (!want) return activeRunId_(fallbackRunId);
+      var currentId = activeRunId_(fallbackRunId);
+      var current = (runsCache_ || []).filter(function (r) { return r.payroll_run_id === currentId; })[0];
+      if (current && (!verticalFromRun_(current) || verticalFromRun_(current) === want)) return currentId;
+      var match = findRunForPeriod_(runsCache_, period_.year, period_.month, want);
+      if (match) {
+        bulkState_.runId = match.payroll_run_id;
+        return match.payroll_run_id;
+      }
+      return currentId;
+    }
+
+    function reloadRunData_(run) {
+      bulkState_.runId = run.payroll_run_id;
+      if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
+      var mount = document.getElementById('att-mount');
+      if (mount) mount.innerHTML = skeletonMount_(window.HrmsApp);
+      return Promise.all([
+        callServer('apiListAttendanceRegister', run.payroll_run_id),
+        callServer('apiGetPayrollRun', run.payroll_run_id)
+      ]).then(function (res) {
+        paintMain_(run, res[0] || [], res[1] || {});
+      });
     }
 
     function filterListByVertical_(list, vertical) {
@@ -231,12 +283,15 @@
       if (!m) return;
       var st = String(run.status || '').toUpperCase();
       var canEdit = st === 'DRAFT' || st === 'CALCULATED';
-      var defaultVertical = bulkState_.vertical || (catalog_.length ? catalog_[0].vertical_name : '');
+      var runVert = verticalFromRun_(run);
+      var defaultVertical = runVert || bulkState_.vertical || (catalog_.length ? catalog_[0].vertical_name : '');
+      if (runVert) bulkState_.vertical = runVert;
 
       m.innerHTML =
         '<div class="card bulk-upload-card"><div class="form-row" style="margin-bottom:12px">' +
         '<div class="form-group"><label class="form-label">Period</label><strong>' + esc_(fmtPeriod_(run.period_year, run.period_month)) +
-        '</strong> <span class="hint">(' + esc_(run.payroll_run_id) + ' · ' + esc_(st) + ')</span></div>' +
+        '</strong> <span class="hint">(' + esc_(run.payroll_run_id) + ' · ' + esc_(st) +
+        (runVert ? ' · ' + esc_(runVert) : '') + ')</span></div>' +
         '<div class="form-group"><label class="form-label" for="att-vertical">Vertical</label>' +
         '<select class="form-select" id="att-vertical" ' + (canEdit ? '' : 'disabled') + '>' + verticalOptionsHtml_(defaultVertical) + '</select></div>' +
         '</div>' +
@@ -341,6 +396,23 @@
         verticalSel.addEventListener('change', function () {
           bulkState_.vertical = verticalSel.value;
           clearStagedUpload_();
+          var newRun = findRunForPeriod_(runsCache_, period_.year, period_.month, bulkState_.vertical);
+          if (!newRun) {
+            showToast('No payroll run for ' + bulkState_.vertical + ' in ' + fmtPeriod_(period_.year, period_.month) +
+              '. Start that vertical from Payroll first.', 'error');
+            return;
+          }
+          var runV = verticalFromRun_(newRun);
+          if (runV && runV !== String(bulkState_.vertical || '').trim().toUpperCase()) {
+            showToast('Payroll run vertical does not match selection.', 'error');
+            return;
+          }
+          if (newRun.payroll_run_id !== bulkState_.runId) {
+            reloadRunData_(newRun).catch(function (err) {
+              showToast((err && err.message) || 'Failed to switch payroll run', 'error');
+            });
+            return;
+          }
           if (viewCache_ && viewCache_.list) refreshVerticalSections_(viewCache_.list);
           if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
           syncBulkActionButtons_();
@@ -354,8 +426,9 @@
           showToast('Select a vertical first.', 'error');
           return;
         }
+        var activeRunId = resolveRunIdForVertical_(vertical, runId);
         var btn = this;
-        callServer('apiDownloadAttendanceRegisterTemplate', runId, vertical, { button: btn, loadingText: 'Downloading…' })
+        callServer('apiDownloadAttendanceRegisterTemplate', activeRunId, vertical, { button: btn, loadingText: 'Downloading…' })
           .then(function (res) {
             if (!res || !res.base64) {
               showToast('Template download returned no file. Run clasp push and redeploy the web app.', 'error');
@@ -411,13 +484,14 @@
         validateBtn.addEventListener('click', function () {
           var vertical = selectedVertical_();
           if (!vertical || !bulkState_.fileMeta) return;
-          callServer('apiValidateAttendanceRegisterUpload', runId, vertical, bulkState_.fileMeta,
+          var validateRunId = resolveRunIdForVertical_(vertical, runId);
+          callServer('apiValidateAttendanceRegisterUpload', validateRunId, vertical, bulkState_.fileMeta,
             { button: validateBtn, loadingText: 'Validating…' })
             .then(function (preview) {
               bulkState_.uploadId = preview.uploadId;
               bulkState_.preview = preview;
               bulkState_.vertical = vertical;
-              paintPreview_(preview, runId, false);
+              paintPreview_(preview, validateRunId, false);
               syncBulkActionButtons_();
               if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
               if (preview.readyCount > 0) {
@@ -435,7 +509,8 @@
         commitBtn.addEventListener('click', function () {
           if (!bulkState_.preview || !bulkState_.uploadId || !bulkState_.preview.readyCount) return;
           var preview = bulkState_.preview;
-          callServer('apiCommitAttendanceRegisterUpload', runId, bulkState_.uploadId,
+          var commitRunId = resolveRunIdForVertical_(selectedVertical_(), runId);
+          callServer('apiCommitAttendanceRegisterUpload', commitRunId, bulkState_.uploadId,
             { button: commitBtn, loadingText: 'Importing…' })
             .then(function () {
               bulkState_.uploadId = null;
