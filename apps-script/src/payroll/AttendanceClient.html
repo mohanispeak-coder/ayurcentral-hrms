@@ -83,24 +83,69 @@
       }).join('');
     }
 
-    function render_(params) {
+    function mergePayrollNavParams_(params) {
       params = params || {};
+      if (App.getPayrollPeriodParams) {
+        var pp = App.getPayrollPeriodParams();
+        if (pp) {
+          if (pp.year != null && params.year == null) params.year = pp.year;
+          if (pp.month != null && params.month == null) params.month = pp.month;
+          if (pp.runId && params.runId == null) params.runId = pp.runId;
+          if (pp.vertical && params.vertical == null) params.vertical = pp.vertical;
+        }
+      }
+      return params;
+    }
+
+    function applyRouteParams_(params) {
       if (params.year) period_.year = Number(params.year);
       if (params.month) period_.month = Number(params.month);
+      if (params.vertical) bulkState_.vertical = String(params.vertical).trim().toUpperCase();
+      if (params.runId) bulkState_.runId = String(params.runId).trim();
+    }
+
+    function shouldRestoreCachedView_(params, restore) {
+      if (!restore || !viewCache_ || !viewCache_.run || viewCache_.periodKey !== periodKey_()) return false;
+      if (params.runId && viewCache_.run.payroll_run_id !== String(params.runId).trim()) return false;
+      if (bulkState_.runId && viewCache_.run.payroll_run_id !== bulkState_.runId) return false;
+      var wantV = params.vertical ? String(params.vertical).trim().toUpperCase() : '';
+      var cacheRunV = verticalFromRun_(viewCache_.run);
+      if (wantV && cacheRunV && cacheRunV !== wantV) return false;
+      return true;
+    }
+
+    function resolveRunForAttendance_(runs) {
+      runs = runs || [];
+      if (bulkState_.runId) {
+        var byId = runs.filter(function (r) { return r.payroll_run_id === bulkState_.runId; })[0];
+        if (byId) return byId;
+      }
+      return findRunForPeriod_(runs, period_.year, period_.month, bulkState_.vertical);
+    }
+
+    function render_(params) {
+      params = mergePayrollNavParams_(params || {});
+      applyRouteParams_(params);
       var page = pageEl_();
       if (!page) return;
 
       var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
       var restore = !forceRefresh && App.consumeModuleViewRestore && App.consumeModuleViewRestore(MODULE_KEY_);
-      if (restore && viewCache_ && viewCache_.periodKey === periodKey_() && viewCache_.run) {
+      if (shouldRestoreCachedView_(params, restore)) {
         catalog_ = viewCache_.catalog || catalog_;
         if (viewCache_.bulkState) {
-          bulkState_.vertical = viewCache_.bulkState.vertical || bulkState_.vertical;
+          var cacheRunV = verticalFromRun_(viewCache_.run);
+          var cachedVert = viewCache_.bulkState.vertical;
+          if (!cacheRunV || !cachedVert ||
+              cacheRunV === String(cachedVert).trim().toUpperCase()) {
+            bulkState_.vertical = cachedVert || bulkState_.vertical;
+          }
           bulkState_.fileMeta = viewCache_.bulkState.fileMeta || null;
           bulkState_.fileName = viewCache_.bulkState.fileName || '';
           bulkState_.uploadId = viewCache_.bulkState.uploadId || null;
           bulkState_.preview = viewCache_.bulkState.preview || null;
         }
+        bulkState_.runId = viewCache_.run.payroll_run_id;
         page.innerHTML =
           '<div class="att-page"><div class="page-header"><h2>Register</h2></div><div id="att-mount"></div></div>';
         paintMain_(viewCache_.run, viewCache_.list || [], {});
@@ -123,7 +168,7 @@
     function loadContext_() {
       callServer('apiListPayrollRuns').then(function (runs) {
         runsCache_ = runs || [];
-        var run = findRunForPeriod_(runsCache_, period_.year, period_.month, bulkState_.vertical);
+        var run = resolveRunForAttendance_(runsCache_);
         if (!run) {
           paintNoRun_();
           return;
@@ -284,8 +329,8 @@
       var st = String(run.status || '').toUpperCase();
       var canEdit = st === 'DRAFT' || st === 'CALCULATED';
       var runVert = verticalFromRun_(run);
-      var defaultVertical = runVert || bulkState_.vertical || (catalog_.length ? catalog_[0].vertical_name : '');
       if (runVert) bulkState_.vertical = runVert;
+      var defaultVertical = runVert || bulkState_.vertical || (catalog_.length ? catalog_[0].vertical_name : '');
 
       m.innerHTML =
         '<div class="card bulk-upload-card"><div class="form-row" style="margin-bottom:12px">' +
