@@ -40,7 +40,8 @@
     'attendance-bulk-upload': 'payroll-attendance',
     'attendance-form-t': 'payroll-attendance',
     'salary-statement': 'payroll-statement',
-    compensation: 'payroll',
+    'payroll-employee-salary': 'payroll',
+    compensation: 'payroll-structure',
     'my-payslips': 'payroll',
     ats: 'ats',
     'ats-jobs': 'ats',
@@ -73,6 +74,7 @@
     'attendance-bulk-upload': 'Register',
     'attendance-form-t': 'Form T',
     'salary-statement': 'Salary Statement',
+    'payroll-employee-salary': 'Employee salary',
     compensation: 'Salary structures',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
@@ -107,6 +109,7 @@
     'attendance-bulk-upload': 'Monthly attendance register (Form XVII style): daily codes, summaries, and payroll day counts.',
     'attendance-form-t': 'Statutory Form T Excel export per vertical for the selected payroll month.',
     'salary-statement': 'Monthly cost-to-company breakdown by employee from structure templates and CTC.',
+    'payroll-employee-salary': 'Bulk upload or edit per-employee salary for the payroll month (after templates exist under Salary structures).',
     compensation: 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
@@ -1131,7 +1134,7 @@
     if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create' ||
         current === 'employee-bulk-upload' || current === 'employee-field-defs')) return true;
     if (itemRoute === 'employee-mandatory-fields' && current === 'employee-mandatory-fields') return true;
-    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'compensation')) return true;
+    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'payroll-employee-salary')) return true;
     if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
@@ -1386,7 +1389,9 @@
     } else if (route === 'payroll-run') {
       html = sectionSkeleton({ variant: 'detail', label: 'Loading run' });
     } else if (route === 'salary-structure' || route === 'compensation') {
-      html = sectionSkeleton({ variant: 'card', label: 'Loading salary structure' }) + '<div id="comp-editor"></div>';
+      html = sectionSkeleton({ variant: 'card', label: 'Loading salary structures' }) + '<div id="sst-mount"></div>';
+    } else if (route === 'payroll-employee-salary') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading employee salary' }) + '<div id="salary-structure-mount"></div>';
     } else if (route === 'attendance-bulk-upload' || route === 'attendance-form-t') {
       html = skeletonKpiRow(['Period', 'Status', 'Employees']) +
         '<div class="card"><h2>' + escapeHtml(route === 'attendance-form-t' ? 'Form T' : 'Register') + '</h2>' +
@@ -1681,7 +1686,8 @@
     options = options || {};
     params = params || {};
     if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'attendance-form-t' ||
-        route === 'salary-structure' || route === 'salary-statement' || route === 'compensation') {
+        route === 'salary-structure' || route === 'salary-statement' || route === 'compensation' ||
+        route === 'payroll-employee-salary') {
       if (window.HrmsApp && window.HrmsApp.getPayrollPeriodParams) {
         var pp = window.HrmsApp.getPayrollPeriodParams();
         if (pp) {

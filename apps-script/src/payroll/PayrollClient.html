@@ -141,8 +141,7 @@
       compState.employees = [];
       compState._loaded = false;
       compState._editorLoadedFor = '';
-      shellInv_('salary-structure');
-      shellInv_('compensation');
+      shellInv_('payroll-employee-salary');
     }
 
     function invalidateAttendanceBulk_() {
@@ -156,7 +155,7 @@
     }
 
     function payrollAreaRoutes_() {
-      return ['payroll', 'payroll-run', 'salary-structure', 'attendance-bulk-upload', 'compensation'];
+      return ['payroll', 'payroll-run', 'payroll-employee-salary', 'attendance-bulk-upload'];
     }
 
     function stillOnPayrollArea_(seq) {
@@ -186,7 +185,7 @@
     function rerenderCurrentPayrollRoute_() {
       var route = App.getState().currentRoute;
       var p = payrollPeriodNavParams_();
-      if (route === 'salary-structure' || route === 'compensation') renderSalaryStructure(p);
+      if (route === 'payroll-employee-salary') renderSalaryStructure(p);
       else renderPayrollHome(p);
     }
 
@@ -308,7 +307,7 @@
       var calcDone = st === 'CALCULATED' || st === 'UNDER_REVIEW' || st === 'APPROVED' || st === 'LOCKED';
       var finDone = st === 'LOCKED';
       var steps = [
-        { id: 'salary', route: 'salary-structure', label: '1. Salary structure', hint: 'Bulk or per employee' },
+        { id: 'salary', route: 'payroll-employee-salary', label: '1. Employee salary', hint: 'Bulk upload or per employee' },
         { id: 'attendance', route: 'attendance-bulk-upload', label: '2. Attendance', hint: attDone ? 'Ready for payroll' : (att.total ? (att.ready + ' of ' + att.total + ' ready') : 'Import or enter days') },
         { id: 'payroll', route: 'payroll', label: '3. Payroll', hint: finDone ? 'Finalized' : (calcDone ? 'Review & lock' : 'Calculate net pay') }
       ];
@@ -350,11 +349,11 @@
       if (step === 'salary') {
         html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="attendance-bulk-upload">Next: Attendance →</button>';
       } else if (step === 'attendance') {
-        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="salary-structure">← Salary structure</button>';
+        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="payroll-employee-salary">← Employee salary</button>';
         html += '<button type="button" class="btn btn-primary" data-payroll-flow-route="payroll">Continue to Payroll →</button>';
       } else if (step === 'payroll') {
         html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="attendance-bulk-upload">← Attendance</button>';
-        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="salary-structure">Salary structure</button>';
+        html += '<button type="button" class="btn btn-secondary" data-payroll-flow-route="payroll-employee-salary">Employee salary</button>';
       }
       html += '</div>';
       return html;
@@ -395,8 +394,8 @@
 
     App.registerRoute('payroll', { title: 'Payroll', render: renderPayrollHome });
     App.registerRoute('payroll-run', { title: 'Payroll', render: function (params) { renderPayrollHome({ runId: params && params.runId }); } });
-    App.registerRoute('salary-structure', { title: 'Salary structure', render: renderSalaryStructure });
-    App.registerRoute('compensation', { title: 'Salary structure', render: renderSalaryStructure });
+    /** Payroll flow step 1 only — do not register salary-structure (template catalog lives in SalaryStructureClient). */
+    App.registerRoute('payroll-employee-salary', { title: 'Employee salary', render: renderSalaryStructure });
     App.registerRoute('my-payslips', { title: 'My Payslips', render: renderMyPayslips });
 
     function pageEl() {
@@ -432,7 +431,7 @@
     }
 
     function stillOnSalaryStructure_(seq) {
-      return stillOnRoute_(seq, ['salary-structure', 'compensation']);
+      return stillOnRoute_(seq, ['payroll-employee-salary']);
     }
 
     function stillOnAttendanceBulk_(seq) {
@@ -966,7 +965,7 @@
         paintPayrollFlowFooter_('salary') +
         '<p class="payroll-ui-build">Payroll UI ' + escapeHtml(payrollClientBuild_()) + '</p></div>';
       page.innerHTML = html;
-      if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('payroll-employee-salary');
       bindPayrollPipelineNav_(page);
       bindPayrollPeriodCard_(page, seq);
       bindSalaryStructurePage_(page, seq);
@@ -1545,7 +1544,7 @@
       employeeId = String(employeeId || '').trim();
       if (!employeeId) return;
       if (App.navigate) {
-        App.navigate('salary-structure', { employeeId: employeeId });
+        App.navigate('payroll-employee-salary', { employeeId: employeeId });
         return;
       }
       compState.employeeId = employeeId;

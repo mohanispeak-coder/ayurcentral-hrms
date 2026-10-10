@@ -108,6 +108,8 @@
         '</td></tr>';
     }).join('');
     m.innerHTML =
+      '<div class="card" style="margin-bottom:12px"><p class="hint">Create templates here first. To bulk-upload monthly CTC per employee for payroll, use ' +
+      '<strong>Payroll → Employee salary</strong> (step 1 in the payroll flow).</p></div>' +
       '<div class="card"><div class="sst-list-head"><button type="button" class="btn btn-primary" id="sst-new">New salary structure</button></div>' +
       (rows
         ? '<table class="data-table"><thead><tr><th>ID</th><th>Name</th><th>Vertical</th><th class="num">Components</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'

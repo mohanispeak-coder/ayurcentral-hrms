@@ -10,6 +10,8 @@ const api = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'pa
 const client = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'payroll', 'PayrollClient.html'), 'utf8');
 const schema = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'foundation', 'SchemaService.gs'), 'utf8');
 const att = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'payroll', 'AttendanceBulkService.gs'), 'utf8');
+const sst = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'payroll', 'SalaryStructureClient.html'), 'utf8');
+const scripts = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ui', 'Scripts.html'), 'utf8');
 const failures = [];
 
 function check(name, cond) {
@@ -34,6 +36,11 @@ check('legacy-import-service', /importInputsFromLegacyRun/.test(payroll) && /fin
 check('legacy-import-api', /apiPayrollImportLegacyInputs/.test(api));
 check('legacy-import-ui', /paintLegacyImportBanner_/.test(client) && /apiPayrollImportLegacyInputs/.test(client));
 check('legacy-attendance-count', /attendance_input_count/.test(payroll) && /runAttendanceCount_/.test(client));
+check('payroll-no-hijack-salary-structure-route', !/registerRoute\('salary-structure'/.test(client));
+check('payroll-employee-salary-route', /registerRoute\('payroll-employee-salary'/.test(client) &&
+  /payroll-employee-salary': 'payroll'/.test(scripts));
+check('salary-structure-template-ui', /sst-new/.test(sst) && /registerRoute\('salary-structure'/.test(sst));
+check('compensation-loads-structure-module', /compensation: 'payroll-structure'/.test(scripts));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
