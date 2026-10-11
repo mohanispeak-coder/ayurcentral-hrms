@@ -27,6 +27,7 @@ var bulk = read('payroll/PayrollBulkService.gs');
 var payroll = read('payroll/PayrollService.gs');
 var api = read('payroll/ApiPayroll.gs');
 var client = read('payroll/PayrollClient.html');
+var sst = read('payroll/SalaryStructureClient.html');
 var perm = read('foundation/PermissionService.gs');
 var scripts = read('ui/Scripts.html');
 var employee = read('employee/EmployeeClient.html');
@@ -74,7 +75,8 @@ check('comp-bulk-ui', /apiValidateCompensationBulkUpload/.test(client) && /comp-
 check('comp-bulk-api', /apiDownloadCompensationBulkTemplate/.test(api) && /apiCommitCompensationBulkUpload/.test(api));
 check('generate-all-payslips', /Generate all payslips/i.test(client));
 check('no-run-id-in-previous-payrolls', !/paintPreviousPayrolls_[\s\S]{0,600}payroll_run_id/.test(client));
-check('salary-structure-route', /renderSalaryStructure/.test(client) && /registerRoute\('salary-structure'/.test(client));
+check('employee-salary-route', /renderSalaryStructure/.test(client) && /registerRoute\('payroll-employee-salary'/.test(client));
+check('salary-template-route', /registerRoute\('salary-structure'/.test(sst));
 check('payroll-pipeline-interconnected', /paintPayrollPipelineNav_/.test(client) && /loadPayrollContext_/.test(client) &&
   /getPayrollPeriodParams/.test(client));
 check('payroll-run-delegates', /renderPayrollRun[\s\S]*renderPayrollHome/.test(client));

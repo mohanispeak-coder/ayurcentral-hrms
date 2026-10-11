@@ -210,9 +210,25 @@
       });
     }
 
+    function reconcilePeriodWithRuns_(runs) {
+      if (!App.reconcilePayrollPeriodWithRuns) return;
+      var rec = App.reconcilePayrollPeriodWithRuns({
+        year: period_.year,
+        month: period_.month,
+        runId: bulkState_.runId,
+        vertical: bulkState_.vertical
+      }, runs || []);
+      if (rec.year) period_.year = rec.year;
+      if (rec.month) period_.month = rec.month;
+      if (rec.runId) bulkState_.runId = rec.runId;
+      if (rec.vertical) bulkState_.vertical = rec.vertical;
+      if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(rec);
+    }
+
     function loadContext_() {
       callServer('apiListPayrollRuns').then(function (runs) {
         runsCache_ = runs || [];
+        reconcilePeriodWithRuns_(runsCache_);
         var run = resolveRunForAttendance_(runsCache_);
         if (!run) {
           paintNoRun_();
@@ -519,6 +535,12 @@
           if (!newRun) {
             showToast('No payroll run for ' + bulkState_.vertical + ' in ' + fmtPeriod_(period_.year, period_.month) +
               '. Start that vertical from Payroll first.', 'error');
+            var cur = (runsCache_ || []).filter(function (r) { return r.payroll_run_id === bulkState_.runId; })[0];
+            var rv = verticalFromRun_(cur);
+            if (verticalSel && rv) {
+              verticalSel.value = rv;
+              bulkState_.vertical = rv;
+            }
             return;
           }
           var runV = verticalFromRun_(newRun);

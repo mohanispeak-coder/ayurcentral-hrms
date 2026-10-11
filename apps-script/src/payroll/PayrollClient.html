@@ -73,7 +73,7 @@
 (function () {
   'use strict';
 
-  var PAYROLL_CLIENT_BUILD_ = '2026.09.26.14';
+  var PAYROLL_CLIENT_BUILD_ = '2026.10.11.1';
 
   function ready(fn) {
     if (window.HrmsApp) fn();
@@ -194,6 +194,19 @@
       return callServer('apiListPayrollRuns').then(function (runs) {
         if (!routeGuard()) return;
         homeState.runs = runs || [];
+        if (App.reconcilePayrollPeriodWithRuns) {
+          var rec = App.reconcilePayrollPeriodWithRuns({
+            year: homeState.year,
+            month: homeState.month,
+            runId: params.runId || '',
+            vertical: homeState.vertical || params.vertical || ''
+          }, homeState.runs);
+          if (rec.year) homeState.year = rec.year;
+          if (rec.month) homeState.month = rec.month;
+          if (rec.vertical) homeState.vertical = rec.vertical;
+          if (rec.runId) params.runId = rec.runId;
+          if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(rec);
+        }
         var targetRun = null;
         if (params.runId) {
           targetRun = (runs || []).filter(function (r) { return r.payroll_run_id === params.runId; })[0];
@@ -1751,6 +1764,23 @@
       });
     }
 
+    function resolveAttendanceRunIdForVertical_(vertical, fallbackRunId) {
+      var want = String(vertical || '').trim().toUpperCase();
+      if (!want) return String(fallbackRunId || '');
+      var runs = homeState.runs || [];
+      if (App.findRunForVerticalMonth) {
+        var match = App.findRunForVerticalMonth(runs, homeState.year, homeState.month, want);
+        if (match) return match.payroll_run_id;
+      }
+      var currentId = String(fallbackRunId || '');
+      var current = runs.filter(function (r) { return r.payroll_run_id === currentId; })[0];
+      if (current) {
+        var rv = App.runVerticalFromRow ? App.runVerticalFromRow(current) : String(current.vertical_name || '').toUpperCase();
+        if (!rv || rv === want) return currentId;
+      }
+      return currentId;
+    }
+
     function bindBulkUpload_(runId, page, detail, editable) {
       var runVert = detail && detail.run ? detail.run.vertical_name : '';
       populateAttendanceVerticalSelect_(page, runVert || homeState.vertical);
@@ -1761,8 +1791,9 @@
           showToast('Select a vertical first.', 'error');
           return;
         }
+        var activeRunId = resolveAttendanceRunIdForVertical_(vertical, runId);
         if (!setButtonLoading(dlBtn, 'Downloading...')) return;
-        rpc('apiDownloadAttendanceRegisterTemplate', [runId, vertical], dlBtn, 'Downloading...', $('pr-upload-feedback'))
+        rpc('apiDownloadAttendanceRegisterTemplate', [activeRunId, vertical], dlBtn, 'Downloading...', $('pr-upload-feedback'))
           .then(function (file) {
             if (!file || !file.base64) {
               throw { message: 'Template file was empty. Enable Drive API in Apps Script and redeploy.' };
@@ -1822,7 +1853,8 @@
         if (!setButtonLoading(validateBtn, 'Validating...')) return;
         if (nameEl) nameEl.textContent = 'Validating ' + file.name + '…';
         readFileBase64_(file).then(function (meta) {
-          return rpc('apiValidateAttendanceRegisterUpload', [runId, vertical, meta], validateBtn, 'Validating...', $('pr-upload-feedback'));
+          var activeRunId = resolveAttendanceRunIdForVertical_(vertical, runId);
+          return rpc('apiValidateAttendanceRegisterUpload', [activeRunId, vertical, meta], validateBtn, 'Validating...', $('pr-upload-feedback'));
         }).then(function (preview) {
           bulkState.preview = preview;
           if (nameEl) nameEl.textContent = file.name + ' - ' + preview.readyCount + ' ready, ' + preview.errorCount + ' errors';

@@ -163,6 +163,87 @@
     return params;
   }
 
+  /** Parse vertical code from payroll run id (PR-YYYY-MM-VERT or PR-YYYY-MM-VERT-Cn). */
+  function verticalFromPayrollRunId_(runId) {
+    var parts = String(runId || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var vert = parts[3];
+    if (!vert || /^C\d+$/i.test(vert)) return '';
+    return String(vert).toUpperCase();
+  }
+
+  function runVerticalFromRow_(run) {
+    var v = String(run && run.vertical_name || '').trim().toUpperCase();
+    if (v) return v;
+    return verticalFromPayrollRunId_(run && run.payroll_run_id);
+  }
+
+  function runsForPayrollMonth_(runs, year, month) {
+    return (runs || []).filter(function (r) {
+      return Number(r.period_year) === Number(year) && Number(r.period_month) === Number(month);
+    });
+  }
+
+  function findRunForVerticalMonth_(runs, year, month, vertical) {
+    var list = runsForPayrollMonth_(runs, year, month);
+    var want = String(vertical || '').trim().toUpperCase();
+    if (!want) return null;
+    var open = list.filter(function (r) {
+      return String(r.status || '').toUpperCase() !== 'LOCKED' && runVerticalFromRow_(r) === want;
+    });
+    if (open.length) return open[0];
+    var any = list.filter(function (r) { return runVerticalFromRow_(r) === want; });
+    return any.length ? any[0] : null;
+  }
+
+  /**
+   * Keep payroll run id and vertical consistent when both are present (session context drift).
+   * Prefers vertical when a matching run exists for that month; otherwise aligns vertical to the run.
+   */
+  function reconcilePayrollPeriodWithRuns_(params, runs) {
+    params = params || {};
+    var out = {
+      year: params.year != null ? Number(params.year) : null,
+      month: params.month != null ? Number(params.month) : null,
+      runId: params.runId ? String(params.runId).trim() : '',
+      vertical: params.vertical ? String(params.vertical).trim().toUpperCase() : ''
+    };
+    if (!runs || !runs.length) return out;
+
+    var byId = out.runId
+      ? (runs || []).filter(function (r) { return r.payroll_run_id === out.runId; })[0]
+      : null;
+    var runV = byId ? runVerticalFromRow_(byId) : '';
+
+    if (byId) {
+      if (!out.year) out.year = Number(byId.period_year);
+      if (!out.month) out.month = Number(byId.period_month);
+    }
+
+    if (byId && out.vertical && runV && runV !== out.vertical) {
+      var alt = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
+      if (alt) {
+        out.runId = alt.payroll_run_id;
+        out.year = Number(alt.period_year);
+        out.month = Number(alt.period_month);
+      } else {
+        out.vertical = runV;
+      }
+    } else if (byId && !out.vertical && runV) {
+      out.vertical = runV;
+    } else if (!byId && out.vertical && out.year && out.month) {
+      var match = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
+      if (match) {
+        out.runId = match.payroll_run_id;
+        out.year = Number(match.period_year);
+        out.month = Number(match.period_month);
+      }
+    } else if (byId && !out.vertical && runV) {
+      out.vertical = runV;
+    }
+    return out;
+  }
+
   function persistPayrollPeriodContext_(params) {
     params = params || {};
     if (params.year == null && params.month == null && !params.runId && !params.vertical) return;
@@ -3098,6 +3179,10 @@
     getPerfLog: function () { return perfLog_.slice(); },
     readPayrollPeriodContext: readPayrollPeriodContext_,
     persistPayrollPeriodContext: persistPayrollPeriodContext_,
+    reconcilePayrollPeriodWithRuns: reconcilePayrollPeriodWithRuns_,
+    verticalFromPayrollRunId: verticalFromPayrollRunId_,
+    runVerticalFromRow: runVerticalFromRow_,
+    findRunForVerticalMonth: findRunForVerticalMonth_,
     enablePerfTiming: function () {
       try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
       window.HRMS_PERF_TIMING = 1;

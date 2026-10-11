@@ -74,15 +74,37 @@
   }
 
   function loadList_() {
+    var m = document.getElementById('sst-mount');
+    var timedOut = false;
+    var timer = setTimeout(function () {
+      timedOut = true;
+      if (!m) return;
+      m.innerHTML =
+        '<div class="alert alert-warning">Still loading salary structures. ' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-retry">Retry</button></div>';
+      var retry = document.getElementById('sst-retry');
+      if (retry) retry.addEventListener('click', function () {
+        if (m) m.innerHTML = spin_('Loading salary structures\u2026');
+        loadList_();
+      });
+    }, 20000);
     try {
       callServer('apiListSalaryStructureTypes', true).then(function (list) {
+        clearTimeout(timer);
+        if (timedOut) return;
         paintList_(list || []);
       }).catch(function (err) {
-        var m = document.getElementById('sst-mount');
-        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
+        clearTimeout(timer);
+        if (timedOut) return;
+        if (m) {
+          m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') +
+            ' <button type="button" class="btn btn-secondary btn-sm" id="sst-retry-err">Retry</button></div>';
+          var rb = document.getElementById('sst-retry-err');
+          if (rb) rb.addEventListener('click', function () { loadList_(); });
+        }
       });
     } catch (err) {
-      var m = document.getElementById('sst-mount');
+      clearTimeout(timer);
       if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
     }
   }
