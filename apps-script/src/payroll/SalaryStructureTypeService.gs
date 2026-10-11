@@ -14,6 +14,7 @@
 var SalaryStructureTypeService = (function () {
   var VALID_KINDS_ = [HRMS.COMPONENT_KIND.EARNING, HRMS.COMPONENT_KIND.DEDUCTION, HRMS.COMPONENT_KIND.EMPLOYER];
   var VALID_METHODS_ = [
+    HRMS.CALC_METHOD.PERCENT,
     HRMS.CALC_METHOD.PERCENT_OF_CTC,
     HRMS.CALC_METHOD.PERCENT_OF_BASIC,
     HRMS.CALC_METHOD.FIXED,
@@ -66,12 +67,14 @@ var SalaryStructureTypeService = (function () {
     }
     var seen = {};
     var out = [];
+    var codesSoFar = {};
     for (var i = 0; i < list.length; i++) {
       var c = list[i] || {};
       var code = trim_(c.component_code).toUpperCase();
       var name = trim_(c.component_name);
       var kind = trim_(c.component_kind).toUpperCase();
       var method = trim_(c.calc_method).toUpperCase();
+      var percentBase = trim_(c.percent_base).toUpperCase();
       if (!code || !name) {
         throw validationError_('Each component needs a code and a name.');
       }
@@ -85,6 +88,13 @@ var SalaryStructureTypeService = (function () {
       if (VALID_METHODS_.indexOf(method) < 0) {
         throw validationError_('calc_method is not valid for structure templates.');
       }
+      if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
+        method = HRMS.CALC_METHOD.PERCENT;
+        percentBase = HRMS.PERCENT_BASE_CTC;
+      } else if (method === HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
+        method = HRMS.CALC_METHOD.PERCENT;
+        if (!percentBase) percentBase = 'BP';
+      }
       if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC && kind !== HRMS.COMPONENT_KIND.EARNING) {
         throw validationError_(code + ': Remainder of CTC is only for EARNING lines.');
       }
@@ -93,11 +103,19 @@ var SalaryStructureTypeService = (function () {
       if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC) {
         percent = '';
         amount = '';
-      } else if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC || method === HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
+        percentBase = '';
+      } else if (method === HRMS.CALC_METHOD.PERCENT) {
         percent = parseNonNegative_(c.percent, code + ' percent');
         if (percent > 100) throw validationError_(code + ' percent cannot exceed 100.');
-      } else {
+        if (!percentBase) percentBase = HRMS.PERCENT_BASE_CTC;
+        if (percentBase !== HRMS.PERCENT_BASE_CTC && !codesSoFar[percentBase]) {
+          throw validationError_(code + ': base "' + percentBase + '" must be a component code defined above this row.');
+        }
+      } else if (method === HRMS.CALC_METHOD.FIXED) {
         amount = parseNonNegative_(c.amount, code + ' amount');
+        percentBase = '';
+      } else {
+        throw validationError_(code + ': use Method %, Fixed amount, or Remainder of CTC.');
       }
       out.push({
         component_code: code,
@@ -106,8 +124,10 @@ var SalaryStructureTypeService = (function () {
         calc_method: method,
         percent: percent,
         amount: amount,
+        percent_base: percentBase,
         sort_order: Number(c.sort_order != null ? c.sort_order : i + 1)
       });
+      codesSoFar[code] = true;
     }
     var balanceCount = 0;
     out.forEach(function (c) {
@@ -137,6 +157,7 @@ var SalaryStructureTypeService = (function () {
       calc_method: String(c.calc_method || ''),
       percent: c.percent === '' || c.percent == null ? null : Number(c.percent),
       amount: c.amount === '' || c.amount == null ? null : Number(c.amount),
+      percent_base: String(c.percent_base || ''),
       sort_order: Number(c.sort_order || 0)
     };
   }
@@ -172,6 +193,7 @@ var SalaryStructureTypeService = (function () {
         calc_method: c.calc_method,
         amount: c.amount,
         percent: c.percent,
+        percent_base: c.percent_base || '',
         sort_order: c.sort_order
       };
     });

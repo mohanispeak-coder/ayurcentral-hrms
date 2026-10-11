@@ -30,10 +30,11 @@ function check(name, cond, detail) {
 }
 
 var template = [
-  { component_code: 'BP', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50, sort_order: 1 },
-  { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', percent: 20, sort_order: 2 },
-  { component_code: 'SA', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'BALANCE_OF_CTC', sort_order: 3 },
-  { component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION', calc_method: 'PERCENT_OF_BASIC', percent: 12, sort_order: 4 }
+  { component_code: 'BP', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT', percent_base: 'CTC', percent: 50, sort_order: 1 },
+  { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT', percent_base: 'BP', percent: 20, sort_order: 2 },
+  { component_code: 'CONV', component_name: 'Conveyance', component_kind: 'EARNING', calc_method: 'FIXED', amount: 1600, sort_order: 3 },
+  { component_code: 'SA', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'BALANCE_OF_CTC', sort_order: 4 },
+  { component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION', calc_method: 'PERCENT', percent_base: 'BP', percent: 12, sort_order: 5 }
 ];
 
 var expanded = Expand.expandTemplateComponents(template, 50000);
@@ -42,14 +43,11 @@ var hra = expanded.filter(function (c) { return c.component_code === 'HRA'; })[0
 var sa = expanded.filter(function (c) { return c.component_code === 'SA'; })[0];
 
 check('bp from ctc', basic && basic.amount === 25000);
-check('hra stays percent of basic', hra && hra.calc_method === 'PERCENT_OF_BASIC' && hra.percent === 20);
-check('sa balance', sa && sa.amount === 20000);
+check('hra fixed from bp', hra && hra.calc_method === 'FIXED' && hra.amount === 5000);
+check('sa balance', sa && sa.amount === 18400);
 
-var basicAmt = basic.amount;
 var earnSum = expanded.filter(function (c) { return c.component_kind === 'EARNING'; }).reduce(function (s, c) {
-  if (c.calc_method === 'FIXED') return s + c.amount;
-  if (c.calc_method === 'PERCENT_OF_BASIC') return s + basicAmt * c.percent / 100;
-  return s;
+  return s + (Number(c.amount) || 0);
 }, 0);
 check('earnings equal ctc', earnSum === 50000);
 

@@ -1,6 +1,7 @@
 /**
- * Expand salary structure *templates* (PERCENT_OF_CTC, PERCENT_OF_BASIC, BALANCE_OF_CTC)
- * into payroll-ready component rows (FIXED amounts + PERCENT_OF_BASIC where needed).
+ * Expand salary structure templates into payroll-ready FIXED (+ PERCENT_OF_BASIC) rows.
+ * Supports PERCENT + percent_base (CTC or prior component code), FIXED, BALANCE_OF_CTC,
+ * and legacy PERCENT_OF_CTC / PERCENT_OF_BASIC.
  */
 var SalaryComponentExpandService = (function () {
   var BASIC_CODES_ = ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'];
@@ -39,101 +40,113 @@ var SalaryComponentExpandService = (function () {
     return trim_(c.component_kind).toUpperCase();
   }
 
-  /** Resolve monthly basic (BP) from template lines before expanding dependents. */
-  function resolveBasicAmount_(sorted, ctcMonthly) {
-    var ctc = Number(ctcMonthly) || 0;
-    for (var i = 0; i < sorted.length; i++) {
-      var c = sorted[i];
-      if (!isBasicCode_(c.component_code)) continue;
-      var m = method_(c);
-      if (m === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-        return round2_(ctc * (Number(c.percent) || 0) / 100);
-      }
-      if (m === HRMS.CALC_METHOD.FIXED) {
-        return round2_(Number(c.amount) || 0);
-      }
-    }
-    return 0;
-  }
-
-  function earningAmountForTemplateLine_(c, ctcMonthly, basicAmount) {
+  function canonicalMethod_(c) {
     var m = method_(c);
-    var ctc = Number(ctcMonthly) || 0;
     if (m === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-      return round2_(ctc * (Number(c.percent) || 0) / 100);
+      return { method: HRMS.CALC_METHOD.PERCENT, percent_base: HRMS.PERCENT_BASE_CTC };
     }
     if (m === HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
-      return round2_(basicAmount * (Number(c.percent) || 0) / 100);
+      var legacyBase = trim_(c.percent_base).toUpperCase();
+      return {
+        method: HRMS.CALC_METHOD.PERCENT,
+        percent_base: legacyBase || 'BP'
+      };
     }
-    if (m === HRMS.CALC_METHOD.FIXED) {
-      return round2_(Number(c.amount) || 0);
+    if (m === HRMS.CALC_METHOD.PERCENT) {
+      return {
+        method: HRMS.CALC_METHOD.PERCENT,
+        percent_base: trim_(c.percent_base).toUpperCase() || HRMS.PERCENT_BASE_CTC
+      };
     }
-    return 0;
+    return { method: m, percent_base: trim_(c.percent_base).toUpperCase() };
+  }
+
+  function aliasAmounts_(amounts, code, amt) {
+    var u = trim_(code).toUpperCase();
+    amounts[u] = amt;
+    if (u === 'BP' || u === 'BASIC') {
+      amounts.BP = amt;
+      amounts.BASIC = amt;
+    }
+  }
+
+  function baseAmount_(amounts, ctc, baseKey) {
+    baseKey = trim_(baseKey).toUpperCase();
+    if (!baseKey || baseKey === HRMS.PERCENT_BASE_CTC) return round2_(ctc);
+    if (amounts[baseKey] != null) return round2_(amounts[baseKey]);
+    if (baseKey === 'BP' && amounts.BASIC != null) return round2_(amounts.BASIC);
+    if (baseKey === 'BASIC' && amounts.BP != null) return round2_(amounts.BP);
+    return null;
   }
 
   /**
    * @param {Array} templateComponents rows from SalaryComponents (template)
    * @param {number} ctcMonthly employee monthly CTC
-   * @return {Array} components for PayrollEngine (BASIC code, FIXED + PERCENT_OF_BASIC)
+   * @return {Array} components for PayrollEngine
    */
   function expandTemplateComponents_(templateComponents, ctcMonthly) {
     var sorted = sortComponents_(templateComponents);
     var ctc = Number(ctcMonthly) || 0;
-    var basicAmount = resolveBasicAmount_(sorted, ctc);
+    var amounts = {};
     var out = [];
     var earningSum = 0;
     var balanceLines = [];
 
-    sorted.forEach(function (c) {
-      var m = method_(c);
-      var kind = kind_(c);
+    sorted.forEach(function (raw) {
+      var canon = canonicalMethod_(raw);
+      var m = canon.method;
+      var kind = kind_(raw);
+      var code = trim_(raw.component_code).toUpperCase();
+
       if (m === HRMS.CALC_METHOD.BALANCE_OF_CTC) {
         if (kind !== HRMS.COMPONENT_KIND.EARNING) {
-          throw validationError_('BALANCE_OF_CTC is only allowed on EARNING components.');
+          throw validationError_('Remainder of CTC is only allowed on EARNING components.');
         }
-        balanceLines.push(c);
+        balanceLines.push(raw);
         return;
       }
 
-      var code = normalizeBasicCode_(c.component_code);
+      var payrollCode = normalizeBasicCode_(raw.component_code);
       var row = {
-        component_code: code,
-        component_name: c.component_name,
-        component_kind: c.component_kind,
-        calc_method: c.calc_method,
-        amount: c.amount,
-        percent: c.percent,
-        sort_order: c.sort_order
+        component_code: payrollCode,
+        component_name: raw.component_name,
+        component_kind: raw.component_kind,
+        calc_method: HRMS.CALC_METHOD.FIXED,
+        amount: 0,
+        percent: '',
+        sort_order: raw.sort_order
       };
 
-      if (m === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-        var amt = round2_(ctc * (Number(c.percent) || 0) / 100);
-        row.calc_method = HRMS.CALC_METHOD.FIXED;
-        row.amount = amt;
-        row.percent = '';
-        if (isBasicCode_(c.component_code)) basicAmount = amt;
-        if (kind === HRMS.COMPONENT_KIND.EARNING) earningSum = round2_(earningSum + amt);
-      } else if (m === HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
-        row.percent = Number(c.percent) || 0;
-        row.amount = '';
-        if (kind === HRMS.COMPONENT_KIND.EARNING) {
-          earningSum = round2_(earningSum + round2_(basicAmount * row.percent / 100));
+      if (m === HRMS.CALC_METHOD.PERCENT) {
+        var pct = Number(raw.percent) || 0;
+        var baseAmt = baseAmount_(amounts, ctc, canon.percent_base);
+        if (baseAmt == null) {
+          throw validationError_('Component ' + code + ': base "' + canon.percent_base +
+            '" is not defined yet. Place base components above this row.');
         }
+        var amt = round2_(baseAmt * pct / 100);
+        row.amount = amt;
+        aliasAmounts_(amounts, code, amt);
+        if (kind === HRMS.COMPONENT_KIND.EARNING) earningSum = round2_(earningSum + amt);
+        out.push(row);
       } else if (m === HRMS.CALC_METHOD.FIXED) {
-        row.amount = round2_(Number(c.amount) || 0);
-        if (kind === HRMS.COMPONENT_KIND.EARNING) earningSum = round2_(earningSum + row.amount);
+        var fixed = round2_(Number(raw.amount) || 0);
+        row.amount = fixed;
+        aliasAmounts_(amounts, code, fixed);
+        if (kind === HRMS.COMPONENT_KIND.EARNING) earningSum = round2_(earningSum + fixed);
+        out.push(row);
+      } else {
+        throw validationError_('Unsupported calc_method on template: ' + m);
       }
-
-      out.push(row);
     });
 
     if (balanceLines.length > 1) {
-      throw validationError_('Only one EARNING component can use Remainder of CTC (balance).');
+      throw validationError_('Only one EARNING component can use Remainder of CTC.');
     }
     if (balanceLines.length === 1) {
       var bal = round2_(ctc - earningSum);
       if (bal < -0.01) {
-        throw validationError_('Earning components exceed monthly CTC by ' + round2_(-bal) + ' (check BP, HRA, and other lines).');
+        throw validationError_('Earning components exceed monthly CTC by ' + round2_(-bal) + '.');
       }
       if (bal < 0) bal = 0;
       var bc = balanceLines[0];
@@ -155,26 +168,16 @@ var SalaryComponentExpandService = (function () {
   }
 
   function sumExpandedEarnings_(expanded) {
-    var basicAmount = 0;
-    expanded.forEach(function (c) {
-      if (isBasicCode_(c.component_code) && method_(c) === HRMS.CALC_METHOD.FIXED) {
-        basicAmount = round2_(Number(c.amount) || 0);
-      }
-    });
     var sum = 0;
     expanded.forEach(function (c) {
       if (kind_(c) !== HRMS.COMPONENT_KIND.EARNING) return;
-      var m = method_(c);
-      if (m === HRMS.CALC_METHOD.FIXED) {
+      if (method_(c) === HRMS.CALC_METHOD.FIXED) {
         sum = round2_(sum + (Number(c.amount) || 0));
-      } else if (m === HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
-        sum = round2_(sum + round2_(basicAmount * (Number(c.percent) || 0) / 100));
       }
     });
     return sum;
   }
 
-  /** Non-blocking warning when expanded earnings do not match sample CTC. */
   function earningsReconcileWarning_(components, sampleCtc) {
     sampleCtc = Number(sampleCtc) || 50000;
     try {
@@ -182,7 +185,7 @@ var SalaryComponentExpandService = (function () {
       var sum = sumExpandedEarnings_(expanded);
       if (Math.abs(sum - sampleCtc) > 0.02) {
         return 'On a sample CTC of ' + sampleCtc + ', earnings total ' + sum +
-          ' (expected ' + sampleCtc + '). Check BP %, HRA % of basic, and balance line.';
+          ' (expected ' + sampleCtc + '). Check %, base, fixed lines, and remainder.';
       }
     } catch (e) {
       return (e && e.message) ? String(e.message) : 'Could not validate earnings against CTC.';
@@ -193,7 +196,7 @@ var SalaryComponentExpandService = (function () {
   return {
     expandTemplateComponents: expandTemplateComponents_,
     earningsReconcileWarning: earningsReconcileWarning_,
-    resolveBasicAmount: resolveBasicAmount_,
+    canonicalMethod: canonicalMethod_,
     isBasicCode: isBasicCode_
   };
 })();

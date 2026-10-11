@@ -5,6 +5,7 @@
 .sst-page .sst-status-active { color: var(--color-success); font-weight: 600; }
 .sst-page .sst-status-inactive { color: var(--color-text-muted); }
 .sst-page .sst-comp-value { max-width: 120px; }
+.sst-page .sst-c-base { max-width: 140px; min-width: 100px; }
 .sst-page .empty-state { color: var(--color-text-muted); padding: 12px 0; }
 </style>
 <script>
@@ -45,11 +46,39 @@
 
   var KINDS_ = [['EARNING', 'Earning'], ['DEDUCTION', 'Deduction'], ['EMPLOYER', 'Employer']];
   var METHODS_ = [
-    ['PERCENT_OF_CTC', '% of monthly CTC'],
-    ['PERCENT_OF_BASIC', '% of Basic (BP)'],
-    ['BALANCE_OF_CTC', 'Remainder of CTC'],
-    ['FIXED', 'Fixed amount']
+    ['PERCENT', '%'],
+    ['FIXED', 'Fixed amount'],
+    ['BALANCE_OF_CTC', 'Remainder of CTC']
   ];
+
+  function uiFromStoredRow_(c) {
+    c = c || {};
+    var m = String(c.calc_method || 'PERCENT').toUpperCase();
+    var base = String(c.percent_base || '').toUpperCase();
+    if (m === 'PERCENT_OF_CTC') return { method: 'PERCENT', base: 'CTC' };
+    if (m === 'PERCENT_OF_BASIC') return { method: 'PERCENT', base: base || 'BP' };
+    if (m === 'PERCENT') return { method: 'PERCENT', base: base || 'CTC' };
+    if (m === 'BALANCE_OF_CTC') return { method: 'BALANCE_OF_CTC', base: '' };
+    return { method: 'FIXED', base: '' };
+  }
+
+  function priorCodesForIndex_(allComps, index) {
+    var prior = [];
+    for (var j = 0; j < index; j++) {
+      var cd = String((allComps[j] && allComps[j].component_code) || '').trim().toUpperCase();
+      if (cd) prior.push(cd);
+    }
+    return prior;
+  }
+
+  function baseOptionsHtml_(selected, priorCodes) {
+    var sel = String(selected || 'CTC').toUpperCase();
+    var html = '<option value="CTC"' + (sel === 'CTC' ? ' selected' : '') + '>Monthly CTC</option>';
+    (priorCodes || []).forEach(function (code) {
+      html += '<option value="' + esc_(code) + '"' + (sel === code ? ' selected' : '') + '>' + esc_(code) + '</option>';
+    });
+    return html;
+  }
 
   function pageEl_() {
     var p = document.getElementById('page-content');
@@ -170,26 +199,32 @@
     });
   }
 
-  function componentRowHtml_(c) {
+  function componentRowHtml_(c, index, allComps) {
     c = c || {};
+    allComps = allComps || [];
+    var ui = uiFromStoredRow_(c);
     var kindVal = String(c.component_kind || 'EARNING').toUpperCase();
-    var methodVal = String(c.calc_method || 'PERCENT_OF_CTC').toUpperCase();
     var kindOpts = KINDS_.map(function (k) {
       return '<option value="' + k[0] + '"' + (kindVal === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
     }).join('');
     var methodOpts = METHODS_.map(function (k) {
-      return '<option value="' + k[0] + '"' + (methodVal === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
+      return '<option value="' + k[0] + '"' + (ui.method === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
     }).join('');
-    var methodHint = methodVal === 'BALANCE_OF_CTC' ? 'Auto' : '';
-    var value = methodVal === 'BALANCE_OF_CTC' ? methodHint
-      : ((c.percent != null && c.percent !== '') ? c.percent
-        : ((c.amount != null && c.amount !== '') ? c.amount : ''));
-    var valueDisabled = methodVal === 'BALANCE_OF_CTC' ? ' disabled' : '';
+    var prior = priorCodesForIndex_(allComps, index);
+    var isPercent = ui.method === 'PERCENT';
+    var isBalance = ui.method === 'BALANCE_OF_CTC';
+    var baseDisabled = !isPercent ? ' disabled' : '';
+    var value = isBalance ? 'Auto'
+      : ((c.percent != null && c.percent !== '' && isPercent) ? c.percent
+        : ((c.amount != null && c.amount !== '' && ui.method === 'FIXED') ? c.amount : ''));
+    var valueDisabled = isBalance || (!isPercent && ui.method !== 'FIXED') ? ' disabled' : '';
     return '<tr class="sst-comp-row">' +
       '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="BP"></td>' +
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Basic Pay"></td>' +
       '<td><select class="form-select sst-c-kind">' + kindOpts + '</select></td>' +
       '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
+      '<td><select class="form-select sst-c-base"' + baseDisabled + '>' +
+        baseOptionsHtml_(ui.base || 'CTC', prior) + '</select></td>' +
       '<td><input class="form-input sst-comp-value sst-c-value" type="text" inputmode="decimal"' + valueDisabled +
         ' value="' + esc_(value) + '"></td>' +
       '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
@@ -218,8 +253,9 @@
     if (!m) return;
     existing = existing || {};
     var comps = (existing.components && existing.components.length) ? existing.components : [
-      { component_code: 'BP', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50 },
-      { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', percent: 20 },
+      { component_code: 'BP', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT', percent_base: 'CTC', percent: 50 },
+      { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT', percent_base: 'BP', percent: 20 },
+      { component_code: 'CONV', component_name: 'Conveyance', component_kind: 'EARNING', calc_method: 'FIXED', amount: 1600 },
       { component_code: 'SA', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'BALANCE_OF_CTC' }
     ];
     var currentVertical = String(existing.vertical_name || '').toUpperCase();
@@ -239,10 +275,10 @@
           '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
       '</div>' +
       '<h3>Components</h3>' +
-      '<p class="page-lede">BP is usually <strong>% of monthly CTC</strong> from the employee profile. HRA is often <strong>% of Basic (BP)</strong>. ' +
-      'Use <strong>Remainder of CTC</strong> for Special Allowance so earnings match CTC.</p>' +
-      '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Method</th><th>% / amount</th><th></th></tr></thead>' +
-      '<tbody id="sst-comp-body">' + comps.map(componentRowHtml_).join('') + '</tbody></table>' +
+      '<p class="page-lede"><strong>%</strong> uses the <strong>Base</strong> column (monthly CTC from the employee profile, or another component above). ' +
+      '<strong>Fixed amount</strong> for conveyance and similar. <strong>Remainder of CTC</strong> for special allowance (balance after other earnings).</p>' +
+      '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Method</th><th>Base</th><th>Value</th><th></th></tr></thead>' +
+      '<tbody id="sst-comp-body">' + comps.map(function (c, i) { return componentRowHtml_(c, i, comps); }).join('') + '</tbody></table>' +
       '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-comp">+ Add component</button>' +
       '<div class="form-actions" style="margin-top:16px;">' +
         '<button type="button" class="btn btn-primary" id="sst-save">Save structure</button> ' +
@@ -252,14 +288,41 @@
     document.getElementById('sst-add-comp').addEventListener('click', function () {
       var body = document.getElementById('sst-comp-body');
       var tmp = document.createElement('tbody');
-      tmp.innerHTML = componentRowHtml_({});
+      var idx = body.querySelectorAll('.sst-comp-row').length;
+      var all = collectComponents_();
+      tmp.innerHTML = componentRowHtml_({}, idx, all);
       body.appendChild(tmp.firstChild);
       bindRemove_();
       bindMethodValueUi_();
+      bindCodeChange_();
     });
     document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
     bindRemove_();
     bindMethodValueUi_();
+    bindCodeChange_();
+  }
+
+  function refreshBaseSelects_() {
+    var rows = document.querySelectorAll('#sst-comp-body .sst-comp-row');
+    var codes = [];
+    rows.forEach(function (tr) {
+      var codeInp = tr.querySelector('.sst-c-code');
+      var baseSel = tr.querySelector('.sst-c-base');
+      var methodSel = tr.querySelector('.sst-c-method');
+      var prior = codes.slice();
+      if (baseSel && methodSel && methodSel.value === 'PERCENT') {
+        baseSel.innerHTML = baseOptionsHtml_(baseSel.value, prior);
+        baseSel.disabled = false;
+      }
+      var cd = codeInp ? String(codeInp.value || '').trim().toUpperCase() : '';
+      if (cd) codes.push(cd);
+    });
+  }
+
+  function bindCodeChange_() {
+    document.querySelectorAll('#sst-comp-body .sst-c-code').forEach(function (inp) {
+      inp.addEventListener('input', refreshBaseSelects_);
+    });
   }
 
   function bindMethodValueUi_() {
@@ -268,13 +331,18 @@
         var tr = sel.closest('tr');
         if (!tr) return;
         var val = tr.querySelector('.sst-c-value');
-        if (!val) return;
-        if (sel.value === 'BALANCE_OF_CTC') {
-          val.value = 'Auto';
-          val.disabled = true;
+        var base = tr.querySelector('.sst-c-base');
+        var m = sel.value;
+        if (m === 'BALANCE_OF_CTC') {
+          if (val) { val.value = 'Auto'; val.disabled = true; }
+          if (base) { base.disabled = true; base.value = 'CTC'; }
+        } else if (m === 'PERCENT') {
+          if (val) { val.disabled = false; if (val.value === 'Auto') val.value = ''; }
+          if (base) base.disabled = false;
+          refreshBaseSelects_();
         } else {
-          val.disabled = false;
-          if (val.value === 'Auto') val.value = '';
+          if (val) { val.disabled = false; if (val.value === 'Auto') val.value = ''; }
+          if (base) base.disabled = true;
         }
       });
     });
@@ -297,6 +365,7 @@
       if (!code && !name) return;
       var kind = tr.querySelector('.sst-c-kind').value;
       var method = tr.querySelector('.sst-c-method').value;
+      var base = tr.querySelector('.sst-c-base') ? tr.querySelector('.sst-c-base').value : 'CTC';
       var value = tr.querySelector('.sst-c-value').value;
       var c = {
         component_code: code,
@@ -306,11 +375,12 @@
         sort_order: i + 1
       };
       if (method === 'BALANCE_OF_CTC') {
-        /* no percent/amount */
+        /* no percent/amount/base */
       } else if (method === 'FIXED') {
         c.amount = value;
-      } else {
+      } else if (method === 'PERCENT') {
         c.percent = value;
+        c.percent_base = base || 'CTC';
       }
       out.push(c);
     });

@@ -191,11 +191,16 @@ HRMS.COMPONENT_KIND = {
 
 HRMS.CALC_METHOD = {
   FIXED: 'FIXED',
+  /** Template UI: percent with percent_base (CTC or another component code). */
+  PERCENT: 'PERCENT',
   PERCENT_OF_BASIC: 'PERCENT_OF_BASIC',
   PERCENT_OF_CTC: 'PERCENT_OF_CTC',
   /** EARNING only: monthly amount = CTC minus other earnings (e.g. Special Allowance). */
   BALANCE_OF_CTC: 'BALANCE_OF_CTC'
 };
+
+/** percent_base value when percentage is of employee monthly CTC. */
+HRMS.PERCENT_BASE_CTC = 'CTC';
 
 HRMS.PAYROLL_EXCEPTION = {
   MISSING_STRUCTURE: 'MISSING_STRUCTURE',
@@ -263,7 +268,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.11.2';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.11.3';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

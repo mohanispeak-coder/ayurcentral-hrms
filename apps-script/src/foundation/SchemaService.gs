@@ -51,7 +51,7 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_COMPONENTS] = [
     'salary_component_id', 'salary_structure_id', 'component_code', 'component_name',
-    'component_kind', 'calc_method', 'amount', 'percent', 'sort_order'
+    'component_kind', 'calc_method', 'amount', 'percent', 'percent_base', 'sort_order'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_RUNS] = [
     'payroll_run_id', 'period_year', 'period_month', 'vertical_name', 'status', 'working_days_default',
