@@ -62,6 +62,7 @@ const context = {
 // Throwing versions must actually throw when used as `throw validationError_(...)`.
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(src, 'foundation', 'Constants.gs'), 'utf8'), context);
+vm.runInContext(fs.readFileSync(path.join(src, 'payroll', 'SalaryComponentExpandService.gs'), 'utf8'), context);
 vm.runInContext(fs.readFileSync(path.join(src, 'payroll', 'SalaryStructureTypeService.gs'), 'utf8'), context);
 
 const Svc = context.SalaryStructureTypeService;
@@ -85,8 +86,8 @@ var created = Svc.saveStructureType({
   status: 'ACTIVE',
   components: [
     { component_code: 'bp', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50 },
-    { component_code: 'hra', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 30 },
-    { component_code: 'sa', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 20 },
+    { component_code: 'hra', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', percent: 20 },
+    { component_code: 'sa', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'BALANCE_OF_CTC' },
     { component_code: 'pf', component_name: 'PF', component_kind: 'DEDUCTION', calc_method: 'FIXED', amount: 1800 }
   ]
 });
@@ -107,7 +108,7 @@ var warned = Svc.saveStructureType({
     { component_code: 'BP', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 40 }
   ]
 });
-check('earnings <100% warns', /add up to 40/.test(warned.warning || ''), warned.warning || '');
+check('incomplete structure warns', /sample CTC|earnings total/i.test(warned.warning || ''), warned.warning || '');
 
 // Duplicate name rejected.
 expectThrow('duplicate name rejected', function () {
@@ -185,6 +186,7 @@ check('legacy row not in list', Svc.listStructureTypes(false).every(function (s)
 const clientHtml = fs.readFileSync(path.join(src, 'payroll', 'SalaryStructureClient.html'), 'utf8');
 check('client-uses-hrms-callserver', /var callServer = App\.callServer/.test(clientHtml));
 check('client-binds-showtoast', /var showToast = App\.showToast/.test(clientHtml));
+check('client-hra-percent-of-basic', /PERCENT_OF_BASIC/.test(clientHtml) && /BALANCE_OF_CTC/.test(clientHtml));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

@@ -44,7 +44,12 @@
     var showToast = App.showToast;
 
   var KINDS_ = [['EARNING', 'Earning'], ['DEDUCTION', 'Deduction'], ['EMPLOYER', 'Employer']];
-  var METHODS_ = [['PERCENT_OF_CTC', '% of CTC'], ['FIXED', 'Fixed amount']];
+  var METHODS_ = [
+    ['PERCENT_OF_CTC', '% of monthly CTC'],
+    ['PERCENT_OF_BASIC', '% of Basic (BP)'],
+    ['BALANCE_OF_CTC', 'Remainder of CTC'],
+    ['FIXED', 'Fixed amount']
+  ];
 
   function pageEl_() {
     var p = document.getElementById('page-content');
@@ -175,14 +180,18 @@
     var methodOpts = METHODS_.map(function (k) {
       return '<option value="' + k[0] + '"' + (methodVal === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
     }).join('');
-    var value = (c.percent != null && c.percent !== '') ? c.percent
-      : ((c.amount != null && c.amount !== '') ? c.amount : '');
+    var methodHint = methodVal === 'BALANCE_OF_CTC' ? 'Auto' : '';
+    var value = methodVal === 'BALANCE_OF_CTC' ? methodHint
+      : ((c.percent != null && c.percent !== '') ? c.percent
+        : ((c.amount != null && c.amount !== '') ? c.amount : ''));
+    var valueDisabled = methodVal === 'BALANCE_OF_CTC' ? ' disabled' : '';
     return '<tr class="sst-comp-row">' +
       '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="BP"></td>' +
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Basic Pay"></td>' +
       '<td><select class="form-select sst-c-kind">' + kindOpts + '</select></td>' +
       '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
-      '<td><input class="form-input sst-comp-value sst-c-value" type="number" step="0.01" min="0" value="' + esc_(value) + '"></td>' +
+      '<td><input class="form-input sst-comp-value sst-c-value" type="text" inputmode="decimal"' + valueDisabled +
+        ' value="' + esc_(value) + '"></td>' +
       '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
       '</tr>';
   }
@@ -210,8 +219,8 @@
     existing = existing || {};
     var comps = (existing.components && existing.components.length) ? existing.components : [
       { component_code: 'BP', component_name: 'Basic Pay', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50 },
-      { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 30 },
-      { component_code: 'SA', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 20 }
+      { component_code: 'HRA', component_name: 'HRA', component_kind: 'EARNING', calc_method: 'PERCENT_OF_BASIC', percent: 20 },
+      { component_code: 'SA', component_name: 'Special Allowance', component_kind: 'EARNING', calc_method: 'BALANCE_OF_CTC' }
     ];
     var currentVertical = String(existing.vertical_name || '').toUpperCase();
     var vertOpts = '<option value="">Select vertical</option>' + (verticals || []).map(function (v) {
@@ -230,7 +239,8 @@
           '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
       '</div>' +
       '<h3>Components</h3>' +
-      '<p class="page-lede">Percentages apply to each employee\u2019s monthly CTC. Earning percentages usually total 100%.</p>' +
+      '<p class="page-lede">BP is usually <strong>% of monthly CTC</strong> from the employee profile. HRA is often <strong>% of Basic (BP)</strong>. ' +
+      'Use <strong>Remainder of CTC</strong> for Special Allowance so earnings match CTC.</p>' +
       '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Method</th><th>% / amount</th><th></th></tr></thead>' +
       '<tbody id="sst-comp-body">' + comps.map(componentRowHtml_).join('') + '</tbody></table>' +
       '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-comp">+ Add component</button>' +
@@ -245,9 +255,29 @@
       tmp.innerHTML = componentRowHtml_({});
       body.appendChild(tmp.firstChild);
       bindRemove_();
+      bindMethodValueUi_();
     });
     document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
     bindRemove_();
+    bindMethodValueUi_();
+  }
+
+  function bindMethodValueUi_() {
+    document.querySelectorAll('#sst-comp-body .sst-c-method').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        var tr = sel.closest('tr');
+        if (!tr) return;
+        var val = tr.querySelector('.sst-c-value');
+        if (!val) return;
+        if (sel.value === 'BALANCE_OF_CTC') {
+          val.value = 'Auto';
+          val.disabled = true;
+        } else {
+          val.disabled = false;
+          if (val.value === 'Auto') val.value = '';
+        }
+      });
+    });
   }
 
   function bindRemove_() {
@@ -275,8 +305,13 @@
         calc_method: method,
         sort_order: i + 1
       };
-      if (method === 'FIXED') c.amount = value;
-      else c.percent = value;
+      if (method === 'BALANCE_OF_CTC') {
+        /* no percent/amount */
+      } else if (method === 'FIXED') {
+        c.amount = value;
+      } else {
+        c.percent = value;
+      }
       out.push(c);
     });
     return out;

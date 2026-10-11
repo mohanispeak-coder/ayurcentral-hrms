@@ -213,38 +213,14 @@ var CompensationService = (function () {
     return null;
   }
 
-  function componentAmountFromCtc_(component, ctcMonthly) {
-    var method = String(component.calc_method || '').toUpperCase();
-    var ctc = Number(ctcMonthly) || 0;
-    if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-      return Math.round(ctc * (Number(component.percent) || 0) / 100 * 100) / 100;
-    }
-    return Number(component.amount) || 0;
-  }
-
   function componentsFromTypeTemplate_(typeStructureId, ctcMonthly) {
     var raw = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: typeStructureId }) || [];
     if (!raw.length) return [];
-    return raw.map(function (c) {
-      var method = String(c.calc_method || '').toUpperCase();
-      var code = String(c.component_code || '').toUpperCase();
-      if (code === 'BP') code = 'BASIC';
-      var out = {
-        component_code: code,
-        component_name: c.component_name,
-        component_kind: c.component_kind,
-        calc_method: c.calc_method,
-        amount: c.amount,
-        percent: c.percent,
-        sort_order: c.sort_order
-      };
-      if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-        out.calc_method = HRMS.CALC_METHOD.FIXED;
-        out.amount = componentAmountFromCtc_(c, ctcMonthly);
-        out.percent = '';
-      }
-      return out;
-    });
+    if (typeof SalaryComponentExpandService !== 'undefined' &&
+        SalaryComponentExpandService.expandTemplateComponents) {
+      return SalaryComponentExpandService.expandTemplateComponents(raw, ctcMonthly);
+    }
+    return [];
   }
 
   function getStructureFromEmployeeTemplate_(employeeId) {

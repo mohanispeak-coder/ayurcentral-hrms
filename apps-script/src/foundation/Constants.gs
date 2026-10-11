@@ -192,7 +192,9 @@ HRMS.COMPONENT_KIND = {
 HRMS.CALC_METHOD = {
   FIXED: 'FIXED',
   PERCENT_OF_BASIC: 'PERCENT_OF_BASIC',
-  PERCENT_OF_CTC: 'PERCENT_OF_CTC'
+  PERCENT_OF_CTC: 'PERCENT_OF_CTC',
+  /** EARNING only: monthly amount = CTC minus other earnings (e.g. Special Allowance). */
+  BALANCE_OF_CTC: 'BALANCE_OF_CTC'
 };
 
 HRMS.PAYROLL_EXCEPTION = {
@@ -261,7 +263,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.11.1';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.11.2';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

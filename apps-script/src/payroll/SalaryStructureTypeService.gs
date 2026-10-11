@@ -6,13 +6,19 @@
  * (that empty employee_id is how a template row is told apart from any legacy
  * per-employee structure row, which carries an employee_id and CURRENT/SUPERSEDED
  * status). Component lines live in SalaryComponents, keyed by salary_structure_id,
- * and hold percentages of the employee's CTC (calc_method PERCENT_OF_CTC) or a
- * flat amount (FIXED). Employees reference a type via Employees.salary_structure_id;
+ * calc_method PERCENT_OF_CTC (e.g. BP), PERCENT_OF_BASIC (e.g. HRA % of BP), FIXED,
+ * or BALANCE_OF_CTC (remainder earning, e.g. SA). Employees reference a type via
+ * Employees.salary_structure_id;
  * payroll consumption is wired in a later step.
  */
 var SalaryStructureTypeService = (function () {
   var VALID_KINDS_ = [HRMS.COMPONENT_KIND.EARNING, HRMS.COMPONENT_KIND.DEDUCTION, HRMS.COMPONENT_KIND.EMPLOYER];
-  var VALID_METHODS_ = [HRMS.CALC_METHOD.PERCENT_OF_CTC, HRMS.CALC_METHOD.FIXED];
+  var VALID_METHODS_ = [
+    HRMS.CALC_METHOD.PERCENT_OF_CTC,
+    HRMS.CALC_METHOD.PERCENT_OF_BASIC,
+    HRMS.CALC_METHOD.FIXED,
+    HRMS.CALC_METHOD.BALANCE_OF_CTC
+  ];
 
   function requireManage_() {
     return PermissionService.require(HRMS.ACTIONS.COMPENSATION_MANAGE);
@@ -77,11 +83,17 @@ var SalaryStructureTypeService = (function () {
         throw validationError_('component_kind must be EARNING, DEDUCTION, or EMPLOYER.');
       }
       if (VALID_METHODS_.indexOf(method) < 0) {
-        throw validationError_('calc_method must be PERCENT_OF_CTC or FIXED.');
+        throw validationError_('calc_method is not valid for structure templates.');
+      }
+      if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC && kind !== HRMS.COMPONENT_KIND.EARNING) {
+        throw validationError_(code + ': Remainder of CTC is only for EARNING lines.');
       }
       var percent = '';
       var amount = '';
-      if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
+      if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC) {
+        percent = '';
+        amount = '';
+      } else if (method === HRMS.CALC_METHOD.PERCENT_OF_CTC || method === HRMS.CALC_METHOD.PERCENT_OF_BASIC) {
         percent = parseNonNegative_(c.percent, code + ' percent');
         if (percent > 100) throw validationError_(code + ' percent cannot exceed 100.');
       } else {
@@ -97,23 +109,21 @@ var SalaryStructureTypeService = (function () {
         sort_order: Number(c.sort_order != null ? c.sort_order : i + 1)
       });
     }
+    var balanceCount = 0;
+    out.forEach(function (c) {
+      if (c.calc_method === HRMS.CALC_METHOD.BALANCE_OF_CTC) balanceCount += 1;
+    });
+    if (balanceCount > 1) {
+      throw validationError_('Only one EARNING component can use Remainder of CTC (balance).');
+    }
     return out;
   }
 
-  /** Non-blocking warning when EARNING percentages don't add up to 100% of CTC. */
+  /** Non-blocking warning when expanded earnings do not match sample monthly CTC. */
   function earningsPercentWarning_(components) {
-    var sum = 0;
-    var hasPercentEarning = false;
-    components.forEach(function (c) {
-      if (c.component_kind === HRMS.COMPONENT_KIND.EARNING &&
-          c.calc_method === HRMS.CALC_METHOD.PERCENT_OF_CTC) {
-        hasPercentEarning = true;
-        sum += Number(c.percent) || 0;
-      }
-    });
-    if (hasPercentEarning && Math.round(sum * 100) / 100 !== 100) {
-      return 'Earning percentages add up to ' + (Math.round(sum * 100) / 100) +
-        '% of CTC (usually should total 100%).';
+    if (typeof SalaryComponentExpandService !== 'undefined' &&
+        SalaryComponentExpandService.earningsReconcileWarning) {
+      return SalaryComponentExpandService.earningsReconcileWarning(components, 50000);
     }
     return '';
   }
