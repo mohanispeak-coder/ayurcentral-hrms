@@ -1313,12 +1313,61 @@
         bulkBar + tableHtml + '</div>';
     }
 
+    function daysInMonthForPreview_(preview) {
+      var y = Number(preview.period_year) || new Date().getFullYear();
+      var m = Number(preview.period_month) || (new Date().getMonth() + 1);
+      return new Date(y, m, 0).getDate();
+    }
+
+    function paintAttendanceValidGrid_(preview) {
+      var valid = preview.valid || [];
+      if (!valid.length) return '';
+      var dim = daysInMonthForPreview_(preview);
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
+      var head = '<tr><th>ID</th><th>Name</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Avail</th>';
+      for (var d = 1; d <= dim; d++) {
+        var key = (d < 10 ? '0' : '') + d;
+        head += '<th>' + key + '</th>';
+      }
+      codes.forEach(function (c) { head += '<th>' + c + '</th>'; });
+      head += '<th class="num">DAYS</th></tr>';
+      var body = valid.map(function (row) {
+        var reg = row.register || {};
+        var cc = row.code_counts || {};
+        var line = '<tr><td class="mono">' + escapeHtml(row.employee_id) + '</td><td>' + escapeHtml(row.display_name) + '</td>' +
+          '<td class="num">' + escapeHtml(row.monthly_grant != null ? row.monthly_grant : '') + '</td>' +
+          '<td class="num">' + escapeHtml(row.leave_used != null ? row.leave_used : row.days_leave) + '</td>' +
+          '<td class="num">' + escapeHtml(row.leave_balance != null ? row.leave_balance : '') + '</td>';
+        for (var day = 1; day <= dim; day++) {
+          var k = (day < 10 ? '0' : '') + day;
+          line += '<td>' + escapeHtml(reg[k] || '') + '</td>';
+        }
+        codes.forEach(function (c) {
+          line += '<td class="num">' + escapeHtml(cc[c] != null ? cc[c] : 0) + '</td>';
+        });
+        line += '<td class="num">' + escapeHtml(row.days_total != null ? row.days_total : '') + '</td></tr>';
+        return line;
+      }).join('');
+      return '<div class="table-wrap" style="overflow-x:auto;margin-top:12px"><table class="data-table">' +
+        '<thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
+    }
+
     function paintBulkPreview_(preview) {
       if (!preview) return '';
-      var html = '<div class="upload-preview"><h3>Upload preview</h3>' +
+      var html = '<div class="upload-preview"><h3>Validation result</h3>' +
         '<p><strong>' + preview.employeesFound + '</strong> employees found · ' +
         '<strong>' + preview.readyCount + '</strong> ready · ' +
         '<strong>' + preview.attentionCount + '</strong> need attention</p>';
+      if (preview.errors && preview.errors.length) {
+        html += '<div class="alert alert-warning"><strong>Rows needing attention</strong><ul class="problem-list">';
+        preview.errors.slice(0, 25).forEach(function (err) {
+          var msgs = (err.messages || []).map(function (m) { return m.message || m; }).join('; ');
+          html += '<li>Row ' + escapeHtml(err.rowNumber) + (err.employee_id ? ' · ' + escapeHtml(err.employee_id) : '') +
+            (msgs ? ': ' + escapeHtml(msgs) : '') + '</li>';
+        });
+        if (preview.errors.length > 25) html += '<li>…and ' + (preview.errors.length - 25) + ' more</li>';
+        html += '</ul></div>';
+      }
       if (preview.problemsByEmployee && preview.problemsByEmployee.length) {
         html += '<div class="alert alert-warning"><strong>Needs attention</strong><ul class="problem-list">';
         preview.problemsByEmployee.forEach(function (p) {
@@ -1326,6 +1375,10 @@
             escapeHtml((p.messages || []).join('; ')) + '</li>';
         });
         html += '</ul></div>';
+      }
+      if (preview.readyCount > 0 && preview.valid && preview.valid.length) {
+        html += '<p class="hint">Validated daily codes and monthly leave below. Confirm import to save to this payroll month.</p>';
+        html += paintAttendanceValidGrid_(preview);
       }
       if (preview.readyCount > 0) {
         html += '<div class="primary-next"><button type="button" class="btn btn-primary" id="btn-commit-upload">Confirm import (' +

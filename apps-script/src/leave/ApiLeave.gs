@@ -152,6 +152,15 @@ function apiLeaveGetApplyBundle(sessionToken) {
  * Payroll-facing reader (also callable from the client for diagnostics).
  * Returns { employee_id, period_year, period_month, lop_from_leave }.
  */
+function apiLeaveGetMonthlySnapshot(employeeId, periodYear, periodMonth, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    var y = periodYear ? Number(periodYear) : new Date().getFullYear();
+    var m = periodMonth ? Number(periodMonth) : (new Date().getMonth() + 1);
+    return EmployeeService.getMonthlyLeaveSnapshot(session, employeeId, y, m);
+  }, sessionToken);
+}
+
 function apiLeaveComputeLopFromLeave(employeeId, periodYear, periodMonth, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

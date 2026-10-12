@@ -1,5 +1,5 @@
 /**
- * Monthly attendance register - daily codes (P, W/H, A, L, WO, ML, H) and payroll day derivation.
+ * Monthly attendance register - daily codes (P, W/H, A, L, WO, ML, H, 1/2P) and payroll day derivation.
  * Legacy upload alias: S maps to ML on read only.
  */
 var HRMS = HRMS || {};
@@ -15,11 +15,14 @@ var AttendanceRegisterService = (function () {
     WO: 'WO',
     ML: 'ML',
     H: 'H',
-    S: 'ML'
+    S: 'ML',
+    '1/2P': '1/2P',
+    HALFP: '1/2P',
+    HP: '1/2P'
   };
 
-  var SUMMARY_HEADERS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', 'Leave Balance', 'DAYS'];
-  var CODE_KEYS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
+  var SUMMARY_HEADERS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P', 'Leave Balance', 'DAYS'];
+  var CODE_KEYS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
 
   function trim_(v) {
     return v == null ? '' : String(v).trim();
@@ -44,6 +47,7 @@ var AttendanceRegisterService = (function () {
     if (!s) return '';
     if (s === 'W/H' || s === 'WH' || s === 'W') return 'W/H';
     if (s === 'S') return 'ML';
+    if (s === '1/2P' || s === 'HALFP' || s === 'HP') return '1/2P';
     if (VALID_CODES_[s]) return VALID_CODES_[s];
     return '';
   }
@@ -80,8 +84,9 @@ var AttendanceRegisterService = (function () {
 
   function computeDaysTotal_(counts) {
     counts = counts || {};
+    var half = Number(counts['1/2P']) || 0;
     return (Number(counts.P) || 0) + (Number(counts['W/H']) || 0) + (Number(counts.L) || 0) +
-      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0);
+      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0) + half;
   }
 
   function leaveBalanceMaxForVertical_(verticalCode) {
@@ -91,14 +96,18 @@ var AttendanceRegisterService = (function () {
     return Number(map.OTHERS) || 0;
   }
 
-  function computeLeaveBalance_(counts, verticalCode) {
+  function computeLeaveBalance_(counts, verticalCode, emp, year, month) {
     counts = counts || {};
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.availableAfterCounts_) {
+      return MonthlyLeaveService.availableAfterCounts_(emp || { vertical_name: verticalCode }, year, month, counts);
+    }
     var max = leaveBalanceMaxForVertical_(verticalCode);
-    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0);
+    var half = (Number(counts['1/2P']) || 0) * 0.5;
+    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + half;
     return Math.max(0, max - used);
   }
 
-  function summarize_(reg, year, month, verticalCode) {
+  function summarize_(reg, year, month, verticalCode, emp) {
     reg = reg || {};
     var dim = daysInMonth_(year, month);
     var counts = emptyCodeCounts_();
@@ -106,11 +115,12 @@ var AttendanceRegisterService = (function () {
       var code = normalizeCode_(reg[pad2_(d)]);
       if (code && counts.hasOwnProperty(code)) counts[code]++;
     }
-    var leaveDays = counts.L + counts.ML;
+    var halfCount = Number(counts['1/2P']) || 0;
+    var leaveDays = counts.L + counts.ML + (halfCount * 0.5);
     var daysTotal = computeDaysTotal_(counts);
     var vertical = trim_(verticalCode).toUpperCase();
     return {
-      present: counts.P,
+      present: counts.P + (halfCount * 0.5),
       week_off_holiday: counts['W/H'],
       absent: counts.A,
       leave: counts.L,
@@ -119,7 +129,10 @@ var AttendanceRegisterService = (function () {
       holiday: counts.H,
       leave_days: leaveDays,
       days_total: daysTotal,
-      leave_balance: computeLeaveBalance_(counts, vertical),
+      leave_balance: computeLeaveBalance_(counts, vertical, emp, year, month),
+      monthly_grant: (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.grantForEmployeeMonth_)
+        ? MonthlyLeaveService.grantForEmployeeMonth_(emp, year, month)
+        : leaveBalanceMaxForVertical_(vertical),
       days_in_month: dim,
       code_counts: counts
     };
@@ -357,9 +370,8 @@ var AttendanceRegisterService = (function () {
     return listEmployeesForPayrollPeriod_(year, month).map(function (emp) {
       var empKey = trim_(emp.employee_id).toUpperCase();
       var inp = inputByEmp[empKey] || inputByEmp[trim_(emp.employee_id)] || null;
-      var inp = inputByEmp[emp.employee_id] || null;
       var reg = inp ? parseRegister_(inp.daily_attendance_json) : {};
-      var sum = summarize_(reg, year, month, emp.vertical_name);
+      var sum = summarize_(reg, year, month, emp.vertical_name, emp);
       return {
         employee_id: emp.employee_id,
         display_name: employeeDisplayName_(emp),
@@ -368,6 +380,8 @@ var AttendanceRegisterService = (function () {
         in_payroll_run: !!inp,
         days_present: sum.present,
         days_leave: sum.leave_days,
+        leave_balance: sum.leave_balance,
+        monthly_grant: sum.monthly_grant,
         days_total: sum.days_total,
         register_complete: inp ? isRegisterComplete_(reg, year, month) : false,
         register: reg,

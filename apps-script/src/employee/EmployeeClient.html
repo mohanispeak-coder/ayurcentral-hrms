@@ -1122,27 +1122,59 @@
         });
     }
 
-    function paintLeaveSummary_(el, rows, options) {
+    function normalizeLeaveSummary_(data) {
+      if (!data) return { monthly_snapshot: null, balances: [] };
+      if (Array.isArray(data)) return { monthly_snapshot: null, balances: data };
+      return {
+        monthly_snapshot: data.monthly_snapshot || null,
+        balances: data.balances || []
+      };
+    }
+
+    function paintLeaveSummary_(el, data, options) {
       options = options || {};
+      var pack = normalizeLeaveSummary_(data);
+      var rows = pack.balances;
+      var snap = pack.monthly_snapshot;
       var actionsHtml = '';
       if (options.showApplyLeave) {
         actionsHtml = '<div class="form-actions" style="margin-bottom:12px">' +
           '<button type="button" class="btn btn-primary" id="btn-profile-apply-leave">Apply for leave</button>' +
           '<span class="hint">Or use <strong>My Leave</strong> in the sidebar.</span></div>';
       }
-      if (!rows.length) {
-        el.innerHTML = actionsHtml +
-          '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Balances follow configured leave types from the joining year through the current leave year.</p></div>';
+      var html = actionsHtml;
+      if (snap) {
+        var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
+        html += '<div class="card" style="margin-bottom:16px"><h3 class="section-title">Monthly leave — ' + escapeHtml(periodLabel) + '</h3>' +
+          '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
+          escapeHtml(snap.carry_forward_note || '') + '</p>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Period</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Adjustment</th><th class="num">Available</th>' +
+          '</tr></thead><tbody><tr>' +
+          '<td>' + escapeHtml(periodLabel) + '</td>' +
+          '<td class="num">' + snap.grant_days + '</td>' +
+          '<td class="num">' + snap.used_days + '</td>' +
+          '<td class="num">' + snap.adjustment_days + '</td>' +
+          '<td class="num"><strong>' + snap.available_days + '</strong></td>' +
+          '</tr></tbody></table></div></div>';
+      }
+      if (!rows.length && !snap) {
+        el.innerHTML = html +
+          '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Monthly allowance appears here once attendance or payroll is set for this month.</p></div>';
         bindProfileApplyLeave_(el);
         return;
       }
-      el.innerHTML = actionsHtml + '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-        '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
-        '</tr></thead><tbody>' + rows.map(function (r) {
-          return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +
-            '<td class="num">' + r.entitled_days + '</td><td class="num">' + r.used_days + '</td><td class="num">' + r.pending_days + '</td>' +
-            '<td class="num">' + r.carried_forward_days + '</td><td class="num">' + r.available_days + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
+      if (rows.length) {
+        html += '<h3 class="section-title">Leave types (legacy)</h3><div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
+          '</tr></thead><tbody>' + rows.map(function (r) {
+            return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +
+              '<td class="num">' + r.entitled_days + '</td><td class="num">' + r.used_days + '</td><td class="num">' + r.pending_days + '</td>' +
+              '<td class="num">' + r.carried_forward_days + '</td><td class="num">' + r.available_days + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      el.innerHTML = html;
       bindProfileApplyLeave_(el);
     }
 

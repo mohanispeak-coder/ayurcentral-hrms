@@ -17,7 +17,11 @@ var SchemaService = (function () {
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.VERTICALS] = [
-    'vertical_name', 'legal_name', 'address_line1', 'address_line2'
+    'vertical_name', 'legal_name', 'address_line1', 'address_line2', 'monthly_leave_days'
+  ];
+  SHEET_HEADERS_[HRMS.SHEETS.LEAVE_MONTHLY_ADJUSTMENTS] = [
+    'adjustment_id', 'employee_id', 'period_year', 'period_month',
+    'adjustment_days', 'reason', 'created_at', 'created_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
     'google_email', 'employee_id', 'role', 'status',
@@ -104,6 +108,8 @@ var SchemaService = (function () {
     ['seq_salary_structure', '0', 'NUMBER', 'Last salary structure sequence', true],
     ['seq_employee_field_def', '0', 'NUMBER', 'Last employee custom field def sequence', true],
     ['leave_year_start_month', '1', 'NUMBER', 'Leave year starts (1-12)', false],
+    ['leave_year_mode', 'CALENDAR', 'STRING', 'CALENDAR or FINANCIAL (FY uses leave_year_start_month)', false],
+    ['leave_join_grant_after_day', '20', 'NUMBER', 'Join after this day in month = no grant that month', false],
     ['leave_count_method', 'WEEKDAYS_ONLY', 'STRING', 'WEEKDAYS_ONLY or CALENDAR_DAYS', false],
     ['default_working_days', '26', 'NUMBER', 'Default working days per month', false],
     ['payroll_round', 'NEAREST_RUPEE', 'STRING', 'PAISE_2 or NEAREST_RUPEE', false],

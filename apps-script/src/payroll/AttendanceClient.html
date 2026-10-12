@@ -676,8 +676,8 @@
 
     function paintPreviewGrid_(validRows, dim) {
       if (!validRows || !validRows.length) return '';
-      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
-      var head = '<tr><th>ID</th><th>Name</th>';
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
+      var head = '<tr><th>ID</th><th>Name</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Avail</th>';
       for (var d = 1; d <= dim; d++) {
         var key = (d < 10 ? '0' : '') + d;
         head += '<th>' + key + '</th>';
@@ -687,7 +687,10 @@
       var body = validRows.map(function (row) {
         var reg = row.register || {};
         var cc = row.code_counts || {};
-        var line = '<tr><td class="mono">' + esc_(row.employee_id) + '</td><td>' + esc_(row.display_name) + '</td>';
+        var line = '<tr><td class="mono">' + esc_(row.employee_id) + '</td><td>' + esc_(row.display_name) + '</td>' +
+          '<td class="num">' + esc_(row.monthly_grant != null ? row.monthly_grant : '') + '</td>' +
+          '<td class="num">' + esc_(row.leave_used != null ? row.leave_used : row.days_leave) + '</td>' +
+          '<td class="num">' + esc_(row.leave_balance != null ? row.leave_balance : '') + '</td>';
         for (var day = 1; day <= dim; day++) {
           var k = (day < 10 ? '0' : '') + day;
           line += '<td>' + esc_(reg[k] || '') + '</td>';
@@ -713,6 +716,18 @@
         '<strong>' + esc_(errN) + '</strong> need attention</p>';
       if (ready > 0 && !errorsOnly) {
         html += '<p class="hint">Click <strong>Upload attendance</strong> to import validated rows. Re-import overwrites daily codes for those employees.</p>';
+      }
+      if (ready > 0 && preview.valid && preview.valid.length && !errorsOnly) {
+        var y = period_.year;
+        var m = period_.month;
+        if (viewCache_ && viewCache_.run) {
+          y = Number(viewCache_.run.period_year) || y;
+          m = Number(viewCache_.run.period_month) || m;
+        }
+        var dim = daysInMonth_(y, m);
+        html += '<h4 class="section-title" style="margin-top:16px">Validated attendance (' + esc_(ready) + ')</h4>' +
+          '<p class="hint">Daily codes and monthly leave (grant / used / available) from this file.</p>' +
+          paintPreviewGrid_(preview.valid, dim);
       }
       if (preview.errors && preview.errors.length) {
         html += '<div class="' + (errN ? 'alert alert-warning' : '') + '" style="margin-top:12px">' +

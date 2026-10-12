@@ -1204,6 +1204,21 @@ var EmployeeService = (function () {
     };
   }
 
+  function getMonthlyLeaveSnapshot(session, employeeId, year, month) {
+    AuthService.requireAuth();
+    var emp = EmployeeRepository.findById(trim_(employeeId));
+    if (!emp) throw notFoundError_('Employee not found.');
+    if (!canAccessEmployee_(session, emp)) throw authorizationError_();
+    var view = sanitizeForViewer(emp, session);
+    if (!view.can_view_leave) {
+      throw authorizationError_('You do not have access to leave information.');
+    }
+    if (typeof MonthlyLeaveService === 'undefined' || !MonthlyLeaveService.getSnapshot) {
+      throw configurationError_('Monthly leave is not available.');
+    }
+    return MonthlyLeaveService.getSnapshot(emp.employee_id, year, month);
+  }
+
   function getLeaveSummary(session, employeeId) {
     AuthService.requireAuth();
     var emp = EmployeeRepository.findById(trim_(employeeId));
@@ -1225,7 +1240,14 @@ var EmployeeService = (function () {
     } catch (ignore) {}
     var typeName = {};
     types.forEach(function (t) { typeName[t.leave_type_id] = t.name || t.code; });
-    return EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
+    var now = new Date();
+    var monthlySnapshot = null;
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.getSnapshot) {
+      try {
+        monthlySnapshot = MonthlyLeaveService.getSnapshot(emp.employee_id, now.getFullYear(), now.getMonth() + 1);
+      } catch (ignoreSnap) {}
+    }
+    var balances = EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
       var available = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
         ? LeaveEngine.availableDays(b)
         : Number(b.available_days) || 0;
@@ -1245,6 +1267,10 @@ var EmployeeService = (function () {
       if (yearCmp) return yearCmp;
       return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
     });
+    return {
+      monthly_snapshot: monthlySnapshot,
+      balances: balances
+    };
   }
 
   function isActive(employeeId) {
@@ -1304,6 +1330,7 @@ var EmployeeService = (function () {
     uploadDocuments: uploadDocuments,
     downloadDocument: downloadDocument,
     getLeaveSummary: getLeaveSummary,
+    getMonthlyLeaveSnapshot: getMonthlyLeaveSnapshot,
     isActive: isActive,
     getMasterRecord: getMasterRecord,
     getDirectReportIds: getDirectReportIds,

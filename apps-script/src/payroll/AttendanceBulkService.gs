@@ -433,7 +433,7 @@ var AttendanceBulkService = (function () {
 
       var reg = parsedRow.register;
       if (!Object.keys(reg).length) {
-        rowErrors.push({ field: 'attendance', message: 'Enter at least one day code (P, W/H, A, L, WO, ML, H).' });
+        rowErrors.push({ field: 'attendance', message: 'Enter at least one day code (P, W/H, A, L, WO, ML, H, 1/2P).' });
       }
 
       if (rowErrors.length) {
@@ -441,7 +441,7 @@ var AttendanceBulkService = (function () {
       } else {
         seen[empId] = true;
         var empRecord = employees[empId];
-        var sum = AttendanceRegisterService.summarize_(reg, year, month, empRecord.vertical_name);
+        var sum = AttendanceRegisterService.summarize_(reg, year, month, empRecord.vertical_name, empRecord);
         valid.push({
           employee_id: empRecord.employee_id,
           payroll_input_id: inputMap[empId].payroll_input_id,
@@ -452,6 +452,9 @@ var AttendanceBulkService = (function () {
             vertical_name: trim_(empRecord.vertical_name),
             days_present: sum.present,
             days_leave: sum.leave_days,
+            leave_used: sum.leave_days,
+            monthly_grant: sum.monthly_grant,
+            leave_balance: sum.leave_balance,
             days_total: sum.days_total,
             code_counts: sum.code_counts,
             register: reg
@@ -506,6 +509,8 @@ var AttendanceBulkService = (function () {
     return {
       uploadId: uploadId,
       runId: runId,
+      period_year: run.period_year,
+      period_month: run.period_month,
       verticalName: verticalCode,
       templateVersion: result.templateVersion,
       totalRows: result.totalRows,
