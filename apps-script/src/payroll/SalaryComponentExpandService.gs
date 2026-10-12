@@ -84,8 +84,18 @@ var SalaryComponentExpandService = (function () {
    * @param {number} ctcMonthly employee monthly CTC
    * @return {Array} components for PayrollEngine
    */
+  function isRateSectionRow_(raw) {
+    var sec = trim_(raw.structure_section).toUpperCase();
+    if (sec === HRMS.STRUCTURE_SECTION.DEDUCTION ||
+        sec === HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION) {
+      return false;
+    }
+    if (sec === HRMS.STRUCTURE_SECTION.RATE_OF_PAY) return true;
+    return kind_(raw) === HRMS.COMPONENT_KIND.EARNING;
+  }
+
   function expandTemplateComponents_(templateComponents, ctcMonthly) {
-    var sorted = sortComponents_(templateComponents);
+    var sorted = sortComponents_(templateComponents).filter(isRateSectionRow_);
     var ctc = Number(ctcMonthly) || 0;
     var amounts = {};
     var out = [];

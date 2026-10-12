@@ -74,6 +74,11 @@ var PayrollEngine = (function () {
    */
   function calculateEmployee(args) {
     args = args || {};
+    if (args.templateComponents && args.templateComponents.length &&
+        typeof SalaryPayrollFormulaService !== 'undefined' &&
+        SalaryPayrollFormulaService.calculateEmployee) {
+      return SalaryPayrollFormulaService.calculateEmployee(args);
+    }
     var inputs = args.inputs || {};
     var employee = args.employee || {};
     var settings = args.settings || {};

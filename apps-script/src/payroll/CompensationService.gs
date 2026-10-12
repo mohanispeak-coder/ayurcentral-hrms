@@ -213,8 +213,12 @@ var CompensationService = (function () {
     return null;
   }
 
+  function loadTypeTemplateComponents_(typeStructureId) {
+    return DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: typeStructureId }) || [];
+  }
+
   function componentsFromTypeTemplate_(typeStructureId, ctcMonthly) {
-    var raw = DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: typeStructureId }) || [];
+    var raw = loadTypeTemplateComponents_(typeStructureId);
     if (!raw.length) return [];
     if (typeof SalaryComponentExpandService !== 'undefined' &&
         SalaryComponentExpandService.expandTemplateComponents) {
@@ -229,6 +233,7 @@ var CompensationService = (function () {
     var typeRow = findTypeStructureByRef_(emp.salary_structure_id);
     var ctc = Number(emp.ctc_monthly);
     if (!typeRow || !isFinite(ctc) || ctc <= 0) return null;
+    var rawTemplate = loadTypeTemplateComponents_(typeRow.salary_structure_id);
     var components = componentsFromTypeTemplate_(typeRow.salary_structure_id, ctc);
     if (!components.length) return null;
     return {
@@ -242,6 +247,8 @@ var CompensationService = (function () {
         effective_to: ''
       },
       components: components,
+      templateComponents: rawTemplate,
+      payroll_rules: typeRow.payroll_rules_json || '',
       from_type_template: true
     };
   }

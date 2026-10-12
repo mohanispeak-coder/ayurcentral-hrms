@@ -45,13 +45,14 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_STRUCTURES] = [
     'salary_structure_id', 'structure_name', 'vertical_name', 'status',
-    'currency', 'created_at', 'created_by_email', 'updated_at', 'updated_by_email',
+    'currency', 'payroll_rules_json', 'created_at', 'created_by_email', 'updated_at', 'updated_by_email',
     'employee_id', 'effective_from', 'effective_to',
     'ctc_monthly', 'previous_structure_id', 'revision_reason', 'approved_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.SALARY_COMPONENTS] = [
     'salary_component_id', 'salary_structure_id', 'component_code', 'component_name',
-    'component_kind', 'calc_method', 'amount', 'percent', 'percent_base', 'sort_order'
+    'component_kind', 'structure_section', 'calc_method', 'amount', 'percent', 'percent_base',
+    'cap_amount', 'cond_ref', 'cond_op', 'cond_value', 'round_mode', 'sort_order'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.PAYROLL_RUNS] = [
     'payroll_run_id', 'period_year', 'period_month', 'vertical_name', 'status', 'working_days_default',

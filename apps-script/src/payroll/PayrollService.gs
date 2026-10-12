@@ -760,6 +760,8 @@ var PayrollService = (function () {
         var result = PayrollEngine.calculateEmployee({
           structure: bundle ? bundle.structure : null,
           components: bundle ? bundle.components : [],
+          templateComponents: bundle ? bundle.templateComponents : null,
+          payroll_rules: bundle ? bundle.payroll_rules : null,
           inputs: inp,
           settings: settings,
           employee: emp
