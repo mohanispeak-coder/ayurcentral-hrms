@@ -293,6 +293,8 @@ var SalaryStatementService = (function () {
       rateResult = PayrollEngine.calculateEmployee({
         structure: bundle.structure,
         components: bundle.components,
+        templateComponents: bundle.templateComponents,
+        payroll_rules: bundle.payroll_rules,
         inputs: inputsFull,
         settings: settings,
         employee: emp
@@ -300,6 +302,8 @@ var SalaryStatementService = (function () {
       earnedResult = PayrollEngine.calculateEmployee({
         structure: bundle.structure,
         components: bundle.components,
+        templateComponents: bundle.templateComponents,
+        payroll_rules: bundle.payroll_rules,
         inputs: inputsEarned,
         settings: settings,
         employee: emp
