@@ -196,7 +196,34 @@ HRMS.CALC_METHOD = {
   PERCENT_OF_BASIC: 'PERCENT_OF_BASIC',
   PERCENT_OF_CTC: 'PERCENT_OF_CTC',
   /** EARNING only: monthly amount = CTC minus other earnings (e.g. Special Allowance). */
-  BALANCE_OF_CTC: 'BALANCE_OF_CTC'
+  BALANCE_OF_CTC: 'BALANCE_OF_CTC',
+  /** Deduction: percent of base, base capped at cap_amount (e.g. PF wage ceiling). */
+  PERCENT_CAPPED: 'PERCENT_CAPPED',
+  /** Deduction: if cond_ref meets cond_op vs cond_value, percent of percent_base (payroll-time). */
+  PERCENT_IF: 'PERCENT_IF',
+  /** Deduction: if cond_ref meets cond_op vs cond_value then 0 else fixed amount (e.g. PT). */
+  THRESHOLD_FEE: 'THRESHOLD_FEE',
+  /** Deduction: amount entered per employee at payroll (Advance, TDS, …). */
+  MANUAL: 'MANUAL'
+};
+
+/** Salary structure template row grouping (UI sections). */
+HRMS.STRUCTURE_SECTION = {
+  RATE_OF_PAY: 'RATE_OF_PAY',
+  DEDUCTION: 'DEDUCTION',
+  MANUAL_DEDUCTION: 'MANUAL_DEDUCTION'
+};
+
+/** Payroll-time formula references (not component codes). */
+HRMS.FORMULA_REF = {
+  RATE_GROSS: 'RATE_GROSS',
+  EARNED_GROSS: 'EARNED_GROSS'
+};
+
+HRMS.FORMULA_ROUND = {
+  ROUND: 'ROUND',
+  ROUNDUP: 'ROUNDUP',
+  NONE: 'NONE'
 };
 
 /** percent_base value when percentage is of employee monthly CTC. */
@@ -268,7 +295,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.11.3';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.12.1';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

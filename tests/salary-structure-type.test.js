@@ -187,6 +187,8 @@ const clientHtml = fs.readFileSync(path.join(src, 'payroll', 'SalaryStructureCli
 check('client-uses-hrms-callserver', /var callServer = App\.callServer/.test(clientHtml));
 check('client-binds-showtoast', /var showToast = App\.showToast/.test(clientHtml));
 check('client-percent-base-ui', /sst-c-base/.test(clientHtml) && /Remainder of CTC/.test(clientHtml));
+check('client-structure-sections', /sst-rate-body/.test(clientHtml) && /sst-ded-body/.test(clientHtml) && /sst-manual-body/.test(clientHtml));
+check('client-payroll-rules', /sst-earned-prorate/.test(clientHtml) && /payroll_rules_json/.test(clientHtml));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

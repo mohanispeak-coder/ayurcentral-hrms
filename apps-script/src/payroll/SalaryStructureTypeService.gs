@@ -18,8 +18,72 @@ var SalaryStructureTypeService = (function () {
     HRMS.CALC_METHOD.PERCENT_OF_CTC,
     HRMS.CALC_METHOD.PERCENT_OF_BASIC,
     HRMS.CALC_METHOD.FIXED,
-    HRMS.CALC_METHOD.BALANCE_OF_CTC
+    HRMS.CALC_METHOD.BALANCE_OF_CTC,
+    HRMS.CALC_METHOD.PERCENT_CAPPED,
+    HRMS.CALC_METHOD.PERCENT_IF,
+    HRMS.CALC_METHOD.THRESHOLD_FEE,
+    HRMS.CALC_METHOD.MANUAL
   ];
+
+  function defaultPayrollRules_() {
+    return JSON.stringify({
+      earned_prorate: 'ROUND_LINE',
+      arrears_add_codes: ['ARREARS']
+    });
+  }
+
+  function defaultTemplateComponents_() {
+    return [
+      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'BP', component_name: 'Basic + DA',
+        component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.PERCENT,
+        percent_base: HRMS.PERCENT_BASE_CTC, percent: 60, sort_order: 1 },
+      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'HRA', component_name: 'HRA',
+        component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.PERCENT,
+        percent_base: 'BP', percent: 40, sort_order: 2 },
+      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'CONV', component_name: 'Conveyance',
+        component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.FIXED, amount: 1600, sort_order: 3 },
+      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'MED', component_name: 'Medical',
+        component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.FIXED, amount: 1250, sort_order: 4 },
+      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'SA', component_name: 'Special allowance',
+        component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.BALANCE_OF_CTC, sort_order: 5 },
+      { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'PF', component_name: 'PF',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_CAPPED,
+        percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 10 },
+      { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'ESIC', component_name: 'ESIC',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_IF,
+        cond_ref: HRMS.FORMULA_REF.RATE_GROSS, cond_op: 'LT', cond_value: 21001,
+        percent_base: HRMS.FORMULA_REF.EARNED_GROSS, percent: 0.75, round_mode: HRMS.FORMULA_ROUND.ROUNDUP, sort_order: 11 },
+      { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'PT', component_name: 'Professional tax',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.THRESHOLD_FEE,
+        cond_ref: HRMS.FORMULA_REF.EARNED_GROSS, cond_op: 'LTE', cond_value: 25000, amount: 200,
+        round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 12 },
+      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'ADVANCE', component_name: 'Advance',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 20 },
+      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'TDS', component_name: 'TDS',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 21 },
+      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'LCD', component_name: 'LCD',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 22 },
+      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'LWF', component_name: 'LWF',
+        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 23 }
+    ];
+  }
+
+  function inferSection_(c, kind, method) {
+    var sec = trim_(c.structure_section).toUpperCase();
+    if (sec) return sec;
+    if (method === HRMS.CALC_METHOD.MANUAL) return HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION;
+    if (kind === HRMS.COMPONENT_KIND.DEDUCTION || kind === HRMS.COMPONENT_KIND.EMPLOYER) {
+      return HRMS.STRUCTURE_SECTION.DEDUCTION;
+    }
+    return HRMS.STRUCTURE_SECTION.RATE_OF_PAY;
+  }
+
+  function rateOnly_(components) {
+    return (components || []).filter(function (c) {
+      return inferSection_(c, trim_(c.component_kind).toUpperCase(), trim_(c.calc_method).toUpperCase()) ===
+        HRMS.STRUCTURE_SECTION.RATE_OF_PAY;
+    });
+  }
 
   function requireManage_() {
     return PermissionService.require(HRMS.ACTIONS.COMPENSATION_MANAGE);
@@ -95,42 +159,79 @@ var SalaryStructureTypeService = (function () {
         method = HRMS.CALC_METHOD.PERCENT;
         if (!percentBase) percentBase = 'BP';
       }
+      var structureSection = inferSection_(c, kind, method);
       if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC && kind !== HRMS.COMPONENT_KIND.EARNING) {
         throw validationError_(code + ': Remainder of CTC is only for EARNING lines.');
       }
       var percent = '';
       var amount = '';
+      var capAmount = '';
+      var condRef = trim_(c.cond_ref).toUpperCase();
+      var condOp = trim_(c.cond_op).toUpperCase();
+      var condValue = c.cond_value === '' || c.cond_value == null ? '' : Number(c.cond_value);
+      var roundMode = trim_(c.round_mode).toUpperCase() || HRMS.FORMULA_ROUND.ROUND;
       if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC) {
         percent = '';
         amount = '';
         percentBase = '';
-      } else if (method === HRMS.CALC_METHOD.PERCENT) {
+      } else if (method === HRMS.CALC_METHOD.MANUAL) {
+        percent = '';
+        amount = '';
+        percentBase = '';
+      } else if (method === HRMS.CALC_METHOD.PERCENT || method === HRMS.CALC_METHOD.PERCENT_CAPPED) {
         percent = parseNonNegative_(c.percent, code + ' percent');
-        if (percent > 100) throw validationError_(code + ' percent cannot exceed 100.');
         if (!percentBase) percentBase = HRMS.PERCENT_BASE_CTC;
-        if (percentBase !== HRMS.PERCENT_BASE_CTC && !codesSoFar[percentBase]) {
-          throw validationError_(code + ': base "' + percentBase + '" must be a component code defined above this row.');
+        if (method === HRMS.CALC_METHOD.PERCENT && percentBase === HRMS.PERCENT_BASE_CTC && percent > 100) {
+          throw validationError_(code + ': percent of CTC cannot exceed 100.');
         }
+        if (percentBase !== HRMS.PERCENT_BASE_CTC &&
+            percentBase !== HRMS.FORMULA_REF.RATE_GROSS &&
+            percentBase !== HRMS.FORMULA_REF.EARNED_GROSS &&
+            !codesSoFar[percentBase]) {
+          throw validationError_(code + ': base "' + percentBase + '" must be defined above or be a formula ref.');
+        }
+        if (method === HRMS.CALC_METHOD.PERCENT_CAPPED) {
+          capAmount = parseNonNegative_(c.cap_amount, code + ' cap');
+        }
+      } else if (method === HRMS.CALC_METHOD.PERCENT_IF) {
+        percent = parseNonNegative_(c.percent, code + ' percent');
+        if (!condRef) throw validationError_(code + ': condition reference is required.');
+        if (!condOp) condOp = 'LT';
+        condValue = parseNonNegative_(c.cond_value, code + ' condition value');
+        if (!percentBase) percentBase = HRMS.FORMULA_REF.EARNED_GROSS;
+      } else if (method === HRMS.CALC_METHOD.THRESHOLD_FEE) {
+        amount = parseNonNegative_(c.amount, code + ' fee amount');
+        if (!condRef) condRef = HRMS.FORMULA_REF.EARNED_GROSS;
+        if (!condOp) condOp = 'LTE';
+        condValue = parseNonNegative_(c.cond_value, code + ' threshold');
       } else if (method === HRMS.CALC_METHOD.FIXED) {
         amount = parseNonNegative_(c.amount, code + ' amount');
         percentBase = '';
       } else {
-        throw validationError_(code + ': use Method %, Fixed amount, or Remainder of CTC.');
+        throw validationError_(code + ': unsupported calc_method.');
       }
       out.push({
         component_code: code,
         component_name: name,
         component_kind: kind,
+        structure_section: structureSection,
         calc_method: method,
         percent: percent,
         amount: amount,
         percent_base: percentBase,
+        cap_amount: capAmount,
+        cond_ref: condRef,
+        cond_op: condOp,
+        cond_value: condValue,
+        round_mode: roundMode,
         sort_order: Number(c.sort_order != null ? c.sort_order : i + 1)
       });
-      codesSoFar[code] = true;
+      if (structureSection === HRMS.STRUCTURE_SECTION.RATE_OF_PAY) {
+        codesSoFar[code] = true;
+      }
     }
     var balanceCount = 0;
-    out.forEach(function (c) {
+    rateOnly_(out).forEach(function (c) {
       if (c.calc_method === HRMS.CALC_METHOD.BALANCE_OF_CTC) balanceCount += 1;
     });
     if (balanceCount > 1) {
@@ -143,7 +244,7 @@ var SalaryStructureTypeService = (function () {
   function earningsPercentWarning_(components) {
     if (typeof SalaryComponentExpandService !== 'undefined' &&
         SalaryComponentExpandService.earningsReconcileWarning) {
-      return SalaryComponentExpandService.earningsReconcileWarning(components, 50000);
+      return SalaryComponentExpandService.earningsReconcileWarning(rateOnly_(components), 50000);
     }
     return '';
   }
@@ -158,6 +259,12 @@ var SalaryStructureTypeService = (function () {
       percent: c.percent === '' || c.percent == null ? null : Number(c.percent),
       amount: c.amount === '' || c.amount == null ? null : Number(c.amount),
       percent_base: String(c.percent_base || ''),
+      structure_section: String(c.structure_section || ''),
+      cap_amount: c.cap_amount === '' || c.cap_amount == null ? null : Number(c.cap_amount),
+      cond_ref: String(c.cond_ref || ''),
+      cond_op: String(c.cond_op || ''),
+      cond_value: c.cond_value === '' || c.cond_value == null ? null : Number(c.cond_value),
+      round_mode: String(c.round_mode || ''),
       sort_order: Number(c.sort_order || 0)
     };
   }
@@ -174,7 +281,8 @@ var SalaryStructureTypeService = (function () {
       structure_name: String(row.structure_name || ''),
       vertical_name: String(row.vertical_name || ''),
       status: String(row.status || HRMS.STRUCTURE_TYPE_STATUS.ACTIVE).toUpperCase(),
-      currency: String(row.currency || 'INR')
+      currency: String(row.currency || 'INR'),
+      payroll_rules_json: String(row.payroll_rules_json || defaultPayrollRules_())
     };
     if (includeComponents) {
       out.components = loadComponents_(row.salary_structure_id).map(serializeComponent_);
@@ -190,10 +298,16 @@ var SalaryStructureTypeService = (function () {
         component_code: c.component_code,
         component_name: c.component_name,
         component_kind: c.component_kind,
+        structure_section: c.structure_section || '',
         calc_method: c.calc_method,
         amount: c.amount,
         percent: c.percent,
         percent_base: c.percent_base || '',
+        cap_amount: c.cap_amount,
+        cond_ref: c.cond_ref || '',
+        cond_op: c.cond_op || '',
+        cond_value: c.cond_value,
+        round_mode: c.round_mode || '',
         sort_order: c.sort_order
       };
     });
@@ -263,6 +377,7 @@ var SalaryStructureTypeService = (function () {
       : HRMS.STRUCTURE_TYPE_STATUS.ACTIVE;
     var components = normalizeComponents_(payload.components);
     var warning = earningsPercentWarning_(components);
+    var payrollRules = trim_(payload.payroll_rules_json) || defaultPayrollRules_();
     var structureId = trim_(payload.salary_structure_id);
 
     return withScriptLock_(function () {
@@ -283,6 +398,7 @@ var SalaryStructureTypeService = (function () {
           vertical_name: vertical,
           status: status,
           currency: 'INR',
+          payroll_rules_json: payrollRules,
           updated_at: now,
           updated_by_email: session.email
         });
@@ -295,6 +411,7 @@ var SalaryStructureTypeService = (function () {
           vertical_name: vertical,
           status: status,
           currency: 'INR',
+          payroll_rules_json: payrollRules,
           employee_id: '',
           created_at: now,
           created_by_email: session.email,
@@ -351,9 +468,18 @@ var SalaryStructureTypeService = (function () {
     })[0] || null;
   }
 
+  function getStructureTypeDefaults() {
+    requireManage_();
+    return {
+      components: defaultTemplateComponents_(),
+      payroll_rules_json: defaultPayrollRules_()
+    };
+  }
+
   return {
     listStructureTypes: listStructureTypes,
     getStructureType: getStructureType,
+    getStructureTypeDefaults: getStructureTypeDefaults,
     listStructureTypeOptions: listStructureTypeOptions,
     saveStructureType: saveStructureType,
     setStructureTypeStatus: setStructureTypeStatus,

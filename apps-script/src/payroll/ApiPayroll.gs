@@ -305,6 +305,12 @@ function apiGetSalaryStructureType(structureId, sessionToken) {
   }, sessionToken);
 }
 
+function apiGetSalaryStructureTypeDefaults(sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.getStructureTypeDefaults();
+  }, sessionToken);
+}
+
 function apiSaveSalaryStructureType(payload, sessionToken) {
   return hrmsRun_(function () {
     return SalaryStructureTypeService.saveStructureType(payload || {});
