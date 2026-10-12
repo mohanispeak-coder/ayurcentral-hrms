@@ -12,6 +12,12 @@
 .sst-page .sst-section .page-lede { margin-bottom: 8px; }
 .sst-page .empty-state { color: var(--color-text-muted); padding: 12px 0; }
 .sst-page .sst-rules-card { margin-top: 12px; padding: 12px; background: var(--color-surface-muted, #f6f7f9); border-radius: 6px; }
+.sst-page .sst-callout { padding: 10px 12px; margin: 8px 0 12px; background: var(--color-info-bg); border: 1px solid var(--color-info-border); border-radius: 6px; font-size: var(--text-sm); }
+.sst-page .sst-ded-cond label, .sst-page .sst-ded-extra label { font-size: var(--text-xs); color: var(--color-text-muted); display: block; margin-bottom: 2px; }
+.sst-page .sst-preset-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.sst-page .sst-ded-block { display: none; }
+.sst-page .sst-ded-block.active { display: block; }
+.sst-page .sst-ded-fields .form-select, .sst-page .sst-ded-fields .form-input { max-width: 220px; margin-bottom: 6px; }
 </style>
 <script>
 (function () {
@@ -54,8 +60,8 @@
   var SECTION_DED_ = 'DEDUCTION';
   var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
   var EARNED_METHODS_ = [
-    ['PRORATE_ROUND_LINE', 'Round each line: (rate ÷ fixed days) × paid days'],
-    ['PRORATE_FACTOR', 'Rate × (paid days ÷ working days)']
+    ['PRORATE_ROUND_LINE', 'Daily rate × paid days (round each line)'],
+    ['PRORATE_FACTOR', 'Monthly rate × (paid days ÷ working days)']
   ];
 
   var RATE_METHODS_ = [
@@ -64,17 +70,17 @@
     ['BALANCE_OF_CTC', 'Remainder of CTC']
   ];
   var DED_METHODS_ = [
-    ['PERCENT_CAPPED', '% with wage cap'],
-    ['PERCENT_IF', '% if condition'],
-    ['THRESHOLD_FEE', 'Fee above threshold'],
-    ['PERCENT', '% of base'],
-    ['FIXED', 'Fixed amount']
+    ['PERCENT_CAPPED', 'Percentage of an amount (with optional maximum base) — e.g. PF'],
+    ['PERCENT_IF', 'Percentage only when a condition is true — e.g. ESIC'],
+    ['THRESHOLD_FEE', 'Fixed fee when salary is above a limit — e.g. PT'],
+    ['PERCENT', 'Simple percentage of an amount'],
+    ['FIXED', 'Same fixed ₹ every month (not typed in payroll)']
   ];
-  var FORMULA_REFS_ = [
-    ['CTC', 'Monthly CTC'],
-    ['RATE_GROSS', 'Rate gross'],
-    ['EARNED_GROSS', 'Earned gross']
-  ];
+  var DED_PRESETS_ = {
+    PF: { component_code: 'PF', component_name: 'PF', calc_method: 'PERCENT_CAPPED', percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: 'ROUND' },
+    ESIC: { component_code: 'ESIC', component_name: 'ESIC', calc_method: 'PERCENT_IF', cond_ref: 'RATE_GROSS', cond_op: 'LT', cond_value: 21001, percent_base: 'EARNED_GROSS', percent: 0.75, round_mode: 'ROUNDUP' },
+    PT: { component_code: 'PT', component_name: 'Professional tax', calc_method: 'THRESHOLD_FEE', cond_ref: 'EARNED_GROSS', cond_op: 'LTE', cond_value: 25000, amount: 200, round_mode: 'ROUND' }
+  };
   var COND_OPS_ = [['LT', '<'], ['LTE', '≤'], ['GT', '>'], ['GTE', '≥']];
   var ROUND_MODES_ = [['ROUND', 'Round'], ['ROUNDUP', 'Round up'], ['NONE', 'None']];
 
@@ -134,20 +140,46 @@
     return prior;
   }
 
-  function refOptionsHtml_(selected, priorCodes, includeFormulaRefs) {
+  /** Section 1 rate line bases (for % of CTC / % of another line). */
+  function rateBaseOptionsHtml_(selected, priorCodes) {
     var sel = String(selected || 'CTC').toUpperCase();
-    var html = '';
-    if (includeFormulaRefs) {
-      FORMULA_REFS_.forEach(function (r) {
-        html += '<option value="' + r[0] + '"' + (sel === r[0] ? ' selected' : '') + '>' + esc_(r[1]) + '</option>';
-      });
-    } else {
-      html += '<option value="CTC"' + (sel === 'CTC' ? ' selected' : '') + '>Monthly CTC</option>';
-    }
+    var html = '<option value="CTC"' + (sel === 'CTC' ? ' selected' : '') + '>Monthly CTC (employee)</option>';
     (priorCodes || []).forEach(function (code) {
-      html += '<option value="' + esc_(code) + '"' + (sel === code ? ' selected' : '') + '>' + esc_(code) + '</option>';
+      html += '<option value="' + esc_(code) + '"' + (sel === code ? ' selected' : '') + '>Section 1 line — ' + esc_(code) + '</option>';
     });
     return html;
+  }
+
+  /** Where a deduction formula takes its amount from (sections 1, 2, or CTC). */
+  function amountSourceOptionsHtml_(selected, rateCodes) {
+    var sel = String(selected || 'EARNED_GROSS').toUpperCase();
+    var opts = [
+      ['CTC', 'Monthly CTC (employee profile)'],
+      ['RATE_GROSS', 'Section 1 — Total monthly gross (rate)'],
+      ['EARNED_GROSS', 'Section 2 — Total earned gross']
+    ];
+    (rateCodes || []).forEach(function (code) {
+      opts.push([code, 'Section 1 — ' + code + ' (monthly rate amount)']);
+    });
+    return opts.map(function (o) {
+      return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + esc_(o[1]) + '</option>';
+    }).join('');
+  }
+
+  function dedMethodHint_(m) {
+    if (m === 'PERCENT_CAPPED') {
+      return 'Pick which amount the % applies to, enter the %, and optional maximum base (PF wage ceiling). Calculated at payroll — no ₹ typed here.';
+    }
+    if (m === 'PERCENT_IF') {
+      return 'If the first amount meets the condition, system deducts % of the second amount (ESIC-style). Calculated at payroll.';
+    }
+    if (m === 'THRESHOLD_FEE') {
+      return 'If amount is below the limit, deduction is 0; otherwise deduct the fixed fee (PT-style). Calculated at payroll.';
+    }
+    if (m === 'PERCENT') {
+      return 'Deduct a % of the amount you select. Calculated at payroll.';
+    }
+    return 'Same ₹ every month for everyone on this structure (rare). Still not the same as Section 4 payroll entry.';
   }
 
   function pageEl_() {
@@ -295,7 +327,7 @@
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Basic"></td>' +
       '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
       '<td><select class="form-select sst-c-base"' + (isPercent ? '' : ' disabled') + '>' +
-        refOptionsHtml_(ui.base || 'CTC', prior, false) + '</select></td>' +
+        rateBaseOptionsHtml_(ui.base || 'CTC', prior) + '</select></td>' +
       '<td><input class="form-input sst-comp-value sst-c-value" type="text" inputmode="decimal"' +
         (isBalance || !isPercent && ui.method !== 'FIXED' ? ' disabled' : '') +
         ' value="' + esc_(value) + '"></td>' +
@@ -309,9 +341,9 @@
     var methodOpts = DED_METHODS_.map(function (k) {
       return '<option value="' + k[0] + '"' + (ui.method === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
     }).join('');
-    var prior = priorRateCodes_(allRate, allRate.length);
+    var rateCodes = priorRateCodes_(allRate, allRate.length);
     var m = ui.method;
-    var baseSel = (m === 'PERCENT_IF' || m === 'THRESHOLD_FEE') ? (c.cond_ref || 'EARNED_GROSS') : (c.percent_base || 'BP');
+    var baseSel = (m === 'PERCENT_IF' || m === 'THRESHOLD_FEE') ? (c.cond_ref || 'RATE_GROSS') : (c.percent_base || 'BP');
     var roundSel = String(c.round_mode || 'ROUND').toUpperCase();
     var roundOpts = ROUND_MODES_.map(function (r) {
       return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
@@ -320,31 +352,55 @@
     var condOpts = COND_OPS_.map(function (o) {
       return '<option value="' + o[0] + '"' + (condOp === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
     }).join('');
-    var showCap = m === 'PERCENT_CAPPED';
-    var showPctBase = m === 'PERCENT_IF';
-    var showCond = m === 'PERCENT_IF' || m === 'THRESHOLD_FEE';
-    var showPct = m === 'PERCENT' || m === 'PERCENT_CAPPED' || m === 'PERCENT_IF';
-    var showAmt = m === 'FIXED' || m === 'THRESHOLD_FEE';
     var pctBaseSel = String(c.percent_base || 'EARNED_GROSS').toUpperCase();
-    var pctBaseOpts = refOptionsHtml_(pctBaseSel, prior, true);
-    var valLabel = showAmt && m === 'THRESHOLD_FEE' ? (c.amount != null ? c.amount : '200') : (showPct ? (c.percent != null ? c.percent : '') : (c.amount != null ? c.amount : ''));
+    var valPct = (c.percent != null && c.percent !== '') ? c.percent : '';
+    var valAmt = (c.amount != null && c.amount !== '') ? c.amount : (m === 'THRESHOLD_FEE' ? '200' : '');
     return '<tr class="sst-comp-row" data-section="' + SECTION_DED_ + '">' +
       '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="PF"></td>' +
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="PF"></td>' +
       '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
-      '<td><select class="form-select sst-c-base">' + refOptionsHtml_(baseSel, prior, true) + '</select></td>' +
-      '<td class="sst-ded-cond"' + (showCond ? '' : ' style="opacity:.35"') + '>' +
-        '<select class="form-select sst-c-cond-op"' + (showCond ? '' : ' disabled') + '>' + condOpts + '</select> ' +
-        '<input class="form-input sst-c-cond-val sst-c-cond" type="text" inputmode="decimal"' + (showCond ? '' : ' disabled') +
-        ' value="' + esc_(showCond && c.cond_value != null ? c.cond_value : (m === 'THRESHOLD_FEE' ? '25000' : '21001')) + '">' +
-      '</td>' +
-      '<td><input class="form-input sst-comp-value sst-c-value" type="text" inputmode="decimal"' +
-        ' value="' + esc_(valLabel) + '" placeholder="' + (showPct ? '%' : 'Amt') + '"></td>' +
-      '<td class="sst-cap-cell">' +
-        (showPctBase
-          ? '<select class="form-select sst-c-pct-base">' + pctBaseOpts + '</select>'
-          : '<input class="form-input sst-c-cap" type="text" inputmode="decimal"' + (showCap ? '' : ' disabled') +
-            ' value="' + esc_(showCap && c.cap_amount != null ? c.cap_amount : (showCap ? '25000' : '')) + '" title="Wage cap">') +
+      '<td colspan="4" class="sst-ded-fields-cell">' +
+        '<div class="sst-ded-fields">' +
+          '<div class="sst-ded-block sst-ded-pct-cap">' +
+            '<label>Take amount from</label>' +
+            '<select class="form-select sst-c-base">' + amountSourceOptionsHtml_(baseSel, rateCodes) + '</select>' +
+            '<label>Percentage (%)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '" placeholder="12">' +
+            '<label>Maximum base for % (optional cap)</label>' +
+            '<input class="form-input sst-c-cap" type="text" inputmode="decimal" value="' + esc_(c.cap_amount != null ? c.cap_amount : '25000') + '">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-pct-if">' +
+            '<label>If this amount</label>' +
+            '<select class="form-select sst-c-base-if">' + amountSourceOptionsHtml_(c.cond_ref || 'RATE_GROSS', rateCodes) + '</select>' +
+            '<label>is</label><select class="form-select sst-c-cond-op">' + condOpts + '</select>' +
+            '<label>this value</label>' +
+            '<input class="form-input sst-c-cond-val" type="text" inputmode="decimal" value="' + esc_(c.cond_value != null ? c.cond_value : '21001') + '">' +
+            '<label>then deduct % of</label>' +
+            '<select class="form-select sst-c-pct-base">' + amountSourceOptionsHtml_(pctBaseSel, rateCodes) + '</select>' +
+            '<label>Percentage (%)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '" placeholder="0.75">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-threshold">' +
+            '<label>If this amount</label>' +
+            '<select class="form-select sst-c-base-th">' + amountSourceOptionsHtml_(c.cond_ref || 'EARNED_GROSS', rateCodes) + '</select>' +
+            '<label>is at most</label>' +
+            '<input class="form-input sst-c-cond-val" type="text" inputmode="decimal" value="' + esc_(c.cond_value != null ? c.cond_value : '25000') + '">' +
+            '<span class="hint">→ deduction ₹0; otherwise use fee below</span>' +
+            '<label>Fee amount (₹)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-amt" type="text" inputmode="decimal" value="' + esc_(valAmt) + '" placeholder="200">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-pct-simple">' +
+            '<label>Take amount from</label>' +
+            '<select class="form-select sst-c-base-simple">' + amountSourceOptionsHtml_(c.percent_base || 'BP', rateCodes) + '</select>' +
+            '<label>Percentage (%)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-fixed">' +
+            '<label>Fixed monthly deduction (₹)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-amt" type="text" inputmode="decimal" value="' + esc_(valAmt) + '">' +
+          '</div>' +
+          '<p class="hint sst-ded-hint" style="margin:6px 0 0">' + esc_(dedMethodHint_(m)) + '</p>' +
+        '</div>' +
       '</td>' +
       '<td><select class="form-select sst-c-round">' + roundOpts + '</select></td>' +
       '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
@@ -362,7 +418,7 @@
       return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
     }).join('');
     var code = String(c.component_code || '*');
-    var codeOpts = '<option value="*"' + (code === '*' ? ' selected' : '') + '>All rate lines (*)</option>';
+    var codeOpts = '<option value="*"' + (code === '*' ? ' selected' : '') + '>All lines from Section 1</option>';
     (rateComps || []).forEach(function (r) {
       var cd = String(r.component_code || '').trim().toUpperCase();
       if (!cd) return;
@@ -382,6 +438,7 @@
     return '<tr class="sst-comp-row" data-section="' + SECTION_MANUAL_ + '">' +
       '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="ADVANCE"></td>' +
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Advance"></td>' +
+      '<td class="hint">Entered each payroll run (not stored in structure)</td>' +
       '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
       '</tr>';
   }
@@ -447,22 +504,31 @@
       '</div>' +
       '<div class="sst-section">' +
         '<h3>2. Earned pay (attendance)</h3>' +
-        '<p class="page-lede">Prorates each <strong>rate</strong> line using payroll <strong>working days</strong> and <strong>paid days</strong>. Use <code>*</code> for all lines, or add rows per component code.</p>' +
-        '<table class="data-table"><thead><tr><th>Rate line</th><th>Label</th><th>Proration</th><th>Round</th><th></th></tr></thead>' +
+        '<div class="sst-callout"><strong>No rupee amounts here.</strong> This section only says how Section 1 monthly amounts become ' +
+        '<em>earned</em> pay when payroll applies <strong>working days</strong> and <strong>paid days</strong> (from attendance / payroll input).</div>' +
+        '<table class="data-table"><thead><tr><th>Which Section 1 line</th><th>Label</th><th>How to calculate earned</th><th>Round</th><th></th></tr></thead>' +
         '<tbody id="sst-earned-body">' + parts.earned.map(function (c) { return earnedRowHtml_(c, parts.rate); }).join('') + '</tbody></table>' +
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-earned">+ Add earned rule</button>' +
       '</div>' +
       '<div class="sst-section">' +
-        '<h3>3. Deduction formulas</h3>' +
-        '<p class="page-lede">PF (capped %), ESIC (conditional %), PT (threshold fee), or custom percent/fixed rules evaluated at payroll.</p>' +
-        '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Method</th><th>Base / If-ref</th><th>Condition</th><th>% or fee</th><th>Cap</th><th>Round</th><th></th></tr></thead>' +
+        '<h3>3. Deduction formulas (automatic)</h3>' +
+        '<div class="sst-callout"><strong>You choose the rule, not the rupee amount.</strong> Pick <em>which section</em> the amount comes from ' +
+        '(e.g. Basic from Section 1, earned gross from Section 2), enter <em>percentage</em> or <em>fee</em>. ' +
+        'PF / ESIC / PT are <strong>calculated at payroll</strong> — nothing to type per employee in this screen.</div>' +
+        '<div class="sst-preset-btns">' +
+          '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="PF">+ PF preset</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="ESIC">+ ESIC preset</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="PT">+ PT preset</button>' +
+        '</div>' +
+        '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Formula type</th><th>Formula settings</th><th>Round</th><th></th></tr></thead>' +
         '<tbody id="sst-ded-body">' + parts.ded.map(function (c, i) { return dedRowHtml_(c, i, parts.rate); }).join('') + '</tbody></table>' +
-        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-ded">+ Add deduction rule</button>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-ded">+ Add custom formula</button>' +
       '</div>' +
       '<div class="sst-section">' +
         '<h3>4. Manual deductions (payroll entry)</h3>' +
-        '<p class="page-lede">Lines with amounts entered per employee each payroll run (advance, TDS, etc.).</p>' +
-        '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th></th></tr></thead>' +
+        '<div class="sst-callout"><strong>Amounts are entered in Payroll each month</strong> (Advance, TDS, LCD, LWF). ' +
+        'This section only lists the deduction <em>names</em> so payslip and payroll know they exist.</div>' +
+        '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Amount</th><th></th></tr></thead>' +
         '<tbody id="sst-manual-body">' + parts.manual.map(function (c) { return manualRowHtml_(c); }).join('') + '</tbody></table>' +
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-manual">+ Add manual line</button>' +
       '</div>' +
@@ -476,6 +542,25 @@
     document.getElementById('sst-add-ded').addEventListener('click', function () { addRow_(SECTION_DED_); });
     document.getElementById('sst-add-manual').addEventListener('click', function () { addRow_(SECTION_MANUAL_); });
     document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
+    document.querySelectorAll('.sst-ded-preset').forEach(function (btn) {
+      btn.addEventListener('click', function () { addDedPreset_(btn.getAttribute('data-preset')); });
+    });
+    bindAllRows_();
+  }
+
+  function addDedPreset_(key) {
+    var preset = DED_PRESETS_[key];
+    if (!preset) return;
+    var body = document.getElementById('sst-ded-body');
+    var rateComps = [];
+    document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(function (tr) {
+      rateComps.push({
+        component_code: tr.querySelector('.sst-c-code').value.trim()
+      });
+    });
+    var tmp = document.createElement('tbody');
+    tmp.innerHTML = dedRowHtml_(preset, body.querySelectorAll('.sst-comp-row').length, rateComps);
+    body.appendChild(tmp.firstChild);
     bindAllRows_();
   }
 
@@ -505,7 +590,7 @@
       var sel = tr.querySelector('.sst-c-earned-code');
       if (!sel) return;
       var cur = sel.value || '*';
-      var html = '<option value="*"' + (cur === '*' ? ' selected' : '') + '>All rate lines (*)</option>';
+      var html = '<option value="*"' + (cur === '*' ? ' selected' : '') + '>All lines from Section 1</option>';
       rateList.forEach(function (r) {
         var cd = String(r.component_code || '').trim().toUpperCase();
         if (!cd) return;
@@ -523,33 +608,38 @@
       var methodSel = tr.querySelector('.sst-c-method');
       var prior = codes.slice();
       if (baseSel && methodSel && methodSel.value === 'PERCENT') {
-        baseSel.innerHTML = refOptionsHtml_(baseSel.value, prior, false);
+        baseSel.innerHTML = rateBaseOptionsHtml_(baseSel.value, prior);
         baseSel.disabled = false;
       }
       var cd = tr.querySelector('.sst-c-code') ? String(tr.querySelector('.sst-c-code').value || '').trim().toUpperCase() : '';
       if (cd) codes.push(cd);
     });
     document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) {
-      var baseSel = tr.querySelector('.sst-c-base');
-      if (baseSel) baseSel.innerHTML = refOptionsHtml_(baseSel.value, codes, true);
+      tr.querySelectorAll('.sst-c-base, .sst-c-base-if, .sst-c-base-th, .sst-c-base-simple, .sst-c-pct-base').forEach(function (sel) {
+        sel.innerHTML = amountSourceOptionsHtml_(sel.value, codes);
+      });
     });
   }
 
   function syncDedRowUi_(tr) {
     if (!tr || tr.getAttribute('data-section') !== SECTION_DED_) return;
     var m = tr.querySelector('.sst-c-method').value;
-    var condWrap = tr.querySelector('.sst-ded-cond');
-    var condOp = tr.querySelector('.sst-c-cond-op');
-    var condVal = tr.querySelector('.sst-c-cond-val');
-    var cap = tr.querySelector('.sst-c-cap');
-    var showCond = m === 'PERCENT_IF' || m === 'THRESHOLD_FEE';
-    var showCap = m === 'PERCENT_CAPPED';
-    var pctBase = tr.querySelector('.sst-c-pct-base');
-    if (condWrap) condWrap.style.opacity = showCond ? '1' : '0.35';
-    if (condOp) condOp.disabled = !showCond;
-    if (condVal) condVal.disabled = !showCond;
-    if (cap) cap.disabled = !showCap;
-    if (pctBase) pctBase.disabled = m !== 'PERCENT_IF';
+    var map = {
+      PERCENT_CAPPED: 'sst-ded-pct-cap',
+      PERCENT_IF: 'sst-ded-pct-if',
+      THRESHOLD_FEE: 'sst-ded-threshold',
+      PERCENT: 'sst-ded-pct-simple',
+      FIXED: 'sst-ded-fixed'
+    };
+    tr.querySelectorAll('.sst-ded-block').forEach(function (b) { b.classList.remove('active'); });
+    var active = tr.querySelector('.' + (map[m] || 'sst-ded-pct-cap'));
+    if (active) active.classList.add('active');
+    var hint = tr.querySelector('.sst-ded-hint');
+    if (hint) hint.textContent = dedMethodHint_(m);
+    if (m === 'THRESHOLD_FEE') {
+      var op = tr.querySelector('.sst-c-cond-op');
+      if (op) op.value = 'LTE';
+    }
   }
 
   function syncRateRowUi_(tr) {
@@ -611,8 +701,10 @@
     var out = [];
     var order = 0;
     function pushRow(tr, section) {
-      var code = tr.querySelector('.sst-c-code').value.trim();
-      var name = tr.querySelector('.sst-c-name').value.trim();
+      var codeEl = tr.querySelector('.sst-c-code') || tr.querySelector('.sst-c-earned-code');
+      var code = codeEl ? String(codeEl.value || '').trim() : '';
+      var nameEl = tr.querySelector('.sst-c-name');
+      var name = nameEl ? String(nameEl.value || '').trim() : '';
       if (!code && !name) return;
       order += 1;
       var c = {
@@ -640,26 +732,30 @@
         var method = tr.querySelector('.sst-c-method').value;
         c.calc_method = method;
         c.round_mode = tr.querySelector('.sst-c-round').value;
-        var baseRef = tr.querySelector('.sst-c-base').value;
-        var val = tr.querySelector('.sst-c-value').value;
-        if (method === 'PERCENT_CAPPED' || method === 'PERCENT') {
-          c.percent_base = baseRef;
-          c.percent = val;
-          if (method === 'PERCENT_CAPPED') c.cap_amount = tr.querySelector('.sst-c-cap').value;
+        if (method === 'PERCENT_CAPPED') {
+          var blk = tr.querySelector('.sst-ded-pct-cap');
+          c.percent_base = blk.querySelector('.sst-c-base').value;
+          c.percent = blk.querySelector('.sst-c-value-pct').value;
+          c.cap_amount = blk.querySelector('.sst-c-cap').value;
         } else if (method === 'PERCENT_IF') {
-          c.cond_ref = baseRef;
-          c.cond_op = tr.querySelector('.sst-c-cond-op').value;
-          c.cond_value = tr.querySelector('.sst-c-cond-val').value;
-          var pctBaseEl = tr.querySelector('.sst-c-pct-base');
-          c.percent_base = pctBaseEl ? pctBaseEl.value : 'EARNED_GROSS';
-          c.percent = val;
+          var bif = tr.querySelector('.sst-ded-pct-if');
+          c.cond_ref = bif.querySelector('.sst-c-base-if').value;
+          c.cond_op = bif.querySelector('.sst-c-cond-op').value;
+          c.cond_value = bif.querySelector('.sst-c-cond-val').value;
+          c.percent_base = bif.querySelector('.sst-c-pct-base').value;
+          c.percent = bif.querySelector('.sst-c-value-pct').value;
         } else if (method === 'THRESHOLD_FEE') {
-          c.cond_ref = baseRef;
-          c.cond_op = tr.querySelector('.sst-c-cond-op').value;
-          c.cond_value = tr.querySelector('.sst-c-cond-val').value;
-          c.amount = val;
+          var bth = tr.querySelector('.sst-ded-threshold');
+          c.cond_ref = bth.querySelector('.sst-c-base-th').value;
+          c.cond_op = 'LTE';
+          c.cond_value = bth.querySelector('.sst-c-cond-val').value;
+          c.amount = bth.querySelector('.sst-c-value-amt').value;
+        } else if (method === 'PERCENT') {
+          var bs = tr.querySelector('.sst-ded-pct-simple');
+          c.percent_base = bs.querySelector('.sst-c-base-simple').value;
+          c.percent = bs.querySelector('.sst-c-value-pct').value;
         } else if (method === 'FIXED') {
-          c.amount = val;
+          c.amount = tr.querySelector('.sst-ded-fixed .sst-c-value-amt').value;
         }
         out.push(c);
         return;
