@@ -22,11 +22,14 @@ var SalaryStructureTypeService = (function () {
     HRMS.CALC_METHOD.PERCENT_CAPPED,
     HRMS.CALC_METHOD.PERCENT_IF,
     HRMS.CALC_METHOD.THRESHOLD_FEE,
-    HRMS.CALC_METHOD.MANUAL
+    HRMS.CALC_METHOD.MANUAL,
+    HRMS.CALC_METHOD.PRORATE_ROUND_LINE,
+    HRMS.CALC_METHOD.PRORATE_FACTOR
   ];
 
   function defaultPayrollRules_() {
     return JSON.stringify({
+      execution_sections: HRMS.SALARY_EXECUTION_SECTIONS,
       earned_prorate: 'ROUND_LINE',
       arrears_add_codes: ['ARREARS']
     });
@@ -46,6 +49,9 @@ var SalaryStructureTypeService = (function () {
         component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.FIXED, amount: 1250, sort_order: 4 },
       { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'SA', component_name: 'Special allowance',
         component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.BALANCE_OF_CTC, sort_order: 5 },
+      { structure_section: HRMS.STRUCTURE_SECTION.EARNED_PAY, component_code: '*', component_name: 'All rate lines',
+        component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.PRORATE_ROUND_LINE,
+        round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 6 },
       { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'PF', component_name: 'PF',
         component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_CAPPED,
         percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 10 },
@@ -72,6 +78,10 @@ var SalaryStructureTypeService = (function () {
     var sec = trim_(c.structure_section).toUpperCase();
     if (sec) return sec;
     if (method === HRMS.CALC_METHOD.MANUAL) return HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION;
+    if (method === HRMS.CALC_METHOD.PRORATE_ROUND_LINE ||
+        method === HRMS.CALC_METHOD.PRORATE_FACTOR) {
+      return HRMS.STRUCTURE_SECTION.EARNED_PAY;
+    }
     if (kind === HRMS.COMPONENT_KIND.DEDUCTION || kind === HRMS.COMPONENT_KIND.EMPLOYER) {
       return HRMS.STRUCTURE_SECTION.DEDUCTION;
     }
@@ -160,6 +170,13 @@ var SalaryStructureTypeService = (function () {
         if (!percentBase) percentBase = 'BP';
       }
       var structureSection = inferSection_(c, kind, method);
+      if (structureSection === HRMS.STRUCTURE_SECTION.EARNED_PAY) {
+        if (method !== HRMS.CALC_METHOD.PRORATE_ROUND_LINE &&
+            method !== HRMS.CALC_METHOD.PRORATE_FACTOR) {
+          throw validationError_(code + ': earned pay lines must use PRORATE_ROUND_LINE or PRORATE_FACTOR.');
+        }
+        kind = HRMS.COMPONENT_KIND.EARNING;
+      }
       if (method === HRMS.CALC_METHOD.BALANCE_OF_CTC && kind !== HRMS.COMPONENT_KIND.EARNING) {
         throw validationError_(code + ': Remainder of CTC is only for EARNING lines.');
       }
@@ -175,6 +192,11 @@ var SalaryStructureTypeService = (function () {
         amount = '';
         percentBase = '';
       } else if (method === HRMS.CALC_METHOD.MANUAL) {
+        percent = '';
+        amount = '';
+        percentBase = '';
+      } else if (method === HRMS.CALC_METHOD.PRORATE_ROUND_LINE ||
+                 method === HRMS.CALC_METHOD.PRORATE_FACTOR) {
         percent = '';
         amount = '';
         percentBase = '';
@@ -228,6 +250,9 @@ var SalaryStructureTypeService = (function () {
       });
       if (structureSection === HRMS.STRUCTURE_SECTION.RATE_OF_PAY) {
         codesSoFar[code] = true;
+      }
+      if (structureSection === HRMS.STRUCTURE_SECTION.EARNED_PAY && code !== '*' && code !== 'ALL') {
+        /* per-line earned rules validated at payroll if rate code missing */
       }
     }
     var balanceCount = 0;

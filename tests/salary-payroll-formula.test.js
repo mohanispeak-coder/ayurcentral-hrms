@@ -42,6 +42,8 @@ var template = [
     calc_method: 'FIXED', amount: 1250, sort_order: 4 },
   { structure_section: 'RATE_OF_PAY', component_code: 'SA', component_name: 'SA', component_kind: 'EARNING',
     calc_method: 'BALANCE_OF_CTC', sort_order: 5 },
+  { structure_section: 'EARNED_PAY', component_code: '*', component_name: 'All', component_kind: 'EARNING',
+    calc_method: 'PRORATE_ROUND_LINE', round_mode: 'ROUND', sort_order: 6 },
   { structure_section: 'DEDUCTION', component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION',
     calc_method: 'PERCENT_CAPPED', percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: 'ROUND', sort_order: 10 },
   { structure_section: 'DEDUCTION', component_code: 'ESIC', component_name: 'ESIC', component_kind: 'DEDUCTION',
@@ -77,6 +79,10 @@ var payHalf = Engine.calculateEmployee({
   employee: { employee_id: 'E1' }
 });
 check('half month earned gross below full', payHalf.gross_earnings < ctc, 'gross=' + payHalf.gross_earnings);
+
+var breakdown = JSON.parse(pay.component_breakdown || '{}');
+check('breakdown has four sections', breakdown.sections && breakdown.sections.rate_of_pay &&
+  breakdown.sections.earned_pay && breakdown.sections.deduction_formulas && breakdown.sections.manual_deductions);
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

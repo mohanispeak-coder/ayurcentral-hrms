@@ -50,8 +50,13 @@
     var showToast = App.showToast;
 
   var SECTION_RATE_ = 'RATE_OF_PAY';
+  var SECTION_EARNED_ = 'EARNED_PAY';
   var SECTION_DED_ = 'DEDUCTION';
   var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
+  var EARNED_METHODS_ = [
+    ['PRORATE_ROUND_LINE', 'Round each line: (rate ÷ fixed days) × paid days'],
+    ['PRORATE_FACTOR', 'Rate × (paid days ÷ working days)']
+  ];
 
   var RATE_METHODS_ = [
     ['PERCENT', '% of base'],
@@ -78,6 +83,10 @@
     section = section || inferSection_(c);
     var m = String(c.calc_method || '').toUpperCase();
     if (section === SECTION_MANUAL_) return { method: 'MANUAL', base: '' };
+    if (section === SECTION_EARNED_) {
+      if (m === 'PRORATE_FACTOR') return { method: 'PRORATE_FACTOR', base: '' };
+      return { method: 'PRORATE_ROUND_LINE', base: '' };
+    }
     if (section === SECTION_DED_) {
       if (DED_METHODS_.some(function (x) { return x[0] === m; })) return { method: m, base: String(c.percent_base || c.cond_ref || '').toUpperCase() };
       return { method: 'PERCENT_CAPPED', base: 'BP' };
@@ -95,6 +104,7 @@
     if (sec) return sec;
     var m = String(c.calc_method || '').toUpperCase();
     if (m === 'MANUAL') return SECTION_MANUAL_;
+    if (m === 'PRORATE_ROUND_LINE' || m === 'PRORATE_FACTOR') return SECTION_EARNED_;
     var kind = String(c.component_kind || '').toUpperCase();
     if (kind === 'DEDUCTION' || kind === 'EMPLOYER') return SECTION_DED_;
     return SECTION_RATE_;
@@ -102,15 +112,17 @@
 
   function splitComponents_(comps) {
     var rate = [];
+    var earned = [];
     var ded = [];
     var manual = [];
     (comps || []).forEach(function (c) {
       var sec = inferSection_(c);
       if (sec === SECTION_MANUAL_) manual.push(c);
       else if (sec === SECTION_DED_) ded.push(c);
+      else if (sec === SECTION_EARNED_) earned.push(c);
       else rate.push(c);
     });
-    return { rate: rate, ded: ded, manual: manual };
+    return { rate: rate, earned: earned, ded: ded, manual: manual };
   }
 
   function priorRateCodes_(allRate, index) {
@@ -339,6 +351,32 @@
       '</tr>';
   }
 
+  function earnedRowHtml_(c, rateComps) {
+    c = c || {};
+    var ui = uiFromStoredRow_(c, SECTION_EARNED_);
+    var methodOpts = EARNED_METHODS_.map(function (k) {
+      return '<option value="' + k[0] + '"' + (ui.method === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
+    }).join('');
+    var roundSel = String(c.round_mode || 'ROUND').toUpperCase();
+    var roundOpts = ROUND_MODES_.map(function (r) {
+      return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
+    }).join('');
+    var code = String(c.component_code || '*');
+    var codeOpts = '<option value="*"' + (code === '*' ? ' selected' : '') + '>All rate lines (*)</option>';
+    (rateComps || []).forEach(function (r) {
+      var cd = String(r.component_code || '').trim().toUpperCase();
+      if (!cd) return;
+      codeOpts += '<option value="' + esc_(cd) + '"' + (code.toUpperCase() === cd ? ' selected' : '') + '>' + esc_(cd) + '</option>';
+    });
+    return '<tr class="sst-comp-row" data-section="' + SECTION_EARNED_ + '">' +
+      '<td><select class="form-select sst-c-earned-code">' + codeOpts + '</select></td>' +
+      '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || 'Earned pay') + '"></td>' +
+      '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
+      '<td><select class="form-select sst-c-round">' + roundOpts + '</select></td>' +
+      '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
+      '</tr>';
+  }
+
   function manualRowHtml_(c) {
     c = c || {};
     return '<tr class="sst-comp-row" data-section="' + SECTION_MANUAL_ + '">' +
@@ -374,7 +412,15 @@
     if (!m) return;
     existing = existing || {};
     var parts = splitComponents_(existing.components || []);
-    var earnedProrate = parseRulesJson_(existing.payroll_rules_json);
+    if (!parts.earned.length) {
+      parts.earned.push({
+        structure_section: SECTION_EARNED_,
+        component_code: '*',
+        component_name: 'All rate lines',
+        calc_method: parseRulesJson_(existing.payroll_rules_json) === 'FACTOR' ? 'PRORATE_FACTOR' : 'PRORATE_ROUND_LINE',
+        round_mode: 'ROUND'
+      });
+    }
     var currentVertical = String(existing.vertical_name || '').toUpperCase();
     var vertOpts = '<option value="">Select vertical</option>' + (verticals || []).map(function (v) {
       return '<option value="' + esc_(v) + '"' + (currentVertical === String(v).toUpperCase() ? ' selected' : '') + '>' + esc_(v) + '</option>';
@@ -391,14 +437,7 @@
         '<div class="form-group"><label class="form-label">Status</label>' +
           '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
       '</div>' +
-      '<div class="sst-rules-card">' +
-        '<label class="form-label" for="sst-earned-prorate">Earned pay proration</label>' +
-        '<select class="form-select" id="sst-earned-prorate" style="max-width:320px">' +
-          '<option value="ROUND_LINE"' + (earnedProrate === 'ROUND_LINE' ? ' selected' : '') + '>Round each earning line: (rate ÷ fixed days) × worked days</option>' +
-          '<option value="FACTOR"' + (earnedProrate === 'FACTOR' ? ' selected' : '') + '>Prorate total rate by paid days ÷ working days</option>' +
-        '</select>' +
-        '<p class="hint" style="margin:6px 0 0">Statutory deductions use <strong>earned gross</strong> and component rates from the sections below.</p>' +
-      '</div>' +
+      '<p class="hint">Payroll runs in order: <strong>1 Rate</strong> \u2192 <strong>2 Earned</strong> \u2192 <strong>3 Deduction formulas</strong> \u2192 <strong>4 Manual</strong>.</p>' +
       '<div class="sst-section">' +
         '<h3>1. Rate of pay (monthly)</h3>' +
         '<p class="page-lede">Defines contractual monthly amounts from employee CTC. Use <strong>Remainder of CTC</strong> once for special allowance (balance after other earnings).</p>' +
@@ -407,14 +446,21 @@
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-rate">+ Add earning line</button>' +
       '</div>' +
       '<div class="sst-section">' +
-        '<h3>2. Deduction formulas</h3>' +
+        '<h3>2. Earned pay (attendance)</h3>' +
+        '<p class="page-lede">Prorates each <strong>rate</strong> line using payroll <strong>working days</strong> and <strong>paid days</strong>. Use <code>*</code> for all lines, or add rows per component code.</p>' +
+        '<table class="data-table"><thead><tr><th>Rate line</th><th>Label</th><th>Proration</th><th>Round</th><th></th></tr></thead>' +
+        '<tbody id="sst-earned-body">' + parts.earned.map(function (c) { return earnedRowHtml_(c, parts.rate); }).join('') + '</tbody></table>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-earned">+ Add earned rule</button>' +
+      '</div>' +
+      '<div class="sst-section">' +
+        '<h3>3. Deduction formulas</h3>' +
         '<p class="page-lede">PF (capped %), ESIC (conditional %), PT (threshold fee), or custom percent/fixed rules evaluated at payroll.</p>' +
         '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Method</th><th>Base / If-ref</th><th>Condition</th><th>% or fee</th><th>Cap</th><th>Round</th><th></th></tr></thead>' +
         '<tbody id="sst-ded-body">' + parts.ded.map(function (c, i) { return dedRowHtml_(c, i, parts.rate); }).join('') + '</tbody></table>' +
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-ded">+ Add deduction rule</button>' +
       '</div>' +
       '<div class="sst-section">' +
-        '<h3>3. Manual deductions (payroll entry)</h3>' +
+        '<h3>4. Manual deductions (payroll entry)</h3>' +
         '<p class="page-lede">Lines with amounts entered per employee each payroll run (advance, TDS, etc.).</p>' +
         '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th></th></tr></thead>' +
         '<tbody id="sst-manual-body">' + parts.manual.map(function (c) { return manualRowHtml_(c); }).join('') + '</tbody></table>' +
@@ -426,6 +472,7 @@
       '</div></div>';
     document.getElementById('sst-cancel').addEventListener('click', function () { render_({}); });
     document.getElementById('sst-add-rate').addEventListener('click', function () { addRow_(SECTION_RATE_); });
+    document.getElementById('sst-add-earned').addEventListener('click', function () { addRow_(SECTION_EARNED_); });
     document.getElementById('sst-add-ded').addEventListener('click', function () { addRow_(SECTION_DED_); });
     document.getElementById('sst-add-manual').addEventListener('click', function () { addRow_(SECTION_MANUAL_); });
     document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
@@ -438,15 +485,34 @@
 
   function addRow_(section) {
     var rateList = collectRateOnly_();
-    var bodyId = section === SECTION_RATE_ ? 'sst-rate-body' : (section === SECTION_DED_ ? 'sst-ded-body' : 'sst-manual-body');
+    var bodyId = section === SECTION_RATE_ ? 'sst-rate-body'
+      : (section === SECTION_EARNED_ ? 'sst-earned-body'
+        : (section === SECTION_DED_ ? 'sst-ded-body' : 'sst-manual-body'));
     var body = document.getElementById(bodyId);
     var tmp = document.createElement('tbody');
     var idx = body.querySelectorAll('.sst-comp-row').length;
     if (section === SECTION_RATE_) tmp.innerHTML = rateRowHtml_({}, idx, rateList);
+    else if (section === SECTION_EARNED_) tmp.innerHTML = earnedRowHtml_({}, rateList);
     else if (section === SECTION_DED_) tmp.innerHTML = dedRowHtml_({}, idx, rateList);
     else tmp.innerHTML = manualRowHtml_({});
     body.appendChild(tmp.firstChild);
     bindAllRows_();
+  }
+
+  function refreshEarnedCodeSelects_() {
+    var rateList = collectRateOnly_();
+    document.querySelectorAll('#sst-earned-body .sst-comp-row').forEach(function (tr) {
+      var sel = tr.querySelector('.sst-c-earned-code');
+      if (!sel) return;
+      var cur = sel.value || '*';
+      var html = '<option value="*"' + (cur === '*' ? ' selected' : '') + '>All rate lines (*)</option>';
+      rateList.forEach(function (r) {
+        var cd = String(r.component_code || '').trim().toUpperCase();
+        if (!cd) return;
+        html += '<option value="' + esc_(cd) + '"' + (cur === cd ? ' selected' : '') + '>' + esc_(cd) + '</option>';
+      });
+      sel.innerHTML = html;
+    });
   }
 
   function refreshRateBaseSelects_() {
@@ -514,8 +580,12 @@
       };
     });
     document.querySelectorAll('#sst-rate-body .sst-c-code').forEach(function (inp) {
-      inp.oninput = refreshRateBaseSelects_;
+      inp.oninput = function () {
+        refreshRateBaseSelects_();
+        refreshEarnedCodeSelects_();
+      };
     });
+    refreshEarnedCodeSelects_();
     document.querySelectorAll('#sst-rate-body .sst-c-method').forEach(function (sel) {
       sel.onchange = function () { syncRateRowUi_(sel.closest('tr')); };
     });
@@ -554,6 +624,14 @@
       if (section === SECTION_MANUAL_) {
         c.component_kind = 'DEDUCTION';
         c.calc_method = 'MANUAL';
+        out.push(c);
+        return;
+      }
+      if (section === SECTION_EARNED_) {
+        c.component_kind = 'EARNING';
+        c.component_code = tr.querySelector('.sst-c-earned-code').value;
+        c.calc_method = tr.querySelector('.sst-c-method').value;
+        c.round_mode = tr.querySelector('.sst-c-round').value;
         out.push(c);
         return;
       }
@@ -602,19 +680,22 @@
       out.push(c);
     }
     document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_RATE_); });
+    document.querySelectorAll('#sst-earned-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_EARNED_); });
     document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_DED_); });
     document.querySelectorAll('#sst-manual-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_MANUAL_); });
     return out;
   }
 
   function save_(btn) {
-    var prorate = document.getElementById('sst-earned-prorate').value;
     var payload = {
       salary_structure_id: document.getElementById('sst-id').value,
       structure_name: document.getElementById('sst-name').value.trim(),
       vertical_name: document.getElementById('sst-vertical').value,
       status: document.getElementById('sst-active').checked ? 'ACTIVE' : 'INACTIVE',
-      payroll_rules_json: JSON.stringify({ earned_prorate: prorate, arrears_add_codes: ['ARREARS'] }),
+      payroll_rules_json: JSON.stringify({
+        execution_sections: [SECTION_RATE_, SECTION_EARNED_, SECTION_DED_, SECTION_MANUAL_],
+        arrears_add_codes: ['ARREARS']
+      }),
       components: collectComponents_()
     };
     callServer('apiSaveSalaryStructureType', payload, { button: btn, loadingText: 'Saving\u2026' }).then(function (res) {

@@ -204,15 +204,27 @@ HRMS.CALC_METHOD = {
   /** Deduction: if cond_ref meets cond_op vs cond_value then 0 else fixed amount (e.g. PT). */
   THRESHOLD_FEE: 'THRESHOLD_FEE',
   /** Deduction: amount entered per employee at payroll (Advance, TDS, …). */
-  MANUAL: 'MANUAL'
+  MANUAL: 'MANUAL',
+  /** Earned pay (section 2): prorate a rate-of-pay line by attendance. */
+  PRORATE_ROUND_LINE: 'PRORATE_ROUND_LINE',
+  PRORATE_FACTOR: 'PRORATE_FACTOR'
 };
 
-/** Salary structure template row grouping (UI sections). */
+/** Salary structure template row grouping — payroll executes in this order. */
 HRMS.STRUCTURE_SECTION = {
   RATE_OF_PAY: 'RATE_OF_PAY',
+  EARNED_PAY: 'EARNED_PAY',
   DEDUCTION: 'DEDUCTION',
   MANUAL_DEDUCTION: 'MANUAL_DEDUCTION'
 };
+
+/** Fixed four-phase payroll execution order for type templates. */
+HRMS.SALARY_EXECUTION_SECTIONS = [
+  HRMS.STRUCTURE_SECTION.RATE_OF_PAY,
+  HRMS.STRUCTURE_SECTION.EARNED_PAY,
+  HRMS.STRUCTURE_SECTION.DEDUCTION,
+  HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION
+];
 
 /** Payroll-time formula references (not component codes). */
 HRMS.FORMULA_REF = {
@@ -295,7 +307,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.12.1';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.12.2';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

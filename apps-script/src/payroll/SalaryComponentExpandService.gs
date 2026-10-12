@@ -87,7 +87,8 @@ var SalaryComponentExpandService = (function () {
   function isRateSectionRow_(raw) {
     var sec = trim_(raw.structure_section).toUpperCase();
     if (sec === HRMS.STRUCTURE_SECTION.DEDUCTION ||
-        sec === HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION) {
+        sec === HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION ||
+        sec === HRMS.STRUCTURE_SECTION.EARNED_PAY) {
       return false;
     }
     if (sec === HRMS.STRUCTURE_SECTION.RATE_OF_PAY) return true;
