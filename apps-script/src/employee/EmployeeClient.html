@@ -1171,7 +1171,7 @@
       var year = pack.leave_year || '';
       var label = 'Public holidays' + (year ? ' (leave year ' + escapeHtml(year) + ')' : '');
       return '<p class="hint" style="margin:0 0 12px">' + label + ': <strong>' + count + '</strong>. ' +
-        'Information only — not part of leave balance.</p>';
+        'Leave cannot be applied on these dates.</p>';
     }
 
     function paintLeaveSummary_(el, data, options) {

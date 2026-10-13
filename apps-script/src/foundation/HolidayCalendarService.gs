@@ -690,8 +690,7 @@ var HolidayCalendarService = (function () {
    * Holidays applicable in a calendar month (for UI + leave calendar).
    */
   /**
-   * All public holidays in a leave-year label (Apr-Mar or calendar), for employee leave UI only.
-   * Does not affect leave balance or payroll calculations.
+   * All public holidays in a leave-year label (Apr-Mar or calendar), for employee leave UI and apply validation.
    */
   function listHolidaysForLeaveYear(leaveYear, verticalCode) {
     leaveYear = String(leaveYear || '').trim();

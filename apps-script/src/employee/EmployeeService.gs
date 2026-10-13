@@ -1379,7 +1379,7 @@ var EmployeeService = (function () {
       monthly_snapshot: monthlySnapshot,
       balances: balances,
       public_holidays: publicHolidays,
-      public_holidays_note: 'Public holidays are listed for information only. They do not reduce leave balance or count as leave taken.'
+      public_holidays_note: 'Public holidays are listed for reference. Leave cannot be applied on these dates.'
     };
   }
 

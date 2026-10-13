@@ -111,6 +111,48 @@ var LeaveEngine = (function () {
   }
 
   /**
+   * Dates in a leave range that fall on configured public holidays (same days as leave counting).
+   * @param {Object.<string, string>} holidaysByDate ISO date -> holiday name
+   * @return {Array.<{date: string, name: string}>}
+   */
+  function publicHolidayConflicts(startDate, endDate, isHalfDay, countMethod, holidaysByDate) {
+    holidaysByDate = holidaysByDate || {};
+    var conflicts = [];
+    var start = toDateOnly(startDate);
+    var end = toDateOnly(endDate);
+    if (!start || !end) return conflicts;
+    if (isTruthy(isHalfDay)) {
+      var halfIso = formatIsoDate(start);
+      if (holidaysByDate[halfIso]) {
+        conflicts.push({ date: halfIso, name: String(holidaysByDate[halfIso] || 'Public holiday') });
+      }
+      return conflicts;
+    }
+    var cursor = start;
+    while (cursor.getTime() <= end.getTime()) {
+      if (dayCounts(cursor, countMethod)) {
+        var iso = formatIsoDate(cursor);
+        if (holidaysByDate[iso]) {
+          conflicts.push({ date: iso, name: String(holidaysByDate[iso] || 'Public holiday') });
+        }
+      }
+      cursor = addDays(cursor, 1);
+    }
+    return conflicts;
+  }
+
+  function formatPublicHolidayConflictMessage(conflicts) {
+    if (!conflicts || !conflicts.length) return '';
+    if (conflicts.length === 1) {
+      return 'Leave cannot be applied on a public holiday: ' + conflicts[0].date + ' (' + conflicts[0].name + ').';
+    }
+    var parts = conflicts.map(function (c) {
+      return c.date + ' (' + c.name + ')';
+    });
+    return 'Leave cannot include public holidays: ' + parts.join('; ') + '.';
+  }
+
+  /**
    * Server-authoritative day count.
    * Half-day: 0.5 when start === end.
    */
@@ -655,6 +697,8 @@ var LeaveEngine = (function () {
     toDateOnly: toDateOnly,
     formatIsoDate: formatIsoDate,
     computeTotalDays: computeTotalDays,
+    publicHolidayConflicts: publicHolidayConflicts,
+    formatPublicHolidayConflictMessage: formatPublicHolidayConflictMessage,
     zeroLeaveDaysMessage: zeroLeaveDaysMessage,
     getLeaveYear: getLeaveYear,
     availableDays: availableDays,

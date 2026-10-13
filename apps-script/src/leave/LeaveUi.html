@@ -138,7 +138,7 @@
     var count = (holidays && holidays.length) ? holidays.length : 0;
     var label = 'Public holidays' + (leaveYear ? ' (leave year ' + escapeHtml(String(leaveYear)) + ')' : '');
     return '<p class="hint" style="margin:0 0 12px">' + label + ': <strong>' + count + '</strong>. ' +
-      'Information only — not part of leave balance.</p>';
+      'Leave cannot be applied on these dates.</p>';
   }
 
   function leaveMyLeaveActionsHtml(yearSelect) {
@@ -482,11 +482,11 @@
         });
       }
 
-      function syncSubmitState_(totalDays) {
+      function syncSubmitState_(totalDays, holidayBlocked) {
         previewTotalDays_ = totalDays;
         var submitBtn = document.getElementById('btn-leave-submit');
         var draftBtn = document.getElementById('btn-leave-draft');
-        var block = totalDays !== null && Number(totalDays) <= 0;
+        var block = !!holidayBlocked || (totalDays !== null && Number(totalDays) <= 0);
         if (submitBtn) submitBtn.disabled = block;
         if (draftBtn) draftBtn.disabled = block;
       }
@@ -509,7 +509,7 @@
             el.classList.toggle('text-danger', Number(d.total_days) <= 0);
           }
           if (hintEl) {
-            var hint = d.zero_days_hint || '';
+            var hint = d.public_holiday_message || d.zero_days_hint || '';
             if (hint) {
               hintEl.textContent = hint;
               hintEl.classList.remove('hidden');
@@ -520,7 +520,10 @@
               hintEl.classList.remove('text-danger');
             }
           }
-          syncSubmitState_(d.total_days);
+          if (el && d.public_holiday_blocked) {
+            el.classList.add('text-danger');
+          }
+          syncSubmitState_(d.total_days, d.public_holiday_blocked);
         }).catch(function (err) {
           if (gen !== previewGen_) return;
           var el = document.getElementById('leave-preview');

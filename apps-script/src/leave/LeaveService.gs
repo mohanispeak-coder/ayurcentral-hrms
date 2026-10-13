@@ -693,6 +693,39 @@ var LeaveService = (function () {
     }
   }
 
+  function holidaysByDateForRange_(start, end, verticalName) {
+    var map = {};
+    if (typeof HolidayCalendarService === 'undefined' || !HolidayCalendarService.listHolidaysForMonth) {
+      return map;
+    }
+    var months = LeaveEngine.monthsTouched(start, end);
+    months.forEach(function (p) {
+      HolidayCalendarService.listHolidaysForMonth(p.year, p.month, verticalName).forEach(function (h) {
+        if (h && h.holiday_date) map[String(h.holiday_date)] = String(h.name || 'Public holiday');
+      });
+    });
+    return map;
+  }
+
+  function publicHolidayConflictsForEmployee_(emp, dates) {
+    var vert = emp && emp.vertical_name;
+    var map = holidaysByDateForRange_(dates.start, dates.end, vert);
+    return LeaveEngine.publicHolidayConflicts(
+      dates.start,
+      dates.end,
+      dates.isHalf,
+      countMethod_(),
+      map
+    );
+  }
+
+  function assertNoPublicHolidayConflict_(emp, dates) {
+    var conflicts = publicHolidayConflictsForEmployee_(emp, dates);
+    if (conflicts.length) {
+      throw validationError_(LeaveEngine.formatPublicHolidayConflictMessage(conflicts));
+    }
+  }
+
   function validateAgainstType_(emp, type, dates, totalDays) {
     if (!type || !type.is_active) {
       throw validationError_('Leave type is not active.');
@@ -809,6 +842,7 @@ var LeaveService = (function () {
     }
     var totalDays = LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, countMethod_());
     assertPositiveLeaveDays_(dates, totalDays);
+    assertNoPublicHolidayConflict_(emp, dates);
     return withScriptLock_(function () {
       var existing = payload.leave_request_id
         ? DbService.findOne(HRMS.SHEETS.LEAVE_REQUESTS, { leave_request_id: payload.leave_request_id })
@@ -884,6 +918,7 @@ var LeaveService = (function () {
     assertNotBeforeJoining_(emp, dates);
     var totalDays = LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, countMethod_());
     assertPositiveLeaveDays_(dates, totalDays);
+    assertNoPublicHolidayConflict_(emp, dates);
     validateAgainstType_(emp, type, dates, totalDays);
     var leaveYear = LeaveEngine.getLeaveYear(dates.start, leaveYearStartMonth_());
     var proxy = String(targetId) !== String(session.employee_id);
@@ -1323,7 +1358,7 @@ var LeaveService = (function () {
       types: listBalanceTypes_(true),
       can_proxy: PermissionService.isHrOrAdmin(session),
       public_holidays: publicHolidaysForEmployeeLeaveYear_(emp, year),
-      public_holidays_note: 'Public holidays are listed for information only. They do not reduce leave balance or count as leave taken.'
+      public_holidays_note: 'Public holidays are listed for reference. Leave cannot be applied on these dates.'
     };
   }
 
@@ -1649,17 +1684,23 @@ var LeaveService = (function () {
   }
 
   function previewDays(payload) {
-    AuthService.requireAuth();
+    var session = AuthService.requireAuth();
     var dates = parsePayloadDates_(payload);
     var method = countMethod_();
     var totalDays = LeaveEngine.computeTotalDays(dates.start, dates.end, dates.isHalf, method);
+    var targetId = String((payload && payload.employee_id) || '').trim() || session.employee_id;
+    var emp = targetId ? requireEmployee_(targetId) : null;
+    var holidayConflicts = emp ? publicHolidayConflictsForEmployee_(emp, dates) : [];
+    var holidayMsg = LeaveEngine.formatPublicHolidayConflictMessage(holidayConflicts);
     return {
       total_days: totalDays,
       leave_year: LeaveEngine.getLeaveYear(dates.start, leaveYearStartMonth_()),
       count_method: method,
       zero_days_hint: totalDays <= 0
         ? LeaveEngine.zeroLeaveDaysMessage(dates.start, dates.end, dates.isHalf, method)
-        : ''
+        : '',
+      public_holiday_blocked: holidayConflicts.length > 0,
+      public_holiday_message: holidayMsg
     };
   }
 
