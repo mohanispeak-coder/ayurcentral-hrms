@@ -595,16 +595,23 @@ var HolidayCalendarService = (function () {
     throw configurationError_('Could not export holiday Excel template.' + driveApiHint_());
   }
 
+  function exampleTemplateRow_(year) {
+    year = Number(year) || new Date().getFullYear();
+    return {
+      calendar_year: year,
+      holiday_date: year + '-01-26',
+      name: 'Example - Republic Day (replace or delete)',
+      scope: SCOPE_ALL_,
+      scope_value: '',
+      optional: 'false'
+    };
+  }
+
   function buildYearTemplateRows_(year) {
     var headers = ['calendar_year', 'holiday_date', 'name', 'scope', 'scope_value', 'optional'];
     var lines = [headers.join(',')];
-    presetRows_('IN_NATIONAL_FIXED', year).forEach(function (r) {
-      lines.push([year, r.holiday_date, r.name, SCOPE_ALL_, '', 'false'].join(','));
-    });
-    var blankRows = 54;
-    for (var i = 0; i < blankRows; i++) {
-      lines.push([year, '', '', 'ALL', '', 'false'].join(','));
-    }
+    var ex = exampleTemplateRow_(year);
+    lines.push([ex.calendar_year, ex.holiday_date, ex.name, ex.scope, ex.scope_value, ex.optional].join(','));
     return { headers: headers, csv: lines.join('\n') + '\n' };
   }
 
@@ -642,13 +649,13 @@ var HolidayCalendarService = (function () {
       var inst = ss.getSheets()[0];
       inst.setName('Instructions');
       var instLines = [
-        ['HRMS public holiday calendar — ' + year],
+        ['HRMS public holiday calendar - ' + year],
         [''],
-        ['1. Open the Holidays sheet. Fill holiday_date (YYYY-MM-DD), name, scope (ALL or vertical code), scope_value (blank or vertical).'],
-        ['2. optional: true/false. calendar_year column is pre-filled — keep it as ' + year + '.'],
-        ['3. Save this file and upload on Attendance → Holidays (Validate → Import).'],
-        ['4. Register template download pre-fills H on these dates for ALL + matching vertical.'],
-        ['5. Leave calendar and attendance register screens list holidays for the month.']
+        ['1. Open the Holidays sheet. Row 2 is ONE example only - replace it and add more rows for each holiday.'],
+        ['2. Columns: holiday_date (YYYY-MM-DD or DD-MM-YYYY), name, scope (ALL or vertical), scope_value, optional true/false.'],
+        ['3. calendar_year must be ' + year + ' for every row you import.'],
+        ['4. Upload on Attendance - Holidays: Validate, then Import valid rows.'],
+        ['5. Or use Preset on the Holidays screen for the four India national fixed dates without a file.']
       ];
       inst.getRange(1, 1, instLines.length, 1).setValues(instLines);
 
@@ -657,15 +664,9 @@ var HolidayCalendarService = (function () {
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
       sheet.setFrozenRows(1);
 
-      var data = presetRows_('IN_NATIONAL_FIXED', year).map(function (r) {
-        return [year, r.holiday_date, r.name, SCOPE_ALL_, '', 'false'];
-      });
-      for (var bi = 0; bi < 54; bi++) {
-        data.push([year, '', '', 'ALL', '', 'false']);
-      }
-      if (data.length) {
-        sheet.getRange(2, 1, data.length, headers.length).setValues(data);
-      }
+      var ex = exampleTemplateRow_(year);
+      var data = [[ex.calendar_year, ex.holiday_date, ex.name, ex.scope, ex.scope_value, ex.optional]];
+      sheet.getRange(2, 1, data.length, headers.length).setValues(data);
       sheet.autoResizeColumns(1, headers.length);
 
       blob = exportSpreadsheetXlsx_(fileId);
