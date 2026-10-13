@@ -39,11 +39,15 @@
         '<div id="settings-body">' +
         (App.sectionSkeleton ? App.sectionSkeleton({ label: 'Loading settings' }) : '<p>Loading…</p>') +
         '</div></div>';
-      callServer('apiGetAdminSettings')
-        .then(function (data) {
+      Promise.all([
+        callServer('apiGetAdminSettings'),
+        callServer('apiLeaveGetPolicySettings').catch(function () { return null; })
+      ])
+        .then(function (parts) {
           if (!stillOn(seq)) return;
-          settingsState.data = data;
-          paintSettings(data);
+          settingsState.data = parts[0];
+          settingsState.leavePolicy = parts[1];
+          paintSettings(parts[0], parts[1]);
         })
         .catch(function (err) {
           if (!stillOn(seq)) return;
@@ -51,9 +55,10 @@
         });
     }
 
-    function paintSettings(data) {
+    function paintSettings(data, leavePolicy) {
       var body = $('settings-body');
       if (!body || !data) return;
+      leavePolicy = leavePolicy || settingsState.leavePolicy || null;
       var email = data.email || [];
       var rm = data.role_modules || {};
       var modFeatures = rm.modules || [];
@@ -63,6 +68,37 @@
       var matrix = ra.matrix || [];
 
       var welcome = data.welcome || {};
+      var lp = leavePolicy || {};
+      var lg = lp.global || {};
+      var verts = lp.verticals || [];
+      var leavePolicyHtml = '<div class="card"><h2>Leave policy</h2>' +
+        '<p class="hint">Monthly values are <strong>entitlement per eligible month</strong> (vertical-specific). ' +
+        'Leave applications use the leave-year balance; attendance templates use the monthly bucket (grant + carry-forward − L/ML/½P).</p>' +
+        '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label" for="lp-year-mode">Leave year</label>' +
+        '<select class="form-select" id="lp-year-mode"><option value="CALENDAR"' +
+        (String(lg.leave_year_mode || 'CALENDAR') === 'CALENDAR' ? ' selected' : '') + '>Calendar (Jan–Dec)</option>' +
+        '<option value="FINANCIAL"' + (String(lg.leave_year_mode) === 'FINANCIAL' ? ' selected' : '') + '>Financial (Apr–Mar)</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-cut">Joining-date cut-off (day of month)</label>' +
+        '<input class="form-input" type="number" min="1" max="28" id="lp-join-cut" value="' +
+        escapeHtml(String(lg.leave_join_grant_after_day != null ? lg.leave_join_grant_after_day : 20)) + '"></div></div>' +
+        '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Vertical</th><th class="num">Monthly entitlement</th>' +
+        '<th>Carry-forward</th><th>Frequency</th><th class="num">CF max</th></tr></thead><tbody>';
+      verts.forEach(function (v) {
+        leavePolicyHtml += '<tr data-vert-row="' + escapeHtml(v.vertical_name) + '"><td><strong>' + escapeHtml(v.vertical_name) + '</strong></td>' +
+          '<td class="num"><input class="form-input" type="number" min="0" step="0.5" data-vert-monthly style="max-width:80px" value="' +
+          escapeHtml(v.monthly_leave_days != null && v.monthly_leave_days !== '' ? v.monthly_leave_days : '') + '"></td>' +
+          '<td><label class="form-check"><input type="checkbox" data-vert-cf-enabled' + (v.carry_forward_enabled ? ' checked' : '') + '></label></td>' +
+          '<td><select class="form-select" data-vert-cf-freq style="max-width:120px">' +
+          '<option value="MONTHLY"' + (v.carry_forward_frequency === 'MONTHLY' ? ' selected' : '') + '>Monthly</option>' +
+          '<option value="YEARLY"' + (v.carry_forward_frequency !== 'MONTHLY' ? ' selected' : '') + '>Yearly</option></select></td>' +
+          '<td class="num"><input class="form-input" type="number" min="0" step="0.5" data-vert-cf-max style="max-width:80px" value="' +
+          escapeHtml(String(v.carry_forward_max_days != null ? v.carry_forward_max_days : 0)) + '"></td></tr>';
+      });
+      leavePolicyHtml += '</tbody></table></div>' +
+        '<p class="hint">Changing policy does not rewrite historical leave requests or past balance rows; current-year entitlement syncs upward when policy increases.</p>' +
+        '<button type="button" class="btn btn-secondary" id="btn-save-leave-policy" style="margin-top:12px">Save leave policy</button></div>';
+
       var welcomeHtml = '<div class="card"><h2>Welcome messaging</h2>' +
         '<p class="hint">Welcome email copy is edited under <strong>Content templates</strong> below. ' +
         'Toggle automatic send on login creation in the email toggles section.</p>' +
@@ -165,10 +201,39 @@
       });
       tplHtml += '</div>';
 
-      body.innerHTML = welcomeHtml + emailHtml + tplHtml + modHtml + roleHtml +
+      body.innerHTML = leavePolicyHtml + welcomeHtml + emailHtml + tplHtml + modHtml + roleHtml +
         '<div class="form-actions" style="margin-top:16px">' +
         '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
         '<span class="hint" id="settings-save-hint"></span></div>';
+
+      var btnLp = $('btn-save-leave-policy');
+      if (btnLp) {
+        btnLp.addEventListener('click', function () {
+          var verticals = [];
+          Array.prototype.forEach.call(body.querySelectorAll('[data-vert-row]'), function (tr) {
+            var name = tr.getAttribute('data-vert-row');
+            verticals.push({
+              vertical_name: name,
+              monthly_leave_days: tr.querySelector('[data-vert-monthly]').value,
+              carry_forward_enabled: tr.querySelector('[data-vert-cf-enabled]').checked,
+              carry_forward_frequency: tr.querySelector('[data-vert-cf-freq]').value,
+              carry_forward_max_days: tr.querySelector('[data-vert-cf-max]').value
+            });
+          });
+          callServer('apiLeaveSavePolicySettings', {
+            global: {
+              leave_year_mode: $('lp-year-mode').value,
+              leave_join_grant_after_day: $('lp-join-cut').value
+            },
+            verticals: verticals
+          }, { button: btnLp, loadingText: 'Saving…' }).then(function (next) {
+            settingsState.leavePolicy = next;
+            showToast('Leave policy saved', 'success');
+          }).catch(function (err) {
+            showToast(err.message || 'Save failed', 'error');
+          });
+        });
+      }
 
       $('btn-save-settings').addEventListener('click', function () {
         var btn = $('btn-save-settings');

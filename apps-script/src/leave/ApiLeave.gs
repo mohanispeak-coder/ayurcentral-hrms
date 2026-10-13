@@ -161,6 +161,20 @@ function apiLeaveGetMonthlySnapshot(employeeId, periodYear, periodMonth, session
   }, sessionToken);
 }
 
+function apiLeaveGetPolicySettings(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeavePolicyService.getPolicyBundle(session);
+  }, sessionToken);
+}
+
+function apiLeaveSavePolicySettings(payload, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeavePolicyService.savePolicyBundle(session, payload || {});
+  }, sessionToken);
+}
+
 function apiLeaveComputeLopFromLeave(employeeId, periodYear, periodMonth, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

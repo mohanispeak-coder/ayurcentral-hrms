@@ -20,7 +20,32 @@ var LeaveService = (function () {
   }
 
   function leaveYearStartMonth_() {
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.leaveYearStartMonth) {
+      return LeavePolicyService.leaveYearStartMonth();
+    }
     return LeaveEngine.toNumber(ConfigService.getSetting('leave_year_start_month', 1), 1);
+  }
+
+  function listBalanceTypes_(includeInactive) {
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.ensureGeneralLeaveType) {
+      var general = LeavePolicyService.ensureGeneralLeaveType();
+      if (general) {
+        var coerced = coerceType_(general);
+        if (!includeInactive && !coerced.is_active) return [];
+        return [coerced];
+      }
+    }
+    return listTypes_(includeInactive).filter(function (t) {
+      return LeaveEngine.typeRequiresBalance(t);
+    });
+  }
+
+  function resolveLeaveTypeFromPayload_(payload) {
+    var id = payload && payload.leave_type_id;
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.resolveApplicationLeaveType) {
+      return coerceType_(LeavePolicyService.resolveApplicationLeaveType(id));
+    }
+    return coerceType_(getType_(id));
   }
 
   function todayDateOnly_() {
@@ -535,7 +560,7 @@ var LeaveService = (function () {
   function syncEntitlementsForEmployeeLocked_(employeeId, emp, throughYear, balanceIndex) {
     var startMonth = leaveYearStartMonth_();
     var years = LeaveEngine.employeeLeaveYears(emp.joining_date, todayDateOnly_(), startMonth);
-    var types = listTypes_(true);
+    var types = listBalanceTypes_(true);
     var through = LeaveEngine.toNumber(throughYear);
     years.forEach(function (y) {
       if (LeaveEngine.toNumber(y) > through) return;
@@ -547,14 +572,22 @@ var LeaveService = (function () {
 
   function buildNewBalanceRecordLocked_(employeeId, type, leaveYear, balanceIndex, joiningDate, startMonth) {
     if (!LeaveEngine.typeRequiresBalance(type)) return null;
-    var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear), balanceIndex);
-    var cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
-    var entitled = LeaveEngine.entitledDaysForLeaveYear(
-      joiningDate,
-      leaveYear,
-      startMonth != null ? startMonth : leaveYearStartMonth_(),
-      type.annual_entitlement_days
-    );
+    var emp = getEmployee_(employeeId) || { employee_id: employeeId, joining_date: joiningDate };
+    var cf = 0;
+    var entitled = 0;
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement) {
+      entitled = LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYear);
+      cf = LeavePolicyService.yearlyCarryForwardAmount(employeeId, leaveYear, balanceIndex);
+    } else {
+      var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear), balanceIndex);
+      cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
+      entitled = LeaveEngine.entitledDaysForLeaveYear(
+        joiningDate,
+        leaveYear,
+        startMonth != null ? startMonth : leaveYearStartMonth_(),
+        type.annual_entitlement_days
+      );
+    }
     var record = {
       leave_balance_id: nextLeaveBalanceIdLocked_(),
       employee_id: employeeId,
@@ -720,6 +753,9 @@ var LeaveService = (function () {
 
   function assertSufficientLocked_(employeeId, type, leaveYear, totalDays, balanceIndex) {
     if (!LeaveEngine.typeRequiresBalance(type)) return;
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.syncCurrentYearBalanceFromPolicy) {
+      LeavePolicyService.syncCurrentYearBalanceFromPolicy(employeeId, leaveYear, balanceIndex);
+    }
     var bal = ensureBalanceLocked_(employeeId, type, leaveYear, true, balanceIndex);
     var available = LeaveEngine.availableDays(bal);
     if (available + 1e-9 < totalDays) {
@@ -764,8 +800,8 @@ var LeaveService = (function () {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     var targetId = resolveApplyTarget_(session, payload);
     var emp = requireEmployee_(targetId);
-    var type = coerceType_(getType_(payload.leave_type_id));
-    if (!type) throw validationError_('Leave type is required.');
+    var type = resolveLeaveTypeFromPayload_(payload);
+    if (!type) throw validationError_('Leave is not configured.');
     var dates = parsePayloadDates_(payload);
     assertNotBeforeJoining_(emp, dates);
     if (dates.isHalf && !type.allow_half_day) {
@@ -838,8 +874,8 @@ var LeaveService = (function () {
     if (String(emp.status).toUpperCase() !== 'ACTIVE') {
       throw validationError_('Leave can only be submitted for ACTIVE employees.');
     }
-    var type = coerceType_(getType_(payload.leave_type_id));
-    if (!type) throw validationError_('Leave type is required.');
+    var type = resolveLeaveTypeFromPayload_(payload);
+    if (!type) throw validationError_('Leave is not configured.');
     var reason = String(payload.reason || '').trim();
     if (!reason) {
       throw validationError_('A reason is required to submit leave.');
@@ -1253,9 +1289,10 @@ var LeaveService = (function () {
         ? currentYear
         : availableYears[availableYears.length - 1];
     }
-    var balances = listTypes_(true).filter(function (t) {
-      return LeaveEngine.typeRequiresBalance(t);
-    }).map(function (t) {
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.syncCurrentYearBalanceFromPolicy) {
+      LeavePolicyService.syncCurrentYearBalanceFromPolicy(target, year, balanceIndex, emp);
+    }
+    var balances = listBalanceTypes_(true).map(function (t) {
       var row = findBalance_(target, t.leave_type_id, year, balanceIndex);
       return serializeBalanceRow_(t, row, year);
     });
@@ -1272,7 +1309,7 @@ var LeaveService = (function () {
       available_years: availableYears.length ? availableYears : [year],
       balances: balances,
       requests: requests,
-      types: listTypes_(true),
+      types: listBalanceTypes_(true),
       can_proxy: PermissionService.isHrOrAdmin(session)
     };
   }
@@ -1473,7 +1510,7 @@ var LeaveService = (function () {
 
     function run_(balanceIndex) {
       var startMonth = leaveYearStartMonth_();
-      var types = listTypes_(true).filter(function (t) { return LeaveEngine.typeRequiresBalance(t); });
+      var types = listBalanceTypes_(true);
       var plan = LeaveEngine.planBalanceGrants({
         joiningDate: emp.joining_date,
         asOfDate: todayDateOnly_(),
@@ -1513,7 +1550,7 @@ var LeaveService = (function () {
     }
 
     var peekIndex = loadBalanceIndex_();
-    var peekTypes = listTypes_(true).filter(function (t) { return LeaveEngine.typeRequiresBalance(t); });
+    var peekTypes = listBalanceTypes_(true);
     var peekPlan = LeaveEngine.planBalanceGrants({
       joiningDate: emp.joining_date,
       asOfDate: todayDateOnly_(),
@@ -1534,7 +1571,7 @@ var LeaveService = (function () {
     return withScriptLock_(function () {
       var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(isActiveEmployeeForLeave_);
       var startMonth = leaveYearStartMonth_();
-      var types = listTypes_(true).filter(function (t) { return LeaveEngine.typeRequiresBalance(t); });
+      var types = listBalanceTypes_(true);
       var typeMap = typeMapFromList_(types);
       var balanceIndex = loadBalanceIndex_();
       var toInsert = [];
@@ -1581,7 +1618,7 @@ var LeaveService = (function () {
   function getApplyBootstrap(session) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     return {
-      types: listTypes_(true),
+      types: listBalanceTypes_(true),
       employees: listEmployeeOptions(session),
       can_proxy: PermissionService.isHrOrAdmin(session)
     };

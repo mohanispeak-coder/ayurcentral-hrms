@@ -394,7 +394,7 @@
     })) return;
     if (!keepLeavePaint_('leave-apply')) {
       page.innerHTML =
-        pageHead('Apply leave', 'Dates are counted on the server. Half-day is 0.5 when the type allows it.') +
+        pageHead('Apply leave', 'General leave policy applies. Dates are counted on the server; half-day is 0.5 when allowed.') +
         '<div class="card" id="leave-apply-body">' + u.spinner('Loading form…') +
         '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
     }
@@ -417,11 +417,7 @@
       var c = ctx();
       var canProxy = !!(mine.can_proxy);
       prefill = prefill || {};
-      var typeOpts = types.map(function (t) {
-        return '<option value="' + c.escapeHtml(t.leave_type_id) + '"' +
-          (prefill.leave_type_id === t.leave_type_id ? ' selected' : '') + '>' +
-          c.escapeHtml(t.code + ' - ' + t.name) + '</option>';
-      }).join('');
+      var defaultTypeId = (types[0] && types[0].leave_type_id) || prefill.leave_type_id || '';
       var empOpts = employees.map(function (e) {
         var selected = (prefill.employee_id || c.state.session.employee_id) === e.employee_id;
         return '<option value="' + c.escapeHtml(e.employee_id) + '"' + (selected ? ' selected' : '') + '>' +
@@ -429,7 +425,7 @@
       }).join('');
 
       page.innerHTML =
-        pageHead('Apply leave', 'Dates are counted on the server. Half-day is 0.5 when the type allows it.') +
+        pageHead('Apply leave', 'General leave policy applies. Dates are counted on the server; half-day is 0.5 when allowed.') +
         '<div class="card">' +
           '<form id="leave-apply-form" class="form-grid">' +
             '<input type="hidden" name="leave_request_id" value="' + c.escapeHtml(prefill.leave_request_id || '') + '">' +
@@ -437,9 +433,7 @@
               ? '<div class="form-group"><label class="form-label is-required" for="leave-emp">Employee</label>' +
                 '<select class="form-select" id="leave-emp" name="employee_id">' + empOpts + '</select></div>'
               : '<input type="hidden" name="employee_id" value="' + c.escapeHtml(c.state.session.employee_id) + '">') +
-            '<div class="form-group"><label class="form-label is-required" for="leave-type">Leave type</label>' +
-              '<select class="form-select" id="leave-type" name="leave_type_id" required>' +
-              '<option value="">Select type</option>' + typeOpts + '</select></div>' +
+            '<input type="hidden" name="leave_type_id" id="leave-type" value="' + c.escapeHtml(defaultTypeId) + '">' +
             '<div class="form-row">' +
               '<div class="form-group"><label class="form-label is-required" for="leave-start">Start date</label>' +
                 '<input class="form-input" type="date" id="leave-start" name="start_date" required value="' + c.escapeHtml(prefill.start_date || '') + '"></div>' +
@@ -563,9 +557,9 @@
       document.getElementById('btn-leave-draft').addEventListener('click', function () {
         var p = readForm();
         var feedback = document.getElementById('leave-apply-feedback');
-        if (!p.leave_type_id || !p.start_date || !p.end_date) {
+        if (!p.start_date || !p.end_date) {
           if (window.HrmsApp && window.HrmsApp.setActionFeedback) {
-            window.HrmsApp.setActionFeedback(feedback, 'Type and dates are required', 'error');
+            window.HrmsApp.setActionFeedback(feedback, 'Dates are required', 'error');
           } else {
             helpers.showToast('Type and dates are required', 'error');
           }
@@ -817,10 +811,9 @@
     })) return;
     if (!keepLeavePaint_('leave-admin')) {
     page.innerHTML =
-      pageHead('Leave', 'Company leave requests and configurable leave types.') +
+      pageHead('Leave', 'Company leave requests. Configure monthly entitlement and carry-forward under Settings → Leave policy.') +
       '<div class="tabs" id="leave-admin-tabs">' +
         '<button type="button" class="tab active" data-tab="requests">All requests</button>' +
-        '<button type="button" class="tab" data-tab="types">Leave types</button>' +
       '</div>' +
       '<div id="tab-requests"><div class="card"><h2 class="section-title">Requests</h2>' +
         '<div class="table-wrap"><table class="data-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th class="col-actions"></th></tr></thead>' +
@@ -864,11 +857,9 @@
 
       page.innerHTML =
         flashHtml('leave-admin') +
-        pageHead('Leave', 'Company leave requests and configurable leave types.',
-          '<button type="button" class="btn btn-primary" id="btn-goto-types">Add / edit leave types</button>') +
+        pageHead('Leave', 'Company leave requests. Policy settings are under Settings → Leave policy.') +
         '<div class="tabs" id="leave-admin-tabs">' +
           '<button type="button" class="tab active" data-tab="requests">All requests</button>' +
-          '<button type="button" class="tab" data-tab="types">Leave types</button>' +
         '</div>' +
         '<div id="tab-requests">' +
           '<div class="page-toolbar"><div class="filters">' +

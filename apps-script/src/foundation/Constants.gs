@@ -11,6 +11,7 @@ HRMS.SHEETS = {
   LEAVE_BALANCES: 'LeaveBalances',
   LEAVE_REQUESTS: 'LeaveRequests',
   LEAVE_MONTHLY_ADJUSTMENTS: 'LeaveMonthlyAdjustments',
+  LEAVE_MONTHLY_LEDGER: 'LeaveMonthlyLedger',
   SALARY_STRUCTURES: 'SalaryStructures',
   SALARY_COMPONENTS: 'SalaryComponents',
   PAYROLL_RUNS: 'PayrollRuns',
@@ -308,7 +309,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.12.4';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.13.1';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

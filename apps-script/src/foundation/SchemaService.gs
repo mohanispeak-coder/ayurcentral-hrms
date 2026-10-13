@@ -17,11 +17,17 @@ var SchemaService = (function () {
     'created_at', 'created_by_email', 'updated_at', 'updated_by_email'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.VERTICALS] = [
-    'vertical_name', 'legal_name', 'address_line1', 'address_line2', 'monthly_leave_days'
+    'vertical_name', 'legal_name', 'address_line1', 'address_line2', 'monthly_leave_days',
+    'leave_carry_forward_enabled', 'leave_carry_forward_frequency', 'leave_carry_forward_max_days'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_MONTHLY_ADJUSTMENTS] = [
     'adjustment_id', 'employee_id', 'period_year', 'period_month',
     'adjustment_days', 'reason', 'created_at', 'created_by_email'
+  ];
+  SHEET_HEADERS_[HRMS.SHEETS.LEAVE_MONTHLY_LEDGER] = [
+    'ledger_id', 'employee_id', 'period_year', 'period_month',
+    'opening_cf_days', 'grant_days', 'used_days', 'adjustment_days',
+    'closing_balance', 'carry_to_next_days', 'processed_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
     'google_email', 'employee_id', 'role', 'status',
