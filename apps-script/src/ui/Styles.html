@@ -810,6 +810,46 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
 
 .profile-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
 
+.hol-status-banner {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.45;
+  border: 2px solid transparent;
+  display: block;
+}
+.hol-status-banner.hol-status-banner--hidden { display: none; }
+.hol-status-banner.is-success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.hol-status-banner.is-error {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+.hol-status-banner.is-info,
+.hol-status-banner.is-busy {
+  background: var(--color-info-bg);
+  border-color: var(--color-info-border);
+  color: var(--color-text);
+}
+.hol-status-banner.is-busy::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: hrms-spin 0.85s linear infinite;
+}
+
 .toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
 .toast {
   padding: 12px 16px; border-radius: var(--radius-sm); background: #0f172a;
