@@ -28,6 +28,8 @@ check('holiday-date-parser', /parseHolidayDate_/.test(svc) && /canonicalImportHe
 check('holiday-skip-blank-import-rows', /!trim_\(r\.holiday_date\) && !trim_\(r\.name\)/.test(svc));
 
 check('holiday-preset-national', /IN_NATIONAL_FIXED/.test(svc) && /Republic Day/.test(svc));
+check('holiday-import-feedback-ui', /hol-import-feedback/.test(client) && /paintImportPreview_/.test(client));
+check('holiday-preset-hyphen', /India - fixed national holidays/.test(svc) && !/India — fixed/.test(svc));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');

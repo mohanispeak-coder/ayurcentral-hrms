@@ -498,7 +498,7 @@ var HolidayCalendarService = (function () {
     return [
       {
         id: 'IN_NATIONAL_FIXED',
-        label: 'India — fixed national holidays',
+        label: 'India - fixed national holidays',
         description: 'Republic Day, Independence Day, Gandhi Jayanti, Christmas (same dates every year).'
       }
     ];
