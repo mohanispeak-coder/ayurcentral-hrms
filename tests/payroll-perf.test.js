@@ -32,6 +32,7 @@ function check(name, cond, detail) {
 const db = read('foundation/DbService.gs');
 const payroll = read('payroll/PayrollService.gs');
 const payslip = read('payroll/PayslipService.gs');
+const lop = read('leave/LeaveLopService.gs');
 const bridge = read('payroll/PayrollLeaveBridge.gs');
 const api = read('payroll/ApiPayroll.gs');
 const client = read('payroll/PayrollClient.html');
@@ -82,8 +83,9 @@ check('payslip-no-per-row-sheet-write', !/updateRecord\(/.test(genFn) && !/inser
 check('payslip-still-writes-drive-files', /writePayslipFile_/.test(payslip) && /createFile\(/.test(payslip) && /setTrashed\(/.test(payslip));
 check('payslip-one-path', /generateForEmployee[\s\S]*generateForRun\(run, \[record\]/.test(payslip));
 
-check('bridge-stub-empty-map', /getApprovedLopMapForPayroll[\s\S]*return \{\}/.test(bridge));
-check('bridge-stub-zero', /getApprovedLopForPayroll[\s\S]*return 0/.test(bridge));
+check('lop-map-fn', /function computeLopMapForPeriod/.test(lop));
+check('lop-map-exported', /computeLopMapForPeriod:\s*computeLopMapForPeriod/.test(lop));
+check('bridge-map', /function getApprovedLopMapForPayroll/.test(bridge));
 check('comp-replace-batch', /replaceRecords\(HRMS\.SHEETS\.SALARY_COMPONENTS/.test(compensation));
 
 if (failures.length) {

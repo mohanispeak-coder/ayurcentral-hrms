@@ -88,6 +88,7 @@
       invalidateEmpLists_();
       if (employeeId) {
         shellInv_('employee-profile:' + employeeId);
+        if (empViewCache.extras[employeeId]) delete empViewCache.extras[employeeId].leave;
       }
       if (isSelf) shellInv_('my-profile');
     }
@@ -747,12 +748,20 @@
             (result.warnings || []).forEach(function (w) { showToast(w); });
             invalidateEmpLists_();
             var empId = result.employee.employee_id;
+            if (empViewCache.extras[empId]) {
+              delete empViewCache.extras[empId].leave;
+            }
+            if (result.leave_balances_seeded > 0) {
+              showToast('Leave balances created (' + result.leave_balances_seeded + ').', 'success');
+            } else {
+              showToast('No leave balances were created - check active leave types in Leave admin.', 'warning');
+            }
             if (result.welcome_delivery && result.welcome_delivery.email && result.welcome_delivery.email.ok) {
               showToast('Welcome email sent.', 'success');
             }
             (result.warnings || []).forEach(function (w) { showToast(w, 'warning'); });
             if (setFlash) setFlash('Created ' + empId, 'success', 'employee-profile');
-            navigate('employee-profile', { employeeId: empId });
+            navigate('employee-profile', { employeeId: empId, tab: 'leave' });
           })
           .catch(function (err) {
             showFieldErrors(err.details);
@@ -825,6 +834,7 @@
       $('page-title').textContent = title;
       var tabs = ['personal', 'employment'];
       if (emp.can_view_payroll_ids) tabs.push('payroll');
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) tabs.push('leave');
       if (emp.can_view_documents || emp.can_upload_documents) tabs.push('documents');
       if (emp.can_view_payslips) tabs.push('payslips');
       if (emp.can_manage_app_access) tabs.push('app-access');
@@ -854,7 +864,7 @@
       var savedTab = extras.tab && tabs.indexOf(extras.tab) >= 0 ? extras.tab : tabs[0];
       var tabBtns = tabs.map(function (t) {
         var labels = {
-          personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs',
+          personal: 'Personal', employment: 'Employment', payroll: 'Payroll IDs', leave: 'Leave summary',
           documents: 'Documents', payslips: 'Payslips', 'app-access': 'Login & role'
         };
         return '<button type="button" class="emp-tab' + (t === savedTab ? ' active' : '') + '" data-tab="' + t + '">' + labels[t] + '</button>';
@@ -866,6 +876,11 @@
       html += '<div class="tab-panel' + (savedTab === 'personal' ? ' active' : '') + '" data-panel="personal">' + personalPanel(emp) + '</div>';
       html += '<div class="tab-panel' + (savedTab === 'employment' ? ' active' : '') + '" data-panel="employment">' + employmentPanel(emp) + '</div>';
       if (emp.can_view_payroll_ids) html += '<div class="tab-panel' + (savedTab === 'payroll' ? ' active' : '') + '" data-panel="payroll">' + payrollPanel(emp) + '</div>';
+      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+        html += '<div class="tab-panel' + (savedTab === 'leave' ? ' active' : '') + '" data-panel="leave"><div id="leave-summary">' +
+          '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
+          '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
+      }
       if (emp.can_view_documents || emp.can_upload_documents) html += '<div class="tab-panel' + (savedTab === 'documents' ? ' active' : '') + '" data-panel="documents"><div id="docs-panel">' + loadingHtml('Loading documents…') + '</div></div>';
       if (emp.can_view_payslips) html += '<div class="tab-panel' + (savedTab === 'payslips' ? ' active' : '') + '" data-panel="payslips"><div id="payslip-panel">' + loadingHtml('Loading payslips…') + '</div></div>';
       if (emp.can_manage_app_access) {
@@ -898,7 +913,9 @@
 
     function ensureProfileExtras_(emp, tab) {
       if (!emp || !tab) return;
-      if (tab === 'documents' && (emp.can_view_documents || emp.can_upload_documents)) {
+      if (tab === 'leave' && emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+        loadLeave(emp.employee_id);
+      } else if (tab === 'documents' && (emp.can_view_documents || emp.can_upload_documents)) {
         loadDocs(emp, null);
       } else if (tab === 'payslips' && emp.can_view_payslips) {
         loadPayslips(emp.employee_id);
@@ -1059,7 +1076,7 @@
       backdrop.className = 'modal-backdrop';
       backdrop.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
         '<div class="modal-header"><h3 class="modal-title" id="modal-title">Deactivate employee?</h3>' +
-        '<p class="modal-desc">' + escapeHtml(emp.display_name) + ' will be set INACTIVE. Their login (if any) will be disabled. Locked payroll is unchanged.</p></div>' +
+        '<p class="modal-desc">' + escapeHtml(emp.display_name) + ' will be set INACTIVE. Their login (if any) will be disabled. They cannot submit new leave. Existing submitted leave stays until decided. Locked payroll is unchanged.</p></div>' +
         '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>' +
         '<button type="button" class="btn btn-danger-solid" id="modal-ok">Deactivate</button></div>' +
         '<div id="modal-status-feedback" class="action-feedback hidden" role="status"></div></div>';
@@ -1103,6 +1120,101 @@
           if (setFlash) setFlash('Status updated to ' + emp.status, 'success', route);
           drawProfile(emp, employeeId === (App.getState().session || {}).employee_id);
         });
+    }
+
+    function normalizeLeaveSummary_(data) {
+      if (!data) return { monthly_snapshot: null, balances: [] };
+      if (Array.isArray(data)) return { monthly_snapshot: null, balances: data };
+      return {
+        monthly_snapshot: data.monthly_snapshot || null,
+        balances: data.balances || []
+      };
+    }
+
+    function paintLeaveSummary_(el, data, options) {
+      options = options || {};
+      var pack = normalizeLeaveSummary_(data);
+      var rows = pack.balances;
+      var snap = pack.monthly_snapshot;
+      var actionsHtml = '';
+      if (options.showApplyLeave) {
+        actionsHtml = '<div class="form-actions" style="margin-bottom:12px">' +
+          '<button type="button" class="btn btn-primary" id="btn-profile-apply-leave">Apply for leave</button>' +
+          '<span class="hint">Or use <strong>My Leave</strong> in the sidebar.</span></div>';
+      }
+      var html = actionsHtml;
+      if (snap) {
+        var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
+        html += '<div class="card" style="margin-bottom:16px"><h3 class="section-title">Monthly leave — ' + escapeHtml(periodLabel) + '</h3>' +
+          '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
+          escapeHtml(snap.carry_forward_note || '') + '</p>' +
+          '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Period</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Adjustment</th><th class="num">Available</th>' +
+          '</tr></thead><tbody><tr>' +
+          '<td>' + escapeHtml(periodLabel) + '</td>' +
+          '<td class="num">' + snap.grant_days + '</td>' +
+          '<td class="num">' + snap.used_days + '</td>' +
+          '<td class="num">' + snap.adjustment_days + '</td>' +
+          '<td class="num"><strong>' + snap.available_days + '</strong></td>' +
+          '</tr></tbody></table></div></div>';
+      }
+      if (!rows.length && !snap) {
+        el.innerHTML = html +
+          '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Monthly allowance appears here once attendance or payroll is set for this month.</p></div>';
+        bindProfileApplyLeave_(el);
+        return;
+      }
+      if (rows.length) {
+        html += '<h3 class="section-title">Leave types (legacy)</h3><div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
+          '</tr></thead><tbody>' + rows.map(function (r) {
+            return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +
+              '<td class="num">' + r.entitled_days + '</td><td class="num">' + r.used_days + '</td><td class="num">' + r.pending_days + '</td>' +
+              '<td class="num">' + r.carried_forward_days + '</td><td class="num">' + r.available_days + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      el.innerHTML = html;
+      bindProfileApplyLeave_(el);
+    }
+
+    function bindProfileApplyLeave_(el) {
+      var btn = el && el.querySelector ? el.querySelector('#btn-profile-apply-leave') : null;
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        App.navigate('leave-apply');
+      });
+    }
+
+    function loadLeave(employeeId, restore) {
+      var el = $('leave-summary');
+      var extras = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
+      if (extras.leave && el) {
+        paintLeaveSummary_(el, extras.leave, leaveSummaryOptions_(employeeId));
+        return;
+      }
+      if (extras.leaveLoading) return;
+      extras.leaveLoading = true;
+      var seq = App.getState().navSeq;
+      callServer('apiGetEmployeeLeaveSummary', employeeId)
+        .then(function (rows) {
+          extras.leaveLoading = false;
+          var panel = $('leave-summary');
+          if (!panel || seq !== App.getState().navSeq) return;
+          extras.leave = rows;
+          paintLeaveSummary_(panel, rows, leaveSummaryOptions_(employeeId));
+        })
+        .catch(function (err) {
+          extras.leaveLoading = false;
+          var panel = $('leave-summary');
+          paintErr(panel, err.message || 'Leave summary unavailable', function () { loadLeave(employeeId); });
+        });
+    }
+
+    function leaveSummaryOptions_(employeeId) {
+      var session = (App.getState().session || {});
+      var isSelf = String(employeeId) === String(session.employee_id || '');
+      return { showApplyLeave: isSelf && !!session.employee_id };
     }
 
     function loadDocs(emp, notice, restore) {
@@ -1537,6 +1649,8 @@
           (access.access_upload_documents ? ' checked' : '') + '> Upload documents (own profile)</label>' +
           '<label class="checkbox-row"><input type="checkbox" id="acc-payslips"' +
           (access.access_payslips ? ' checked' : '') + '> Download payslips</label>' +
+          '<label class="checkbox-row"><input type="checkbox" id="acc-leave"' +
+          (access.access_leave ? ' checked' : '') + '> Leave apply and history</label>' +
           '</div>' +
           '<div class="form-actions"><button type="button" class="btn btn-primary" id="btn-save-app-access">' + saveLabel + '</button></div>' +
           '<div id="emp-app-access-feedback" class="action-feedback hidden" role="status"></div>' +
@@ -1577,7 +1691,8 @@
       var payload = {
         access_documents: $('acc-documents') && $('acc-documents').checked,
         access_upload_documents: $('acc-upload-documents') && $('acc-upload-documents').checked,
-        access_payslips: $('acc-payslips') && $('acc-payslips').checked
+        access_payslips: $('acc-payslips') && $('acc-payslips').checked,
+        access_leave: $('acc-leave') && $('acc-leave').checked
       };
       var roleEl = $('acc-role');
       if (roleEl) payload.role = roleEl.value;

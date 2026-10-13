@@ -351,7 +351,7 @@ later().then(function () {
   check('shell querySelector only on elements', badQs.length === 0, badQs[0] ? JSON.stringify(badQs[0]) : '');
 
   var App = env.sandbox.window.HrmsApp;
-  ['employees', 'attendance-bulk-upload', 'payroll', 'ats', 'notifications'].forEach(function (route) {
+  ['employees', 'my-leave', 'payroll', 'ats', 'notifications'].forEach(function (route) {
     try {
       App.navigate(route);
       check('navigate ' + route + ' no throw', true);
@@ -366,7 +366,7 @@ later().then(function () {
     if (c.name === 'apiGetModuleUi') mods[c.args[0]] = true;
   });
   check('lazy employee module', !!mods.employee);
-  check('leave-module-removed', !mods.leave);
+  check('lazy leave module', !!mods.leave);
   check('lazy payroll module', !!mods.payroll);
   check('lazy ats module', !!mods.ats);
   check('lazy notifications module', !!mods.notifications);

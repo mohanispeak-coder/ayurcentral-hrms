@@ -39,9 +39,9 @@ check('render-welcome', svc.render('employee_welcome', { '{{company}}': 'Co' }).
 check('legacy-bulk-def', svc.definitions.some(function (d) { return d.id === 'bulk_legacy'; }));
 check('settings-rows', svc.defaultSettingsRows().length >= 5);
 
-var monthlyLeave = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'payroll', 'MonthlyLeaveService.gs'), 'utf8');
-check('monthly-leave-snapshot', /function getSnapshot/.test(monthlyLeave));
-check('monthly-leave-grant', /grantForEmployeeMonth_/.test(monthlyLeave));
+var leave = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'leave', 'LeaveService.gs'), 'utf8');
+check('coerce-balance-default', /requires_balance === '' \|\| row\.requires_balance == null/.test(leave));
+check('coerce-active-default', /is_active === '' \|\| row\.is_active == null/.test(leave));
 
 var ats = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ats', 'AtsService.gs'), 'utf8');
 check('offer-manual-hire', /sendOfferLetterForHire/.test(ats) && /sendHireOfferLetter/.test(ats));

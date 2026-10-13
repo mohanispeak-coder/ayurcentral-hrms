@@ -242,14 +242,14 @@ function runAsync() {
     feedback.classList.add('hidden');
     ctrl.mode = 'success';
     ctrl.result = { ok: true, data: { ok: true } };
-    return App.callServer('apiUpdateEmployee', 'EMP1', { phone: '9' }, {
+    return App.callServer('apiLeaveSubmit', { leave_type_id: 'LT1' }, {
       button: actionBtn,
       loadingText: 'Submitting...',
       feedback: feedback,
-      successMessage: 'Saved.'
+      successMessage: 'Leave submitted.'
     }).then(function () {
       check('action button restored after success', actionBtn.disabled === false && actionBtn.innerHTML === 'Submit');
-      check('inline success message', feedback._text === 'Saved.');
+      check('inline success message', feedback._text === 'Leave submitted.');
     });
   }).then(function () {
     var failBtn = fakeEl('button');
@@ -258,7 +258,7 @@ function runAsync() {
     failFb.classList.add('action-feedback');
     ctrl.mode = 'failure';
     ctrl.error = { message: 'Not allowed' };
-    return App.callServer('apiLockPayroll', 'RUN1', {
+    return App.callServer('apiLeaveApprove', 'LR1', 'ok', {
       button: failBtn,
       loadingText: 'Approving...',
       feedback: failFb
@@ -352,7 +352,7 @@ function runAsync() {
     ctrl.result = { ok: true, data: { html: '' } };
     ctrl.calls = [];
     App.setSessionToken('otp_session_token_demo');
-    var modules = ['employee', 'payroll', 'payroll-attendance', 'ats', 'notifications', 'admin'];
+    var modules = ['employee', 'leave', 'payroll', 'ats', 'notifications', 'admin'];
     var chain = Promise.resolve();
     modules.forEach(function (mid) {
       chain = chain.then(function () {
@@ -391,17 +391,17 @@ function runAsync() {
     });
   }).then(function () {
     ctrl.calls = [];
-    return App.callServer('apiGetEmployee', '').then(function () {
+    return App.callServer('apiLeaveGetCalendar', 2026, 9, '').then(function () {
       var args = ctrl.calls[0] && ctrl.calls[0].args;
       check('empty string business arg preserved before OTP token',
-        args && args.length === 2 && args[0] === '' && args[1] === 'otp_session_token_demo');
+        args && args.length === 4 && args[0] === 2026 && args[1] === 9 && args[2] === '' && args[3] === 'otp_session_token_demo');
     });
   }).then(function () {
     ctrl.calls = [];
-    return App.callServer('apiSetEmployeeStatus', 'EMP1', 'ACTIVE').then(function () {
+    return App.callServer('apiLeaveApprove', 'LR1', 'ok').then(function () {
       var args = ctrl.calls[0] && ctrl.calls[0].args;
       check('two string args keep OTP token last',
-        args && args.length === 3 && args[0] === 'EMP1' && args[1] === 'ACTIVE' && args[2] === 'otp_session_token_demo');
+        args && args.length === 3 && args[0] === 'LR1' && args[1] === 'ok' && args[2] === 'otp_session_token_demo');
     });
   }).then(function () {
     ctrl.mode = 'throw';

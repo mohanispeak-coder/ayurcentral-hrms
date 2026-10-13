@@ -20,7 +20,7 @@ function check(name, cond, detail) {
   }
 }
 
-var monthlySrc = fs.readFileSync(path.join(root, 'payroll', 'MonthlyLeaveService.gs'), 'utf8');
+var monthlySrc = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 var regSrc = fs.readFileSync(path.join(root, 'payroll', 'AttendanceRegisterService.gs'), 'utf8');
 var attClient = fs.readFileSync(path.join(root, 'payroll', 'AttendanceClient.html'), 'utf8');
 var payrollClient = fs.readFileSync(path.join(root, 'payroll', 'PayrollClient.html'), 'utf8');

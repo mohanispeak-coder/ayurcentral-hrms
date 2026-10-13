@@ -7,11 +7,6 @@
 var HRMS = HRMS || {};
 
 var NotificationLeaveAdapter = (function () {
-  function isTruthy_(v) {
-    var s = String(v == null ? '' : v).trim().toUpperCase();
-    return s === 'TRUE' || s === '1' || s === 'YES';
-  }
-
   function employeeHint_(emp) {
     emp = emp || {};
     var dn = String(emp.display_name || '').trim();
@@ -114,7 +109,7 @@ var NotificationLeaveAdapter = (function () {
 
   function notifyLeaveDecisionToAdditional(leaveRequest, employee, decision, options) {
     try {
-      var enabled = isTruthy_(ConfigService.getSetting('leave_decision_notify_additional_enabled', false));
+      var enabled = LeaveEngine.isTruthy(ConfigService.getSetting('leave_decision_notify_additional_enabled', false));
       var extraEmail = String(ConfigService.getSetting('leave_decision_notify_additional_email', '') || '').trim().toLowerCase();
       if (!enabled || !extraEmail) return { ok: true, skipped: true };
       var resolved = NotificationService.resolveRecipient({ email: extraEmail });

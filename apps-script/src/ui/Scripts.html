@@ -29,6 +29,11 @@
     'employee-bulk-upload': 'employee',
     'employee-field-defs': 'employee',
     'employee-mandatory-fields': 'employee',
+    'my-leave': 'leave',
+    'leave-apply': 'leave',
+    'leave-approvals': 'leave',
+    'leave-admin': 'leave',
+    'leave-calendar': 'leave',
     payroll: 'payroll',
     'payroll-run': 'payroll',
     'salary-structure': 'payroll-structure',
@@ -58,6 +63,11 @@
     'employee-bulk-upload': 'Bulk upload',
     'employee-field-defs': 'Employee custom fields',
     'employee-mandatory-fields': 'Mandatory fields',
+    'my-leave': 'My Leave',
+    'leave-apply': 'Apply Leave',
+    'leave-approvals': 'Leave Approvals',
+    'leave-admin': 'Leave',
+    'leave-calendar': 'Leave Calendar',
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
     'salary-structure': 'Salary structures',
@@ -88,6 +98,11 @@
     'employee-bulk-upload': 'Import many employees from Excel or CSV.',
     'employee-field-defs': 'Define optional extra columns for profiles and bulk upload.',
     'employee-mandatory-fields': 'Choose which employee fields are required on create and bulk upload.',
+    'my-leave': 'Balances for the current leave year and your requests.',
+    'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
+    'leave-approvals': 'Submitted requests waiting for a decision.',
+    'leave-admin': 'Company leave requests and configurable leave types.',
+    'leave-calendar': 'Approved leave for the month, scoped to your role.',
     payroll: 'Process one month: calculate on the server, review exceptions, then lock.',
     'payroll-run': 'One primary next step. Locked amounts never change.',
     'salary-structure': 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
@@ -111,8 +126,9 @@
 
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
-    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-payslips'], collapsible: true },
+    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'employee-mandatory-fields', 'my-team'], collapsible: true },
+    { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
     { id: 'attendance', label: 'Attendance', routes: ['attendance-bulk-upload', 'attendance-form-t'], collapsible: true },
     { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'salary-statement', 'payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
@@ -1242,6 +1258,7 @@
     if (itemRoute === 'employee-mandatory-fields' && current === 'employee-mandatory-fields') return true;
     if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'payroll-employee-salary')) return true;
     if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
+    if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
     if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
@@ -1473,6 +1490,20 @@
     } else if (route === 'employee-create') {
       html = '<div class="card" aria-hidden="true">' + skeletonLine('w60') +
         '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    } else if (route === 'my-leave') {
+      html =
+        '<div class="card"><h2 class="section-title">Balances</h2>' + tableShell(['Code', 'Type', 'Entitled', 'Carried', 'Used', 'Pending', 'Available'], 'shell-bal', 4) + '</div>' +
+        '<div class="card"><h2 class="section-title">My requests</h2>' + tableShell(['ID', 'Type', 'Dates', 'Days', 'Status', 'Reason', ''], 'shell-req', 4) + '</div>';
+    } else if (route === 'leave-approvals') {
+      html = tableShell(['Employee ID', 'Name', 'Type', 'Dates', 'Days', 'Reason', ''], 'shell-appr', 5);
+    } else if (route === 'leave-admin') {
+      html = '<div class="card">' +
+        tableShell(['Employee ID', 'Type', 'Dates', 'Days', 'Status', ''], 'shell-admin', 5) + '</div>';
+    } else if (route === 'leave-apply') {
+      html = '<div class="card" aria-hidden="true">' + skeletonLine('w80') +
+        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
+    } else if (route === 'leave-calendar') {
+      html = '<div class="card"><div class="skeleton skeleton-block" style="height:280px" aria-hidden="true"></div></div>';
     } else if (route === 'payroll') {
       html = skeletonKpiRow(['Period', 'Status', 'Employees', 'Net pay']) +
         '<div class="card"><h2>Payroll period</h2>' + sectionSkeleton({ lines: 2 }) + '</div>' +
@@ -1803,7 +1834,7 @@
     var item = state.navigation.filter(function (n) { return n.route === route; })[0];
     var def = ROUTES[route];
     var title = item ? item.label : (def ? def.title : 'HRMS');
-    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route.indexOf('ats-') === 0)) {
+    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('ats-') === 0)) {
       title = def.title;
     }
     $('page-title').textContent = title;
@@ -1866,6 +1897,9 @@
     var seq = state.navSeq;
     var dashKey = 'dashboard';
     var actions = '';
+    if (navHas('leave-approvals')) {
+      actions += '<button type="button" class="btn btn-secondary" id="dash-approvals">Approvals</button>';
+    }
     if (navHas('payroll')) {
       actions += '<button type="button" class="btn btn-secondary" id="dash-payroll">Payroll</button>';
     }
@@ -1874,7 +1908,10 @@
     }
     if (navHas('employees')) {
       actions += '<button type="button" class="btn btn-primary" id="dash-add-emp">Add employee</button>';
+    } else if (navHas('my-leave')) {
+      actions += '<button type="button" class="btn btn-primary" id="dash-leave">Apply leave</button>';
     }
+
     if (consumeModuleViewRestore(dashKey) && dashViewCache_.payload) {
       paintHomeDashboard(dashViewCache_.payload, dashViewCache_.actions || actions, { secondaryPending: false });
       return;
@@ -1885,9 +1922,11 @@
       page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
         skeletonKpiRow(['Employee ID', 'Role', 'Unread']) +
         '<div class="card dash-section">' + sectionSkeleton({ variant: 'list', rows: 4, label: 'Loading workspace' }) + '</div>';
+      if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
       if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
       if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
       if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
+      if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
     }
 
     var primary = keepPainted ? (dashViewCache_.payload || null) : null;
@@ -1964,6 +2003,9 @@
     var s = state.session || {};
     var kpis = '';
     kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '-', 'In-app notifications');
+    if (data.leave_approvals_count != null) {
+      kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
+    }
     if (data.payroll && data.payroll.latest) {
       var run = data.payroll.latest;
       kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
@@ -1977,6 +2019,13 @@
     }
 
     var sections = '';
+    if (data.leave_approvals && data.leave_approvals.length) {
+      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
+        dashActionList(data.leave_approvals, 'No leave waiting for you.') + '</div>';
+    } else if (data.leave_approvals_count === 0 && navHas('leave-approvals')) {
+      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
+        '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
+    }
     if (data.ats_actions && data.ats_actions.length) {
       sections += '<div class="card dash-section"><h2>Recruitment</h2>' +
         dashActionList(data.ats_actions, 'No recruitment actions in your scope.') + '</div>';
@@ -1988,7 +2037,7 @@
     if (!sections) {
       sections = '<div class="card dash-welcome">' +
         '<h2>Welcome to AyurCentral HRMS</h2>' +
-        '<p>Use the sidebar for people, attendance, pay, and - if your role allows - recruitment.</p></div>';
+        '<p>Use the sidebar for people, time off, pay, and - if your role allows - recruitment.</p></div>';
     }
     if (state.app && !state.app.configured) {
       sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
@@ -2000,9 +2049,11 @@
     page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
       '<div class="kpi-row">' + kpis + '</div>' + sections;
 
+    if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
     if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
     if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
     if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
+    if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
     Array.prototype.forEach.call(page.querySelectorAll('.dash-go'), function (btn) {
       btn.addEventListener('click', function () {
         var route = btn.getAttribute('data-route');

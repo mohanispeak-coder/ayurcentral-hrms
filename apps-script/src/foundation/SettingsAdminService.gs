@@ -26,6 +26,7 @@ var AdminSettingsService = (function () {
     { id: 'documents', label: 'Download documents' },
     { id: 'upload_documents', label: 'Upload documents' },
     { id: 'payslips', label: 'Download payslips' },
+    { id: 'leave', label: 'Leave apply and history' }
   ];
 
   /** Which HRMS areas each role may use (sidebar + APIs). OWNER is always full access. */
@@ -35,6 +36,9 @@ var AdminSettingsService = (function () {
     { id: 'my_profile', label: 'My profile', navIds: ['my-profile'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
     { id: 'employees', label: 'Employees', navIds: ['employees', 'employee-mandatory-fields', 'employee-field-defs', 'employee-bulk-upload'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'my_team', label: 'My team', navIds: ['my-team'], defaultRoles: ['MANAGER'] },
+    { id: 'leave_admin', label: 'Leave administration', navIds: ['leave-admin'], defaultRoles: ['HR', 'ADMIN'] },
+    { id: 'leave_approvals', label: 'Leave approvals', navIds: ['leave-approvals'], defaultRoles: ['MANAGER', 'HR', 'ADMIN'] },
+    { id: 'my_leave', label: 'My leave', navIds: ['my-leave', 'leave-apply', 'leave-calendar'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
     { id: 'attendance', label: 'Attendance', navIds: ['attendance-bulk-upload', 'attendance-form-t'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'payroll', label: 'Payroll', navIds: ['salary-structure', 'salary-statement', 'payroll', 'payroll-run', 'compensation'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'my_payslips', label: 'My payslips', navIds: ['my-payslips'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
@@ -47,6 +51,9 @@ var AdminSettingsService = (function () {
     EMPLOYEE_DIRECTORY: 'employees',
     EMPLOYEE_CREATE: 'employees',
     EMPLOYEE_STATUS: 'employees',
+    LEAVE_ADMIN: 'leave_admin',
+    LEAVE_APPROVE: 'leave_approvals',
+    LEAVE_APPLY: 'my_leave',
     PAYROLL_RUN: 'payroll',
     ATTENDANCE_MANAGE: 'attendance',
     COMPENSATION_MANAGE: 'payroll',

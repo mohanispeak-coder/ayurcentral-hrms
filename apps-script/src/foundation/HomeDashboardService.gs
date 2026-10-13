@@ -11,6 +11,16 @@ var HomeDashboardService = (function () {
     }
   }
 
+  function fmtLeave(row) {
+    var dates = [row.start_date, row.end_date].filter(Boolean).join(' – ');
+    return {
+      label: (row.employee_name || row.employee_id || 'Leave') + (row.leave_type_code ? ' · ' + row.leave_type_code : ''),
+      meta: dates + (row.total_days != null ? ' · ' + row.total_days + ' day(s)' : ''),
+      route: 'leave-approvals',
+      params: { leaveRequestId: row.leave_request_id }
+    };
+  }
+
   function empty_(notes) {
     return {
       unread_count: null,
@@ -35,6 +45,20 @@ var HomeDashboardService = (function () {
     if (ntf.ok) out.unread_count = ntf.value;
     else out.notes.push('Notification count is unavailable until inbox sheets exist.');
 
+    if (PermissionService.can(HRMS.ACTIONS.LEAVE_APPROVE, {}, session)) {
+      var leave = try_('leave', function () {
+        var t = Date.now();
+        var value = LeaveService.getApprovalQueueSummary(session, 5);
+        if (typeof HrmsPerf !== 'undefined' && HrmsPerf.addStage) {
+          HrmsPerf.addStage('dash.leave', Date.now() - t);
+        }
+        return value;
+      });
+      if (leave.ok && leave.value) {
+        out.leave_approvals_count = leave.value.count;
+        out.leave_approvals = (leave.value.preview || []).map(fmtLeave);
+      }
+    }
     return out;
   }
 

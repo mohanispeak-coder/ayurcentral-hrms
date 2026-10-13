@@ -27,13 +27,14 @@ function check(name, cond, detail) {
 
 var scripts = read('ui/Scripts.html');
 var emp = read('employee/EmployeeClient.html');
-var attendance = read('payroll/AttendanceClient.html');
+var leaveUi = read('leave/LeaveUi.html');
 var payroll = read('payroll/PayrollClient.html');
 var ats = read('ats/AtsClient.html');
 var ntf = read('notifications/NotificationClient.html');
 var bell = read('notifications/NotificationBell.html');
 var perm = read('foundation/PermissionService.gs');
 var apiEmp = read('employee/ApiEmployee.gs');
+var apiLeave = read('leave/ApiLeave.gs');
 var apiPay = read('payroll/ApiPayroll.gs');
 
 check('cache-session-var', /var moduleViewCache_ = \{\}/.test(scripts));
@@ -56,8 +57,8 @@ check('no-post-login-herd', !/setTimeout\(preloadModulesFromNav,\s*0\)/.test(scr
 
 check('emp-restore-list', /consumeModuleViewRestore\(key\)/.test(emp) && /apiGetEmployeeDirectory/.test(emp));
 check('emp-restore-profile', /consumeModuleViewRestore\(key\)/.test(emp) && /apiGetEmployee/.test(emp));
-check('attendance-route', /registerRoute\('attendance-bulk-upload'/.test(attendance));
-check('attendance-validate-rpc', /apiValidateAttendanceRegisterUpload/.test(attendance));
+check('leave-restore', /tryRestoreLeave_/.test(leaveUi) && /apiLeaveGetMyLeave/.test(leaveUi));
+check('leave-approve-still-rpc', /apiLeaveApprove/.test(leaveUi));
 check('payroll-restore-home', /consumeModuleViewRestore\('payroll'\)/.test(payroll));
 check('payroll-finalize-still-rpc', /apiFinalizePayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));
 check('ats-restore-home', /consumeModuleViewRestore\('ats'\)/.test(ats));
@@ -72,6 +73,8 @@ check('invalidate-api', /function invalidateModuleViewCache/.test(scripts) &&
   /function invalidateDashboardView/.test(scripts));
 check('invalidate-exported', /invalidateModuleViewCache:/.test(scripts) &&
   /invalidateDashboardView:/.test(scripts));
+check('leave-invalidate-hooks', /invalidateLeaveAfterRequestMutation_/.test(leaveUi) &&
+  /invalidateLeaveAfterAdminConfig_/.test(leaveUi));
 check('emp-invalidate-hooks', /invalidateEmpLists_/.test(emp) && /invalidateEmpProfileLists_/.test(emp));
 check('payroll-invalidate-hooks', /invalidatePayrollHome_/.test(payroll) && /invalidateCompensation_/.test(payroll));
 check('ats-invalidate-hooks', /invalidateAtsPipeline_/.test(ats) && /invalidateAtsJob_/.test(ats));
@@ -81,6 +84,9 @@ check('emp-no-dash-inv', !/function invalidateEmpLists_[\s\S]{0,200}invalidateDa
 check('payroll-home-dash-inv', /function invalidatePayrollHome_[\s\S]{0,160}invalidateDashboardView/.test(payroll));
 check('comp-no-dash-inv', !/function invalidateCompensation_[\s\S]{0,160}invalidateDashboardView/.test(payroll));
 check('ats-dash-inv', /function invalidateAtsPipeline_[\s\S]*?invalidateDashboardView/.test(ats));
+check('leave-inv-on-success', /apiLeaveApprove[\s\S]{0,220}invalidateLeaveAfterRequestMutation_/.test(leaveUi));
+check('leave-inv-not-in-catch', !/apiLeaveApprove[\s\S]{0,400}\.catch[\s\S]{0,80}invalidateLeave/.test(leaveUi));
+check('scoped-leave-not-emp', !/invalidateLeaveViews_[\s\S]{0,120}employees/.test(leaveUi));
 check('session-cache-key-fn', /function sessionCacheKey_/.test(scripts));
 check('mark-stores-session-key', /sessionKey:\s*sessionCacheKey_\(\)/.test(scripts));
 check('restore-checks-session-key', /rec\.sessionKey !== sk/.test(scripts));
@@ -102,11 +108,12 @@ check('auth-login-tears-down-shell', /function showAuthLogin[\s\S]*?page\.innerH
   /function showAuthLogin[\s\S]*?HrmsNotificationBell\.unmount/.test(scripts));
 check('navigate-requires-auth', /function navigate[\s\S]*?!\s*state\.session\.authorized\)\s*return/.test(scripts));
 check('emp-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?empViewCache\.lists/.test(emp));
-check('attendance-bulk-state', /bulkState_/.test(attendance) && /viewCache_/.test(attendance));
+check('leave-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?leaveViewCache/.test(leaveUi));
 check('payroll-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?homeState\.runs/.test(payroll));
 check('ats-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?atsView\.dashboard/.test(ats));
 check('ntf-data-cache-hook', /registerModuleDataCacheClear[\s\S]*?ntfState\.inbox/.test(ntf));
 check('rbac-server-emp', /requireAuth|PermissionService/.test(apiEmp));
+check('rbac-server-leave', /PermissionService|requireAuth/.test(apiLeave));
 check('rbac-server-payroll', /hrmsRun_/.test(apiPay));
 check('rbac-roles-unchanged', /ADMIN/.test(perm) && /EMPLOYEE/.test(perm) && /function require/.test(perm));
 check('client-cache-not-authz', !/consumeModuleViewRestore[\s\S]{0,80}authorized/.test(scripts));
@@ -221,7 +228,7 @@ function loadShell() {
           navigation: [
             { route: 'dashboard', label: 'Dashboard' },
             { route: 'employees', label: 'Employees' },
-            { route: 'attendance-bulk-upload', label: 'Register' },
+            { route: 'my-leave', label: 'My Leave' },
             { route: 'payroll', label: 'Payroll' },
             { route: 'ats', label: 'Recruitment' },
             { route: 'notifications', label: 'Notifications' }
@@ -319,7 +326,7 @@ later().then(function () {
   check('first-dashboard-rpc', env.count('apiGetHomeDashboard') === 1, String(env.count('apiGetHomeDashboard')));
   check('first-dashboard-more-rpc', env.count('apiGetHomeDashboardMore') === 1);
 
-  var fetches = { employees: 0, attendance: 0, payroll: 0, ats: 0, notifications: 0 };
+  var fetches = { employees: 0, leave: 0, payroll: 0, ats: 0, notifications: 0 };
   var binds = { employees: 0 };
 
   function mountFake(route, fetchName, bucket) {
@@ -340,7 +347,7 @@ later().then(function () {
   }
 
   mountFake('employees', 'apiGetEmployeeDirectory', 'employees');
-  mountFake('attendance-bulk-upload', 'apiListAttendanceRegister', 'attendance');
+  mountFake('my-leave', 'apiLeaveGetMyLeave', 'leave');
   mountFake('payroll', 'apiListPayrollRuns', 'payroll');
   mountFake('ats', 'apiAtsGetDashboard', 'ats');
   mountFake('notifications', 'apiGetNotifications', 'notifications');
@@ -348,8 +355,8 @@ later().then(function () {
   App.navigate('employees');
   check('first-employees-fetch', fetches.employees === 1 && env.count('apiGetEmployeeDirectory') === 1);
 
-  App.navigate('attendance-bulk-upload');
-  check('first-attendance-fetch', fetches.attendance === 1 && env.count('apiListAttendanceRegister') === 1);
+  App.navigate('my-leave');
+  check('first-leave-fetch', fetches.leave === 1 && env.count('apiLeaveGetMyLeave') === 1);
 
   App.navigate('employees');
   check('second-employees-no-fetch', fetches.employees === 1 && env.count('apiGetEmployeeDirectory') === 1);
@@ -360,10 +367,10 @@ later().then(function () {
 
   App.navigate('payroll');
   check('first-payroll-fetch', fetches.payroll === 1);
-  App.navigate('attendance-bulk-upload');
-  check('return-attendance-no-fetch', fetches.attendance === 1);
+  App.navigate('my-leave');
+  check('return-leave-no-fetch', fetches.leave === 1);
   App.refreshCurrentModuleView();
-  check('attendance-refresh-fetches', fetches.attendance === 2);
+  check('leave-refresh-fetches', fetches.leave === 2);
 
   App.navigate('ats');
   check('first-ats-fetch', fetches.ats === 1);
@@ -425,24 +432,24 @@ later().then(function () {
   check('scoped-inv-employees-only', !App.getModuleViewCache().employees && !!App.getModuleViewCache().payroll);
 
   App.markModuleViewLoaded('dashboard');
-  App.markModuleViewLoaded('attendance-bulk-upload');
+  App.markModuleViewLoaded('my-leave');
   App.invalidateDashboardView();
-  check('scoped-dash-not-attendance', !App.getModuleViewCache().dashboard && !!App.getModuleViewCache()['attendance-bulk-upload']);
+  check('scoped-dash-not-leave', !App.getModuleViewCache().dashboard && !!App.getModuleViewCache()['my-leave']);
 
   App.markModuleViewLoaded('employees');
-  App.markModuleViewLoaded('attendance-bulk-upload');
+  App.markModuleViewLoaded('my-leave');
   App.navigate('employees');
   App.navigate('employees');
   check('nav-restore-after-scoped-inv', fetches.employees === 1, 'still cached restore');
 
   var sess = App.getState().session;
-  var attBeforeSwitch = fetches.attendance;
+  var leaveBeforeSwitch = fetches.leave;
   App.getState().session = {
     authorized: true, role: 'EMPLOYEE', employee_id: 'EMP999',
     displayName: 'Other', email: 'other@x.com'
   };
-  App.navigate('attendance-bulk-upload');
-  check('session-switch-no-restore-attendance', fetches.attendance === attBeforeSwitch + 1, 'must refetch for new user');
+  App.navigate('my-leave');
+  check('session-switch-no-restore-leave', fetches.leave === leaveBeforeSwitch + 1, 'must refetch for new user');
   App.getState().session = sess;
   App.clearUserSessionViewState();
   App.markModuleViewLoaded('employees');

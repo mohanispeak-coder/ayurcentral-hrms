@@ -37,12 +37,13 @@ if (navMatch) {
 
 check('nav-groups-defined', /var NAV_GROUPS = \[/.test(scripts));
 check('nav-main-section', /id:\s*'main'[\s\S]*label:\s*'Main'[\s\S]*dashboard/.test(scripts));
-check('nav-my-work-section', /id:\s*'my-work'[\s\S]*my-profile[\s\S]*my-payslips/.test(scripts));
+check('nav-my-work-section', /id:\s*'my-work'[\s\S]*my-profile[\s\S]*my-leave[\s\S]*my-payslips/.test(scripts));
 check('nav-people-section', /id:\s*'people'[\s\S]*employees[\s\S]*employee-mandatory-fields[\s\S]*my-team/.test(scripts));
-check('no-time-off-section', !/id:\s*'time-off'/.test(scripts));
+check('nav-time-off-section', /id:\s*'time-off'[\s\S]*leave-admin[\s\S]*leave-approvals/.test(scripts));
 check('no-nav-performance-section', !/id:\s*'performance'/.test(scripts));
 check('global-button-busy', /isGlobalActionBusy/.test(scripts) && /globalLoadingButton_/.test(scripts));
 
+var timeOffBlock = scripts.match(/id:\s*'time-off'[\s\S]*?collapsible:\s*true/);
 var payrollBlock = scripts.match(/id:\s*'payroll',\s*label:\s*'Payroll'[\s\S]*?collapsible:\s*true/);
 
 check('nav-attendance-section', /id:\s*'attendance'[\s\S]*routes:\s*\['attendance-bulk-upload',\s*'attendance-form-t'\]/.test(scripts));
@@ -55,7 +56,7 @@ check('attendance-not-in-payroll-group', !!(payrollBlock && payrollBlock[0].inde
 check('nav-recruitment-section', /id:\s*'recruitment'[\s\S]*ats[\s\S]*ats-jobs[\s\S]*ats-candidates/.test(scripts));
 check('nav-admin-section', /id:\s*'admin'[\s\S]*notifications[\s\S]*settings[\s\S]*users/.test(scripts));
 
-check('no-leave-nav-routes', navRoutes.indexOf('leave-admin') < 0 && navRoutes.indexOf('my-leave') < 0);
+check('my-leave-not-in-time-off', !!(timeOffBlock && timeOffBlock[0].indexOf('my-leave') < 0));
 check('my-payslips-not-in-payroll', !!(payrollBlock && payrollBlock[0].indexOf('my-payslips') < 0));
 
 check('collapsible-section-state', /navSectionExpanded_/.test(scripts));
