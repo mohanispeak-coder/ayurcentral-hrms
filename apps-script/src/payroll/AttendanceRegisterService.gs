@@ -119,6 +119,15 @@ var AttendanceRegisterService = (function () {
     var leaveDays = counts.L + counts.ML + (halfCount * 0.5);
     var daysTotal = computeDaysTotal_(counts);
     var vertical = trim_(verticalCode).toUpperCase();
+    var monthlyGrant = (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.grantForEmployeeMonth_)
+      ? MonthlyLeaveService.grantForEmployeeMonth_(emp, year, month)
+      : leaveBalanceMaxForVertical_(vertical);
+    var entitlementPool = monthlyGrant;
+    if (emp && emp.employee_id && typeof MonthlyLeaveService !== 'undefined' &&
+        MonthlyLeaveService.monthlyEntitlementPool_) {
+      entitlementPool = MonthlyLeaveService.monthlyEntitlementPool_(emp, emp.employee_id, year, month);
+    }
+    var leaveSplit = leavePaidAndLopSplit_(leaveDays, entitlementPool);
     return {
       present: counts.P + (halfCount * 0.5),
       week_off_holiday: counts['W/H'],
@@ -130,11 +139,22 @@ var AttendanceRegisterService = (function () {
       leave_days: leaveDays,
       days_total: daysTotal,
       leave_balance: computeLeaveBalance_(counts, vertical, emp, year, month),
-      monthly_grant: (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.grantForEmployeeMonth_)
-        ? MonthlyLeaveService.grantForEmployeeMonth_(emp, year, month)
-        : leaveBalanceMaxForVertical_(vertical),
+      monthly_grant: monthlyGrant,
+      monthly_entitlement_pool: entitlementPool,
+      paid_leave_days: leaveSplit.paid_leave_days,
+      lop_from_excess_leave: leaveSplit.lop_from_excess_leave,
       days_in_month: dim,
       code_counts: counts
+    };
+  }
+
+  function leavePaidAndLopSplit_(leaveDays, entitlementPool) {
+    leaveDays = Number(leaveDays) || 0;
+    entitlementPool = Math.max(0, Number(entitlementPool) || 0);
+    var paidLeave = Math.min(leaveDays, entitlementPool);
+    return {
+      paid_leave_days: paidLeave,
+      lop_from_excess_leave: Math.max(0, leaveDays - paidLeave)
     };
   }
 
@@ -143,15 +163,25 @@ var AttendanceRegisterService = (function () {
     var present = Number(summary.present) || 0;
     var absent = Number(summary.absent) || 0;
     var leaveDays = Number(summary.leave_days) || 0;
+    var pool = Number(summary.monthly_entitlement_pool);
+    if (!isFinite(pool)) pool = Number(summary.monthly_grant) || 0;
+    var split = leavePaidAndLopSplit_(leaveDays, pool);
+    if (summary.paid_leave_days != null && isFinite(Number(summary.paid_leave_days))) {
+      split.paid_leave_days = Number(summary.paid_leave_days);
+      split.lop_from_excess_leave = Number(summary.lop_from_excess_leave) || 0;
+    }
+    var lopFromLeave = split.lop_from_excess_leave;
     var daysTotal = Number(summary.days_total);
     if (isFinite(daysTotal) && daysTotal >= 0) {
       return {
-        working_days: daysTotal + absent,
-        paid_days: daysTotal,
-        lop_days: absent,
+        working_days: daysTotal + absent + lopFromLeave,
+        paid_days: Math.max(0, daysTotal - lopFromLeave),
+        lop_days: absent + lopFromLeave,
         days_present: present,
         days_absent: absent,
-        leave_days: leaveDays
+        leave_days: leaveDays,
+        paid_leave_days: split.paid_leave_days,
+        lop_from_excess_leave: lopFromLeave
       };
     }
     var dim = Number(summary.days_in_month) || 0;
@@ -162,8 +192,8 @@ var AttendanceRegisterService = (function () {
       working = dim - wh - holiday;
     }
     if (working <= 0) working = dim || 0;
-    var paid = present + leaveDays;
-    var lop = absent;
+    var paid = present + split.paid_leave_days;
+    var lop = absent + lopFromLeave;
     if (paid + lop > working) {
       working = paid + lop;
     }
@@ -173,7 +203,9 @@ var AttendanceRegisterService = (function () {
       lop_days: lop,
       days_present: present,
       days_absent: absent,
-      leave_days: leaveDays
+      leave_days: leaveDays,
+      paid_leave_days: split.paid_leave_days,
+      lop_from_excess_leave: lopFromLeave
     };
   }
 
@@ -392,7 +424,10 @@ var AttendanceRegisterService = (function () {
   }
 
   function saveRegisterForInput_(inp, reg, year, month, verticalCode) {
-    var summary = summarize_(reg, year, month, verticalCode);
+    var emp = inp && inp.employee_id
+      ? DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: inp.employee_id })
+      : null;
+    var summary = summarize_(reg, year, month, verticalCode, emp);
     var derived = derivePayrollDays_(summary);
     return {
       daily_attendance_json: stringifyRegister_(reg),
@@ -415,6 +450,7 @@ var AttendanceRegisterService = (function () {
     computeDaysTotal_: computeDaysTotal_,
     leaveBalanceMaxForVertical_: leaveBalanceMaxForVertical_,
     computeLeaveBalance_: computeLeaveBalance_,
+    leavePaidAndLopSplit_: leavePaidAndLopSplit_,
     derivePayrollDays_: derivePayrollDays_,
     isRegisterComplete_: isRegisterComplete_,
     buildTemplateHeaders_: buildTemplateHeaders_,

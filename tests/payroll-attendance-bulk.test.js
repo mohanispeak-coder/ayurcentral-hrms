@@ -28,7 +28,10 @@ var api = fs.readFileSync(path.join(payrollDir, 'ApiPayroll.gs'), 'utf8');
 
 function loadRegister() {
   var ctx = {
-    HRMS: { ACTIONS: { PAYROLL_RUN: 'PAYROLL_RUN' } },
+    HRMS: {
+      ACTIONS: { PAYROLL_RUN: 'PAYROLL_RUN' },
+      ATTENDANCE_LEAVE_BALANCE_MAX: { AOPL: 2, SAPL: 2, AOMS: 1, OTHERS: 2 }
+    },
     PermissionService: { require: function () {} },
     DbService: { findOne: function () { return null; }, findRecords: function () { return []; } },
     EmployeeRepository: { listAll: function () { return []; } },
@@ -70,6 +73,13 @@ check('summarize-present', sum.present === 1 && sum.absent === 1 && sum.leave_da
 
 var derived = Reg.derivePayrollDays_(sum);
 check('derive-paid-lop', derived.paid_days >= 1 && derived.lop_days === 1);
+
+var sumExcess = Reg.summarize_({
+  '01': 'L', '02': 'L', '03': 'L', '04': 'P'
+}, 2026, 1, 'AOPL', { employee_id: 'AOPL-1', vertical_name: 'AOPL', joining_date: '2020-01-01' });
+var derivedExcess = Reg.derivePayrollDays_(sumExcess);
+check('excess-leave-lop', (derivedExcess.lop_from_excess_leave || 0) >= 1 &&
+  derivedExcess.lop_days >= (derivedExcess.lop_from_excess_leave || 0));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');

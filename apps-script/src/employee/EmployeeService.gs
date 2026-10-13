@@ -190,7 +190,7 @@ var EmployeeService = (function () {
       work.can_view_payroll_ids = false;
       work.can_view_salary_summary = false;
       work.can_view_payslips = false;
-      work.can_view_leave = false;
+      work.can_view_leave = true;
       return work;
     }
 
@@ -376,8 +376,13 @@ var EmployeeService = (function () {
     var page = Number(query.page) || 1;
     if (page < 1) page = 1;
     var start = (page - 1) * pageSize;
+    var includeLeave = !!query.include_leave_summary;
     var rows = filtered.slice(start, start + pageSize).map(function (e) {
-      return directoryRow_(e, nameMap);
+      var row = directoryRow_(e, nameMap);
+      if (includeLeave) {
+        row.leave_summary = compactLeaveSummaryForList_(e);
+      }
+      return row;
     });
     return {
       rows: rows,
@@ -403,8 +408,53 @@ var EmployeeService = (function () {
     query.teamOnly = true;
     if (PermissionService.isHrOrAdmin(session) && session.role !== HRMS.ROLES.MANAGER) {
       query.teamOnly = false;
+    } else if (session.role === HRMS.ROLES.MANAGER) {
+      query.include_leave_summary = true;
     }
     return listDirectory(session, query);
+  }
+
+  function compactLeaveSummaryForList_(emp) {
+    emp = emp || {};
+    var employeeId = emp.employee_id;
+    var out = {
+      leave_year_available: 0,
+      leave_year_used: 0,
+      leave_year_pending: 0,
+      leave_year_entitled: 0,
+      month_grant: 0,
+      month_used: 0,
+      month_available: 0
+    };
+    if (!employeeId) return out;
+    var leaveYear = '';
+    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
+      try { leaveYear = String(LeaveService.currentLeaveYear()); } catch (ignoreY) {}
+    }
+    var balances = EmployeeRepository.listLeaveBalances(employeeId);
+    var general = balances.filter(function (b) {
+      return !leaveYear || String(b.leave_year) === leaveYear;
+    });
+    if (!general.length) general = balances;
+    general.forEach(function (b) {
+      out.leave_year_entitled += Number(b.entitled_days) || 0;
+      out.leave_year_used += Number(b.used_days) || 0;
+      out.leave_year_pending += Number(b.pending_days) || 0;
+      var avail = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
+        ? LeaveEngine.availableDays(b)
+        : Number(b.available_days) || 0;
+      out.leave_year_available += avail;
+    });
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.getSnapshot) {
+      try {
+        var now = new Date();
+        var snap = MonthlyLeaveService.getSnapshot(employeeId, now.getFullYear(), now.getMonth() + 1);
+        out.month_grant = Number(snap.grant_days) || 0;
+        out.month_used = Number(snap.used_days) || 0;
+        out.month_available = Number(snap.available_days) || 0;
+      } catch (ignoreSnap) {}
+    }
+    return out;
   }
 
   function listPicker(session) {
@@ -1231,7 +1281,7 @@ var EmployeeService = (function () {
     if (String(emp.status || '').toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE &&
         typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
       try {
-        LeaveService.grantBalancesForEmployee(emp.employee_id, null);
+        LeaveService.grantBalancesForEmployee(emp.employee_id, null, { alreadyLocked: true });
       } catch (ignore) {}
     }
     var types = [];

@@ -27,6 +27,7 @@ var leaveUi = fs.readFileSync(path.join(root, 'leave', 'LeaveUi.html'), 'utf8');
 var apiLeave = fs.readFileSync(path.join(root, 'leave', 'ApiLeave.gs'), 'utf8');
 
 check('leave-policy-service', /LeavePolicyService/.test(policySrc) && /computeLeaveYearEntitlement/.test(policySrc));
+check('monthly-carry-read-only', /monthlyOpeningCarryReadOnly/.test(policySrc));
 check('ledger-sheet', /LEAVE_MONTHLY_LEDGER/.test(constantsSrc) && /LEAVE_MONTHLY_LEDGER/.test(schemaSrc));
 check('vertical-cf-columns', /leave_carry_forward_enabled/.test(schemaSrc));
 check('policy-api', /apiLeaveGetPolicySettings/.test(apiLeave) && /apiLeaveSavePolicySettings/.test(apiLeave));

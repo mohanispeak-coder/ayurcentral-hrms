@@ -468,6 +468,9 @@ var AttendanceBulkService = (function () {
             leave_used: sum.leave_days,
             monthly_grant: sum.monthly_grant,
             leave_balance: sum.leave_balance,
+            paid_leave_days: sum.paid_leave_days,
+            lop_from_excess_leave: sum.lop_from_excess_leave,
+            monthly_entitlement_pool: sum.monthly_entitlement_pool,
             days_total: sum.days_total,
             code_counts: sum.code_counts,
             register: reg

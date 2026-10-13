@@ -115,11 +115,26 @@ var MonthlyLeaveService = (function () {
     var adj = emp && emp.employee_id
       ? adjustmentForEmployeeMonth_(emp.employee_id, year, month)
       : 0;
-    var opening = 0;
-    if (emp && emp.employee_id && typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthlyOpeningCarry) {
-      opening = LeavePolicyService.monthlyOpeningCarry(emp.employee_id, year, month);
-    }
+    var opening = readOpeningCarry_(emp && emp.employee_id, year, month);
     return Math.max(0, opening + grant + adj - used);
+  }
+
+  function readOpeningCarry_(employeeId, year, month) {
+    if (!employeeId) return 0;
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthlyOpeningCarryReadOnly) {
+      return LeavePolicyService.monthlyOpeningCarryReadOnly(employeeId, year, month);
+    }
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthlyOpeningCarry) {
+      return LeavePolicyService.monthlyOpeningCarry(employeeId, year, month);
+    }
+    return 0;
+  }
+
+  function monthlyEntitlementPool_(emp, employeeId, year, month) {
+    var grant = grantForEmployeeMonth_(emp, year, month);
+    var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
+    var opening = readOpeningCarry_(employeeId, year, month);
+    return opening + grant + adj;
   }
 
   function getSnapshot(employeeId, year, month) {
@@ -133,17 +148,10 @@ var MonthlyLeaveService = (function () {
     var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
     var counts = emptyCountsFromPayrollInput_(employeeId, year, month);
     var used = leaveUsedFromCounts_(counts);
-    var openingCf = 0;
-    var carryNote = '';
-    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthlyOpeningCarry) {
-      openingCf = LeavePolicyService.monthlyOpeningCarry(employeeId, year, month);
-      if (LeavePolicyService.processMonthlyPeriod) {
-        var ledger = LeavePolicyService.processMonthlyPeriod(employeeId, year, month);
-        if (ledger) {
-          carryNote = 'Monthly carry-forward ' + (ledger.carry_to_next_days || 0) + ' day(s) to next month.';
-        }
-      }
-    }
+    var openingCf = readOpeningCarry_(employeeId, year, month);
+    var carryNote = openingCf > 0
+      ? 'Includes ' + openingCf + ' day(s) carried forward from the prior month.'
+      : '';
     var available = Math.max(0, openingCf + grant + adj - used);
     var yearMode = typeof LeavePolicyService !== 'undefined' && LeavePolicyService.leaveYearMode
       ? LeavePolicyService.leaveYearMode()
@@ -224,6 +232,8 @@ var MonthlyLeaveService = (function () {
     availableAfterCounts_: availableAfterCounts_,
     baseMonthlyGrant_: baseMonthlyGrant_,
     adjustmentForEmployeeMonth_: adjustmentForEmployeeMonth_,
+    monthlyEntitlementPool_: monthlyEntitlementPool_,
+    readOpeningCarry_: readOpeningCarry_,
     emptyCountsFromPayrollInput_: emptyCountsFromPayrollInput_,
     getSnapshot: getSnapshot,
     saveAdjustment: saveAdjustment

@@ -397,6 +397,25 @@ var LeavePolicyService = (function () {
     return row ? num_(row.opening_cf_days, 0) : 0;
   }
 
+  /**
+   * Read-only opening carry for UI / attendance (no ledger writes or month backfill).
+   */
+  function monthlyOpeningCarryReadOnly_(employeeId, year, month) {
+    employeeId = trim_(employeeId);
+    year = Number(year);
+    month = Number(month);
+    if (!employeeId || !isFinite(year) || !isFinite(month)) return 0;
+    var current = findLedgerRow_(employeeId, year, month);
+    if (current) return num_(current.opening_cf_days, 0);
+    var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    if (!emp) return 0;
+    var policy = coerceVerticalPolicy_(getVerticalRow_(emp.vertical_name));
+    if (!policy.carry_forward_enabled || policy.carry_forward_frequency !== 'MONTHLY') return 0;
+    var prevMonth = month === 1 ? { year: year - 1, month: 12 } : { year: year, month: month - 1 };
+    var prev = findLedgerRow_(employeeId, prevMonth.year, prevMonth.month);
+    return prev ? num_(prev.carry_to_next_days, 0) : 0;
+  }
+
   return {
     GENERAL_TYPE_CODE: GENERAL_TYPE_CODE_,
     leaveYearStartMonth: leaveYearStartMonth,
@@ -413,6 +432,7 @@ var LeavePolicyService = (function () {
     syncCurrentYearBalanceFromPolicy: syncCurrentYearBalanceFromPolicy_,
     processMonthlyPeriod: processMonthlyPeriod_,
     monthlyOpeningCarry: monthlyOpeningCarry_,
+    monthlyOpeningCarryReadOnly: monthlyOpeningCarryReadOnly_,
     monthsInLeaveYear: monthsInLeaveYear_
   };
 })();

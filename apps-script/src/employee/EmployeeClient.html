@@ -412,15 +412,46 @@
       listState.ignoreFilter = false;
     }
 
+    function syncTeamLeaveTableHead_(showLeave) {
+      var table = document.querySelector('.data-table--stack-md');
+      if (!table) return;
+      var tr = table.querySelector('thead tr');
+      if (!tr) return;
+      if (!showLeave) {
+        tr.innerHTML = '<th>Employee ID</th><th>Name</th><th>Department</th><th>Designation</th>' +
+          '<th>Vertical</th><th>Location</th><th>Type</th><th>Status</th><th>Manager</th>';
+        return;
+      }
+      tr.innerHTML = '<th>Employee ID</th><th>Name</th><th class="num">Year avail.</th><th class="num">Year used</th>' +
+        '<th class="num">Pending</th><th class="num">Month avail.</th><th>Department</th><th>Status</th><th>Manager</th>';
+    }
+
     function renderTable(data) {
       var tbody = $('emp-table-body');
       if (!tbody) return;
+      var showLeave = !!(listState.team && data.rows && data.rows.length && data.rows[0].leave_summary);
+      syncTeamLeaveTableHead_(showLeave);
+      var colCount = showLeave ? 9 : 9;
       if (!data.rows || !data.rows.length) {
-        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="9"><div class="empty-state empty-state-inline">' +
+        tbody.innerHTML = '<tr class="table-empty-row"><td colspan="' + colCount + '"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p>' +
           '<p class="empty-state-text">Try a different search or clear a filter.</p></div></td></tr>';
       } else {
         tbody.innerHTML = data.rows.map(function (r) {
+          var ls = r.leave_summary || {};
+          if (showLeave) {
+            return '<tr class="table-row-click" data-id="' + escapeHtml(r.employee_id) + '">' +
+              '<td class="mono" data-label="Employee ID">' + escapeHtml(r.employee_id) + '</td>' +
+              '<td data-label="Name">' + escapeHtml(r.display_name) + '</td>' +
+              '<td class="num" data-label="Year available">' + (ls.leave_year_available != null ? ls.leave_year_available : '-') + '</td>' +
+              '<td class="num" data-label="Year used">' + (ls.leave_year_used != null ? ls.leave_year_used : '-') + '</td>' +
+              '<td class="num" data-label="Pending">' + (ls.leave_year_pending != null ? ls.leave_year_pending : '-') + '</td>' +
+              '<td class="num" data-label="Month available">' + (ls.month_available != null ? ls.month_available : '-') + '</td>' +
+              '<td data-label="Department">' + escapeHtml(r.department) + '</td>' +
+              '<td data-label="Status">' + statusBadge(r.status) + '</td>' +
+              '<td data-label="Manager">' + escapeHtml(r.manager_name || r.manager_employee_id || '-') + '</td>' +
+              '</tr>';
+          }
           return '<tr class="table-row-click" data-id="' + escapeHtml(r.employee_id) + '">' +
             '<td class="mono" data-label="Employee ID">' + escapeHtml(r.employee_id) + '</td>' +
             '<td data-label="Name">' + escapeHtml(r.display_name) + '</td>' +
@@ -834,7 +865,7 @@
       $('page-title').textContent = title;
       var tabs = ['personal', 'employment'];
       if (emp.can_view_payroll_ids) tabs.push('payroll');
-      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) tabs.push('leave');
+      if (emp.can_view_leave) tabs.push('leave');
       if (emp.can_view_documents || emp.can_upload_documents) tabs.push('documents');
       if (emp.can_view_payslips) tabs.push('payslips');
       if (emp.can_manage_app_access) tabs.push('app-access');
@@ -876,7 +907,7 @@
       html += '<div class="tab-panel' + (savedTab === 'personal' ? ' active' : '') + '" data-panel="personal">' + personalPanel(emp) + '</div>';
       html += '<div class="tab-panel' + (savedTab === 'employment' ? ' active' : '') + '" data-panel="employment">' + employmentPanel(emp) + '</div>';
       if (emp.can_view_payroll_ids) html += '<div class="tab-panel' + (savedTab === 'payroll' ? ' active' : '') + '" data-panel="payroll">' + payrollPanel(emp) + '</div>';
-      if (emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+      if (emp.can_view_leave) {
         html += '<div class="tab-panel' + (savedTab === 'leave' ? ' active' : '') + '" data-panel="leave"><div id="leave-summary">' +
           '<div class="table-wrap"><table><thead><tr><th>Type</th><th>Year</th><th>Entitled</th><th>Used</th><th>Pending</th><th>Carried</th><th>Available</th></tr></thead>' +
           '<tbody>' + skRows(7, 3) + '</tbody></table></div></div></div>';
@@ -913,7 +944,7 @@
 
     function ensureProfileExtras_(emp, tab) {
       if (!emp || !tab) return;
-      if (tab === 'leave' && emp.view_mode !== 'TEAM_WORK' && emp.can_view_leave) {
+      if (tab === 'leave' && emp.can_view_leave) {
         loadLeave(emp.employee_id);
       } else if (tab === 'documents' && (emp.can_view_documents || emp.can_upload_documents)) {
         loadDocs(emp, null);
@@ -1186,28 +1217,35 @@
       });
     }
 
-    function loadLeave(employeeId, restore) {
+    function loadLeave(employeeId, forceRefresh) {
       var el = $('leave-summary');
       var extras = empViewCache.extras[employeeId] = empViewCache.extras[employeeId] || {};
-      if (extras.leave && el) {
+      if (extras.leave && el && !forceRefresh) {
         paintLeaveSummary_(el, extras.leave, leaveSummaryOptions_(employeeId));
         return;
       }
-      if (extras.leaveLoading) return;
+      var reqId = (extras.leaveReqId || 0) + 1;
+      extras.leaveReqId = reqId;
       extras.leaveLoading = true;
       var seq = App.getState().navSeq;
       callServer('apiGetEmployeeLeaveSummary', employeeId)
         .then(function (rows) {
-          extras.leaveLoading = false;
+          if (extras.leaveReqId !== reqId) return;
           var panel = $('leave-summary');
           if (!panel || seq !== App.getState().navSeq) return;
           extras.leave = rows;
           paintLeaveSummary_(panel, rows, leaveSummaryOptions_(employeeId));
         })
         .catch(function (err) {
-          extras.leaveLoading = false;
+          if (extras.leaveReqId !== reqId) return;
           var panel = $('leave-summary');
-          paintErr(panel, err.message || 'Leave summary unavailable', function () { loadLeave(employeeId); });
+          paintErr(panel, err.message || 'Leave summary unavailable', function () {
+            delete extras.leave;
+            loadLeave(employeeId, true);
+          });
+        })
+        .then(function () {
+          if (extras.leaveReqId === reqId) extras.leaveLoading = false;
         });
     }
 
