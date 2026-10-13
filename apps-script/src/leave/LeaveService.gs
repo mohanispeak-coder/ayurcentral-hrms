@@ -63,6 +63,65 @@ var LeaveService = (function () {
     return LeaveEngine.getLeaveYear(asOf || todayDateOnly_(), leaveYearStartMonth_());
   }
 
+  /**
+   * Approved / pending days for a leave year from LeaveRequests (source of truth for directory UI).
+   */
+  function summarizeLeaveYearFromRequests_(employeeId, leaveYear) {
+    employeeId = String(employeeId || '').trim();
+    leaveYear = String(leaveYear || currentLeaveYear_());
+    var startMonth = leaveYearStartMonth_();
+    var usedByType = {};
+    var pendingByType = {};
+    var usedTotal = 0;
+    var pendingTotal = 0;
+    DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
+      if (!employeeIdsMatch_(r.employee_id, employeeId)) return;
+      var y = String(LeaveEngine.getLeaveYear(r.start_date, startMonth));
+      if (y !== leaveYear) return;
+      var days = LeaveEngine.toNumber(r.total_days);
+      var tid = String(r.leave_type_id || '');
+      var st = String(r.status || '').toUpperCase();
+      if (st === HRMS.LEAVE_STATUS.APPROVED) {
+        usedTotal += days;
+        usedByType[tid] = (usedByType[tid] || 0) + days;
+      } else if (LeaveEngine.isPendingApprovalStatus(r.status) || st === HRMS.LEAVE_STATUS.SUBMITTED) {
+        pendingTotal += days;
+        pendingByType[tid] = (pendingByType[tid] || 0) + days;
+      }
+    });
+    return {
+      leave_year: leaveYear,
+      usedByType: usedByType,
+      pendingByType: pendingByType,
+      usedTotal: usedTotal,
+      pendingTotal: pendingTotal
+    };
+  }
+
+  function mergeRequestTotalsIntoBalanceView_(view, reqTotals, leaveTypeId) {
+    if (!view || !reqTotals) return view;
+    var tid = String(leaveTypeId || view.leave_type_id || '');
+    var entitled = LeaveEngine.toNumber(view.entitled_days);
+    var cf = LeaveEngine.toNumber(view.carried_forward_days);
+    var used = reqTotals.usedByType.hasOwnProperty(tid)
+      ? LeaveEngine.toNumber(reqTotals.usedByType[tid])
+      : LeaveEngine.toNumber(view.used_days);
+    var pending = reqTotals.pendingByType.hasOwnProperty(tid)
+      ? LeaveEngine.toNumber(reqTotals.pendingByType[tid])
+      : LeaveEngine.toNumber(view.pending_days);
+    view.used_days = used;
+    view.pending_days = pending;
+    if (view.requires_balance !== false) {
+      view.available_days = LeaveEngine.availableDays({
+        entitled_days: entitled,
+        carried_forward_days: cf,
+        used_days: used,
+        pending_days: pending
+      });
+    }
+    return view;
+  }
+
   function notificationsEnabled_() {
     return LeaveEngine.isTruthy(ConfigService.getSetting('notification_leave', true));
   }
@@ -1338,9 +1397,10 @@ var LeaveService = (function () {
     if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.syncCurrentYearBalanceFromPolicy) {
       LeavePolicyService.syncCurrentYearBalanceFromPolicy(target, year, balanceIndex, emp);
     }
+    var reqTotals = summarizeLeaveYearFromRequests_(target, year);
     var balances = listBalanceTypes_(true).map(function (t) {
       var row = findBalance_(target, t.leave_type_id, year, balanceIndex);
-      return serializeBalanceRow_(t, row, year);
+      return mergeRequestTotalsIntoBalanceView_(serializeBalanceRow_(t, row, year), reqTotals, t.leave_type_id);
     });
     var tmap = typeMap_();
     var emap = empMap_();
@@ -1750,6 +1810,7 @@ var LeaveService = (function () {
     previewDays: previewDays,
     listEmployeeOptions: listEmployeeOptions,
     currentLeaveYear: currentLeaveYear_,
+    summarizeLeaveYearFromRequests: summarizeLeaveYearFromRequests_,
     getApprovedLopForPayroll: function (employeeId, periodYear, periodMonth) {
       return LeaveLopService.computeLopFromLeave(employeeId, periodYear, periodMonth);
     }

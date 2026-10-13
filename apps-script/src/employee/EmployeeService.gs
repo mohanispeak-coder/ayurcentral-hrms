@@ -441,15 +441,34 @@ var EmployeeService = (function () {
       return !leaveYear || String(b.leave_year) === leaveYear;
     });
     if (!general.length) general = balances;
+    var reqTotals = null;
+    if (typeof LeaveService !== 'undefined' && LeaveService.summarizeLeaveYearFromRequests && leaveYear) {
+      try {
+        reqTotals = LeaveService.summarizeLeaveYearFromRequests(employeeId, leaveYear);
+      } catch (ignoreReq) {}
+    }
+    var entitledSum = 0;
+    var cfSum = 0;
     general.forEach(function (b) {
-      out.leave_year_entitled += Number(b.entitled_days) || 0;
-      out.leave_year_used += Number(b.used_days) || 0;
-      out.leave_year_pending += Number(b.pending_days) || 0;
-      var avail = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
-        ? LeaveEngine.availableDays(b)
-        : Number(b.available_days) || 0;
-      out.leave_year_available += avail;
+      entitledSum += Number(b.entitled_days) || 0;
+      cfSum += Number(b.carried_forward_days) || 0;
     });
+    if (reqTotals) {
+      out.leave_year_entitled = entitledSum;
+      out.leave_year_used = Number(reqTotals.usedTotal) || 0;
+      out.leave_year_pending = Number(reqTotals.pendingTotal) || 0;
+      out.leave_year_available = Math.max(0, entitledSum + cfSum - out.leave_year_used - out.leave_year_pending);
+    } else {
+      general.forEach(function (b) {
+        out.leave_year_entitled += Number(b.entitled_days) || 0;
+        out.leave_year_used += Number(b.used_days) || 0;
+        out.leave_year_pending += Number(b.pending_days) || 0;
+        var avail = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
+          ? LeaveEngine.availableDays(b)
+          : Number(b.available_days) || 0;
+        out.leave_year_available += avail;
+      });
+    }
     if (typeof MonthlyLeaveService !== 'undefined') {
       try {
         var now = new Date();
@@ -1336,19 +1355,43 @@ var EmployeeService = (function () {
         monthlySnapshot = MonthlyLeaveService.getSnapshot(emp.employee_id, now.getFullYear(), now.getMonth() + 1);
       } catch (ignoreSnap) {}
     }
+    var leaveYearForReq = '';
+    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
+      try { leaveYearForReq = String(LeaveService.currentLeaveYear()); } catch (ignoreLy2) {}
+    }
+    var reqTotals = null;
+    if (leaveYearForReq && typeof LeaveService !== 'undefined' && LeaveService.summarizeLeaveYearFromRequests) {
+      try {
+        reqTotals = LeaveService.summarizeLeaveYearFromRequests(emp.employee_id, leaveYearForReq);
+      } catch (ignoreReq2) {}
+    }
     var balances = EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
+      var entitled = Number(b.entitled_days) || 0;
+      var cf = Number(b.carried_forward_days) || 0;
+      var used = Number(b.used_days) || 0;
+      var pending = Number(b.pending_days) || 0;
+      var tid = String(b.leave_type_id || '');
+      if (reqTotals && String(b.leave_year) === leaveYearForReq) {
+        if (reqTotals.usedByType.hasOwnProperty(tid)) used = Number(reqTotals.usedByType[tid]) || 0;
+        if (reqTotals.pendingByType.hasOwnProperty(tid)) pending = Number(reqTotals.pendingByType[tid]) || 0;
+      }
       var available = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
-        ? LeaveEngine.availableDays(b)
+        ? LeaveEngine.availableDays({
+          entitled_days: entitled,
+          carried_forward_days: cf,
+          used_days: used,
+          pending_days: pending
+        })
         : Number(b.available_days) || 0;
       return {
         leave_balance_id: b.leave_balance_id,
         leave_type_id: b.leave_type_id,
         leave_type_name: typeName[b.leave_type_id] || b.leave_type_id,
         leave_year: String(b.leave_year),
-        entitled_days: Number(b.entitled_days) || 0,
-        used_days: Number(b.used_days) || 0,
-        pending_days: Number(b.pending_days) || 0,
-        carried_forward_days: Number(b.carried_forward_days) || 0,
+        entitled_days: entitled,
+        used_days: used,
+        pending_days: pending,
+        carried_forward_days: cf,
         available_days: available
       };
     }).sort(function (a, b) {

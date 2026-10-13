@@ -15,6 +15,7 @@ function check(name, cond) {
 }
 
 var emp = fs.readFileSync(path.join(root, 'employee', 'EmployeeService.gs'), 'utf8');
+var leaveSvc = fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8');
 var api = fs.readFileSync(path.join(root, 'employee', 'ApiEmployee.gs'), 'utf8');
 var perm = fs.readFileSync(path.join(root, 'foundation', 'PermissionService.gs'), 'utf8');
 var leaveUi = fs.readFileSync(path.join(root, 'leave', 'LeaveUi.html'), 'utf8');
@@ -28,6 +29,7 @@ check('leave-ui-self-registers-routes', /registerLeaveRoutesFromUi_/.test(leaveU
 check('shell-leave-route-fallback', /invokeRegisteredRouteRender_/.test(scripts));
 check('module-routes-all-registered', /keys\.every/.test(scripts));
 check('leave-summary-month-lop', /month_lop/.test(emp) && /month_paid/.test(emp));
+check('leave-year-used-from-requests', /summarizeLeaveYearFromRequests/.test(leaveSvc) && /summarizeLeaveYearFromRequests/.test(emp));
 var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));
 check('leave-balances-lop-column', /Month LOP/.test(leaveUi));
