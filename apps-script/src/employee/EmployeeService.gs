@@ -426,7 +426,10 @@ var EmployeeService = (function () {
       month_grant: 0,
       month_used: 0,
       month_available: 0,
-      month_lop: 0
+      month_lop: 0,
+      month_opening_carry: 0,
+      month_pool: 0,
+      month_paid: 0
     };
     if (!employeeId) return out;
     var leaveYear = '';
@@ -452,32 +455,17 @@ var EmployeeService = (function () {
         var now = new Date();
         var y = now.getFullYear();
         var m = now.getMonth() + 1;
-        if (options.light) {
-          if (MonthlyLeaveService.grantForEmployeeMonth_) {
-            out.month_grant = Number(MonthlyLeaveService.grantForEmployeeMonth_(emp, y, m)) || 0;
-          }
-          var counts = MonthlyLeaveService.emptyCountsFromPayrollInput_
-            ? MonthlyLeaveService.emptyCountsFromPayrollInput_(employeeId, y, m)
-            : {};
-          out.month_used = MonthlyLeaveService.leaveUsedFromCounts_
-            ? Number(MonthlyLeaveService.leaveUsedFromCounts_(counts)) || 0
-            : 0;
-          var opening = MonthlyLeaveService.readOpeningCarry_
-            ? Number(MonthlyLeaveService.readOpeningCarry_(employeeId, y, m)) || 0
-            : 0;
-          var adj = MonthlyLeaveService.adjustmentForEmployeeMonth_
-            ? Number(MonthlyLeaveService.adjustmentForEmployeeMonth_(employeeId, y, m)) || 0
-            : 0;
-          out.month_available = Math.max(0, opening + out.month_grant + adj - out.month_used);
-          if (MonthlyLeaveService.lopFromExcessLeave_) {
-            out.month_lop = Number(MonthlyLeaveService.lopFromExcessLeave_(employeeId, y, m, emp, counts)) || 0;
-          }
+        if (MonthlyLeaveService.fillMonthPoolSummary_) {
+          MonthlyLeaveService.fillMonthPoolSummary_(out, employeeId, y, m, emp);
         } else if (MonthlyLeaveService.getSnapshot) {
           var snap = MonthlyLeaveService.getSnapshot(employeeId, y, m);
           out.month_grant = Number(snap.grant_days) || 0;
           out.month_used = Number(snap.used_days) || 0;
           out.month_available = Number(snap.available_days) || 0;
           out.month_lop = Number(snap.lop_days) || 0;
+          out.month_opening_carry = Number(snap.opening_carry_forward_days) || 0;
+          out.month_pool = Number(snap.entitlement_pool_days) || 0;
+          out.month_paid = Number(snap.paid_leave_days) || 0;
         }
       } catch (ignoreSnap) {}
     }

@@ -333,13 +333,11 @@ var LeavePolicyService = (function () {
     return rows && rows.length ? rows[0] : null;
   }
 
-  function processMonthlyPeriod_(employeeId, year, month) {
+  function computeMonthlyLedgerFields_(employeeId, year, month) {
     employeeId = trim_(employeeId);
     year = Number(year);
     month = Number(month);
     if (!employeeId || !isFinite(year) || !isFinite(month)) return null;
-    var existing = findLedgerRow_(employeeId, year, month);
-    if (existing) return existing;
     var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
     if (!emp) return null;
     var policy = coerceVerticalPolicy_(getVerticalRow_(emp.vertical_name));
@@ -350,9 +348,6 @@ var LeavePolicyService = (function () {
     var opening = 0;
     if (policy.carry_forward_enabled && policy.carry_forward_frequency === 'MONTHLY') {
       var prev = findLedgerRow_(employeeId, prevMonth.year, prevMonth.month);
-      if (!prev && (prevMonth.year !== year || prevMonth.month !== month)) {
-        prev = processMonthlyPeriod_(employeeId, prevMonth.year, prevMonth.month);
-      }
       opening = prev ? num_(prev.carry_to_next_days, 0) : 0;
     }
     var counts = typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.emptyCountsFromPayrollInput_
@@ -374,26 +369,92 @@ var LeavePolicyService = (function () {
     if (policy.carry_forward_enabled && policy.carry_forward_frequency === 'MONTHLY') {
       carry = closing < policy.carry_forward_max_days ? closing : policy.carry_forward_max_days;
     }
+    return {
+      opening_cf_days: opening,
+      grant_days: grant,
+      used_days: used,
+      adjustment_days: adj,
+      closing_balance: closing,
+      carry_to_next_days: carry
+    };
+  }
+
+  function refreshMonthlyLedger_(employeeId, year, month) {
+    employeeId = trim_(employeeId);
+    year = Number(year);
+    month = Number(month);
+    var fields = computeMonthlyLedgerFields_(employeeId, year, month);
+    if (!fields) return null;
+    var processedAt = new Date().toISOString();
+    var existing = findLedgerRow_(employeeId, year, month);
+    if (existing) {
+      var merged = {
+        ledger_id: existing.ledger_id,
+        employee_id: employeeId,
+        period_year: year,
+        period_month: month,
+        opening_cf_days: fields.opening_cf_days,
+        grant_days: fields.grant_days,
+        used_days: fields.used_days,
+        adjustment_days: fields.adjustment_days,
+        closing_balance: fields.closing_balance,
+        carry_to_next_days: fields.carry_to_next_days,
+        processed_at: processedAt
+      };
+      DbService.updateRecord(HRMS.SHEETS.LEAVE_MONTHLY_LEDGER, 'ledger_id', existing.ledger_id, merged);
+      return merged;
+    }
     var id = 'LML' + Utilities.getUuid().replace(/-/g, '').slice(0, 12).toUpperCase();
     var row = {
       ledger_id: id,
       employee_id: employeeId,
       period_year: year,
       period_month: month,
-      opening_cf_days: opening,
-      grant_days: grant,
-      used_days: used,
-      adjustment_days: adj,
-      closing_balance: closing,
-      carry_to_next_days: carry,
-      processed_at: new Date().toISOString()
+      opening_cf_days: fields.opening_cf_days,
+      grant_days: fields.grant_days,
+      used_days: fields.used_days,
+      adjustment_days: fields.adjustment_days,
+      closing_balance: fields.closing_balance,
+      carry_to_next_days: fields.carry_to_next_days,
+      processed_at: processedAt
     };
     DbService.appendRecord(HRMS.SHEETS.LEAVE_MONTHLY_LEDGER, row);
     return row;
   }
 
+  function processMonthlyPeriod_(employeeId, year, month) {
+    return refreshMonthlyLedger_(employeeId, year, month);
+  }
+
+  /**
+   * After attendance register save: refresh monthly ledger so carry → next month and paid vs LOP stay correct.
+   */
+  function syncMonthlyLedgerAfterAttendance_(employeeId, year, month) {
+    employeeId = trim_(employeeId);
+    year = Number(year);
+    month = Number(month);
+    if (!employeeId || !isFinite(year) || !isFinite(month)) return null;
+    var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    if (!emp) return null;
+    var policy = coerceVerticalPolicy_(getVerticalRow_(emp.vertical_name));
+    if (policy.carry_forward_enabled && policy.carry_forward_frequency === 'MONTHLY') {
+      var prevMonth = month === 1 ? { year: year - 1, month: 12 } : { year: year, month: month - 1 };
+      if (findLedgerRow_(employeeId, prevMonth.year, prevMonth.month)) {
+        refreshMonthlyLedger_(employeeId, prevMonth.year, prevMonth.month);
+      }
+    }
+    refreshMonthlyLedger_(employeeId, year, month);
+    if (policy.carry_forward_enabled && policy.carry_forward_frequency === 'MONTHLY') {
+      var nextMonth = month === 12 ? { year: year + 1, month: 1 } : { year: year, month: month + 1 };
+      if (findLedgerRow_(employeeId, nextMonth.year, nextMonth.month)) {
+        refreshMonthlyLedger_(employeeId, nextMonth.year, nextMonth.month);
+      }
+    }
+    return findLedgerRow_(employeeId, year, month);
+  }
+
   function monthlyOpeningCarry_(employeeId, year, month) {
-    var row = processMonthlyPeriod_(employeeId, year, month);
+    var row = refreshMonthlyLedger_(employeeId, year, month);
     return row ? num_(row.opening_cf_days, 0) : 0;
   }
 
@@ -431,6 +492,8 @@ var LeavePolicyService = (function () {
     effectiveEntitledDays: effectiveEntitledDays_,
     syncCurrentYearBalanceFromPolicy: syncCurrentYearBalanceFromPolicy_,
     processMonthlyPeriod: processMonthlyPeriod_,
+    refreshMonthlyLedger: refreshMonthlyLedger_,
+    syncMonthlyLedgerAfterAttendance: syncMonthlyLedgerAfterAttendance_,
     monthlyOpeningCarry: monthlyOpeningCarry_,
     monthlyOpeningCarryReadOnly: monthlyOpeningCarryReadOnly_,
     monthsInLeaveYear: monthsInLeaveYear_

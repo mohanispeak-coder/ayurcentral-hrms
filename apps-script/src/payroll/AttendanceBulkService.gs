@@ -491,6 +491,15 @@ var AttendanceBulkService = (function () {
     };
   }
 
+  function syncMonthlyLedgerForAttendance_(employeeId, year, month) {
+    if (typeof LeavePolicyService === 'undefined' || !LeavePolicyService.syncMonthlyLedgerAfterAttendance) return;
+    try {
+      LeavePolicyService.syncMonthlyLedgerAfterAttendance(employeeId, year, month);
+    } catch (e) {
+      Logger.log('syncMonthlyLedgerForAttendance failed: ' + (e.message || e));
+    }
+  }
+
   function commitPayloads_(run, payloads) {
     var year = Number(run.period_year);
     var month = Number(run.period_month);
@@ -500,9 +509,12 @@ var AttendanceBulkService = (function () {
       var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: p.employee_id });
       var updates = AttendanceRegisterService.saveRegisterForInput_(
         inp, p.register, year, month, emp ? emp.vertical_name : '');
-      return { pk: p.payroll_input_id, updates: updates };
+      return { pk: p.payroll_input_id, updates: updates, employee_id: p.employee_id };
     });
     if (items.length) DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', items);
+    items.forEach(function (item) {
+      syncMonthlyLedgerForAttendance_(item.employee_id, year, month);
+    });
     return PayrollService.getRunDetail(run.payroll_run_id, { skipSync: true, alreadyLocked: true });
   }
 
@@ -573,6 +585,7 @@ var AttendanceBulkService = (function () {
       var updates = AttendanceRegisterService.saveRegisterForInput_(
         inp, reg, run.period_year, run.period_month, emp ? emp.vertical_name : '');
       DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', inp.payroll_input_id, updates);
+      syncMonthlyLedgerForAttendance_(employeeId, run.period_year, run.period_month);
       return AttendanceRegisterService.listSummariesForRun_(runId).filter(function (r) {
         return r.employee_id === employeeId;
       })[0];

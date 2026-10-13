@@ -27,7 +27,7 @@ check('leave-ui-balances-route', /renderLeaveBalances/.test(leaveUi) && /apiGetL
 check('leave-ui-self-registers-routes', /registerLeaveRoutesFromUi_/.test(leaveUi));
 check('shell-leave-route-fallback', /invokeRegisteredRouteRender_/.test(scripts));
 check('module-routes-all-registered', /keys\.every/.test(scripts));
-check('leave-summary-month-lop', /month_lop/.test(emp));
+check('leave-summary-month-lop', /month_lop/.test(emp) && /month_paid/.test(emp));
 var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));
 check('leave-balances-lop-column', /Month LOP/.test(leaveUi));

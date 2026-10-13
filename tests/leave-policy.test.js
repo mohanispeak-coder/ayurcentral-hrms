@@ -28,6 +28,11 @@ var apiLeave = fs.readFileSync(path.join(root, 'leave', 'ApiLeave.gs'), 'utf8');
 
 check('leave-policy-service', /LeavePolicyService/.test(policySrc) && /computeLeaveYearEntitlement/.test(policySrc));
 check('monthly-carry-read-only', /monthlyOpeningCarryReadOnly/.test(policySrc));
+check('ledger-refresh-on-attendance', /syncMonthlyLedgerAfterAttendance/.test(policySrc) && /refreshMonthlyLedger_/.test(policySrc));
+var bulk = fs.readFileSync(path.join(root, 'payroll', 'AttendanceBulkService.gs'), 'utf8');
+check('attendance-sync-ledger', /syncMonthlyLedgerForAttendance_/.test(bulk));
+var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
+check('month-pool-summary', /fillMonthPoolSummary_/.test(monthly) && /paid_leave_days/.test(monthly));
 check('ledger-sheet', /LEAVE_MONTHLY_LEDGER/.test(constantsSrc) && /LEAVE_MONTHLY_LEDGER/.test(schemaSrc));
 check('vertical-cf-columns', /leave_carry_forward_enabled/.test(schemaSrc));
 check('policy-api', /apiLeaveGetPolicySettings/.test(apiLeave) && /apiLeaveSavePolicySettings/.test(apiLeave));

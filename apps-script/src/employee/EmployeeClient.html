@@ -423,7 +423,7 @@
         return;
       }
       tr.innerHTML = '<th>Employee ID</th><th>Name</th><th class="num">Year avail.</th><th class="num">Year used</th>' +
-        '<th class="num">Pending</th><th class="num">Month avail.</th><th class="num">Month LOP</th><th>Department</th><th>Status</th><th>Manager</th>';
+        '<th class="num">Pending</th><th class="num">Open CF</th><th class="num">Month paid</th><th class="num">Month LOP</th><th>Department</th><th>Status</th><th>Manager</th>';
     }
 
     function renderTable(data) {
@@ -446,7 +446,8 @@
               '<td class="num" data-label="Year available">' + (ls.leave_year_available != null ? ls.leave_year_available : '-') + '</td>' +
               '<td class="num" data-label="Year used">' + (ls.leave_year_used != null ? ls.leave_year_used : '-') + '</td>' +
               '<td class="num" data-label="Pending">' + (ls.leave_year_pending != null ? ls.leave_year_pending : '-') + '</td>' +
-              '<td class="num" data-label="Month available">' + (ls.month_available != null ? ls.month_available : '-') + '</td>' +
+              '<td class="num" data-label="Open carry">' + (ls.month_opening_carry != null ? ls.month_opening_carry : '-') + '</td>' +
+              '<td class="num" data-label="Month paid">' + (ls.month_paid != null ? ls.month_paid : '-') + '</td>' +
               '<td class="num" data-label="Month LOP">' + (ls.month_lop != null ? ls.month_lop : '-') + '</td>' +
               '<td data-label="Department">' + escapeHtml(r.department) + '</td>' +
               '<td data-label="Status">' + statusBadge(r.status) + '</td>' +
@@ -1192,16 +1193,20 @@
         var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
         html += '<div class="card" style="margin-bottom:16px"><h3 class="section-title">Monthly leave — ' + escapeHtml(periodLabel) + '</h3>' +
           '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
-          'LOP is leave recorded in the register above the monthly pool (grant + carry + adjustment). ' +
+          'Pool = opening carry + grant + adjustment. Leave in the register uses the pool first (<strong>paid</strong>); only the remainder is <strong>LOP</strong>. ' +
           escapeHtml(snap.carry_forward_note || '') + '</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-          '<th>Period</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Adjustment</th><th class="num">Available</th><th class="num">LOP</th>' +
+          '<th>Period</th><th class="num">Open carry</th><th class="num">Grant</th><th class="num">Adj</th><th class="num">Pool</th>' +
+          '<th class="num">Used</th><th class="num">Paid</th><th class="num">Avail</th><th class="num">LOP</th>' +
           '</tr></thead><tbody><tr>' +
           '<td>' + escapeHtml(periodLabel) + '</td>' +
+          '<td class="num">' + (snap.opening_carry_forward_days != null ? snap.opening_carry_forward_days : 0) + '</td>' +
           '<td class="num">' + snap.grant_days + '</td>' +
-          '<td class="num">' + snap.used_days + '</td>' +
           '<td class="num">' + snap.adjustment_days + '</td>' +
-          '<td class="num"><strong>' + snap.available_days + '</strong></td>' +
+          '<td class="num"><strong>' + (snap.entitlement_pool_days != null ? snap.entitlement_pool_days : 0) + '</strong></td>' +
+          '<td class="num">' + snap.used_days + '</td>' +
+          '<td class="num">' + (snap.paid_leave_days != null ? snap.paid_leave_days : 0) + '</td>' +
+          '<td class="num">' + snap.available_days + '</td>' +
           '<td class="num">' + (snap.lop_days != null ? snap.lop_days : 0) + '</td>' +
           '</tr></tbody></table></div></div>';
       }

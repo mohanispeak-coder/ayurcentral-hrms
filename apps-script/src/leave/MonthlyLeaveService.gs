@@ -141,6 +141,42 @@ var MonthlyLeaveService = (function () {
    * LOP days from leave (L / ML / half-day) recorded in attendance when usage exceeds the monthly pool.
    * Same rule as attendance register → payroll (lop_from_excess_leave).
    */
+  function leavePaidLopSplit_(used, pool) {
+    if (typeof AttendanceRegisterService !== 'undefined' && AttendanceRegisterService.leavePaidAndLopSplit_) {
+      return AttendanceRegisterService.leavePaidAndLopSplit_(used, pool);
+    }
+    used = num_(used, 0);
+    pool = Math.max(0, num_(pool, 0));
+    var paid = Math.min(used, pool);
+    return { paid_leave_days: paid, lop_from_excess_leave: Math.max(0, used - paid) };
+  }
+
+  function fillMonthPoolSummary_(target, employeeId, year, month, emp, counts) {
+    target = target || {};
+    employeeId = trim_(employeeId);
+    year = Number(year);
+    month = Number(month);
+    if (!emp && employeeId) {
+      emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    }
+    counts = counts || emptyCountsFromPayrollInput_(employeeId, year, month);
+    var opening = readOpeningCarry_(employeeId, year, month);
+    var grant = grantForEmployeeMonth_(emp || {}, year, month);
+    var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
+    var used = leaveUsedFromCounts_(counts);
+    var pool = opening + grant + adj;
+    var split = leavePaidLopSplit_(used, pool);
+    target.month_opening_carry = opening;
+    target.month_grant = grant;
+    target.month_adjustment = adj;
+    target.month_pool = pool;
+    target.month_used = used;
+    target.month_paid = split.paid_leave_days;
+    target.month_lop = split.lop_from_excess_leave;
+    target.month_available = Math.max(0, pool - used);
+    return target;
+  }
+
   function lopFromExcessLeave_(employeeId, year, month, emp, counts) {
     employeeId = trim_(employeeId);
     year = Number(year);
@@ -174,7 +210,9 @@ var MonthlyLeaveService = (function () {
       : '';
     var available = Math.max(0, openingCf + grant + adj - used);
     var entitlementPool = monthlyEntitlementPool_(emp, employeeId, year, month);
-    var lopDays = lopFromExcessLeave_(employeeId, year, month, emp, counts);
+    var split = leavePaidLopSplit_(used, entitlementPool);
+    var lopDays = split.lop_from_excess_leave;
+    var paidLeaveDays = split.paid_leave_days;
     var yearMode = typeof LeavePolicyService !== 'undefined' && LeavePolicyService.leaveYearMode
       ? LeavePolicyService.leaveYearMode()
       : String(ConfigService.getSetting('leave_year_mode', 'CALENDAR') || 'CALENDAR').toUpperCase();
@@ -189,6 +227,7 @@ var MonthlyLeaveService = (function () {
       used_days: used,
       adjustment_days: adj,
       available_days: available,
+      paid_leave_days: paidLeaveDays,
       lop_days: lopDays,
       carry_forward_days: openingCf,
       carry_forward_note: carryNote || (openingCf > 0 ? 'Includes carried-forward balance from prior month.' : ''),
@@ -258,6 +297,8 @@ var MonthlyLeaveService = (function () {
     adjustmentForEmployeeMonth_: adjustmentForEmployeeMonth_,
     monthlyEntitlementPool_: monthlyEntitlementPool_,
     lopFromExcessLeave_: lopFromExcessLeave_,
+    fillMonthPoolSummary_: fillMonthPoolSummary_,
+    leavePaidLopSplit_: leavePaidLopSplit_,
     readOpeningCarry_: readOpeningCarry_,
     emptyCountsFromPayrollInput_: emptyCountsFromPayrollInput_,
     getSnapshot: getSnapshot,
