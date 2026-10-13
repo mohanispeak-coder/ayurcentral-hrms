@@ -54,7 +54,11 @@ function apiHolidayDownloadImportTemplate(sessionToken) {
 function apiHolidayDownloadYearTemplate(calendarYear, sessionToken) {
   return hrmsRun_(function () {
     AuthService.requireAuth();
-    return HolidayCalendarService.downloadYearTemplate(calendarYear);
+    var y = calendarYear;
+    if (y && typeof y === 'object') {
+      y = y.calendar_year || y.year;
+    }
+    return HolidayCalendarService.downloadYearTemplate(y);
   }, sessionToken);
 }
 

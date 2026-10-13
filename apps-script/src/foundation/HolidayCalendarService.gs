@@ -452,22 +452,91 @@ var HolidayCalendarService = (function () {
     });
   }
 
+  function driveApiHint_() {
+    return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API → Add, then redeploy.';
+  }
+
   function exportSpreadsheetXlsx_(spreadsheetId) {
     SpreadsheetApp.flush();
-    Utilities.sleep(200);
+    Utilities.sleep(300);
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+
+    function tryFetchExport(url, label) {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) Utilities.sleep(400 * attempt);
+        try {
+          var resp = UrlFetchApp.fetch(url, {
+            headers: auth,
+            muteHttpExceptions: true,
+            followRedirects: true
+          });
+          if (resp.getResponseCode() === 200) {
+            var b = resp.getBlob();
+            if (b && b.getBytes().length > 100) return b;
+          }
+          Logger.log(label + ' attempt ' + (attempt + 1) + ' HTTP ' + resp.getResponseCode());
+        } catch (e) {
+          Logger.log(label + ' attempt ' + (attempt + 1) + ' failed: ' + (e.message || e));
+        }
+      }
+      return null;
+    }
+
     var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
       '/export?mimeType=' + encodeURIComponent(xlsxMime);
-    var resp = UrlFetchApp.fetch(v3Url, { headers: auth, muteHttpExceptions: true });
-    if (resp.getResponseCode() === 200) {
-      var b = resp.getBlob();
-      if (b && b.getBytes().length > 100) return b;
-    }
+    var blob = tryFetchExport(v3Url, 'Drive v3 export');
+    if (blob) return blob;
+
+    var docsUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
+    blob = tryFetchExport(docsUrl, 'Docs export');
+    if (blob) return blob;
+
     if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
-      return Drive.Files.export(spreadsheetId, xlsxMime);
+      try {
+        return Drive.Files.export(spreadsheetId, xlsxMime);
+      } catch (e) {
+        Logger.log('Drive.Files.export failed: ' + (e.message || e));
+      }
     }
-    throw configurationError_('Could not export holiday Excel template.');
+    throw configurationError_('Could not export holiday Excel template.' + driveApiHint_());
+  }
+
+  function buildYearTemplateRows_(year) {
+    var headers = ['calendar_year', 'holiday_date', 'name', 'scope', 'scope_value', 'optional'];
+    var lines = [headers.join(',')];
+    presetRows_('IN_NATIONAL_FIXED', year).forEach(function (r) {
+      lines.push([year, r.holiday_date, r.name, SCOPE_ALL_, '', 'false'].join(','));
+    });
+    var blankRows = 54;
+    for (var i = 0; i < blankRows; i++) {
+      lines.push([year, '', '', 'ALL', '', 'false'].join(','));
+    }
+    return { headers: headers, csv: lines.join('\n') + '\n' };
+  }
+
+  function downloadYearTemplateCsv_(year) {
+    var pack = buildYearTemplateRows_(year);
+    var blob = Utilities.newBlob(pack.csv, 'text/csv', 'HRMS_Holiday_Calendar_' + year + '.csv');
+    return {
+      fileName: blob.getName(),
+      mimeType: 'text/csv',
+      base64: Utilities.base64Encode(blob.getBytes()),
+      calendar_year: year,
+      templateVersion: '1-csv',
+      format: 'csv'
+    };
+  }
+
+  function fileResponseFromBlob_(blob, year, format) {
+    return {
+      fileName: blob.getName(),
+      mimeType: blob.getContentType(),
+      base64: Utilities.base64Encode(blob.getBytes()),
+      calendar_year: year,
+      templateVersion: '1',
+      format: format || 'xlsx'
+    };
   }
 
   function downloadYearTemplate(calendarYear) {
@@ -475,6 +544,7 @@ var HolidayCalendarService = (function () {
     var year = Number(calendarYear) || new Date().getFullYear();
     var ss = SpreadsheetApp.create('HRMS Holiday Calendar ' + year);
     var fileId = ss.getId();
+    var blob;
     try {
       var inst = ss.getSheets()[0];
       inst.setName('Instructions');
@@ -494,26 +564,24 @@ var HolidayCalendarService = (function () {
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
       sheet.setFrozenRows(1);
 
-      var examples = presetRows_('IN_NATIONAL_FIXED', year).map(function (r) {
+      var data = presetRows_('IN_NATIONAL_FIXED', year).map(function (r) {
         return [year, r.holiday_date, r.name, SCOPE_ALL_, '', 'false'];
       });
-      var data = examples.slice();
-      var blankRows = 54;
-      for (var i = 0; i < blankRows; i++) {
+      for (var bi = 0; bi < 54; bi++) {
         data.push([year, '', '', 'ALL', '', 'false']);
       }
-      sheet.getRange(2, 1, data.length, headers.length).setValues(data); // numRows = data.length
+      if (data.length) {
+        sheet.getRange(2, 1, data.length, headers.length).setValues(data);
+      }
       sheet.autoResizeColumns(1, headers.length);
 
-      var blob = exportSpreadsheetXlsx_(fileId);
+      blob = exportSpreadsheetXlsx_(fileId);
       blob.setName('HRMS_Holiday_Calendar_' + year + '.xlsx');
-      return {
-        fileName: blob.getName(),
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        base64: Utilities.base64Encode(blob.getBytes()),
-        calendar_year: year,
-        templateVersion: '1'
-      };
+      return fileResponseFromBlob_(blob, year, 'xlsx');
+    } catch (e) {
+      Logger.log('Holiday xlsx template failed, CSV fallback: ' + (e.message || e));
+      if (e.hrmsCode) throw e;
+      return downloadYearTemplateCsv_(year);
     } finally {
       try { DriveApp.getFileById(fileId).setTrashed(true); } catch (ignore) {}
     }
