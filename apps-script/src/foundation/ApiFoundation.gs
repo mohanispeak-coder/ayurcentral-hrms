@@ -5,7 +5,6 @@
 /** Allowlisted module UI partials for lazy load (shell stays lean). */
 var HRMS_MODULE_UI_FILES_ = {
   employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient', 'employee/EmployeeMandatoryFieldsClient'],
-  leave: ['leave/LeaveUi', 'leave/LeaveClient'],
   payroll: ['payroll/PayrollClient'],
   'payroll-attendance': ['payroll/AttendanceClient', 'payroll/FormTClient'],
   'payroll-structure': ['payroll/SalaryStructureClient'],
@@ -151,7 +150,7 @@ function apiGetAppBootstrap(sessionToken) {
 /**
  * Lazy-load module HTML/JS for first paint optimization.
  * Requires ACCESS_APP. Returns concatenated HTML for allowlisted modules only.
- * @param {string} moduleId employee | leave | payroll | ats | notifications
+ * @param {string} moduleId employee | payroll | ats | notifications
  * @param {string=} sessionToken
  * @return {Object} { moduleId, html }
  */

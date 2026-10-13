@@ -33,7 +33,7 @@ var scripts = read('apps-script/src/ui/Scripts.html');
 var styles = read('apps-script/src/ui/Styles.html');
 var index = read('apps-script/src/ui/Index.html');
 var ats = read('apps-script/src/ats/AtsService.gs');
-var leave = read('apps-script/src/leave/LeaveService.gs');
+var monthlyLeave = read('apps-script/src/payroll/MonthlyLeaveService.gs');
 var hrmsApi = read(path.join('..', 'ayurveda-ai', 'HrmsApi.js'));
 var hmac = read(path.join('..', 'ayurveda-ai', 'Hmac.js'));
 var driveSearch = read(path.join('..', 'ayurveda-ai', 'DriveSearch.js'));
@@ -71,7 +71,7 @@ check('expand-css-kept', /is-expanded/.test(styles));
 check('no-live-chip-css', !/ask-hr-live-chip/.test(styles));
 
 check('ats-no-askhr-count-helper', !/countScheduledInterviews/.test(ats));
-check('leave-no-askhr-count-helper', !/countApprovedOnDate/.test(leave));
+check('monthly-leave-no-askhr-count-helper', !/countApprovedOnDate/.test(monthlyLeave));
 
 check('hub-no-mode-allowlist', !/mode:\s*true/.test(hrmsApi) && !/context:\s*true/.test(hrmsApi));
 check('hub-knowledge-only-search',

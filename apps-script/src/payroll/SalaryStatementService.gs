@@ -60,8 +60,15 @@ var SalaryStatementService = (function () {
     return (names[Number(month) - 1] || month) + '- ' + year;
   }
 
+  function parseDateOnly_(value) {
+    if (!value) return null;
+    if (value instanceof Date && isFinite(value.getTime())) return value;
+    var d = new Date(value);
+    return isFinite(d.getTime()) ? d : null;
+  }
+
   function fmtDoj_(value) {
-    var d = typeof LeaveEngine !== 'undefined' ? LeaveEngine.toDateOnly(value) : null;
+    var d = parseDateOnly_(value);
     if (!d) return trim_(value);
     var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var yy = String(d.getFullYear());

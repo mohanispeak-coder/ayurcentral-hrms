@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HRMS shell smoke</title><style>
 /* =============================================================================
-   AyurCentral HRMS — premium enterprise design system
+   AyurCentral HRMS - premium enterprise design system
    Cool slate foundation + refined blue primary. System fonts only (no remote assets).
    Modules reuse these tokens/classes; do not invent one-off palettes.
    ============================================================================= */
@@ -416,11 +416,46 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--color-bg-muted);
 }
 .module-refresh-icon { display: inline-block; margin-right: 2px; flex-shrink: 0; }
+.page-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.page-header-meta:empty { display: none; }
+.page-header-meta .module-updated { margin-right: 0; flex: 1 1 auto; min-width: 0; }
 .btn.js-module-refresh {
   font-weight: 600;
   min-width: 10.5rem;
   justify-content: center;
 }
+
+.settings-matrix-wrap { margin-top: 12px; }
+.settings-matrix-table { min-width: 36rem; }
+.settings-matrix-table th:not(:first-child),
+.settings-matrix-table td:not(:first-child) {
+  min-width: 3.25rem;
+  text-align: center;
+  vertical-align: middle;
+}
+.settings-matrix-table th:first-child,
+.settings-matrix-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 6.5rem;
+  text-align: left;
+}
+.settings-matrix-table th:first-child {
+  background: #f8fafc;
+  box-shadow: 4px 0 8px -4px rgba(15, 23, 42, 0.1);
+}
+.settings-matrix-table td:first-child {
+  background: var(--color-bg-elevated);
+  box-shadow: 4px 0 8px -4px rgba(15, 23, 42, 0.08);
+}
+.settings-matrix-table .form-check { justify-content: center; margin: 0; }
+.settings-page .card > .hint { margin-bottom: 0; }
 
 /* ----- Cards & KPI ----- */
 
@@ -744,6 +779,7 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
   font-size: var(--text-md); line-height: 1.45; border: 1px solid transparent;
 }
 .alert-danger { background: var(--color-danger-bg); border-color: var(--color-danger-border); color: var(--color-danger); }
+.text-danger { color: var(--color-danger); }
 .alert-info { background: var(--color-info-bg); border-color: var(--color-info-border); color: var(--color-text-secondary); }
 .alert-warning { background: var(--color-warning-bg); border-color: var(--color-warning-border); color: var(--color-warning); }
 .alert-success { background: var(--color-success-bg); border-color: var(--color-success-border); color: var(--color-success); }
@@ -843,7 +879,7 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; width: 
   transform-origin: center center;
 }
 
-/* Shared skeleton surface + left→right shimmer (background-position — reliable in GAS iframe) */
+/* Shared skeleton surface + left→right shimmer (background-position - reliable in GAS iframe) */
 .skeleton,
 .hrms-skeleton,
 .hrms-skeleton-line,
@@ -923,7 +959,7 @@ tr.skeleton-row td { padding-top: 14px; padding-bottom: 14px; vertical-align: mi
   min-height: 120px;
 }
 
-/* Stable filter/control widths — prevent Refresh layout jump */
+/* Stable filter/control widths - prevent Refresh layout jump */
 .page-toolbar .filters .form-select,
 .filters .form-select {
   min-width: 140px;
@@ -1261,7 +1297,7 @@ body:has(> .careers-shell) {
 @media (max-width: 768px) {
   :root {
     --content-pad-x: 14px;
-    --content-pad-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    --content-pad-bottom: calc(128px + env(safe-area-inset-bottom, 0px));
     --touch-min: 44px;
   }
 
@@ -1286,18 +1322,26 @@ body:has(> .careers-shell) {
   .header, .app-header {
     padding: 0 12px;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     min-height: var(--header-height);
-    height: auto;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    height: var(--header-height);
+    padding-top: 0;
+    padding-bottom: 0;
+    overflow: visible;
+    z-index: 25;
+  }
+  #ntf-bell-slot,
+  .header-right {
+    overflow: visible;
+    position: relative;
   }
   .header-left { flex: 1 1 auto; min-width: 0; }
   .header-right {
-    flex: 1 1 100%;
+    flex: 0 0 auto;
     justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
+    max-width: 58%;
   }
   .sidebar-toggle {
     min-width: var(--touch-min);
@@ -1310,14 +1354,21 @@ body:has(> .careers-shell) {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .user-name { max-width: 72px; }
+  .user-name { max-width: 5.5rem; }
+  .user-chip { padding: 3px 6px 3px 3px; gap: 6px; max-width: 100%; }
   .user-chip .badge { display: none; }
-  #btn-sign-out { min-height: var(--touch-min); }
+  #btn-sign-out {
+    min-height: var(--touch-min);
+    padding: 8px 10px;
+    flex-shrink: 0;
+  }
 
   .content {
-    padding: var(--space-4) var(--content-pad-x) var(--content-pad-bottom);
+    padding: var(--space-3) var(--content-pad-x) var(--content-pad-bottom);
   }
-  .card { padding: 14px 16px; margin-bottom: 14px; }
+  .card { padding: 14px 16px; margin-bottom: 12px; }
+  .card h2 { margin-bottom: 6px; }
+  .alert { overflow-wrap: anywhere; word-break: break-word; }
   .emp-form-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
@@ -1326,45 +1377,78 @@ body:has(> .careers-shell) {
   .page-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 8px;
+    margin-bottom: 12px;
   }
   .page-header .page-heading { display: none; }
+  .page-lede {
+    margin-top: 0;
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   .page-header-actions,
   .hrms-page-actions {
     width: 100%;
+    display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
+    gap: 8px;
   }
-  .page-header-actions .module-updated {
+  .page-header-actions > .btn-primary {
+    order: 1;
     width: 100%;
-    white-space: normal;
-    order: -1;
-  }
-  .page-header-actions .form-select,
-  .page-header-actions .form-input {
-    width: 100%;
-    max-width: none;
-    min-width: 0;
+    min-height: var(--touch-min);
   }
   .page-header-actions .btn-row,
   .leave-toolbar-actions {
+    order: 2;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     width: 100%;
   }
-  .page-header-actions .btn:not(.js-module-refresh),
+  .page-header-actions .btn-row .btn,
   .leave-toolbar-actions .btn {
     flex: 1 1 calc(50% - 4px);
     min-height: var(--touch-min);
     white-space: normal;
   }
-  .page-header-actions .js-module-refresh {
-    width: 100%;
+  .page-header-actions > .btn-secondary:not(.js-module-refresh) {
+    order: 2;
+    flex: 1 1 calc(50% - 4px);
     min-height: var(--touch-min);
-    flex: 1 1 100%;
+    white-space: normal;
+  }
+  .page-header-actions .form-select,
+  .page-header-actions .form-input,
+  .leave-toolbar-actions .form-select {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex: 1 1 calc(50% - 4px);
+  }
+  .page-header-meta {
+    order: 20;
+    width: 100%;
+    margin-top: 2px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+  .page-header-meta .js-module-refresh {
+    min-width: 0;
+    width: auto;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .page-header-meta .module-updated {
+    white-space: normal;
+    width: auto;
   }
 
   .page-toolbar,
@@ -1389,9 +1473,14 @@ body:has(> .careers-shell) {
 
   .btn:not(.btn-sm):not(.btn-icon) { min-height: var(--touch-min); }
   .btn-sm { min-height: 38px; padding: 8px 12px; }
-  .btn-row,
+  .btn-row:not(.leave-toolbar-actions):not(.btn-row--inline-sm),
   .form-actions {
     flex-direction: column;
+    align-items: stretch;
+  }
+  .leave-toolbar-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
     align-items: stretch;
   }
   .form-actions .btn { width: 100%; }
@@ -1449,19 +1538,27 @@ body:has(> .careers-shell) {
     margin: 0 12px;
   }
 
-  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .kpi-value { font-size: 1.35rem; }
-  .quick-links .btn { flex: 1 1 calc(50% - 4px); min-height: var(--touch-min); }
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .kpi-card { padding: 12px 14px; }
+  .kpi-label { margin-bottom: 4px; }
+  .kpi-value { font-size: 1.25rem; }
+  .quick-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .quick-links .btn { width: 100%; min-height: var(--touch-min); white-space: normal; }
+  .dash-welcome { padding: 14px 16px; }
+  .dash-section { padding: 12px 14px; }
 
   .hrms-mobile-only { display: block !important; }
   .hrms-desktop-only { display: none !important; }
 
   .ask-hr-fab {
     right: max(12px, env(safe-area-inset-right, 0px));
-    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
     min-height: var(--touch-min);
-    padding: 12px 16px;
+    padding: 10px 14px;
+    max-width: calc(100vw - 24px);
+    z-index: 35;
   }
+  .ask-hr-fab-label { font-size: var(--text-sm); }
   .ask-hr-panel {
     right: 8px; left: 8px; bottom: max(8px, env(safe-area-inset-bottom, 0px));
     width: auto;
@@ -1478,8 +1575,13 @@ body:has(> .careers-shell) {
   .cal-grid { font-size: 0.7rem; }
   .cal-cell { min-height: 52px; padding: 4px; }
 
-  .leave-bulk-bar { flex-direction: column; align-items: stretch; }
+  .leave-bulk-bar {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
   .leave-bulk-bar .btn { width: 100%; min-height: var(--touch-min); }
+  .filters .btn { width: 100%; min-height: var(--touch-min); }
 
   th { position: static; }
   .data-table:not(.data-table--stack-md) { min-width: 520px; }
@@ -1493,9 +1595,11 @@ body:has(> .careers-shell) {
 }
 
 @media (max-width: 480px) {
-  .kpi-row { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
   .leave-balance-dl { grid-template-columns: 1fr 1fr; }
-  .user-name { max-width: 56px; }
+  .user-name { display: none; }
+  .header-right { max-width: 52%; gap: 4px; }
+  #btn-sign-out { padding: 8px; font-size: var(--text-xs); }
 }
 
 @media (max-width: 360px) {
@@ -1557,11 +1661,27 @@ body:has(> .careers-shell) {
   border: 1px solid var(--color-info-border);
   color: var(--color-text-secondary);
 }
+.action-feedback.is-animate-in {
+  animation: hrms-action-feedback-in 0.38s ease-out;
+}
+@keyframes hrms-action-feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-feedback.is-animate-in { animation: none; }
+}
 .skeleton-card[aria-busy="true"] { pointer-events: none; }
 .hrms-global-busy { cursor: progress; }
 .hrms-global-busy button.btn-loading { cursor: wait; }
 
-/* Collapsible sections — click summary to expand (chevron points right when closed, down when open) */
+/* Collapsible sections - click summary to expand (chevron points right when closed, down when open) */
 .collapsible-section { margin-top: 12px; }
 .collapsible-section > summary {
   list-style: none;
@@ -1603,19 +1723,12 @@ body:has(> .careers-shell) {
   margin: 12px 0 16px;
   position: relative;
 }
+/* display:none avoids scroll jump when the browser focuses a visually-hidden file input */
 .bulk-action-bar .hidden-file,
-.bulk-upload-card .hidden-file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-  opacity: 0;
-  pointer-events: none;
+.bulk-upload-card .hidden-file,
+.payroll-page .hidden-file,
+.att-page .hidden-file {
+  display: none !important;
 }
 .bulk-upload-card .bulk-steps {
   margin: 8px 0 14px 20px;
@@ -1988,6 +2101,25 @@ details.card.collapsible-section {
   display: flex; justify-content: space-between; gap: 8px; background: #f8fafc;
 }
 .ntf-error { padding: 12px 14px; color: var(--color-danger, #b91c1c); font-size: 0.8125rem; }
+
+@media (max-width: 768px) {
+  /* Header uses overflow clipping on small screens; anchor panel to the viewport instead. */
+  .ntf-panel {
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    top: calc(var(--header-height, 56px) + env(safe-area-inset-top, 0px) + 6px);
+    width: auto;
+    max-height: min(
+      420px,
+      calc(100dvh - var(--header-height, 56px) - 20px - env(safe-area-inset-bottom, 0px))
+    );
+  }
+  .ntf-panel-head { padding: 12px 14px 10px; flex-wrap: wrap; gap: 6px; }
+  .ntf-panel-actions .btn { min-height: 40px; }
+  .ntf-panel-foot { flex-wrap: wrap; }
+  .ntf-panel-foot .btn { flex: 1 1 calc(50% - 4px); min-height: 44px; justify-content: center; }
+}
 </style>
 <script>
 (function () {
@@ -2103,7 +2235,7 @@ details.card.collapsible-section {
   function paintList() {
     var list = document.getElementById('ntf-list');
     if (!list) return;
-    if (state.loading && !state.items.length) {
+    if (state.loading && state.open) {
       list.innerHTML =
         '<div class="ntf-skel" aria-busy="true" aria-hidden="true">' +
           '<div class="skeleton skeleton-line w80"></div>' +
@@ -2408,14 +2540,17 @@ details.card.collapsible-section {
     'my-profile': 'employee',
     'employee-create': 'employee',
     'employee-profile': 'employee',
-    'my-leave': 'leave',
-    'leave-apply': 'leave',
-    'leave-approvals': 'leave',
-    'leave-admin': 'leave',
-    'leave-calendar': 'leave',
+    'employee-bulk-upload': 'employee',
+    'employee-field-defs': 'employee',
+    'employee-mandatory-fields': 'employee',
     payroll: 'payroll',
     'payroll-run': 'payroll',
-    compensation: 'payroll',
+    'salary-structure': 'payroll-structure',
+    'attendance-bulk-upload': 'payroll-attendance',
+    'attendance-form-t': 'payroll-attendance',
+    'salary-statement': 'payroll-statement',
+    'payroll-employee-salary': 'payroll',
+    compensation: 'payroll-structure',
     'my-payslips': 'payroll',
     ats: 'ats',
     'ats-jobs': 'ats',
@@ -2434,14 +2569,17 @@ details.card.collapsible-section {
     'my-profile': 'My Profile',
     'employee-create': 'Add employee',
     'employee-profile': 'Employee',
-    'my-leave': 'My Leave',
-    'leave-apply': 'Apply Leave',
-    'leave-approvals': 'Leave Approvals',
-    'leave-admin': 'Leave',
-    'leave-calendar': 'Leave Calendar',
+    'employee-bulk-upload': 'Bulk upload',
+    'employee-field-defs': 'Employee custom fields',
+    'employee-mandatory-fields': 'Mandatory fields',
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
-    compensation: 'Compensation',
+    'salary-structure': 'Salary structures',
+    'attendance-bulk-upload': 'Register',
+    'attendance-form-t': 'Form T',
+    'salary-statement': 'Salary Statement',
+    'payroll-employee-salary': 'Employee salary',
+    compensation: 'Salary structures',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
     'ats-jobs': 'Jobs',
@@ -2461,14 +2599,17 @@ details.card.collapsible-section {
     'my-profile': 'Your employee record and the details you are allowed to see.',
     'employee-create': 'Employee ID is assigned on save. Payroll identifiers are optional.',
     'employee-profile': 'Employee master record.',
-    'my-leave': 'Balances for the current leave year and your requests.',
-    'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
-    'leave-approvals': 'Submitted requests waiting for a decision.',
-    'leave-admin': 'Company leave requests and configurable leave types.',
-    'leave-calendar': 'Approved leave for the month, scoped to your role.',
-    payroll: 'Process one month: enter days, calculate on the server, review, then lock.',
+    'employee-bulk-upload': 'Import many employees from Excel or CSV.',
+    'employee-field-defs': 'Define optional extra columns for profiles and bulk upload.',
+    'employee-mandatory-fields': 'Choose which employee fields are required on create and bulk upload.',
+    payroll: 'Process one month: calculate on the server, review exceptions, then lock.',
     'payroll-run': 'One primary next step. Locked amounts never change.',
-    compensation: 'Save a first structure, then revise so history stays intact.',
+    'salary-structure': 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
+    'attendance-bulk-upload': 'Monthly attendance register (Form XVII style): daily codes, summaries, and payroll day counts.',
+    'attendance-form-t': 'Statutory Form T Excel export per vertical for the selected payroll month.',
+    'salary-statement': 'Monthly cost-to-company breakdown by employee from structure templates and CTC.',
+    'payroll-employee-salary': 'Bulk upload or edit per-employee salary for the payroll month (after templates exist under Salary structures).',
+    compensation: 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
     'ats-jobs': 'Create, publish, and share requisitions.',
@@ -2484,10 +2625,10 @@ details.card.collapsible-section {
 
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
-    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
-    { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
-    { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
+    { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-payslips'], collapsible: true },
+    { id: 'people', label: 'People', routes: ['employees', 'employee-mandatory-fields', 'my-team'], collapsible: true },
+    { id: 'attendance', label: 'Attendance', routes: ['attendance-bulk-upload', 'attendance-form-t'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'salary-statement', 'payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -2495,11 +2636,133 @@ details.card.collapsible-section {
   /** Session-only sidebar section expand/collapse (never localStorage). */
   var navSectionExpanded_ = {};
 
+  var PAYROLL_PERIOD_CTX_KEY_ = 'hrms_payroll_period_v1';
+
+  function readPayrollPeriodContext_() {
+    try {
+      var raw = sessionStorage.getItem(PAYROLL_PERIOD_CTX_KEY_);
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      if (!o || typeof o !== 'object') return null;
+      return o;
+    } catch (ignore) {
+      return null;
+    }
+  }
+
+  function mergePayrollPeriodContext_(params) {
+    params = params || {};
+    var ctx = readPayrollPeriodContext_();
+    if (!ctx) return params;
+    if (ctx.year != null && params.year == null) params.year = ctx.year;
+    if (ctx.month != null && params.month == null) params.month = ctx.month;
+    if (ctx.runId && params.runId == null) params.runId = ctx.runId;
+    if (ctx.vertical && params.vertical == null) params.vertical = ctx.vertical;
+    return params;
+  }
+
+  /** Parse vertical code from payroll run id (PR-YYYY-MM-VERT or PR-YYYY-MM-VERT-Cn). */
+  function verticalFromPayrollRunId_(runId) {
+    var parts = String(runId || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var vert = parts[3];
+    if (!vert || /^C\d+$/i.test(vert)) return '';
+    return String(vert).toUpperCase();
+  }
+
+  function runVerticalFromRow_(run) {
+    var v = String(run && run.vertical_name || '').trim().toUpperCase();
+    if (v) return v;
+    return verticalFromPayrollRunId_(run && run.payroll_run_id);
+  }
+
+  function runsForPayrollMonth_(runs, year, month) {
+    return (runs || []).filter(function (r) {
+      return Number(r.period_year) === Number(year) && Number(r.period_month) === Number(month);
+    });
+  }
+
+  function findRunForVerticalMonth_(runs, year, month, vertical) {
+    var list = runsForPayrollMonth_(runs, year, month);
+    var want = String(vertical || '').trim().toUpperCase();
+    if (!want) return null;
+    var open = list.filter(function (r) {
+      return String(r.status || '').toUpperCase() !== 'LOCKED' && runVerticalFromRow_(r) === want;
+    });
+    if (open.length) return open[0];
+    var any = list.filter(function (r) { return runVerticalFromRow_(r) === want; });
+    return any.length ? any[0] : null;
+  }
+
+  /**
+   * Keep payroll run id and vertical consistent when both are present (session context drift).
+   * Prefers vertical when a matching run exists for that month; otherwise aligns vertical to the run.
+   */
+  function reconcilePayrollPeriodWithRuns_(params, runs) {
+    params = params || {};
+    var out = {
+      year: params.year != null ? Number(params.year) : null,
+      month: params.month != null ? Number(params.month) : null,
+      runId: params.runId ? String(params.runId).trim() : '',
+      vertical: params.vertical ? String(params.vertical).trim().toUpperCase() : ''
+    };
+    if (!runs || !runs.length) return out;
+
+    var byId = out.runId
+      ? (runs || []).filter(function (r) { return r.payroll_run_id === out.runId; })[0]
+      : null;
+    var runV = byId ? runVerticalFromRow_(byId) : '';
+
+    if (byId) {
+      if (!out.year) out.year = Number(byId.period_year);
+      if (!out.month) out.month = Number(byId.period_month);
+    }
+
+    if (byId && out.vertical && runV && runV !== out.vertical) {
+      var alt = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
+      if (alt) {
+        out.runId = alt.payroll_run_id;
+        out.year = Number(alt.period_year);
+        out.month = Number(alt.period_month);
+      } else {
+        out.vertical = runV;
+      }
+    } else if (byId && !out.vertical && runV) {
+      out.vertical = runV;
+    } else if (!byId && out.vertical && out.year && out.month) {
+      var match = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
+      if (match) {
+        out.runId = match.payroll_run_id;
+        out.year = Number(match.period_year);
+        out.month = Number(match.period_month);
+      }
+    } else if (byId && !out.vertical && runV) {
+      out.vertical = runV;
+    }
+    return out;
+  }
+
+  function persistPayrollPeriodContext_(params) {
+    params = params || {};
+    if (params.year == null && params.month == null && !params.runId && !params.vertical) return;
+    var prev = readPayrollPeriodContext_() || {};
+    var next = {
+      year: params.year != null ? Number(params.year) : prev.year,
+      month: params.month != null ? Number(params.month) : prev.month,
+      runId: params.runId ? String(params.runId) : (prev.runId || ''),
+      vertical: params.vertical ? String(params.vertical).trim().toUpperCase() : (prev.vertical || ''),
+      updatedAt: Date.now()
+    };
+    try {
+      sessionStorage.setItem(PAYROLL_PERIOD_CTX_KEY_, JSON.stringify(next));
+    } catch (ignore) {}
+  }
+
   var ROUTE_ALIASES = {
     'ats-applications': 'ats-candidates',
     'ats-interviews': 'ats-candidates',
     'payroll-run': 'payroll',
-    compensation: 'payroll'
+    compensation: 'salary-structure'
   };
 
   /** When true, navigate() must not push/replace browser history (popstate / hash restore). */
@@ -2709,13 +2972,13 @@ details.card.collapsible-section {
       stamp = '<span class="module-updated" id="module-updated-stamp">' +
         escapeHtml(formatModuleUpdatedAt_(rec.lastLoadedAt)) + '</span>';
     }
-    return stamp +
+    return '<div class="page-header-meta">' + stamp +
       '<button type="button" class="btn btn-secondary btn-sm js-module-refresh" id="btn-module-refresh"' +
       (loading ? ' disabled aria-busy="true"' : '') + '>' +
       (loading
         ? '<span class="spinner-sm" aria-hidden="true"></span> Refreshing…'
         : '<span class="module-refresh-icon" aria-hidden="true">↻</span> Refresh') +
-      '</button>';
+      '</button></div>';
   }
 
   function ensureModuleRefreshControls() {
@@ -2729,19 +2992,18 @@ details.card.collapsible-section {
       actions.className = 'page-header-actions';
       header.appendChild(actions);
     }
-    var existing = actions.querySelector('.js-module-refresh');
-    var stamp = actions.querySelector('#module-updated-stamp');
-    if (existing) {
-      if (globalLoadingButton_ === existing) {
+    var existingMeta = actions.querySelector('.page-header-meta');
+    if (existingMeta) {
+      var existing = existingMeta.querySelector('.js-module-refresh');
+      if (existing && globalLoadingButton_ === existing) {
         try { restoreButton(existing); } catch (ignoreRestore) {}
       }
-      if (stamp) stamp.remove();
-      existing.remove();
+      existingMeta.remove();
     }
     var hold = document.createElement('div');
     hold.innerHTML = moduleRefreshControlsHtml();
     while (hold.lastChild) {
-      actions.insertBefore(hold.lastChild, actions.firstChild);
+      actions.appendChild(hold.lastChild);
     }
   }
 
@@ -2954,7 +3216,14 @@ details.card.collapsible-section {
 
   function getSessionToken() {
     try {
-      return sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+      var token = localStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) return token;
+      token = sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+      return token;
     } catch (e) {
       return '';
     }
@@ -2962,8 +3231,13 @@ details.card.collapsible-section {
 
   function setSessionToken(token) {
     try {
-      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
-      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      } else {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
     } catch (ignore) {}
   }
 
@@ -3001,7 +3275,8 @@ details.card.collapsible-section {
     var fb = obj.feedback || obj.feedbackEl;
     if (fb && fb.nodeType === 1) return true;
     if (obj.background === true) return true;
-    // Module rpc() may append { loadingText } without a button - never send as sessionToken.
+    // ATS/payroll rpc() always appends { loadingText } even with no button.
+    // That must not be sent as a google.script.run argument or it steals sessionToken.
     if (typeof obj.loadingText === 'string' && !obj.button && !obj.loadingButton) return true;
     return false;
   }
@@ -3015,6 +3290,57 @@ details.card.collapsible-section {
       args.pop();
     }
     return action;
+  }
+
+  /** Plain objects that only carry callServer UI metadata (must never be google.script.run args). */
+  function isClientRpcMeta_(obj) {
+    if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
+    if (Object.prototype.toString.call(obj) === '[object Array]') return false;
+    if (isActionOpts_(obj)) return true;
+    var btn = obj.button || obj.loadingButton;
+    if (btn && btn.nodeType !== 1) return false;
+    var keys = Object.keys(obj);
+    if (!keys.length) return false;
+    var clientOnly = {
+      button: 1, loadingButton: 1, feedback: 1, feedbackEl: 1,
+      loadingText: 1, background: 1, successMessage: 1, silent: 1
+    };
+    for (var i = 0; i < keys.length; i++) {
+      if (!clientOnly.hasOwnProperty(keys[i])) return false;
+    }
+    if (obj.background === true) return true;
+    if (typeof obj.loadingText === 'string') return true;
+    if (typeof obj.successMessage === 'string') return true;
+    if (obj.silent === true) return true;
+    if (btn && btn.nodeType === 1) return true;
+    var fb = obj.feedback || obj.feedbackEl;
+    if (fb && fb.nodeType === 1) return true;
+    return false;
+  }
+
+  /**
+   * google.script.run maps arguments by position. sessionToken must be appended last.
+   * Strip leaked UI objects only - never treat business strings (module ids, EMP001, run ids)
+   * as the OTP token or every lazy-loaded module fails for non-deployers.
+   */
+  function prepareGoogleScriptArgs_(args) {
+    while (args.length && isClientRpcMeta_(args[args.length - 1])) {
+      args.pop();
+    }
+    var token = getSessionToken();
+    if (token && args.length && args[args.length - 1] === token) return;
+    args.push(token);
+  }
+
+  function moduleRpc(fnName, args, btn, loadingText, feedback) {
+    var callArgs = [fnName].concat(args || []);
+    if (btn || feedback) {
+      var opts = { loadingText: loadingText || 'Working…' };
+      if (btn) opts.button = btn;
+      if (feedback) opts.feedback = feedback;
+      callArgs.push(opts);
+    }
+    return callServer.apply(null, callArgs);
   }
 
   function isButtonLoading(button) {
@@ -3138,13 +3464,14 @@ details.card.collapsible-section {
     var text = message ? String(message) : '';
     target.textContent = text;
     if (target.classList) {
-      target.classList.remove('is-success', 'is-error', 'is-info');
+      target.classList.remove('is-success', 'is-error', 'is-info', 'is-animate-in');
       if (!text) {
         target.classList.add('hidden');
         return;
       }
       target.classList.remove('hidden');
       target.classList.add(type === 'error' ? 'is-error' : (type === 'info' ? 'is-info' : 'is-success'));
+      target.classList.add('is-animate-in');
     }
     if (target.setAttribute) {
       target.setAttribute('role', type === 'error' ? 'alert' : 'status');
@@ -3208,6 +3535,7 @@ details.card.collapsible-section {
   }
 
   function invokeRpc_(fnName, args, onPerf) {
+    prepareGoogleScriptArgs_(args);
     return new Promise(function (resolve, reject) {
       try {
         google.script.run
@@ -3222,9 +3550,12 @@ details.card.collapsible-section {
                 return;
               }
               if (result && result.error) {
+                var errDetails = result.error.details || null;
                 reject({
                   message: result.error.message || 'Request failed',
-                  code: result.error.code || ''
+                  code: result.error.code || '',
+                  details: errDetails,
+                  fields: errDetails && errDetails.fields ? errDetails.fields : null
                 });
                 return;
               }
@@ -3243,7 +3574,9 @@ details.card.collapsible-section {
                     result.hasOwnProperty('created') || result.hasOwnProperty('preferences') ||
                     result.hasOwnProperty('components') || result.hasOwnProperty('structure') ||
                     result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
-                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline')) {
+                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline') ||
+                    (result.hasOwnProperty('groups') && result.hasOwnProperty('fields')) ||
+                    (result.hasOwnProperty('base64') && result.hasOwnProperty('fileName'))) {
                   resolve(result);
                   return;
                 }
@@ -3279,7 +3612,13 @@ details.card.collapsible-section {
     }
     if (!ok) {
       if (feedback && !(value && value.silent) && !(value && value.code === 'IN_PROGRESS')) {
-        setActionFeedback(feedback, (value && value.message) || 'Request failed', 'error');
+        var fbMsg = (value && value.message) || 'Request failed';
+        if (value && value.fields && typeof value.fields === 'object') {
+          var fieldBits = [];
+          Object.keys(value.fields).forEach(function (k) { fieldBits.push(value.fields[k]); });
+          if (fieldBits.length) fbMsg = fieldBits.join(' ');
+        }
+        setActionFeedback(feedback, fbMsg, 'error');
       }
       return Promise.reject(value);
     }
@@ -3292,7 +3631,7 @@ details.card.collapsible-section {
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
     var action = extractActionOpts_(args);
-    args.push(getSessionToken());
+    prepareGoogleScriptArgs_(args);
 
     var button = action && (action.button || action.loadingButton);
     var feedback = action && (action.feedback || action.feedbackEl);
@@ -3387,7 +3726,7 @@ details.card.collapsible-section {
         '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
         (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
       '</div>' +
-      '<div class="page-header-actions hrms-page-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+      '<div class="page-header-actions hrms-page-actions">' + (actionsHtml || '') + refresh + '</div></div>';
   }
 
   function navIconSvg(name) {
@@ -3412,9 +3751,11 @@ details.card.collapsible-section {
 
   function isNavRouteActive(itemRoute, current) {
     if (itemRoute === current) return true;
-    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
-    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'compensation')) return true;
-    if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
+    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create' ||
+        current === 'employee-bulk-upload' || current === 'employee-field-defs')) return true;
+    if (itemRoute === 'employee-mandatory-fields' && current === 'employee-mandatory-fields') return true;
+    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'payroll-employee-salary')) return true;
+    if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
     if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
@@ -3506,7 +3847,7 @@ details.card.collapsible-section {
     });
   }
 
-  /* —— Shared perceived-loading helpers —— */
+  /* -- Shared perceived-loading helpers -- */
 
   function skeletonLine(widthClass) {
     return '<div class="skeleton skeleton-line hrms-skeleton-line ' + (widthClass || 'w80') + '" aria-hidden="true"></div>';
@@ -3537,8 +3878,8 @@ details.card.collapsible-section {
 
   /**
    * Preferred data-loading placeholder. Replaces plain "Loading…" text.
-   * opts.lines — number of text lines (default 3)
-   * opts.variant — 'block' | 'card' | 'detail' | 'list'
+   * opts.lines - number of text lines (default 3)
+   * opts.variant - 'block' | 'card' | 'detail' | 'list'
    */
   function sectionSkeleton(opts) {
     opts = opts || {};
@@ -3578,7 +3919,7 @@ details.card.collapsible-section {
     return html;
   }
 
-  /** @deprecated Prefer sectionSkeleton — kept as alias for existing call sites. */
+  /** @deprecated Prefer sectionSkeleton - kept as alias for existing call sites. */
   function sectionSpinner(label) {
     return sectionSkeleton({ label: label || 'Loading', variant: 'block', lines: 3 });
   }
@@ -3646,28 +3987,20 @@ details.card.collapsible-section {
     } else if (route === 'employee-create') {
       html = '<div class="card" aria-hidden="true">' + skeletonLine('w60') +
         '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
-    } else if (route === 'my-leave') {
-      html =
-        '<div class="card"><h2 class="section-title">Balances</h2>' + tableShell(['Code', 'Type', 'Entitled', 'Carried', 'Used', 'Pending', 'Available'], 'shell-bal', 4) + '</div>' +
-        '<div class="card"><h2 class="section-title">My requests</h2>' + tableShell(['ID', 'Type', 'Dates', 'Days', 'Status', 'Reason', ''], 'shell-req', 4) + '</div>';
-    } else if (route === 'leave-approvals') {
-      html = tableShell(['Employee ID', 'Name', 'Type', 'Dates', 'Days', 'Reason', ''], 'shell-appr', 5);
-    } else if (route === 'leave-admin') {
-      html = '<div class="card">' +
-        tableShell(['Employee ID', 'Type', 'Dates', 'Days', 'Status', ''], 'shell-admin', 5) + '</div>';
-    } else if (route === 'leave-apply') {
-      html = '<div class="card" aria-hidden="true">' + skeletonLine('w80') +
-        '<div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>';
-    } else if (route === 'leave-calendar') {
-      html = '<div class="card"><div class="skeleton skeleton-block" style="height:280px" aria-hidden="true"></div></div>';
     } else if (route === 'payroll') {
       html = skeletonKpiRow(['Period', 'Status', 'Employees', 'Net pay']) +
         '<div class="card"><h2>Payroll period</h2>' + sectionSkeleton({ lines: 2 }) + '</div>' +
         '<div class="card">' + tableShell(['Period', 'Run', 'Status', 'Created', ''], 'shell-pr', 5) + '</div>';
     } else if (route === 'payroll-run') {
       html = sectionSkeleton({ variant: 'detail', label: 'Loading run' });
-    } else if (route === 'compensation') {
-      html = sectionSkeleton({ variant: 'card', label: 'Loading employees' }) + '<div id="comp-editor"></div>';
+    } else if (route === 'salary-structure' || route === 'compensation') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading salary structures' }) + '<div id="sst-mount"></div>';
+    } else if (route === 'payroll-employee-salary') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading employee salary' }) + '<div id="salary-structure-mount"></div>';
+    } else if (route === 'attendance-bulk-upload' || route === 'attendance-form-t') {
+      html = skeletonKpiRow(['Period', 'Status', 'Employees']) +
+        '<div class="card"><h2>' + escapeHtml(route === 'attendance-form-t' ? 'Form T' : 'Register') + '</h2>' +
+        sectionSkeleton({ lines: 3 }) + '</div>';
     } else if (route === 'my-payslips') {
       html = '<div class="card">' + tableShell(['Title', 'Run', 'Date', ''], 'shell-ps', 4) + '</div>';
     } else if (route === 'ats-jobs') {
@@ -3723,11 +4056,36 @@ details.card.collapsible-section {
     });
   }
 
+  function moduleRoutesRegistered_(moduleId) {
+    if (!moduleId) return true;
+    var keys = Object.keys(ROUTE_MODULE).filter(function (r) { return ROUTE_MODULE[r] === moduleId; });
+    if (!keys.length) return true;
+    return keys.some(function (r) {
+      return ROUTES[r] && ROUTES[r].render && !ROUTES[r]._lazy;
+    });
+  }
+
+  function waitForModuleRoutes_(moduleId, attempts) {
+    attempts = attempts || 0;
+    if (moduleRoutesRegistered_(moduleId)) return Promise.resolve();
+    if (attempts > 80) {
+      return Promise.reject({ message: 'Module UI did not initialize (' + moduleId + '). Refresh the page and try again.' });
+    }
+    return new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        waitForModuleRoutes_(moduleId, attempts + 1).then(resolve, reject);
+      }, 10);
+    });
+  }
+
   function ensureModule(moduleId, opts) {
     opts = opts || {};
     if (opts.userInitiated) pauseBackgroundPreload();
     if (moduleLoaded_[moduleId]) {
-      return Promise.resolve();
+      if (moduleRoutesRegistered_(moduleId)) {
+        return Promise.resolve();
+      }
+      delete moduleLoaded_[moduleId];
     }
     if (moduleLoading_[moduleId]) {
       return moduleLoading_[moduleId];
@@ -3740,15 +4098,17 @@ details.card.collapsible-section {
       .then(function (data) {
         var tInject = Date.now();
         injectModuleHtml(data && data.html ? data.html : '');
-        logClientPerf_({
-          kind: 'module-ui',
-          moduleId: moduleId,
-          rpcAndInjectMs: Date.now() - tMod,
-          injectMs: Date.now() - tInject,
-          htmlChars: data && data.html ? data.html.length : 0
+        return waitForModuleRoutes_(moduleId).then(function () {
+          logClientPerf_({
+            kind: 'module-ui',
+            moduleId: moduleId,
+            rpcAndInjectMs: Date.now() - tMod,
+            injectMs: Date.now() - tInject,
+            htmlChars: data && data.html ? data.html.length : 0
+          });
+          moduleLoaded_[moduleId] = true;
+          delete moduleLoading_[moduleId];
         });
-        moduleLoaded_[moduleId] = true;
-        delete moduleLoading_[moduleId];
       })
       .catch(function (err) {
         delete moduleLoading_[moduleId];
@@ -3786,9 +4146,9 @@ details.card.collapsible-section {
       });
     };
     if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(run, { timeout: 8000 });
+      window.requestIdleCallback(run, { timeout: 15000 });
     } else {
-      setTimeout(run, 1200);
+      setTimeout(run, 2000);
     }
   }
 
@@ -3828,7 +4188,7 @@ details.card.collapsible-section {
               });
             return;
           }
-          // Paint layout immediately — never wait for module RPC.
+          // Paint layout immediately - never wait for module RPC.
           paintPendingModuleShell(route);
           logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
           ensureModule(moduleId, { userInitiated: true })
@@ -3930,8 +4290,24 @@ details.card.collapsible-section {
     if (!state.session || !state.session.authorized) return;
     options = options || {};
     params = params || {};
-    if (route === 'compensation') {
-      params.openSalaryStructure = true;
+    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'attendance-form-t' ||
+        route === 'salary-structure' || route === 'salary-statement' || route === 'compensation' ||
+        route === 'payroll-employee-salary') {
+      params = mergePayrollPeriodContext_(params);
+      if (window.HrmsApp && window.HrmsApp.getPayrollPeriodParams) {
+        var pp = window.HrmsApp.getPayrollPeriodParams();
+        if (pp) {
+          if (pp.year != null && params.year == null) params.year = pp.year;
+          if (pp.month != null && params.month == null) params.month = pp.month;
+          if (pp.runId && params.runId == null) params.runId = pp.runId;
+          if (pp.vertical && params.vertical == null) params.vertical = pp.vertical;
+        }
+      }
+      persistPayrollPeriodContext_(params);
+      if ((route === 'attendance-bulk-upload' || route === 'attendance-form-t') && params.runId) {
+        invalidateModuleViewCache('attendance-bulk-upload');
+        invalidateModuleViewCache('attendance-form-t');
+      }
     }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
     state.navSeq = (state.navSeq || 0) + 1;
@@ -3941,7 +4317,7 @@ details.card.collapsible-section {
     var item = state.navigation.filter(function (n) { return n.route === route; })[0];
     var def = ROUTES[route];
     var title = item ? item.label : (def ? def.title : 'HRMS');
-    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route === 'leave-apply' || route === 'leave-calendar' || route.indexOf('ats-') === 0)) {
+    if (def && def.title && (!item || route === 'employee-create' || route === 'employee-profile' || route === 'payroll-run' || route.indexOf('ats-') === 0)) {
       title = def.title;
     }
     $('page-title').textContent = title;
@@ -3975,7 +4351,7 @@ details.card.collapsible-section {
 
   function dashCard(label, value, hint) {
     return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
-      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</div>' +
+      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '-' : String(value)) + '</div>' +
       (hint ? '<div class="kpi-hint">' + escapeHtml(hint) + '</div>' : '') + '</div>';
   }
 
@@ -4004,9 +4380,6 @@ details.card.collapsible-section {
     var seq = state.navSeq;
     var dashKey = 'dashboard';
     var actions = '';
-    if (navHas('leave-approvals')) {
-      actions += '<button type="button" class="btn btn-secondary" id="dash-approvals">Approvals</button>';
-    }
     if (navHas('payroll')) {
       actions += '<button type="button" class="btn btn-secondary" id="dash-payroll">Payroll</button>';
     }
@@ -4015,10 +4388,7 @@ details.card.collapsible-section {
     }
     if (navHas('employees')) {
       actions += '<button type="button" class="btn btn-primary" id="dash-add-emp">Add employee</button>';
-    } else if (navHas('my-leave')) {
-      actions += '<button type="button" class="btn btn-primary" id="dash-leave">Apply leave</button>';
     }
-
     if (consumeModuleViewRestore(dashKey) && dashViewCache_.payload) {
       paintHomeDashboard(dashViewCache_.payload, dashViewCache_.actions || actions, { secondaryPending: false });
       return;
@@ -4029,11 +4399,9 @@ details.card.collapsible-section {
       page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
         skeletonKpiRow(['Employee ID', 'Role', 'Unread']) +
         '<div class="card dash-section">' + sectionSkeleton({ variant: 'list', rows: 4, label: 'Loading workspace' }) + '</div>';
-      if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
       if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
       if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
       if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
-      if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
     }
 
     var primary = keepPainted ? (dashViewCache_.payload || null) : null;
@@ -4109,30 +4477,20 @@ details.card.collapsible-section {
     if (!page) return;
     var s = state.session || {};
     var kpis = '';
-    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '—', 'In-app notifications');
-    if (data.leave_approvals_count != null) {
-      kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
-    }
+    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '-', 'In-app notifications');
     if (data.payroll && data.payroll.latest) {
       var run = data.payroll.latest;
       kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
     }
     if (data.ats) {
-      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '—');
-      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '—');
+      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '-');
+      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '-');
     }
     if (!kpis) {
-      kpis = dashCard('Employee ID', s.employee_id || '—') + dashCard('Role', s.role || '—');
+      kpis = dashCard('Employee ID', s.employee_id || '-') + dashCard('Role', s.role || '-');
     }
 
     var sections = '';
-    if (data.leave_approvals && data.leave_approvals.length) {
-      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
-        dashActionList(data.leave_approvals, 'No leave waiting for you.') + '</div>';
-    } else if (data.leave_approvals_count === 0 && navHas('leave-approvals')) {
-      sections += '<div class="card dash-section"><h2>Pending leave approvals</h2>' +
-        '<div class="empty-state empty-state-inline"><p class="empty-state-text">No submitted leave is waiting for you.</p></div></div>';
-    }
     if (data.ats_actions && data.ats_actions.length) {
       sections += '<div class="card dash-section"><h2>Recruitment</h2>' +
         dashActionList(data.ats_actions, 'No recruitment actions in your scope.') + '</div>';
@@ -4144,7 +4502,7 @@ details.card.collapsible-section {
     if (!sections) {
       sections = '<div class="card dash-welcome">' +
         '<h2>Welcome to AyurCentral HRMS</h2>' +
-        '<p>Use the sidebar for people, time off, pay, and — if your role allows — recruitment.</p></div>';
+        '<p>Use the sidebar for people, attendance, pay, and - if your role allows - recruitment.</p></div>';
     }
     if (state.app && !state.app.configured) {
       sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
@@ -4156,11 +4514,9 @@ details.card.collapsible-section {
     page.innerHTML = pageHeaderHtml('Dashboard', ROUTE_LEDES.dashboard, actions) +
       '<div class="kpi-row">' + kpis + '</div>' + sections;
 
-    if ($('dash-approvals')) $('dash-approvals').addEventListener('click', function () { navigate('leave-approvals'); });
     if ($('dash-payroll')) $('dash-payroll').addEventListener('click', function () { navigate('payroll'); });
     if ($('dash-ats')) $('dash-ats').addEventListener('click', function () { navigate('ats'); });
     if ($('dash-add-emp')) $('dash-add-emp').addEventListener('click', function () { navigate('employee-create'); });
-    if ($('dash-leave')) $('dash-leave').addEventListener('click', function () { navigate('leave-apply'); });
     Array.prototype.forEach.call(page.querySelectorAll('.dash-go'), function (btn) {
       btn.addEventListener('click', function () {
         var route = btn.getAttribute('data-route');
@@ -4462,11 +4818,16 @@ details.card.collapsible-section {
     hideAllMainStates();
     setAuthedChrome(true);
     updateUserChip();
+    var initial = parseRouteHash_(window.location.hash);
+    var initialRoute = (initial.route && isKnownRoute_(initial.route)) ? initial.route : 'dashboard';
+    var initialModule = ROUTE_MODULE[initialRoute];
+    if (initialModule) {
+      ensureModule(initialModule, { userInitiated: true });
+    }
     initShell();
     bindBrowserHistory_();
     bindModuleRefreshUi();
     renderNav();
-    var initial = parseRouteHash_(window.location.hash);
     if (initial.route && isKnownRoute_(initial.route)) {
       navigate(initial.route, initial.params || {}, { replaceHistory: true, fromHistory: true });
     } else {
@@ -4476,7 +4837,7 @@ details.card.collapsible-section {
     if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
       window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
     }
-    // Idle, one-at-a-time preload — never compete with the first dashboard RPCs.
+    // Idle, one-at-a-time preload - never compete with the first dashboard RPCs.
     if (typeof window.requestIdleCallback === 'function') {
       window.requestIdleCallback(function () { preloadModulesFromNav(); }, { timeout: 12000 });
     } else {
@@ -4946,7 +5307,7 @@ details.card.collapsible-section {
         safePoints.push(String(keyPoints[i]));
       }
     }
-    // Structured answers already include lists/sections — avoid duplicating as Key points.
+    // Structured answers already include lists/sections - avoid duplicating as Key points.
     if (!notFound && safePoints.length && !askHrAnswerLooksStructured(answerText)) {
       var keyLabel = document.createElement('div');
       keyLabel.className = 'ask-hr-key-label';
@@ -5223,6 +5584,7 @@ details.card.collapsible-section {
     registerModuleRoutes: registerModuleRoutes,
     navigate: navigate,
     callServer: callServer,
+    moduleRpc: moduleRpc,
     showToast: showToast,
     routeStill: routeStill,
     setHtml: setHtml,
@@ -5278,6 +5640,12 @@ details.card.collapsible-section {
     },
     isUserRpcBusy: function () { return userRpcBusy_ > 0; },
     getPerfLog: function () { return perfLog_.slice(); },
+    readPayrollPeriodContext: readPayrollPeriodContext_,
+    persistPayrollPeriodContext: persistPayrollPeriodContext_,
+    reconcilePayrollPeriodWithRuns: reconcilePayrollPeriodWithRuns_,
+    verticalFromPayrollRunId: verticalFromPayrollRunId_,
+    runVerticalFromRow: runVerticalFromRow_,
+    findRunForVerticalMonth: findRunForVerticalMonth_,
     enablePerfTiming: function () {
       try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
       window.HRMS_PERF_TIMING = 1;

@@ -28,7 +28,7 @@ var styles = read('ui/Styles.html');
 var scripts = read('ui/Scripts.html');
 var ats = read('ats/AtsClient.html');
 var emp = read('employee/EmployeeClient.html');
-var leave = read('leave/LeaveUi.html');
+var attendance = read('payroll/AttendanceClient.html');
 var payroll = read('payroll/PayrollClient.html');
 var ntf = read('notifications/NotificationClient.html');
 var bell = read('notifications/NotificationBell.html');
@@ -66,7 +66,7 @@ check('ask-hr-no-plain-loading-text-as-primary',
   !/ask-hr-status[\s\S]{0,200}textContent = ['"]Loading…['"]/.test(scripts));
 
 check('emp-refresh-refills-selects', /isModuleRefresh[\s\S]*fillSelectOptions\('emp-filter-dept'/.test(emp));
-check('leave-spinner-uses-skeleton', /sectionSkeleton/.test(leave) || /hrms-loading-block/.test(leave));
+check('attendance-spinner-uses-skeleton', /sectionSkeleton|skeletonMount_/.test(attendance) || /hrms-loading-block/.test(attendance));
 
 check('cache-api-untouched', /function consumeModuleViewRestore/.test(scripts) &&
   /function markModuleViewLoaded/.test(scripts) &&

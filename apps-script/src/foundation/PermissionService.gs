@@ -51,9 +51,6 @@ var PermissionService = (function () {
     { id: 'employees', label: 'Employees', route: 'employees', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'employee-mandatory-fields', label: 'Mandatory fields', route: 'employee-mandatory-fields', icon: 'people', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'my-team', label: 'My Team', route: 'my-team', icon: 'group', roles: ['MANAGER'] },
-    { id: 'leave-admin', label: 'Leave', route: 'leave-admin', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR'] },
-    { id: 'leave-approvals', label: 'Leave Approvals', route: 'leave-approvals', icon: 'approval', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
-    { id: 'my-leave', label: 'My Leave', route: 'my-leave', icon: 'calendar', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'salary-structure', label: 'Salary structure', route: 'salary-structure', icon: 'account_balance', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'attendance-bulk-upload', label: 'Register', route: 'attendance-bulk-upload', icon: 'payments', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'attendance-form-t', label: 'Form T', route: 'attendance-form-t', icon: 'payments', roles: ['OWNER', 'ADMIN', 'HR'] },
@@ -97,10 +94,6 @@ var PermissionService = (function () {
     }
 
     if (typeof UserAccessService !== 'undefined' && !isHrOrAdmin(session)) {
-      if (action === HRMS.ACTIONS.LEAVE_APPLY &&
-          !UserAccessService.hasSelfServiceAccess(session, 'leave')) {
-        return false;
-      }
       if (action === HRMS.ACTIONS.VIEW_OWN_PAYSLIP &&
           !UserAccessService.hasSelfServiceAccess(session, 'payslips')) {
         return false;
@@ -151,7 +144,6 @@ var PermissionService = (function () {
     if (isHrOrAdmin(session)) return items;
     if (typeof UserAccessService === 'undefined') return items;
     return items.filter(function (item) {
-      if (item.id === 'my-leave') return UserAccessService.hasSelfServiceAccess(session, 'leave');
       if (item.id === 'my-payslips') return UserAccessService.hasSelfServiceAccess(session, 'payslips');
       return true;
     });

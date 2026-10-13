@@ -87,16 +87,6 @@ var EmployeeService = (function () {
     return d.toISOString();
   }
 
-  function currentLeaveYear_() {
-    var startMonth = Number(ConfigService.getSetting('leave_year_start_month', 1)) || 1;
-    var tz = ConfigService.getTimezone();
-    var now = new Date();
-    var y = Number(Utilities.formatDate(now, tz, 'yyyy'));
-    var m = Number(Utilities.formatDate(now, tz, 'M'));
-    if (m < startMonth) y -= 1;
-    return String(y);
-  }
-
   function pick_(row, keys) {
     var out = {};
     keys.forEach(function (k) {
@@ -564,104 +554,6 @@ var EmployeeService = (function () {
     }
   }
 
-  function countLeaveBalances_(employeeId) {
-    try {
-      return EmployeeRepository.listLeaveBalances(employeeId).length;
-    } catch (ignore) {
-      return 0;
-    }
-  }
-
-  function ensureLeaveBalancesOnCreate_(employeeId, now) {
-    var before = countLeaveBalances_(employeeId);
-    if (typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-      try {
-        LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-      } catch (grantErr) {
-        Logger.log('Leave grant on create (first pass): ' + (grantErr.message || grantErr));
-      }
-    }
-    if (countLeaveBalances_(employeeId) <= before) {
-      seedLeaveBalances_(employeeId, now);
-    }
-    if (countLeaveBalances_(employeeId) <= before &&
-        typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-      try {
-        LeaveService.grantBalancesForEmployee(employeeId, null, { alreadyLocked: true });
-      } catch (ignoreRetry) {}
-    }
-    return countLeaveBalances_(employeeId) - before;
-  }
-
-  function seedLeaveBalances_(employeeId, now) {
-    var types;
-    try {
-      types = EmployeeRepository.listActiveLeaveTypes();
-    } catch (e) {
-      return 0;
-    }
-    if (!types.length) return 0;
-    var emp = EmployeeRepository.findById(employeeId);
-    var startMonth = Number(ConfigService.getSetting('leave_year_start_month', 1)) || 1;
-    var asOf = now;
-    try {
-      asOf = Utilities.formatDate(now, ConfigService.getTimezone(), 'yyyy-MM-dd');
-    } catch (ignore) {}
-    var years;
-    if (typeof LeaveEngine !== 'undefined' && LeaveEngine.employeeLeaveYears) {
-      years = LeaveEngine.employeeLeaveYears(emp && emp.joining_date, asOf, startMonth);
-    } else {
-      years = [currentLeaveYear_()];
-    }
-    if (!years.length) return 0;
-    var existing = EmployeeRepository.listLeaveBalances(employeeId);
-    var seeded = 0;
-    years.forEach(function (year) {
-      types.forEach(function (t) {
-        if (typeof LeaveEngine !== 'undefined' && LeaveEngine.typeRequiresBalance) {
-          if (!LeaveEngine.typeRequiresBalance(t)) return;
-        } else if (t.hasOwnProperty('requires_balance') && !LeaveEngine.isTruthy(t.requires_balance)) {
-          return;
-        }
-        var already = existing.some(function (b) {
-          return String(b.leave_type_id) === String(t.leave_type_id) && String(b.leave_year) === String(year);
-        });
-        if (already) return;
-        var entitled = (typeof LeaveEngine !== 'undefined' && LeaveEngine.entitledDaysForLeaveYear)
-          ? LeaveEngine.entitledDaysForLeaveYear(emp && emp.joining_date, year, startMonth, t.annual_entitlement_days)
-          : (Number(t.annual_entitlement_days) || 0);
-        var prevYear = String((Number(year) || 0) - 1);
-        var prev = null;
-        for (var i = 0; i < existing.length; i++) {
-          if (String(existing[i].leave_type_id) === String(t.leave_type_id) &&
-              String(existing[i].leave_year) === prevYear) {
-            prev = existing[i];
-            break;
-          }
-        }
-        var cf = (typeof LeaveEngine !== 'undefined' && LeaveEngine.carryForwardDays)
-          ? LeaveEngine.carryForwardDays(prev, t.carry_forward_max_days)
-          : 0;
-        var record = {
-          leave_balance_id: DbService.generateId('LB'),
-          employee_id: employeeId,
-          leave_type_id: t.leave_type_id,
-          leave_year: String(year),
-          entitled_days: entitled,
-          used_days: 0,
-          pending_days: 0,
-          carried_forward_days: cf,
-          available_days: entitled + cf,
-          updated_at: now
-        };
-        EmployeeRepository.insertLeaveBalance(record);
-        existing.push(record);
-        seeded++;
-      });
-    });
-    return seeded;
-  }
-
   function maybeCreateDriveFolder_(employeeId) {
     try {
       var folder = DriveService.getEmployeeDocumentsFolder(employeeId);
@@ -789,7 +681,6 @@ var EmployeeService = (function () {
       };
       EmployeeRepository.insert(record);
 
-      var leaveSeeded = ensureLeaveBalancesOnCreate_(employeeId, now);
 
       var welcomeDelivery = null;
       if (createUser) {
@@ -838,7 +729,6 @@ var EmployeeService = (function () {
         employee: sanitizeForViewer(EmployeeRepository.findById(employeeId), session),
         warnings: allWarnings,
         welcome_delivery: welcomeDelivery,
-        leave_balances_seeded: leaveSeeded,
         drive_folder_created: drive.created,
         user_created: createUser
       };
@@ -989,12 +879,6 @@ var EmployeeService = (function () {
         }
       }
       EmployeeRepository.update(id, updates);
-      if (hr && updates.hasOwnProperty('joining_date') &&
-          typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-        try {
-          LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
-        } catch (ignore) {}
-      }
       AuditService.log(
         'EMPLOYEE_UPDATE',
         'Employees',
@@ -1040,12 +924,6 @@ var EmployeeService = (function () {
         'Status set to ' + next + (user ? '; user ' + (next === HRMS.EMPLOYEE_STATUS.INACTIVE ? 'DISABLED' : 'ACTIVE') : ''),
         id
       );
-      if (next === HRMS.EMPLOYEE_STATUS.ACTIVE &&
-          typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-        try {
-          LeaveService.grantBalancesForEmployee(id, null, { alreadyLocked: true });
-        } catch (ignore) {}
-      }
       if (next === HRMS.EMPLOYEE_STATUS.ACTIVE) {
         try {
           if (typeof PayrollService !== 'undefined' && PayrollService.syncOpenPayrollRunsForEmployee) {
@@ -1204,75 +1082,6 @@ var EmployeeService = (function () {
     };
   }
 
-  function getMonthlyLeaveSnapshot(session, employeeId, year, month) {
-    AuthService.requireAuth();
-    var emp = EmployeeRepository.findById(trim_(employeeId));
-    if (!emp) throw notFoundError_('Employee not found.');
-    if (!canAccessEmployee_(session, emp)) throw authorizationError_();
-    var view = sanitizeForViewer(emp, session);
-    if (!view.can_view_leave) {
-      throw authorizationError_('You do not have access to leave information.');
-    }
-    if (typeof MonthlyLeaveService === 'undefined' || !MonthlyLeaveService.getSnapshot) {
-      throw configurationError_('Monthly leave is not available.');
-    }
-    return MonthlyLeaveService.getSnapshot(emp.employee_id, year, month);
-  }
-
-  function getLeaveSummary(session, employeeId) {
-    AuthService.requireAuth();
-    var emp = EmployeeRepository.findById(trim_(employeeId));
-    if (!emp) throw notFoundError_('Employee not found.');
-    if (!canAccessEmployee_(session, emp)) throw authorizationError_();
-    var view = sanitizeForViewer(emp, session);
-    if (!view.can_view_leave) {
-      throw authorizationError_('You do not have access to leave information.');
-    }
-    if (String(emp.status || '').toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE &&
-        typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
-      try {
-        LeaveService.grantBalancesForEmployee(emp.employee_id, null);
-      } catch (ignore) {}
-    }
-    var types = [];
-    try {
-      types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);
-    } catch (ignore) {}
-    var typeName = {};
-    types.forEach(function (t) { typeName[t.leave_type_id] = t.name || t.code; });
-    var now = new Date();
-    var monthlySnapshot = null;
-    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.getSnapshot) {
-      try {
-        monthlySnapshot = MonthlyLeaveService.getSnapshot(emp.employee_id, now.getFullYear(), now.getMonth() + 1);
-      } catch (ignoreSnap) {}
-    }
-    var balances = EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
-      var available = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
-        ? LeaveEngine.availableDays(b)
-        : Number(b.available_days) || 0;
-      return {
-        leave_balance_id: b.leave_balance_id,
-        leave_type_id: b.leave_type_id,
-        leave_type_name: typeName[b.leave_type_id] || b.leave_type_id,
-        leave_year: String(b.leave_year),
-        entitled_days: Number(b.entitled_days) || 0,
-        used_days: Number(b.used_days) || 0,
-        pending_days: Number(b.pending_days) || 0,
-        carried_forward_days: Number(b.carried_forward_days) || 0,
-        available_days: available
-      };
-    }).sort(function (a, b) {
-      var yearCmp = String(b.leave_year).localeCompare(String(a.leave_year));
-      if (yearCmp) return yearCmp;
-      return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
-    });
-    return {
-      monthly_snapshot: monthlySnapshot,
-      balances: balances
-    };
-  }
-
   function isActive(employeeId) {
     var row = EmployeeRepository.findById(employeeId);
     return !!(row && String(row.status).toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE);
@@ -1329,8 +1138,6 @@ var EmployeeService = (function () {
     uploadDocument: uploadDocument,
     uploadDocuments: uploadDocuments,
     downloadDocument: downloadDocument,
-    getLeaveSummary: getLeaveSummary,
-    getMonthlyLeaveSnapshot: getMonthlyLeaveSnapshot,
     isActive: isActive,
     getMasterRecord: getMasterRecord,
     getDirectReportIds: getDirectReportIds,

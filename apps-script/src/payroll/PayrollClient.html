@@ -1304,7 +1304,6 @@
       var bulkBar = '';
       if (editable) {
         bulkBar = '<div class="bulk-action-bar" id="pr-attendance-bulk-bar" style="margin:12px 0">' +
-          '<button type="button" class="btn btn-secondary" id="btn-pr-bulk-apply-lop">Apply leave LOP to all employees</button> ' +
           '<button type="button" class="btn btn-primary" id="btn-pr-bulk-save-attendance">Save all attendance</button>' +
           '<span class="hint">Bulk-apply suggested LOP from approved leave, then save before calculating.</span></div>';
       }
@@ -1605,8 +1604,6 @@
         '<summary>More actions</summary>' +
         '<div class="advanced-actions" id="payroll-advanced">' +
         importBtn +
-        (editable ? '<button type="button" class="btn btn-secondary" id="btn-refresh-lop">Refresh leave LOP</button> ' +
-          '<button type="button" class="btn btn-secondary" id="btn-apply-lop">Apply leave LOP to days</button> ' : '') +
         (canReturnPayrollToDraft_(st) ?
           '<button type="button" class="btn btn-secondary" id="btn-draft">Return to draft</button> ' : '') +
         (st === 'LOCKED' ? '<button type="button" class="btn btn-secondary" id="btn-correct">Create correction run</button> ' : '') +
@@ -2268,41 +2265,6 @@
           if (rid && App.navigate) App.navigate('payroll', { runId: rid, vertical: LEGACY_VERTICAL_ });
         });
       });
-
-      var lop = $('btn-refresh-lop');
-      if (lop) lop.addEventListener('click', function () {
-        if (!setButtonLoading(lop, 'Refreshing...')) return;
-        saveIfNeeded()
-          .then(function () {
-            return rpc('apiRefreshPayrollLop', [runId], lop, 'Refreshing...', $('pr-action-feedback'));
-          })
-          .then(function (next) { afterUpdate(next, 'Leave LOP refreshed.'); })
-          .catch(function (err) {
-            restoreButton(lop);
-            showToast(err.message || 'Refresh failed', 'error');
-          });
-      });
-
-      function bindApplyLeaveLop_(btn) {
-        if (!btn) return;
-        btn.addEventListener('click', function () {
-          confirmModal({
-            title: 'Apply leave LOP to payroll days?',
-            body: 'This copies approved leave LOP into LOP days and sets paid days to working days minus LOP. Recalculate after this.',
-            okLabel: 'Apply leave LOP'
-          }).then(function (ok) {
-            if (!ok) return;
-            if (!setButtonLoading(btn, 'Applying...')) return;
-            rpc('apiApplyPayrollLeaveLop', [runId], btn, 'Applying...', $('pr-action-feedback'))
-              .then(function (next) { afterUpdate(next, 'Leave LOP applied. Calculate to update net pay.'); })
-              .catch(function (err) {
-                showToast(err.message || 'Apply LOP failed', 'error');
-              });
-          });
-        });
-      }
-      bindApplyLeaveLop_($('btn-apply-lop'));
-      bindApplyLeaveLop_($('btn-pr-bulk-apply-lop'));
 
       var bulkSaveAtt = $('btn-pr-bulk-save-attendance');
       if (bulkSaveAtt) bulkSaveAtt.addEventListener('click', function () {

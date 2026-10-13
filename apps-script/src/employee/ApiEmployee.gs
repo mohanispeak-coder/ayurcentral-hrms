@@ -109,13 +109,6 @@ function apiDownloadEmployeeDocument(documentId, intent, sessionToken) {
   }, sessionToken);
 }
 
-function apiGetEmployeeLeaveSummary(employeeId, sessionToken) {
-  return hrmsRun_(function () {
-    var session = AuthService.requireAuth();
-    return EmployeeService.getLeaveSummary(session, employeeId);
-  }, sessionToken);
-}
-
 function apiListEmployeeFieldDefs(includeInactive, sessionToken) {
   return hrmsRun_(function () {
     AuthService.requireAuth();

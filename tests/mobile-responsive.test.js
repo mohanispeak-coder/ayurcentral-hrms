@@ -24,7 +24,7 @@ function check(name, cond, detail) {
 const styles = read('ui/Styles.html');
 const index = read('ui/Index.html');
 const scripts = read('ui/Scripts.html');
-const leave = read('leave/LeaveUi.html');
+const attendance = read('payroll/AttendanceClient.html');
 const emp = read('employee/EmployeeClient.html');
 
 check('viewport-meta', /viewport-fit=cover/.test(index) && /width=device-width/.test(index));
@@ -36,9 +36,9 @@ check('touch-min-height', /--touch-min: 44px/.test(styles));
 check('safe-area-ask-hr', /safe-area-inset-bottom/.test(styles));
 check('modal-mobile-sheet', /@media \(max-width: 768px\)[\s\S]*modal-backdrop[\s\S]*align-items: flex-end/.test(styles));
 check('kpi-mobile-columns', /@media \(max-width: 480px\)[\s\S]*kpi-row/.test(styles));
-check('leave-balance-cards', /leave-balance-card/.test(styles) && /leaveBalanceCardsHtml/.test(leave));
-check('leave-my-requests-stack', /data-table--stack-md/.test(leave) && /data-label="Dates"/.test(leave));
-check('leave-toolbar-actions', /leave-toolbar-actions/.test(leave));
+check('attendance-preview-grid', /att-preview-grid/.test(attendance) && /paintPreviewGrid_/.test(attendance));
+check('attendance-validate-step', /att-validate-upload/.test(attendance));
+check('attendance-responsive-table', /data-table/.test(attendance));
 check('employee-directory-stack', /data-table--stack-md/.test(emp) && /data-label="Name"/.test(emp));
 check('nav-drawer-class', /hrms-nav-drawer-open/.test(scripts) && /hrms-nav-drawer-open/.test(styles));
 check('page-actions-stack', /hrms-page-actions/.test(scripts));
