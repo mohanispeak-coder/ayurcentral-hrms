@@ -476,11 +476,23 @@ var EmployeeService = (function () {
     }
     if (typeof MonthlyLeaveService !== 'undefined') {
       try {
-        var now = new Date();
-        var y = now.getFullYear();
-        var m = now.getMonth() + 1;
+        var y;
+        var m;
+        if (typeof LeaveService !== 'undefined' && LeaveService.getCurrentCalendarMonth) {
+          var cal = LeaveService.getCurrentCalendarMonth();
+          y = cal.year;
+          m = cal.month;
+        } else {
+          var now = new Date();
+          y = now.getFullYear();
+          m = now.getMonth() + 1;
+        }
+        var monthOpts = {};
+        if (options.approvedLeaveDaysInMonth !== undefined && options.approvedLeaveDaysInMonth !== null) {
+          monthOpts.approvedLeaveDaysInMonth = options.approvedLeaveDaysInMonth;
+        }
         if (MonthlyLeaveService.fillMonthPoolSummary_) {
-          MonthlyLeaveService.fillMonthPoolSummary_(out, employeeId, y, m, emp);
+          MonthlyLeaveService.fillMonthPoolSummary_(out, employeeId, y, m, emp, null, monthOpts);
         } else if (MonthlyLeaveService.getSnapshot) {
           var snap = MonthlyLeaveService.getSnapshot(employeeId, y, m);
           out.month_grant = Number(snap.grant_days) || 0;
@@ -517,6 +529,30 @@ var EmployeeService = (function () {
     }
     result.leave_year = leaveYear;
     result.scope = session.role === HRMS.ROLES.MANAGER ? 'TEAM' : 'COMPANY';
+    if (typeof LeaveService !== 'undefined' &&
+        LeaveService.getCurrentCalendarMonth &&
+        LeaveService.approvedLeaveDaysMapForCalendarMonth &&
+        typeof MonthlyLeaveService !== 'undefined' &&
+        MonthlyLeaveService.fillMonthPoolSummary_ &&
+        result.rows && result.rows.length) {
+      try {
+        var calMonth = LeaveService.getCurrentCalendarMonth();
+        var approvedByEmp = LeaveService.approvedLeaveDaysMapForCalendarMonth(calMonth.year, calMonth.month);
+        result.rows.forEach(function (row) {
+          if (!row || !row.employee_id) return;
+          var norm = LeaveEngine.normalizeEmployeeId(row.employee_id);
+          var approvedDays = approvedByEmp[norm];
+          if (approvedDays == null) approvedDays = approvedByEmp[row.employee_id];
+          if (approvedDays == null || approvedDays === '') return;
+          var emp = EmployeeRepository.findById(row.employee_id);
+          var ls = row.leave_summary || {};
+          MonthlyLeaveService.fillMonthPoolSummary_(ls, row.employee_id, calMonth.year, calMonth.month, emp, null, {
+            approvedLeaveDaysInMonth: approvedDays
+          });
+          row.leave_summary = ls;
+        });
+      } catch (ignoreDirMonth) {}
+    }
     return result;
   }
 

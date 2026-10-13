@@ -85,6 +85,41 @@ var LeaveService = (function () {
     return false;
   }
 
+  function getCurrentCalendarMonth_() {
+    var d = todayDateOnly_();
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+
+  /**
+   * Approved leave days for one request in a calendar month (split ranges; timezone-safe dates).
+   */
+  function approvedDaysForRequestInMonth_(req, periodYear, periodMonth, method) {
+    if (!req) return 0;
+    if (String(req.status || '').trim().toUpperCase() !== HRMS.LEAVE_STATUS.APPROVED) return 0;
+    var days = LeaveEngine.lopDaysInMonth(
+      req.start_date,
+      req.end_date,
+      req.is_half_day,
+      method,
+      periodYear,
+      periodMonth
+    );
+    if (days > 0) return days;
+    var total = LeaveEngine.toNumber(req.total_days);
+    if (total <= 0) return 0;
+    var start = LeaveEngine.toDateOnly(req.start_date);
+    var end = LeaveEngine.toDateOnly(req.end_date || req.start_date);
+    if (!start && !end) return 0;
+    if (!start) start = end;
+    if (!end) end = start;
+    var months = LeaveEngine.monthsTouched(start, end);
+    var onlyThisMonth = months.length === 1 &&
+      months[0].year === periodYear &&
+      months[0].month === periodMonth;
+    if (onlyThisMonth) return total;
+    return 0;
+  }
+
   /**
    * Approved leave days that fall in a payroll calendar month (for Month used on balances grid).
    */
@@ -93,21 +128,36 @@ var LeaveService = (function () {
     periodYear = Number(periodYear);
     periodMonth = Number(periodMonth);
     if (!employeeId || !periodYear || periodMonth < 1 || periodMonth > 12) return 0;
+    var norm = LeaveEngine.normalizeEmployeeId(employeeId);
     var method = countMethod_();
     var total = 0;
     DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
-      if (!employeeIdsMatch_(r.employee_id, employeeId)) return;
-      if (String(r.status || '').trim().toUpperCase() !== HRMS.LEAVE_STATUS.APPROVED) return;
-      total += LeaveEngine.lopDaysInMonth(
-        r.start_date,
-        r.end_date,
-        r.is_half_day,
-        method,
-        periodYear,
-        periodMonth
-      );
+      if (LeaveEngine.normalizeEmployeeId(r.employee_id) !== norm) return;
+      total += approvedDaysForRequestInMonth_(r, periodYear, periodMonth, method);
     });
-    return total;
+    return Math.round(total * 100) / 100;
+  }
+
+  /**
+   * One read of LeaveRequests → normalized employee_id → approved days in calendar month.
+   */
+  function approvedLeaveDaysMapForCalendarMonth_(periodYear, periodMonth) {
+    periodYear = Number(periodYear);
+    periodMonth = Number(periodMonth);
+    if (!periodYear || periodMonth < 1 || periodMonth > 12) return {};
+    var method = countMethod_();
+    var map = {};
+    DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
+      var eid = LeaveEngine.normalizeEmployeeId(r.employee_id);
+      if (!eid) return;
+      var days = approvedDaysForRequestInMonth_(r, periodYear, periodMonth, method);
+      if (!days) return;
+      map[eid] = (map[eid] || 0) + days;
+    });
+    Object.keys(map).forEach(function (k) {
+      map[k] = Math.round(map[k] * 100) / 100;
+    });
+    return map;
   }
 
   function summarizeLeaveYearFromRequests_(employeeId, leaveYear) {
@@ -1888,6 +1938,9 @@ var LeaveService = (function () {
     currentLeaveYear: currentLeaveYear_,
     summarizeLeaveYearFromRequests: summarizeLeaveYearFromRequests_,
     applyRequestTotalsToYearBalances: applyRequestTotalsToYearBalances_,
+    approvedLeaveDaysInCalendarMonth: approvedLeaveDaysInCalendarMonth_,
+    approvedLeaveDaysMapForCalendarMonth: approvedLeaveDaysMapForCalendarMonth_,
+    getCurrentCalendarMonth: getCurrentCalendarMonth_,
     getApprovedLopForPayroll: function (employeeId, periodYear, periodMonth) {
       return LeaveLopService.computeLopFromLeave(employeeId, periodYear, periodMonth);
     }

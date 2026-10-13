@@ -47,11 +47,27 @@ var LeaveEngine = (function () {
     return isNaN(n) ? (fallback !== undefined ? fallback : 0) : n;
   }
 
+  function appTimezone_() {
+    try {
+      if (typeof ConfigService !== 'undefined' && ConfigService.getTimezone) {
+        return ConfigService.getTimezone() || 'Asia/Kolkata';
+      }
+    } catch (ignoreTz) {}
+    return 'Asia/Kolkata';
+  }
+
   function toDateOnly(value) {
     if (value === '' || value === null || value === undefined) return null;
     var d;
     if (Object.prototype.toString.call(value) === '[object Date]') {
       if (isNaN(value.getTime())) return null;
+      if (typeof Utilities !== 'undefined' && Utilities.formatDate) {
+        var iso = Utilities.formatDate(value, appTimezone_(), 'yyyy-MM-dd');
+        var cal = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (cal) {
+          return new Date(Number(cal[1]), Number(cal[2]) - 1, Number(cal[3]));
+        }
+      }
       d = value;
     } else if (typeof value === 'number' && isFinite(value)) {
       if (value > 1000 && value < 1000000) {

@@ -148,10 +148,12 @@ var MonthlyLeaveService = (function () {
     return { paid_leave_days: paid, lop_from_excess_leave: Math.max(0, used - paid) };
   }
 
-  function monthLeaveUsedDays_(employeeId, year, month, counts) {
+  function monthLeaveUsedDays_(employeeId, year, month, counts, approvedOverride) {
     var registerUsed = leaveUsedFromCounts_(counts);
     var approvedUsed = 0;
-    if (typeof LeaveService !== 'undefined' && LeaveService.approvedLeaveDaysInCalendarMonth) {
+    if (approvedOverride !== undefined && approvedOverride !== null && approvedOverride !== '') {
+      approvedUsed = Number(approvedOverride) || 0;
+    } else if (typeof LeaveService !== 'undefined' && LeaveService.approvedLeaveDaysInCalendarMonth) {
       try {
         approvedUsed = Number(LeaveService.approvedLeaveDaysInCalendarMonth(employeeId, year, month)) || 0;
       } catch (ignoreAppr) {}
@@ -159,7 +161,8 @@ var MonthlyLeaveService = (function () {
     return Math.max(registerUsed, approvedUsed);
   }
 
-  function fillMonthPoolSummary_(target, employeeId, year, month, emp, counts) {
+  function fillMonthPoolSummary_(target, employeeId, year, month, emp, counts, options) {
+    options = options || {};
     target = target || {};
     employeeId = trim_(employeeId);
     year = Number(year);
@@ -171,7 +174,7 @@ var MonthlyLeaveService = (function () {
     var opening = readOpeningCarry_(employeeId, year, month);
     var grant = grantForEmployeeMonth_(emp || {}, year, month);
     var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
-    var used = leaveUsedFromCounts_(counts);
+    var used = monthLeaveUsedDays_(employeeId, year, month, counts, options.approvedLeaveDaysInMonth);
     var pool = opening + grant + adj;
     var split = leavePaidLopSplit_(used, pool);
     target.month_opening_carry = opening;
@@ -193,7 +196,7 @@ var MonthlyLeaveService = (function () {
       emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
     }
     counts = counts || emptyCountsFromPayrollInput_(employeeId, year, month);
-    var used = leaveUsedFromCounts_(counts);
+    var used = monthLeaveUsedDays_(employeeId, year, month, counts);
     var pool = monthlyEntitlementPool_(emp || {}, employeeId, year, month);
     if (typeof AttendanceRegisterService !== 'undefined' && AttendanceRegisterService.leavePaidAndLopSplit_) {
       return AttendanceRegisterService.leavePaidAndLopSplit_(used, pool).lop_from_excess_leave;
@@ -211,7 +214,7 @@ var MonthlyLeaveService = (function () {
     var grant = grantForEmployeeMonth_(emp, year, month);
     var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
     var counts = emptyCountsFromPayrollInput_(employeeId, year, month);
-    var used = leaveUsedFromCounts_(counts);
+    var used = monthLeaveUsedDays_(employeeId, year, month, counts);
     var openingCf = readOpeningCarry_(employeeId, year, month);
     var carryNote = openingCf > 0
       ? 'Includes ' + openingCf + ' day(s) carried forward from the prior month.'
