@@ -82,7 +82,12 @@
       }).join('');
 
       body.innerHTML =
-        '<div class="card"><div class="page-toolbar filters">' +
+        '<div class="card"><h2>Year Excel template</h2>' +
+        '<p class="hint">Download one workbook for the whole year, fill the <strong>Holidays</strong> sheet (sample national dates included), then upload below. ' +
+        'The same holidays appear on the leave calendar, attendance register (H pre-fill), and this list.</p>' +
+        '<button type="button" class="btn btn-primary" id="hol-dl-year-template">Download Excel template for ' + escapeHtml(String(state.year)) + '</button></div>' +
+
+        '<div class="card" style="margin-top:16px"><div class="page-toolbar filters">' +
         '<div class="form-group"><label class="form-label">Calendar year</label><select class="form-select" id="hol-year">' + yearOpts + '</select></div>' +
         '<div class="form-group"><label class="form-label">Filter</label><select class="form-select" id="hol-scope">' + vertOpts + '</select></div>' +
         '<button type="button" class="btn btn-secondary" id="hol-refresh">Refresh</button></div></div>' +

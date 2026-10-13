@@ -104,19 +104,7 @@ var HolidayCalendarService = (function () {
   }
 
   function nextHolidayId_() {
-    var n = 1;
-    if (DbService.nextSequenceAssumingLocked) {
-      n = DbService.nextSequenceAssumingLocked('seq_holiday');
-    } else {
-      var row = DbService.findOne(HRMS.SHEETS.SETTINGS, { setting_key: 'seq_holiday' });
-      n = Number(row && row.setting_value) + 1;
-      if (!isFinite(n) || n < 1) n = 1;
-      DbService.updateRecord(HRMS.SHEETS.SETTINGS, 'setting_key', 'seq_holiday', {
-        setting_value: String(n),
-        updated_at: new Date()
-      });
-    }
-    return 'HOL' + String(n).replace(/\D/g, '').slice(-8) || ('HOL' + n);
+    return 'HOL' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase();
   }
 
   function saveHoliday(session, payload) {
@@ -255,7 +243,7 @@ var HolidayCalendarService = (function () {
         errors.push({ line: line, message: 'Name is required.' });
         return;
       }
-      var year = defaultYear || Number(date.substring(0, 4));
+      var year = r.calendar_year ? Number(r.calendar_year) : (defaultYear || Number(date.substring(0, 4)));
       try {
         var sc = normalizeScope_(r.scope, r.scope_value);
         var key = duplicateKey_(date, sc.scope, sc.scope_value);
@@ -281,16 +269,96 @@ var HolidayCalendarService = (function () {
     return { valid: valid, errors: errors };
   }
 
+  function isExcelMeta_(meta) {
+    meta = meta || {};
+    var name = String(meta.fileName || '').toLowerCase();
+    var mime = String(meta.mimeType || '').toLowerCase();
+    return name.indexOf('.xlsx') >= 0 || name.indexOf('.xls') >= 0 ||
+      mime.indexOf('spreadsheet') >= 0 || mime.indexOf('excel') >= 0;
+  }
+
+  function convertUploadToSheetId_(blob) {
+    if (typeof Drive === 'undefined' || !Drive.Files) {
+      throw configurationError_('Google Drive advanced service is required for Excel uploads.');
+    }
+    var temp = DriveApp.createFile(blob);
+    try {
+      var resource = { name: 'holiday-parse-' + Date.now(), mimeType: MimeType.GOOGLE_SHEETS };
+      var converted = Drive.Files.create(resource, temp.getBlob(), { convert: true });
+      return converted.id;
+    } finally {
+      temp.setTrashed(true);
+    }
+  }
+
+  function parseImportSheet_(sheet) {
+    var values = sheet.getDataRange().getValues();
+    if (!values || values.length < 2) return [];
+    var headerRowIndex = 0;
+    for (var hi = 0; hi < Math.min(3, values.length); hi++) {
+      var probe = values[hi].map(function (h) { return trim_(h).toLowerCase(); });
+      if (probe.indexOf('holiday_date') >= 0 || probe.indexOf('date') >= 0) {
+        headerRowIndex = hi;
+        break;
+      }
+    }
+    var header = values[headerRowIndex].map(function (h) { return trim_(h).toLowerCase(); });
+    var rows = [];
+    for (var r = headerRowIndex + 1; r < values.length; r++) {
+      var line = values[r];
+      var blank = true;
+      for (var c = 0; c < line.length; c++) {
+        if (trim_(line[c])) blank = false;
+      }
+      if (blank) continue;
+      var obj = {};
+      header.forEach(function (h, i) {
+        if (!h) return;
+        obj[h] = line[i];
+      });
+      rows.push({
+        calendar_year: obj.calendar_year,
+        holiday_date: obj.holiday_date || obj.date,
+        name: obj.name,
+        scope: obj.scope || SCOPE_ALL_,
+        scope_value: obj.scope_value || '',
+        optional: obj.optional || ''
+      });
+    }
+    return rows;
+  }
+
+  function parseImportFromExcel_(meta) {
+    var base64 = trim_(meta.base64);
+    if (!base64) throw validationError_('Upload file is required.');
+    var bytes = Utilities.base64Decode(base64);
+    var blob = Utilities.newBlob(bytes, meta.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      meta.fileName || 'holidays.xlsx');
+    var sheetId = convertUploadToSheetId_(blob);
+    try {
+      var ss = SpreadsheetApp.openById(sheetId);
+      var sheet = ss.getSheetByName('Holidays') || ss.getSheets()[0];
+      return parseImportSheet_(sheet);
+    } finally {
+      try { DriveApp.getFileById(sheetId).setTrashed(true); } catch (ignore) {}
+    }
+  }
+
   function validateImport(session, meta) {
     requireManage_();
     meta = meta || {};
-    var text = trim_(meta.csv_text);
-    if (!text && meta.base64) {
-      text = Utilities.newBlob(Utilities.base64Decode(meta.base64)).getDataAsString('UTF-8');
-    }
-    if (!text) throw validationError_('CSV content is required.');
     var defaultYear = Number(meta.calendar_year) || 0;
-    var parsed = parseCsvText_(text);
+    var parsed = [];
+    if (meta.base64 && isExcelMeta_(meta)) {
+      parsed = parseImportFromExcel_(meta);
+    } else {
+      var text = trim_(meta.csv_text);
+      if (!text && meta.base64) {
+        text = Utilities.newBlob(Utilities.base64Decode(meta.base64)).getDataAsString('UTF-8');
+      }
+      if (!text) throw validationError_('Upload a CSV or Excel holiday template.');
+      parsed = parseCsvText_(text);
+    }
     return validateImportRows_(parsed, defaultYear || null);
   }
 
@@ -384,15 +452,120 @@ var HolidayCalendarService = (function () {
     });
   }
 
-  function downloadImportTemplate() {
+  function exportSpreadsheetXlsx_(spreadsheetId) {
+    SpreadsheetApp.flush();
+    Utilities.sleep(200);
+    var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+    var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
+      '/export?mimeType=' + encodeURIComponent(xlsxMime);
+    var resp = UrlFetchApp.fetch(v3Url, { headers: auth, muteHttpExceptions: true });
+    if (resp.getResponseCode() === 200) {
+      var b = resp.getBlob();
+      if (b && b.getBytes().length > 100) return b;
+    }
+    if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
+      return Drive.Files.export(spreadsheetId, xlsxMime);
+    }
+    throw configurationError_('Could not export holiday Excel template.');
+  }
+
+  function downloadYearTemplate(calendarYear) {
     requireManage_();
-    var header = 'holiday_date,name,scope,scope_value,optional';
-    var sample = '2026-01-26,Republic Day,ALL,,false';
-    var blob = Utilities.newBlob(header + '\n' + sample + '\n', 'text/csv', 'HRMS_Holiday_Import_Template.csv');
+    var year = Number(calendarYear) || new Date().getFullYear();
+    var ss = SpreadsheetApp.create('HRMS Holiday Calendar ' + year);
+    var fileId = ss.getId();
+    try {
+      var inst = ss.getSheets()[0];
+      inst.setName('Instructions');
+      var instLines = [
+        ['HRMS public holiday calendar — ' + year],
+        [''],
+        ['1. Open the Holidays sheet. Fill holiday_date (YYYY-MM-DD), name, scope (ALL or vertical code), scope_value (blank or vertical).'],
+        ['2. optional: true/false. calendar_year column is pre-filled — keep it as ' + year + '.'],
+        ['3. Save this file and upload on Attendance → Holidays (Validate → Import).'],
+        ['4. Register template download pre-fills H on these dates for ALL + matching vertical.'],
+        ['5. Leave calendar and attendance register screens list holidays for the month.']
+      ];
+      inst.getRange(1, 1, instLines.length, 1).setValues(instLines);
+
+      var sheet = ss.insertSheet('Holidays');
+      var headers = ['calendar_year', 'holiday_date', 'name', 'scope', 'scope_value', 'optional'];
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+
+      var examples = presetRows_('IN_NATIONAL_FIXED', year).map(function (r) {
+        return [year, r.holiday_date, r.name, SCOPE_ALL_, '', 'false'];
+      });
+      var data = examples.slice();
+      var blankRows = 54;
+      for (var i = 0; i < blankRows; i++) {
+        data.push([year, '', '', 'ALL', '', 'false']);
+      }
+      sheet.getRange(2, 1, data.length, headers.length).setValues(data); // numRows = data.length
+      sheet.autoResizeColumns(1, headers.length);
+
+      var blob = exportSpreadsheetXlsx_(fileId);
+      blob.setName('HRMS_Holiday_Calendar_' + year + '.xlsx');
+      return {
+        fileName: blob.getName(),
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: Utilities.base64Encode(blob.getBytes()),
+        calendar_year: year,
+        templateVersion: '1'
+      };
+    } finally {
+      try { DriveApp.getFileById(fileId).setTrashed(true); } catch (ignore) {}
+    }
+  }
+
+  function downloadImportTemplate() {
+    var year = new Date().getFullYear();
+    return downloadYearTemplate(year);
+  }
+
+  /**
+   * Holidays applicable in a calendar month (for UI + leave calendar).
+   */
+  function listHolidaysForMonth(year, month, verticalCode) {
+    year = Number(year);
+    month = Number(month);
+    var out = [];
+    var rows = DbService.getAllRecords(HRMS.SHEETS.HOLIDAY_CALENDAR) || [];
+    rows.forEach(function (r) {
+      if (!rowApplies_(r, verticalCode)) return;
+      var d = parseIsoDate_(r.holiday_date);
+      if (!d) return;
+      var parts = d.split('-');
+      if (Number(parts[0]) !== year || Number(parts[1]) !== month) return;
+      out.push({
+        holiday_id: r.holiday_id,
+        holiday_date: d,
+        name: trim_(r.name),
+        scope: trim_(r.scope).toUpperCase() || SCOPE_ALL_,
+        scope_value: trim_(r.scope_value),
+        optional: bool_(r.optional),
+        register_code: trim_(r.register_code) || 'H'
+      });
+    });
+    out.sort(function (a, b) { return String(a.holiday_date).localeCompare(String(b.holiday_date)); });
+    return out;
+  }
+
+  function listForMonthClient(session, year, month, vertical) {
+    AuthService.requireAuth();
+    var y = Number(year) || new Date().getFullYear();
+    var m = Number(month) || (new Date().getMonth() + 1);
+    var vert = trim_(vertical).toUpperCase();
+    if (!vert && session && session.employee_id) {
+      var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: session.employee_id });
+      if (emp) vert = trim_(emp.vertical_name).toUpperCase();
+    }
     return {
-      fileName: blob.getName(),
-      mimeType: 'text/csv',
-      base64: Utilities.base64Encode(blob.getBytes())
+      year: y,
+      month: m,
+      vertical: vert || '',
+      holidays: listHolidaysForMonth(y, m, vert)
     };
   }
 
@@ -405,10 +578,6 @@ var HolidayCalendarService = (function () {
     var out = {};
     var rows = DbService.getAllRecords(HRMS.SHEETS.HOLIDAY_CALENDAR) || [];
     rows.forEach(function (r) {
-      if (Number(r.calendar_year) !== year && Number(r.calendar_year) !== 0) {
-        var d = parseIsoDate_(r.holiday_date);
-        if (!d || Number(d.substring(0, 4)) !== year) return;
-      }
       if (!rowApplies_(r, verticalCode)) return;
       var d = parseIsoDate_(r.holiday_date);
       if (!d) return;
@@ -428,6 +597,9 @@ var HolidayCalendarService = (function () {
     commitImport: commitImport,
     applyPreset: applyPreset,
     downloadImportTemplate: downloadImportTemplate,
+    downloadYearTemplate: downloadYearTemplate,
+    listHolidaysForMonth: listHolidaysForMonth,
+    listForMonthClient: listForMonthClient,
     dayCodesForMonth: dayCodesForMonth
   };
 })();

@@ -1403,10 +1403,21 @@ var LeaveService = (function () {
       return LeaveEngine.lopDaysInMonth(r.start_date, r.end_date, false, HRMS.LEAVE_COUNT.CALENDAR_DAYS, y, m) > 0 ||
         LeaveEngine.lopDaysInMonth(r.start_date, r.end_date, r.is_half_day, HRMS.LEAVE_COUNT.CALENDAR_DAYS, y, m) > 0;
     });
+    var holidays = [];
+    if (typeof HolidayCalendarService !== 'undefined' && HolidayCalendarService.listHolidaysForMonth) {
+      var vert = '';
+      var targetEmp = employeeId || (session && session.employee_id);
+      if (targetEmp) {
+        var empRow = getEmployee_(targetEmp);
+        if (empRow) vert = empRow.vertical_name;
+      }
+      holidays = HolidayCalendarService.listHolidaysForMonth(y, m, vert);
+    }
     return {
       year: y,
       month: m,
-      items: rows.map(function (r) { return serializeRequest_(r, tmap, emap); })
+      items: rows.map(function (r) { return serializeRequest_(r, tmap, emap); }),
+      public_holidays: holidays
     };
   }
 

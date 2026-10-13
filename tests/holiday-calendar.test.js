@@ -22,6 +22,8 @@ check('holiday-service', /HolidayCalendarService/.test(svc) && /dayCodesForMonth
 check('holiday-sheet', /HOLIDAY_CALENDAR/.test(fs.readFileSync(path.join(root, 'foundation', 'Constants.gs'), 'utf8')));
 check('attendance-prefill', /HolidayCalendarService\.dayCodesForMonth/.test(bulk));
 check('holiday-ui-route', /holiday-calendar/.test(client) && /apiHolidayValidateImport/.test(client));
+check('year-excel-template', /downloadYearTemplate/.test(svc) && /apiHolidayDownloadYearTemplate/.test(fs.readFileSync(path.join(root, 'foundation', 'ApiHoliday.gs'), 'utf8')));
+check('leave-calendar-holidays', /public_holidays/.test(fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8')));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');

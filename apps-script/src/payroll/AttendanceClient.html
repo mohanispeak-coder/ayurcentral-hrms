@@ -315,6 +315,27 @@
       });
     }
 
+    function paintHolidaysBanner_(year, month, vertical) {
+      var el = document.getElementById('att-holidays-banner');
+      if (!el) return;
+      el.textContent = 'Loading public holidays…';
+      callServer('apiHolidayListForMonth', year, month, vertical || '')
+        .then(function (data) {
+          var list = data.holidays || [];
+          if (!list.length) {
+            el.innerHTML = 'No public holidays configured for this month. Download the <strong>year Excel template</strong> under Attendance → Holidays, fill dates, import, then re-download the register template to pre-fill <strong>H</strong>.';
+            return;
+          }
+          el.innerHTML = '<strong>Public holidays (' + list.length + '):</strong> ' +
+            list.map(function (h) {
+              return esc_(h.holiday_date) + ' ' + esc_(h.name);
+            }).join(' · ') + ' — register download pre-fills <strong>H</strong> on these days.';
+        })
+        .catch(function () {
+          el.textContent = '';
+        });
+    }
+
     function filterListByVertical_(list, vertical) {
       if (!vertical) return list || [];
       var want = String(vertical).toUpperCase();
@@ -423,7 +444,9 @@
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
         '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · <strong>A</strong> absent · ' +
         '<strong>L</strong> leave · <strong>WO</strong> weekly off · <strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
-        '<p class="hint">Payroll run, vertical, and template must all match (e.g. PR-2026-10-AOPL with AOPL).</p>' +
+        '<div id="att-holidays-banner" class="hint" style="margin:8px 0"></div>' +
+        '<p class="hint">Payroll run, vertical, and template must all match (e.g. PR-2026-10-AOPL with AOPL). ' +
+        '<button type="button" class="btn btn-link" id="att-goto-holidays">Manage holiday calendar</button></p>' +
         '<div id="att-vertical-sections">' + renderVerticalSections_(filterListByVertical_(list, defaultVertical)) + '</div>' +
         '</div>' +
         '<div id="att-preview"></div><div id="att-feedback" class="action-feedback hidden"></div>';
@@ -434,6 +457,11 @@
       document.getElementById('att-goto-formt').addEventListener('click', function () {
         navigate('attendance-form-t', { year: run.period_year, month: run.period_month, runId: run.payroll_run_id });
       });
+      var gotoHol = document.getElementById('att-goto-holidays');
+      if (gotoHol) {
+        gotoHol.addEventListener('click', function () { navigate('holiday-calendar'); });
+      }
+      paintHolidaysBanner_(run.period_year, run.period_month, defaultVertical);
 
       if (canEdit) bindBulk_(run.payroll_run_id);
 
@@ -555,7 +583,10 @@
             return;
           }
           if (viewCache_ && viewCache_.list) refreshVerticalSections_(viewCache_.list);
-          if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+          if (viewCache_ && viewCache_.run) {
+            syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
+            paintHolidaysBanner_(viewCache_.run.period_year, viewCache_.run.period_month, verticalSel.value);
+          }
           syncBulkActionButtons_();
         });
         if (!bulkState_.vertical) bulkState_.vertical = verticalSel.value;

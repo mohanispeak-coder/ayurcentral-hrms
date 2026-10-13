@@ -50,3 +50,17 @@ function apiHolidayDownloadImportTemplate(sessionToken) {
     return HolidayCalendarService.downloadImportTemplate();
   }, sessionToken);
 }
+
+function apiHolidayDownloadYearTemplate(calendarYear, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return HolidayCalendarService.downloadYearTemplate(calendarYear);
+  }, sessionToken);
+}
+
+function apiHolidayListForMonth(year, month, vertical, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return HolidayCalendarService.listForMonthClient(session, year, month, vertical);
+  }, sessionToken);
+}

@@ -1118,8 +1118,13 @@
         var cells = [];
         var i;
         for (i = 0; i < startPad; i++) cells.push('<div class="cal-cell cal-empty"></div>');
+        var holidayByDate = {};
+        (data.public_holidays || []).forEach(function (h) {
+          if (h && h.holiday_date) holidayByDate[h.holiday_date] = h;
+        });
         for (i = 1; i <= daysInMonth; i++) {
           var iso = data.year + '-' + (data.month < 10 ? '0' : '') + data.month + '-' + (i < 10 ? '0' : '') + i;
+          var hol = holidayByDate[iso];
           var hits = (data.items || []).filter(function (r) {
             return r.start_date <= iso && r.end_date >= iso;
           });
@@ -1127,12 +1132,16 @@
             var label = (h.employee_name || h.employee_id) + ' (' + h.employee_id + ') ' + h.leave_type_code;
             return label;
           }).join(', ');
-          cells.push('<div class="cal-cell' + (hits.length ? ' cal-leave' : '') + '"><div class="cal-day">' + i +
-            '</div><div class="cal-items">' + c.escapeHtml(names) + '</div></div>');
+          var cls = 'cal-cell';
+          if (hol) cls += ' cal-holiday';
+          if (hits.length) cls += ' cal-leave';
+          var holLine = hol ? '<div class="cal-holiday-label">' + c.escapeHtml(hol.name) + '</div>' : '';
+          cells.push('<div class="' + cls + '"><div class="cal-day">' + i + '</div>' + holLine +
+            '<div class="cal-items">' + c.escapeHtml(names) + '</div></div>');
         }
         page.innerHTML =
-          pageHead('Leave calendar', 'Approved leave · ' + data.year + '-' + (data.month < 10 ? '0' : '') + data.month +
-            '. Scope follows your role: own, team, or company.',
+          pageHead('Leave calendar', 'Approved leave and public holidays · ' + data.year + '-' + (data.month < 10 ? '0' : '') + data.month +
+            '. Holidays use your vertical plus company-wide (ALL) dates.',
             '<button type="button" class="btn btn-secondary" id="cal-prev">Previous</button>' +
             '<button type="button" class="btn btn-secondary" id="cal-next">Next</button>') +
           '<div class="cal-grid">' +
