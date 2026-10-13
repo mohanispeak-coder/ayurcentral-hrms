@@ -32,6 +32,8 @@ check('holiday-import-feedback-ui', /hol-import-feedback/.test(client) && /paint
 check('holiday-status-banner', /hol-status-banner/.test(client) && /holNotify_/.test(client));
 check('holiday-preset-hyphen', /India - fixed national holidays/.test(svc) && !/India — fixed/.test(svc));
 check('holiday-template-one-example', /exampleTemplateRow_/.test(svc) && !/blankRows = 54/.test(svc));
+check('holiday-leave-year-list', /listHolidaysForLeaveYear/.test(svc));
+check('leave-my-leave-public-holidays', /public_holidays/.test(fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8')));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');

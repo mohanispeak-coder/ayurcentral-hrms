@@ -689,6 +689,35 @@ var HolidayCalendarService = (function () {
   /**
    * Holidays applicable in a calendar month (for UI + leave calendar).
    */
+  /**
+   * All public holidays in a leave-year label (Apr-Mar or calendar), for employee leave UI only.
+   * Does not affect leave balance or payroll calculations.
+   */
+  function listHolidaysForLeaveYear(leaveYear, verticalCode) {
+    leaveYear = String(leaveYear || '').trim();
+    if (!leaveYear) return [];
+    var months = [];
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthsInLeaveYear) {
+      months = LeavePolicyService.monthsInLeaveYear(leaveYear);
+    } else {
+      var y = Number(leaveYear);
+      if (!y) return [];
+      for (var m = 1; m <= 12; m++) months.push({ year: y, month: m });
+    }
+    var seen = {};
+    var out = [];
+    months.forEach(function (p) {
+      listHolidaysForMonth(p.year, p.month, verticalCode).forEach(function (h) {
+        var key = String(h.holiday_date) + '|' + String(h.holiday_id);
+        if (seen[key]) return;
+        seen[key] = true;
+        out.push(h);
+      });
+    });
+    out.sort(function (a, b) { return String(a.holiday_date).localeCompare(String(b.holiday_date)); });
+    return out;
+  }
+
   function listHolidaysForMonth(year, month, verticalCode) {
     year = Number(year);
     month = Number(month);
@@ -761,6 +790,7 @@ var HolidayCalendarService = (function () {
     downloadImportTemplate: downloadImportTemplate,
     downloadYearTemplate: downloadYearTemplate,
     listHolidaysForMonth: listHolidaysForMonth,
+    listHolidaysForLeaveYear: listHolidaysForLeaveYear,
     listForMonthClient: listForMonthClient,
     dayCodesForMonth: dayCodesForMonth
   };

@@ -1317,9 +1317,23 @@ var EmployeeService = (function () {
       if (yearCmp) return yearCmp;
       return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
     });
+    var leaveYear = '';
+    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
+      try { leaveYear = String(LeaveService.currentLeaveYear()); } catch (ignoreLy) {}
+    }
+    if (!leaveYear && balances.length) leaveYear = String(balances[0].leave_year);
+    var publicHolidays = [];
+    if (typeof HolidayCalendarService !== 'undefined' && HolidayCalendarService.listHolidaysForLeaveYear && leaveYear) {
+      try {
+        publicHolidays = HolidayCalendarService.listHolidaysForLeaveYear(leaveYear, emp.vertical_name);
+      } catch (ignoreHol) {}
+    }
     return {
+      leave_year: leaveYear,
       monthly_snapshot: monthlySnapshot,
-      balances: balances
+      balances: balances,
+      public_holidays: publicHolidays,
+      public_holidays_note: 'Public holidays are listed for information only. They do not reduce leave balance or count as leave taken.'
     };
   }
 

@@ -1154,12 +1154,36 @@
     }
 
     function normalizeLeaveSummary_(data) {
-      if (!data) return { monthly_snapshot: null, balances: [] };
-      if (Array.isArray(data)) return { monthly_snapshot: null, balances: data };
+      if (!data) return { monthly_snapshot: null, balances: [], public_holidays: [], leave_year: '' };
+      if (Array.isArray(data)) return { monthly_snapshot: null, balances: data, public_holidays: [], leave_year: '' };
       return {
         monthly_snapshot: data.monthly_snapshot || null,
-        balances: data.balances || []
+        balances: data.balances || [],
+        public_holidays: data.public_holidays || [],
+        leave_year: data.leave_year || '',
+        public_holidays_note: data.public_holidays_note || ''
       };
+    }
+
+    function publicHolidaysProfileHtml_(pack) {
+      var holidays = pack.public_holidays || [];
+      var year = pack.leave_year || '';
+      var note = pack.public_holidays_note ||
+        'Public holidays are listed for information only. They do not reduce leave balance.';
+      var title = 'Public holidays' + (year ? ' (leave year ' + escapeHtml(year) + ')' : '');
+      var html = '<div class="card" style="margin-top:16px"><h3 class="section-title">' + title + '</h3>' +
+        '<p class="hint">' + escapeHtml(note) + '</p>';
+      if (!holidays.length) {
+        html += '<p class="empty-state-text">No public holidays configured for this leave year.</p></div>';
+        return html;
+      }
+      html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Name</th><th>Scope</th></tr></thead><tbody>';
+      holidays.forEach(function (h) {
+        html += '<tr><td>' + escapeHtml(h.holiday_date) + '</td><td>' + escapeHtml(h.name) + '</td><td>' +
+          escapeHtml(h.scope === 'ALL' ? 'ALL' : (h.scope_value || h.scope)) + '</td></tr>';
+      });
+      html += '</tbody></table></div></div>';
+      return html;
     }
 
     function paintLeaveSummary_(el, data, options) {
@@ -1191,13 +1215,16 @@
           '</tr></tbody></table></div></div>';
       }
       if (!rows.length && !snap) {
-        el.innerHTML = html +
-          '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Monthly allowance appears here once attendance or payroll is set for this month.</p></div>';
+        html += publicHolidaysProfileHtml_(pack);
+        if (!(pack.public_holidays && pack.public_holidays.length)) {
+          html += '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p><p class="empty-state-text">Monthly allowance appears here once attendance or payroll is set for this month.</p></div>';
+        }
+        el.innerHTML = html;
         bindProfileApplyLeave_(el);
         return;
       }
       if (rows.length) {
-        html += '<h3 class="section-title">Leave types (legacy)</h3><div class="table-wrap"><table class="data-table"><thead><tr>' +
+        html += '<h3 class="section-title">Leave balance</h3><div class="table-wrap"><table class="data-table"><thead><tr>' +
           '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
           '</tr></thead><tbody>' + rows.map(function (r) {
             return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +
@@ -1205,6 +1232,7 @@
               '<td class="num">' + r.carried_forward_days + '</td><td class="num">' + r.available_days + '</td></tr>';
           }).join('') + '</tbody></table></div>';
       }
+      html += publicHolidaysProfileHtml_(pack);
       el.innerHTML = html;
       bindProfileApplyLeave_(el);
     }

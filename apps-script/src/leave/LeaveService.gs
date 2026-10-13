@@ -1260,6 +1260,17 @@ var LeaveService = (function () {
     return years;
   }
 
+  function publicHolidaysForEmployeeLeaveYear_(emp, leaveYear) {
+    if (typeof HolidayCalendarService === 'undefined' || !HolidayCalendarService.listHolidaysForLeaveYear) {
+      return [];
+    }
+    var vert = emp && emp.vertical_name ? String(emp.vertical_name).trim().toUpperCase() : '';
+    if (!vert && emp && emp.employee_id) {
+      vert = String(emp.employee_id).split('-')[0].trim().toUpperCase();
+    }
+    return HolidayCalendarService.listHolidaysForLeaveYear(leaveYear, vert);
+  }
+
   function getMyLeave(session, employeeId, leaveYear) {
     PermissionService.require(HRMS.ACTIONS.LEAVE_APPLY, {}, session);
     var target = employeeId || session.employee_id;
@@ -1310,7 +1321,9 @@ var LeaveService = (function () {
       balances: balances,
       requests: requests,
       types: listBalanceTypes_(true),
-      can_proxy: PermissionService.isHrOrAdmin(session)
+      can_proxy: PermissionService.isHrOrAdmin(session),
+      public_holidays: publicHolidaysForEmployeeLeaveYear_(emp, year),
+      public_holidays_note: 'Public holidays are listed for information only. They do not reduce leave balance or count as leave taken.'
     };
   }
 

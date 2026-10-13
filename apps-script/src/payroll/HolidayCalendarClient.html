@@ -44,6 +44,9 @@
       el.className = cls;
       el.textContent = message;
       el.removeAttribute('aria-hidden');
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (ignoreScroll) {}
       if (alsoToast && showToast) {
         showToast(message, type === 'error' ? 'error' : (type === 'busy' ? '' : 'success'));
       }
@@ -95,7 +98,7 @@
         } else if (!opts.quietSuccess) {
           holNotify_('List updated: ' + n + ' holiday(s) for ' + state.year + '.', 'success', true);
         } else {
-          holNotify_('', null);
+          holNotify_('Showing ' + n + ' holiday(s) for calendar year ' + state.year + '. Actions below update this list.', 'info', false);
         }
       }).catch(function (err) {
         if (!stillOn(seq)) return;
@@ -203,7 +206,8 @@
         loadAndPaint(App.getState().navSeq);
       });
       $('hol-refresh').addEventListener('click', function () {
-        loadAndPaint(App.getState().navSeq);
+        holNotify_('Refreshing holiday list…', 'busy', false);
+        loadAndPaint(App.getState().navSeq, { quietSuccess: false });
       });
 
       var fileInput = $('hol-csv-file');

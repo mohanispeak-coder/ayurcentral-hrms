@@ -134,6 +134,26 @@
     }).join('');
   }
 
+  function publicHolidaysCardHtml(holidays, leaveYear, note, escapeHtml) {
+    var title = 'Public holidays' + (leaveYear ? ' (leave year ' + escapeHtml(String(leaveYear)) + ')' : '');
+    var hint = note || 'For information only - not counted in leave balance or leave taken.';
+    if (!holidays || !holidays.length) {
+      return '<div class="card"><h2 class="section-title">' + title + '</h2>' +
+        '<p class="hint">' + escapeHtml(hint) + '</p>' +
+        '<p class="empty-state-text">No public holidays are configured for this period yet. HR adds them under Attendance → Holidays.</p></div>';
+    }
+    var rows = holidays.map(function (h) {
+      return '<tr><td data-label="Date">' + escapeHtml(h.holiday_date) + '</td>' +
+        '<td data-label="Holiday">' + escapeHtml(h.name) + '</td>' +
+        '<td data-label="Scope">' + escapeHtml(h.scope === 'ALL' ? 'ALL' : (h.scope_value || h.scope)) + '</td>' +
+        '<td data-label="Optional">' + (h.optional ? 'Yes' : 'No') + '</td></tr>';
+    }).join('');
+    return '<div class="card"><h2 class="section-title">' + title + '</h2>' +
+      '<p class="hint">' + escapeHtml(hint) + '</p>' +
+      '<div class="table-wrap table-wrap--contain"><table class="data-table data-table--stack-md"><thead><tr>' +
+      '<th>Date</th><th>Holiday</th><th>Scope</th><th>Optional</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+
   function leaveMyLeaveActionsHtml(yearSelect) {
     return '<button type="button" class="btn btn-primary" id="btn-apply-leave">Apply leave</button>' +
       '<div class="btn-row leave-toolbar-actions">' +
@@ -684,6 +704,7 @@
             '</p></div></td></tr>') + '</tbody></table></div>' +
           (!balCards ? '<div class="empty-state empty-state-inline hrms-mobile-only"><p class="empty-state-title">No leave balances yet</p></div>' : '') +
         '</div>' +
+        publicHolidaysCardHtml(data.public_holidays, data.leave_year, data.public_holidays_note, c.escapeHtml) +
         '<div class="card"><h2 class="section-title">My requests</h2>' +
           '<div class="table-wrap table-wrap--contain"><table class="data-table data-table--stack-md"><thead><tr><th>ID</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Status</th><th>Reason</th><th class="col-actions"></th></tr></thead>' +
           '<tbody>' + (reqRows || '<tr class="table-empty-row"><td colspan="7"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave requests yet</p><p class="empty-state-text">Apply leave to create your first request.</p></div></td></tr>') + '</tbody></table></div></div>';
