@@ -944,40 +944,6 @@
       load();
     });
     document.getElementById('leave-bal-refresh').addEventListener('click', function () { load(); });
-    var filtersFilled_ = false;
-    function fillFilters_(data) {
-      if (filtersFilled_ || !data) return;
-      filtersFilled_ = true;
-      var deptSel = document.getElementById('leave-bal-dept');
-      var vertSel = document.getElementById('leave-bal-vert');
-      (data.departments || []).forEach(function (d) {
-        if (deptSel) deptSel.innerHTML += '<option value="' + c.escapeHtml(d) + '">' + c.escapeHtml(d) + '</option>';
-      });
-      (data.verticals || []).forEach(function (v) {
-        if (vertSel) vertSel.innerHTML += '<option value="' + c.escapeHtml(v) + '">' + c.escapeHtml(v) + '</option>';
-      });
-    }
-    var origLoad = load;
-    load = function () {
-      var fb = document.getElementById('leave-bal-feedback');
-      if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loading…', 'info');
-      c.callServer('apiGetLeaveBalancesDirectory', {
-        q: state.q,
-        department: state.department,
-        vertical_name: state.vertical,
-        status: 'ACTIVE',
-        page: state.page,
-        pageSize: state.pageSize
-      }).then(function (data) {
-        if (!onRoute('leave-balances')) return;
-        fillFilters_(data);
-        paintTable(data);
-        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loaded ' + (data.total || 0) + ' employee(s).', 'success');
-      }).catch(function (err) {
-        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, err.message || 'Failed to load', 'error');
-        else helpers.showToast(err.message || 'Failed to load', 'error');
-      });
-    };
     load();
   }
 
@@ -1336,6 +1302,19 @@
         });
   }
 
+  function leaveRouteHelpers_(App) {
+    return {
+      callServer: App.callServer,
+      escapeHtml: App.escapeHtml,
+      showToast: App.showToast,
+      setButtonLoading: App.setButtonLoading,
+      restoreButton: App.restoreButton,
+      setActionFeedback: App.setActionFeedback,
+      navigate: App.navigate,
+      $: App.$
+    };
+  }
+
   window.HRMSLeaveUi = {
     render: function (route, helpers, params) {
       var page = helpers.$('page-content');
@@ -1353,5 +1332,26 @@
       page.innerHTML = '<div class="empty-state"><h2 class="empty-state-title">Unknown leave screen</h2><p class="empty-state-text">This leave route is not recognized.</p></div>';
     }
   };
+
+  (function registerLeaveRoutesFromUi_() {
+    var App = window.HrmsApp;
+    if (!App || !App.registerRoute) return;
+    var titles = {
+      'my-leave': 'My Leave',
+      'leave-apply': 'Apply Leave',
+      'leave-approvals': 'Leave Approvals',
+      'leave-admin': 'Leave',
+      'leave-balances': 'Leave balances',
+      'leave-calendar': 'Leave Calendar'
+    };
+    Object.keys(titles).forEach(function (route) {
+      App.registerRoute(route, {
+        title: titles[route],
+        render: function (params) {
+          window.HRMSLeaveUi.render(route, leaveRouteHelpers_(App), params);
+        }
+      });
+    });
+  })();
 })();
 </script>

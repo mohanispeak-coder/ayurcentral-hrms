@@ -24,6 +24,9 @@ check('list-leave-balances-service', /listLeaveBalancesDirectory/.test(emp));
 check('api-leave-balances', /apiGetLeaveBalancesDirectory/.test(api));
 check('nav-leave-balances', /leave-balances/.test(perm) && /leave-balances/.test(scripts));
 check('leave-ui-balances-route', /renderLeaveBalances/.test(leaveUi) && /apiGetLeaveBalancesDirectory/.test(leaveUi));
+check('leave-ui-self-registers-routes', /registerLeaveRoutesFromUi_/.test(leaveUi));
+check('shell-leave-route-fallback', /invokeRegisteredRouteRender_/.test(scripts));
+check('module-routes-all-registered', /keys\.every/.test(scripts));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');

@@ -1585,9 +1585,37 @@
     if (!moduleId) return true;
     var keys = Object.keys(ROUTE_MODULE).filter(function (r) { return ROUTE_MODULE[r] === moduleId; });
     if (!keys.length) return true;
-    return keys.some(function (r) {
+    return keys.every(function (r) {
       return ROUTES[r] && ROUTES[r].render && !ROUTES[r]._lazy;
     });
+  }
+
+  function leaveModuleHelpers_() {
+    return {
+      callServer: callServer,
+      escapeHtml: escapeHtml,
+      showToast: showToast,
+      setButtonLoading: setButtonLoading,
+      restoreButton: restoreButton,
+      setActionFeedback: setActionFeedback,
+      navigate: navigate,
+      $: $
+    };
+  }
+
+  /** Run route after lazy module load; falls back to HRMSLeaveUi when stub was not replaced (stale module cache). */
+  function invokeRegisteredRouteRender_(route, params) {
+    var def = ROUTES[route];
+    if (def && def.render && !def._lazy) {
+      def.render(params);
+      return true;
+    }
+    var moduleId = ROUTE_MODULE[route];
+    if (moduleId === 'leave' && window.HRMSLeaveUi && window.HRMSLeaveUi.render) {
+      window.HRMSLeaveUi.render(route, leaveModuleHelpers_(), params || {});
+      return true;
+    }
+    return false;
   }
 
   function waitForModuleRoutes_(moduleId, attempts) {
@@ -1707,9 +1735,7 @@
             ensureModule(moduleId, { userInitiated: true })
               .then(function () {
                 if (seq !== state.navSeq || state.currentRoute !== route) return;
-                var def = ROUTES[route];
-                if (def && def.render && !def._lazy) def.render(params);
-                else renderPlaceholder();
+                if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
               });
             return;
           }
@@ -1726,12 +1752,7 @@
                 cached: !!moduleLoaded_[moduleId]
               });
               if (seq !== state.navSeq || state.currentRoute !== route) return;
-              var def = ROUTES[route];
-              if (def && def.render && !def._lazy) {
-                def.render(params);
-              } else {
-                renderPlaceholder();
-              }
+              if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
             })
             .catch(function (err) {
               if (seq !== state.navSeq || state.currentRoute !== route) return;
