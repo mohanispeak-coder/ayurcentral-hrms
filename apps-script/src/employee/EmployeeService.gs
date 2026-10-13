@@ -380,7 +380,7 @@ var EmployeeService = (function () {
     var rows = filtered.slice(start, start + pageSize).map(function (e) {
       var row = directoryRow_(e, nameMap);
       if (includeLeave) {
-        row.leave_summary = compactLeaveSummaryForList_(e);
+        row.leave_summary = compactLeaveSummaryForList_(e, { light: !!query.light_leave_summary });
       }
       return row;
     });
@@ -414,7 +414,8 @@ var EmployeeService = (function () {
     return listDirectory(session, query);
   }
 
-  function compactLeaveSummaryForList_(emp) {
+  function compactLeaveSummaryForList_(emp, options) {
+    options = options || {};
     emp = emp || {};
     var employeeId = emp.employee_id;
     var out = {
@@ -445,16 +446,61 @@ var EmployeeService = (function () {
         : Number(b.available_days) || 0;
       out.leave_year_available += avail;
     });
-    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.getSnapshot) {
+    if (typeof MonthlyLeaveService !== 'undefined') {
       try {
         var now = new Date();
-        var snap = MonthlyLeaveService.getSnapshot(employeeId, now.getFullYear(), now.getMonth() + 1);
-        out.month_grant = Number(snap.grant_days) || 0;
-        out.month_used = Number(snap.used_days) || 0;
-        out.month_available = Number(snap.available_days) || 0;
+        var y = now.getFullYear();
+        var m = now.getMonth() + 1;
+        if (options.light) {
+          if (MonthlyLeaveService.grantForEmployeeMonth_) {
+            out.month_grant = Number(MonthlyLeaveService.grantForEmployeeMonth_(emp, y, m)) || 0;
+          }
+          var counts = MonthlyLeaveService.emptyCountsFromPayrollInput_
+            ? MonthlyLeaveService.emptyCountsFromPayrollInput_(employeeId, y, m)
+            : {};
+          out.month_used = MonthlyLeaveService.leaveUsedFromCounts_
+            ? Number(MonthlyLeaveService.leaveUsedFromCounts_(counts)) || 0
+            : 0;
+          var opening = MonthlyLeaveService.readOpeningCarry_
+            ? Number(MonthlyLeaveService.readOpeningCarry_(employeeId, y, m)) || 0
+            : 0;
+          var adj = MonthlyLeaveService.adjustmentForEmployeeMonth_
+            ? Number(MonthlyLeaveService.adjustmentForEmployeeMonth_(employeeId, y, m)) || 0
+            : 0;
+          out.month_available = Math.max(0, opening + out.month_grant + adj - out.month_used);
+        } else if (MonthlyLeaveService.getSnapshot) {
+          var snap = MonthlyLeaveService.getSnapshot(employeeId, y, m);
+          out.month_grant = Number(snap.grant_days) || 0;
+          out.month_used = Number(snap.used_days) || 0;
+          out.month_available = Number(snap.available_days) || 0;
+        }
       } catch (ignoreSnap) {}
     }
     return out;
+  }
+
+  function listLeaveBalancesDirectory(session, query) {
+    if (session.role === HRMS.ROLES.EMPLOYEE) {
+      throw authorizationError_('Employees cannot open the leave balances directory.');
+    }
+    if (!PermissionService.isHrOrAdmin(session) && session.role !== HRMS.ROLES.MANAGER) {
+      throw authorizationError_();
+    }
+    query = query || {};
+    query.include_leave_summary = true;
+    query.light_leave_summary = true;
+    if (!trim_(query.status)) query.status = HRMS.EMPLOYEE_STATUS.ACTIVE;
+    if (session.role === HRMS.ROLES.MANAGER) {
+      query.teamOnly = true;
+    }
+    var result = listDirectory(session, query);
+    var leaveYear = '';
+    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
+      try { leaveYear = String(LeaveService.currentLeaveYear()); } catch (ignoreLy) {}
+    }
+    result.leave_year = leaveYear;
+    result.scope = session.role === HRMS.ROLES.MANAGER ? 'TEAM' : 'COMPANY';
+    return result;
   }
 
   function listPicker(session) {
@@ -1382,6 +1428,7 @@ var EmployeeService = (function () {
   return {
     listDirectory: listDirectory,
     listMyTeam: listMyTeam,
+    listLeaveBalancesDirectory: listLeaveBalancesDirectory,
     listPicker: listPicker,
     getEmployee: getEmployee,
     getMyProfile: getMyProfile,

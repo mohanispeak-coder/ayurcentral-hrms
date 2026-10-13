@@ -33,6 +33,7 @@
     'leave-apply': 'leave',
     'leave-approvals': 'leave',
     'leave-admin': 'leave',
+    'leave-balances': 'leave',
     'leave-calendar': 'leave',
     payroll: 'payroll',
     'payroll-run': 'payroll',
@@ -68,6 +69,7 @@
     'leave-apply': 'Apply Leave',
     'leave-approvals': 'Leave Approvals',
     'leave-admin': 'Leave',
+    'leave-balances': 'Leave balances',
     'leave-calendar': 'Leave Calendar',
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
@@ -104,6 +106,7 @@
     'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
     'leave-approvals': 'Submitted requests waiting for a decision.',
     'leave-admin': 'Company leave requests and configurable leave types.',
+    'leave-balances': 'All employees leave balance at a glance (HR/Admin: company; Manager: direct reports).',
     'leave-calendar': 'Approved leave for the month, scoped to your role.',
     payroll: 'Process one month: calculate on the server, review exceptions, then lock.',
     'payroll-run': 'One primary next step. Locked amounts never change.',
@@ -131,7 +134,7 @@
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
     { id: 'people', label: 'People', routes: ['employees', 'employee-mandatory-fields', 'my-team'], collapsible: true },
-    { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
+    { id: 'time-off', label: 'Time Off', routes: ['leave-balances', 'leave-admin', 'leave-approvals'], collapsible: true },
     { id: 'attendance', label: 'Attendance', routes: ['attendance-bulk-upload', 'attendance-form-t', 'holiday-calendar'], collapsible: true },
     { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'salary-statement', 'payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
@@ -1499,6 +1502,8 @@
         '<div class="card"><h2 class="section-title">My requests</h2>' + tableShell(['ID', 'Type', 'Dates', 'Days', 'Status', 'Reason', ''], 'shell-req', 4) + '</div>';
     } else if (route === 'leave-approvals') {
       html = tableShell(['Employee ID', 'Name', 'Type', 'Dates', 'Days', 'Reason', ''], 'shell-appr', 5);
+    } else if (route === 'leave-balances') {
+      html = '<div class="card">' + tableShell(['Employee ID', 'Name', 'Dept', 'Vertical', 'Year avail.', 'Month avail.'], 'shell-leave-bal', 6) + '</div>';
     } else if (route === 'leave-admin') {
       html = '<div class="card">' +
         tableShell(['Employee ID', 'Type', 'Dates', 'Days', 'Status', ''], 'shell-admin', 5) + '</div>';

@@ -16,6 +16,13 @@ function apiGetMyTeam(query, sessionToken) {
   }, sessionToken);
 }
 
+function apiGetLeaveBalancesDirectory(query, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listLeaveBalancesDirectory(session, query || {});
+  }, sessionToken);
+}
+
 function apiGetEmployeePicker(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

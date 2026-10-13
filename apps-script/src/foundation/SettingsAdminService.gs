@@ -38,6 +38,7 @@ var AdminSettingsService = (function () {
     { id: 'my_team', label: 'My team', navIds: ['my-team'], defaultRoles: ['MANAGER'] },
     { id: 'leave_admin', label: 'Leave administration', navIds: ['leave-admin'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'leave_approvals', label: 'Leave approvals', navIds: ['leave-approvals'], defaultRoles: ['MANAGER', 'HR', 'ADMIN'] },
+    { id: 'leave_balances', label: 'Leave balances', navIds: ['leave-balances'], defaultRoles: ['MANAGER', 'HR', 'ADMIN'] },
     { id: 'my_leave', label: 'My leave', navIds: ['my-leave', 'leave-apply', 'leave-calendar'], defaultRoles: ['EMPLOYEE', 'MANAGER', 'HR', 'ADMIN'] },
     { id: 'attendance', label: 'Attendance', navIds: ['attendance-bulk-upload', 'attendance-form-t', 'holiday-calendar'], defaultRoles: ['HR', 'ADMIN'] },
     { id: 'payroll', label: 'Payroll', navIds: ['salary-structure', 'salary-statement', 'payroll', 'payroll-run', 'compensation'], defaultRoles: ['HR', 'ADMIN'] },

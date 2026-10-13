@@ -53,6 +53,7 @@ var PermissionService = (function () {
     { id: 'my-team', label: 'My Team', route: 'my-team', icon: 'group', roles: ['MANAGER'] },
     { id: 'leave-admin', label: 'Leave', route: 'leave-admin', icon: 'event', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'leave-approvals', label: 'Leave Approvals', route: 'leave-approvals', icon: 'approval', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
+    { id: 'leave-balances', label: 'Leave balances', route: 'leave-balances', icon: 'table_chart', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER'] },
     { id: 'my-leave', label: 'My Leave', route: 'my-leave', icon: 'calendar', roles: ['OWNER', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] },
     { id: 'salary-structure', label: 'Salary structure', route: 'salary-structure', icon: 'account_balance', roles: ['OWNER', 'ADMIN', 'HR'] },
     { id: 'attendance-bulk-upload', label: 'Register', route: 'attendance-bulk-upload', icon: 'payments', roles: ['OWNER', 'ADMIN', 'HR'] },

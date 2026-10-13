@@ -824,6 +824,163 @@
       });
   }
 
+  function renderLeaveBalances(page, helpers) {
+    var c = ctx();
+    var u = uiHelpers();
+    var state = { page: 1, pageSize: 50, q: '', department: '', vertical: '' };
+
+    function paintTable(data) {
+      var rows = (data.rows || []).map(function (r) {
+        var ls = r.leave_summary || {};
+        return '<tr class="table-row-click" data-emp-id="' + c.escapeHtml(r.employee_id) + '">' +
+          '<td class="mono" data-label="Employee ID">' + c.escapeHtml(r.employee_id) + '</td>' +
+          '<td data-label="Name">' + c.escapeHtml(r.display_name) + '</td>' +
+          '<td data-label="Department">' + c.escapeHtml(r.department || '') + '</td>' +
+          '<td data-label="Vertical">' + c.escapeHtml(r.vertical_name || '') + '</td>' +
+          '<td class="num" data-label="Year entitled">' + fmtDays(ls.leave_year_entitled) + '</td>' +
+          '<td class="num" data-label="Year used">' + fmtDays(ls.leave_year_used) + '</td>' +
+          '<td class="num" data-label="Pending">' + fmtDays(ls.leave_year_pending) + '</td>' +
+          '<td class="num" data-label="Year available"><strong>' + fmtDays(ls.leave_year_available) + '</strong></td>' +
+          '<td class="num" data-label="Month grant">' + fmtDays(ls.month_grant) + '</td>' +
+          '<td class="num" data-label="Month used">' + fmtDays(ls.month_used) + '</td>' +
+          '<td class="num" data-label="Month avail">' + fmtDays(ls.month_available) + '</td>' +
+          '</tr>';
+      }).join('');
+      var tbody = document.getElementById('leave-bal-tbody');
+      if (tbody) {
+        tbody.innerHTML = rows || '<tr class="table-empty-row"><td colspan="11"><div class="empty-state empty-state-inline">' +
+          '<p class="empty-state-title">No matching employees</p></div></td></tr>';
+        tbody.querySelectorAll('tr.table-row-click').forEach(function (tr) {
+          tr.addEventListener('click', function () {
+            var id = tr.getAttribute('data-emp-id');
+            if (id) helpers.navigate('employee-profile', { employeeId: id });
+          });
+        });
+      }
+      var pag = document.getElementById('leave-bal-pagination');
+      if (pag && data) {
+        var total = data.total || 0;
+        var page = data.page || 1;
+        var size = data.pageSize || 50;
+        var pages = Math.max(1, Math.ceil(total / size));
+        pag.innerHTML = '<span>' + total + ' people</span><span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" id="leave-bal-prev" ' + (page <= 1 ? 'disabled' : '') + '>Previous</button> ' +
+          'Page ' + page + ' of ' + pages + ' ' +
+          '<button type="button" class="btn btn-secondary btn-sm" id="leave-bal-next" ' + (page >= pages ? 'disabled' : '') + '>Next</button></span>';
+        var prev = document.getElementById('leave-bal-prev');
+        var next = document.getElementById('leave-bal-next');
+        if (prev) prev.addEventListener('click', function () { state.page = Math.max(1, page - 1); load(); });
+        if (next) next.addEventListener('click', function () { state.page = page + 1; load(); });
+      }
+      var meta = document.getElementById('leave-bal-meta');
+      if (meta) {
+        var scopeLabel = data.scope === 'TEAM' ? 'your direct reports' : 'all employees';
+        meta.textContent = 'Leave year ' + (data.leave_year || '') + ' · ' + scopeLabel +
+          ' · Click a row to open the employee profile Leave tab.';
+      }
+    }
+
+    var filtersFilled_ = false;
+    function fillFilters_(data) {
+      if (filtersFilled_ || !data) return;
+      filtersFilled_ = true;
+      var deptSel = document.getElementById('leave-bal-dept');
+      var vertSel = document.getElementById('leave-bal-vert');
+      (data.departments || []).forEach(function (d) {
+        if (deptSel) deptSel.innerHTML += '<option value="' + c.escapeHtml(d) + '">' + c.escapeHtml(d) + '</option>';
+      });
+      (data.verticals || []).forEach(function (v) {
+        if (vertSel) vertSel.innerHTML += '<option value="' + c.escapeHtml(v) + '">' + c.escapeHtml(v) + '</option>';
+      });
+    }
+
+    function load() {
+      var fb = document.getElementById('leave-bal-feedback');
+      if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loading…', 'info');
+      c.callServer('apiGetLeaveBalancesDirectory', {
+        q: state.q,
+        department: state.department,
+        vertical_name: state.vertical,
+        status: 'ACTIVE',
+        page: state.page,
+        pageSize: state.pageSize
+      }).then(function (data) {
+        if (!onRoute('leave-balances')) return;
+        fillFilters_(data);
+        paintTable(data);
+        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loaded ' + (data.total || 0) + ' employee(s).', 'success');
+      }).catch(function (err) {
+        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, err.message || 'Failed to load', 'error');
+        else helpers.showToast(err.message || 'Failed to load', 'error');
+      });
+    }
+
+    page.innerHTML =
+      flashHtml('leave-balances') +
+      pageHead('Leave balances', 'View leave year and current-month allowance for everyone in one table.') +
+      '<div id="leave-bal-feedback" class="action-feedback hidden" role="status"></div>' +
+      '<div class="card"><div class="page-toolbar filters">' +
+      '<div class="form-group"><label class="form-label" for="leave-bal-search">Search</label>' +
+      '<input class="form-input search-input" id="leave-bal-search" type="search" placeholder="Employee ID or name"></div>' +
+      '<div class="form-group"><label class="form-label" for="leave-bal-dept">Department</label>' +
+      '<select class="form-select" id="leave-bal-dept"><option value="">All</option></select></div>' +
+      '<div class="form-group"><label class="form-label" for="leave-bal-vert">Vertical</label>' +
+      '<select class="form-select" id="leave-bal-vert"><option value="">All</option></select></div>' +
+      '<button type="button" class="btn btn-secondary" id="leave-bal-apply">Apply</button>' +
+      '<button type="button" class="btn btn-secondary" id="leave-bal-refresh">Refresh</button></div>' +
+      '<p id="leave-bal-meta" class="hint"></p>' +
+      '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md">' +
+      '<thead><tr><th>Employee ID</th><th>Name</th><th>Dept</th><th>Vertical</th>' +
+      '<th class="num">Year entitled</th><th class="num">Year used</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
+      '<th class="num">Month grant</th><th class="num">Month used</th><th class="num">Month avail.</th></tr></thead>' +
+      '<tbody id="leave-bal-tbody">' + u.skRows(11, 6) + '</tbody></table></div>' +
+      '<div class="pagination" id="leave-bal-pagination"></div></div>';
+
+    document.getElementById('leave-bal-apply').addEventListener('click', function () {
+      state.q = (document.getElementById('leave-bal-search') || {}).value || '';
+      state.department = (document.getElementById('leave-bal-dept') || {}).value || '';
+      state.vertical = (document.getElementById('leave-bal-vert') || {}).value || '';
+      state.page = 1;
+      load();
+    });
+    document.getElementById('leave-bal-refresh').addEventListener('click', function () { load(); });
+    var filtersFilled_ = false;
+    function fillFilters_(data) {
+      if (filtersFilled_ || !data) return;
+      filtersFilled_ = true;
+      var deptSel = document.getElementById('leave-bal-dept');
+      var vertSel = document.getElementById('leave-bal-vert');
+      (data.departments || []).forEach(function (d) {
+        if (deptSel) deptSel.innerHTML += '<option value="' + c.escapeHtml(d) + '">' + c.escapeHtml(d) + '</option>';
+      });
+      (data.verticals || []).forEach(function (v) {
+        if (vertSel) vertSel.innerHTML += '<option value="' + c.escapeHtml(v) + '">' + c.escapeHtml(v) + '</option>';
+      });
+    }
+    var origLoad = load;
+    load = function () {
+      var fb = document.getElementById('leave-bal-feedback');
+      if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loading…', 'info');
+      c.callServer('apiGetLeaveBalancesDirectory', {
+        q: state.q,
+        department: state.department,
+        vertical_name: state.vertical,
+        status: 'ACTIVE',
+        page: state.page,
+        pageSize: state.pageSize
+      }).then(function (data) {
+        if (!onRoute('leave-balances')) return;
+        fillFilters_(data);
+        paintTable(data);
+        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loaded ' + (data.total || 0) + ' employee(s).', 'success');
+      }).catch(function (err) {
+        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, err.message || 'Failed to load', 'error');
+        else helpers.showToast(err.message || 'Failed to load', 'error');
+      });
+    };
+    load();
+  }
+
   function renderAdmin(page, helpers) {
     var c = ctx();
     var u = uiHelpers();
@@ -1191,6 +1348,7 @@
       }
       if (route === 'leave-approvals') return renderApprovals(page, helpers);
       if (route === 'leave-admin') return renderAdmin(page, helpers);
+      if (route === 'leave-balances') return renderLeaveBalances(page, helpers);
       if (route === 'leave-calendar') return renderCalendar(page, helpers);
       page.innerHTML = '<div class="empty-state"><h2 class="empty-state-title">Unknown leave screen</h2><p class="empty-state-text">This leave route is not recognized.</p></div>';
     }
