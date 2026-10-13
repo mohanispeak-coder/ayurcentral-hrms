@@ -148,6 +148,17 @@ var MonthlyLeaveService = (function () {
     return { paid_leave_days: paid, lop_from_excess_leave: Math.max(0, used - paid) };
   }
 
+  function monthLeaveUsedDays_(employeeId, year, month, counts) {
+    var registerUsed = leaveUsedFromCounts_(counts);
+    var approvedUsed = 0;
+    if (typeof LeaveService !== 'undefined' && LeaveService.approvedLeaveDaysInCalendarMonth) {
+      try {
+        approvedUsed = Number(LeaveService.approvedLeaveDaysInCalendarMonth(employeeId, year, month)) || 0;
+      } catch (ignoreAppr) {}
+    }
+    return Math.max(registerUsed, approvedUsed);
+  }
+
   function fillMonthPoolSummary_(target, employeeId, year, month, emp, counts) {
     target = target || {};
     employeeId = trim_(employeeId);

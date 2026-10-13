@@ -32,6 +32,8 @@ check('leave-summary-month-lop', /month_lop/.test(emp) && /month_paid/.test(emp)
 check('leave-year-used-from-requests', /summarizeLeaveYearFromRequests/.test(leaveSvc) && /summarizeLeaveYearFromRequests/.test(emp));
 check('request-in-leave-year', /requestInLeaveYear_/.test(leaveSvc));
 check('apply-request-totals-balances', /applyRequestTotalsToYearBalances_/.test(leaveSvc));
+check('month-used-includes-approved', /approvedLeaveDaysInCalendarMonth_/.test(leaveSvc) &&
+  /monthLeaveUsedDays_/.test(fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8')));
 check('no-all-years-fallback', !/if \(!general\.length\) general = balances/.test(emp));
 var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));

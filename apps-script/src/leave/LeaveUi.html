@@ -839,7 +839,7 @@
       }).join('');
       var tbody = document.getElementById('leave-bal-tbody');
       if (tbody) {
-        tbody.innerHTML = rows || '<tr class="table-empty-row"><td colspan="14"><div class="empty-state empty-state-inline">' +
+        tbody.innerHTML = rows || '<tr class="table-empty-row"><td colspan="12"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p></div></td></tr>';
         tbody.querySelectorAll('tr.table-row-click').forEach(function (tr) {
           tr.addEventListener('click', function () {
@@ -867,7 +867,7 @@
       if (meta) {
         var scopeLabel = data.scope === 'TEAM' ? 'your direct reports' : 'all employees';
         meta.textContent = 'Leave year ' + (data.leave_year || '') + ' · ' + scopeLabel +
-          ' · Year used/pending from approved leave requests · Month paid/LOP from attendance register · Click a row for profile Leave tab.';
+          ' · Month used = approved leave this month or attendance register (whichever is higher); paid ≤ pool; over pool = Month LOP · Click a row for profile.';
       }
     }
 
@@ -922,9 +922,9 @@
       '<p id="leave-bal-meta" class="hint"></p>' +
       '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md">' +
       '<thead><tr><th>Employee ID</th><th>Name</th><th>Dept</th><th>Vertical</th>' +
-      '<th class="num">Year entitled</th><th class="num">Year carry</th><th class="num">Year used</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
+      '<th class="num">Year entitled</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
       '<th class="num">Open carry</th><th class="num">Month grant</th><th class="num">Month used</th><th class="num">Month paid</th><th class="num">Month LOP</th></tr></thead>' +
-      '<tbody id="leave-bal-tbody">' + u.skRows(14, 6) + '</tbody></table></div>' +
+      '<tbody id="leave-bal-tbody">' + u.skRows(12, 6) + '</tbody></table></div>' +
       '<div class="pagination" id="leave-bal-pagination"></div></div>';
 
     document.getElementById('leave-bal-apply').addEventListener('click', function () {

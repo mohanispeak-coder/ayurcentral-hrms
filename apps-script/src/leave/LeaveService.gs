@@ -85,6 +85,31 @@ var LeaveService = (function () {
     return false;
   }
 
+  /**
+   * Approved leave days that fall in a payroll calendar month (for Month used on balances grid).
+   */
+  function approvedLeaveDaysInCalendarMonth_(employeeId, periodYear, periodMonth) {
+    employeeId = String(employeeId || '').trim();
+    periodYear = Number(periodYear);
+    periodMonth = Number(periodMonth);
+    if (!employeeId || !periodYear || periodMonth < 1 || periodMonth > 12) return 0;
+    var method = countMethod_();
+    var total = 0;
+    DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
+      if (!employeeIdsMatch_(r.employee_id, employeeId)) return;
+      if (String(r.status || '').trim().toUpperCase() !== HRMS.LEAVE_STATUS.APPROVED) return;
+      total += LeaveEngine.lopDaysInMonth(
+        r.start_date,
+        r.end_date,
+        r.is_half_day,
+        method,
+        periodYear,
+        periodMonth
+      );
+    });
+    return total;
+  }
+
   function summarizeLeaveYearFromRequests_(employeeId, leaveYear) {
     employeeId = String(employeeId || '').trim();
     leaveYear = String(leaveYear || currentLeaveYear_());
