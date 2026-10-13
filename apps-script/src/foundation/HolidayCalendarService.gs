@@ -30,6 +30,84 @@ var HolidayCalendarService = (function () {
     return s;
   }
 
+  function scriptTimeZone_() {
+    try {
+      return Session.getScriptTimeZone() || 'Asia/Kolkata';
+    } catch (ignore) {
+      return 'Asia/Kolkata';
+    }
+  }
+
+  function formatYmdParts_(year, month, day) {
+    return String(year) + '-' + pad2_(month) + '-' + pad2_(day);
+  }
+
+  function formatYmdValidated_(year, month, day) {
+    return parseIsoDate_(formatYmdParts_(year, month, day));
+  }
+
+  function dateObjectToYmd_(value) {
+    if (!value || Object.prototype.toString.call(value) !== '[object Date]' || isNaN(value.getTime())) {
+      return null;
+    }
+    return Utilities.formatDate(value, scriptTimeZone_(), 'yyyy-MM-dd');
+  }
+
+  function excelSerialToYmd_(serial) {
+    var n = Number(serial);
+    if (!isFinite(n) || n < 1) return null;
+    var utcMs = Date.UTC(1899, 11, 30) + Math.round(n * 86400000);
+    return dateObjectToYmd_(new Date(utcMs));
+  }
+
+  /**
+   * Accept ISO text, Excel/Sheets Date cells, serial numbers, DD-MM-YYYY, and JS date strings.
+   */
+  function parseHolidayDate_(value) {
+    if (value == null || value === '') return null;
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+      return dateObjectToYmd_(value);
+    }
+    if (typeof value === 'number' && isFinite(value)) {
+      var fromSerial = excelSerialToYmd_(value);
+      if (fromSerial) return fromSerial;
+    }
+    var s = trim_(String(value));
+    if (!s) return null;
+    var iso = parseIsoDate_(s);
+    if (iso) return iso;
+    var dmy = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(s);
+    if (dmy) {
+      return formatYmdValidated_(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
+    }
+    var ymd = /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/.exec(s);
+    if (ymd) {
+      return formatYmdValidated_(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
+    }
+    if (/[A-Za-z]{3}/.test(s)) {
+      var parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) return dateObjectToYmd_(parsed);
+    }
+    return null;
+  }
+
+  function canonicalImportHeader_(h) {
+    h = trim_(h).toLowerCase().replace(/\s+/g, '_');
+    if (!h) return '';
+    if (h.indexOf('calendar') >= 0 && h.indexOf('year') >= 0) return 'calendar_year';
+    if (h.indexOf('holiday') >= 0 && h.indexOf('date') >= 0) return 'holiday_date';
+    if (h === 'date' || h === 'holiday_dat') return 'holiday_date';
+    if (h === 'name' || h.indexOf('holiday_name') >= 0) return 'name';
+    if (h.indexOf('scope_val') >= 0) return 'scope_value';
+    if (h === 'scope' || (h.indexOf('scope') >= 0 && h.indexOf('value') < 0)) return 'scope';
+    if (h.indexOf('optional') >= 0) return 'optional';
+    return h;
+  }
+
+  function normalizeHolidayDateCell_(raw, display) {
+    return parseHolidayDate_(display) || parseHolidayDate_(raw);
+  }
+
   function pad2_(n) {
     n = String(Number(n));
     return n.length < 2 ? '0' + n : n;
@@ -54,7 +132,7 @@ var HolidayCalendarService = (function () {
     return {
       holiday_id: row.holiday_id,
       calendar_year: Number(row.calendar_year),
-      holiday_date: parseIsoDate_(row.holiday_date) || trim_(row.holiday_date),
+      holiday_date: parseHolidayDate_(row.holiday_date) || trim_(row.holiday_date),
       name: trim_(row.name),
       scope: trim_(row.scope).toUpperCase() || SCOPE_ALL_,
       scope_value: trim_(row.scope_value),
@@ -110,8 +188,8 @@ var HolidayCalendarService = (function () {
   function saveHoliday(session, payload) {
     requireManage_();
     payload = payload || {};
-    var date = parseIsoDate_(payload.holiday_date);
-    if (!date) throw validationError_('holiday_date must be YYYY-MM-DD.');
+    var date = parseHolidayDate_(payload.holiday_date);
+    if (!date) throw validationError_('holiday_date must be YYYY-MM-DD (or a valid Excel date).');
     var name = trim_(payload.name);
     if (!name) throw validationError_('Holiday name is required.');
     var year = Number(payload.calendar_year);
@@ -168,7 +246,7 @@ var HolidayCalendarService = (function () {
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       if (excludeId && String(r.holiday_id) === String(excludeId)) continue;
-      var k = duplicateKey_(parseIsoDate_(r.holiday_date) || r.holiday_date, r.scope, r.scope_value);
+      var k = duplicateKey_(parseHolidayDate_(r.holiday_date) || r.holiday_date, r.scope, r.scope_value);
       if (k === key) return r;
     }
     return null;
@@ -233,9 +311,16 @@ var HolidayCalendarService = (function () {
     var seen = {};
     (rows || []).forEach(function (r, i) {
       var line = i + 1;
-      var date = parseIsoDate_(r.holiday_date);
+      if (!trim_(r.holiday_date) && !trim_(r.name)) return;
+      var date = parseHolidayDate_(r.holiday_date);
       if (!date) {
-        errors.push({ line: line, message: 'Invalid date: ' + trim_(r.holiday_date) });
+        var hint = trim_(r.holiday_date);
+        errors.push({
+          line: line,
+          message: hint
+            ? 'Invalid date: ' + hint + ' (use YYYY-MM-DD or DD-MM-YYYY)'
+            : 'holiday_date is required.'
+        });
         return;
       }
       var name = trim_(r.name);
@@ -293,32 +378,40 @@ var HolidayCalendarService = (function () {
 
   function parseImportSheet_(sheet) {
     var values = sheet.getDataRange().getValues();
+    var display = sheet.getDataRange().getDisplayValues();
     if (!values || values.length < 2) return [];
     var headerRowIndex = 0;
-    for (var hi = 0; hi < Math.min(3, values.length); hi++) {
-      var probe = values[hi].map(function (h) { return trim_(h).toLowerCase(); });
-      if (probe.indexOf('holiday_date') >= 0 || probe.indexOf('date') >= 0) {
+    for (var hi = 0; hi < Math.min(5, values.length); hi++) {
+      var probe = values[hi].map(function (h) { return canonicalImportHeader_(h); });
+      if (probe.indexOf('holiday_date') >= 0) {
         headerRowIndex = hi;
         break;
       }
     }
-    var header = values[headerRowIndex].map(function (h) { return trim_(h).toLowerCase(); });
+    var header = values[headerRowIndex].map(function (h) { return canonicalImportHeader_(h); });
+    var dateCol = header.indexOf('holiday_date');
     var rows = [];
     for (var r = headerRowIndex + 1; r < values.length; r++) {
       var line = values[r];
+      var dispLine = display[r] || [];
       var blank = true;
       for (var c = 0; c < line.length; c++) {
-        if (trim_(line[c])) blank = false;
+        if (trim_(line[c]) || trim_(dispLine[c])) blank = false;
       }
       if (blank) continue;
       var obj = {};
       header.forEach(function (h, i) {
         if (!h) return;
-        obj[h] = line[i];
+        if (h === 'holiday_date') {
+          obj[h] = normalizeHolidayDateCell_(line[i], dispLine[i]);
+        } else {
+          obj[h] = line[i];
+        }
       });
+      var rawDate = dateCol >= 0 ? normalizeHolidayDateCell_(line[dateCol], dispLine[dateCol]) : '';
       rows.push({
         calendar_year: obj.calendar_year,
-        holiday_date: obj.holiday_date || obj.date,
+        holiday_date: obj.holiday_date || rawDate || obj.date,
         name: obj.name,
         scope: obj.scope || SCOPE_ALL_,
         scope_value: obj.scope_value || '',
@@ -602,7 +695,7 @@ var HolidayCalendarService = (function () {
     var rows = DbService.getAllRecords(HRMS.SHEETS.HOLIDAY_CALENDAR) || [];
     rows.forEach(function (r) {
       if (!rowApplies_(r, verticalCode)) return;
-      var d = parseIsoDate_(r.holiday_date);
+      var d = parseHolidayDate_(r.holiday_date);
       if (!d) return;
       var parts = d.split('-');
       if (Number(parts[0]) !== year || Number(parts[1]) !== month) return;
@@ -647,7 +740,7 @@ var HolidayCalendarService = (function () {
     var rows = DbService.getAllRecords(HRMS.SHEETS.HOLIDAY_CALENDAR) || [];
     rows.forEach(function (r) {
       if (!rowApplies_(r, verticalCode)) return;
-      var d = parseIsoDate_(r.holiday_date);
+      var d = parseHolidayDate_(r.holiday_date);
       if (!d) return;
       var parts = d.split('-');
       if (Number(parts[0]) !== year || Number(parts[1]) !== month) return;

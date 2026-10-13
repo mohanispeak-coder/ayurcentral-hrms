@@ -116,7 +116,8 @@
         '<button type="button" class="btn btn-ghost hidden" id="hol-cancel-edit">Cancel edit</button></div></form></div>' +
 
         '<div class="card" style="margin-top:16px"><h2>Import from Excel or CSV</h2>' +
-        '<p class="hint">Use the year template (.xlsx) or CSV with columns: calendar_year, holiday_date, name, scope, scope_value, optional.</p>' +
+        '<p class="hint">Use the year template (.xlsx) or CSV with columns: calendar_year, holiday_date, name, scope, scope_value, optional. ' +
+        'Dates: <strong>YYYY-MM-DD</strong> or <strong>DD-MM-YYYY</strong>; Excel date cells are accepted. Empty template rows are ignored.</p>' +
         '<input type="file" id="hol-csv-file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">' +
         '<label class="form-check"><input type="checkbox" id="hol-replace"> Replace existing holidays for this year (ALL scope only)</label>' +
         '<div class="form-actions"><button type="button" class="btn btn-secondary" id="hol-validate">Validate</button>' +
@@ -124,6 +125,9 @@
         '<div id="hol-import-preview" class="hint" style="margin-top:8px"></div></div>' +
 
         '<div class="card" style="margin-top:16px"><h2>Preset</h2>' +
+        '<p class="hint">One-click add common fixed-date holidays for the selected calendar year (no upload). ' +
+        'Use <strong>India — fixed national holidays</strong> for Republic Day, Independence Day, Gandhi Jayanti, and Christmas. ' +
+        'Add regional days (e.g. Ayudha Pooja) via the template or manual Add holiday.</p>' +
         '<div class="form-row"><select class="form-select" id="hol-preset">' + presetOpts + '</select>' +
         '<select class="form-select" id="hol-preset-scope"><option value="ALL">ALL</option>' +
         verticals.map(function (v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('') +

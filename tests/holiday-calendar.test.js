@@ -24,6 +24,10 @@ check('attendance-prefill', /HolidayCalendarService\.dayCodesForMonth/.test(bulk
 check('holiday-ui-route', /holiday-calendar/.test(client) && /apiHolidayValidateImport/.test(client));
 check('year-excel-template', /downloadYearTemplate/.test(svc) && /apiHolidayDownloadYearTemplate/.test(fs.readFileSync(path.join(root, 'foundation', 'ApiHoliday.gs'), 'utf8')));
 check('leave-calendar-holidays', /public_holidays/.test(fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8')));
+check('holiday-date-parser', /parseHolidayDate_/.test(svc) && /canonicalImportHeader_/.test(svc));
+check('holiday-skip-blank-import-rows', /!trim_\(r\.holiday_date\) && !trim_\(r\.name\)/.test(svc));
+
+check('holiday-preset-national', /IN_NATIONAL_FIXED/.test(svc) && /Republic Day/.test(svc));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');
