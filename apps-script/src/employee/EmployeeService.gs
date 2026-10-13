@@ -440,7 +440,6 @@ var EmployeeService = (function () {
     var general = balances.filter(function (b) {
       return !leaveYear || String(b.leave_year) === leaveYear;
     });
-    if (!general.length) general = balances;
     var reqTotals = null;
     if (typeof LeaveService !== 'undefined' && LeaveService.summarizeLeaveYearFromRequests && leaveYear) {
       try {
@@ -454,7 +453,13 @@ var EmployeeService = (function () {
       cfSum += Number(b.carried_forward_days) || 0;
     });
     if (reqTotals) {
+      if (entitledSum <= 0 && typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement && emp) {
+        try {
+          entitledSum = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYear)) || 0;
+        } catch (ignoreEnt) {}
+      }
       out.leave_year_entitled = entitledSum;
+      out.leave_year_carried = cfSum;
       out.leave_year_used = Number(reqTotals.usedTotal) || 0;
       out.leave_year_pending = Number(reqTotals.pendingTotal) || 0;
       out.leave_year_available = Math.max(0, entitledSum + cfSum - out.leave_year_used - out.leave_year_pending);
@@ -1371,40 +1376,50 @@ var EmployeeService = (function () {
         reqTotals = LeaveService.summarizeLeaveYearFromRequests(emp.employee_id, leaveYearForReq);
       } catch (ignoreReq2) {}
     }
-    var balances = EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
-      var entitled = Number(b.entitled_days) || 0;
-      var cf = Number(b.carried_forward_days) || 0;
-      var used = Number(b.used_days) || 0;
-      var pending = Number(b.pending_days) || 0;
-      var tid = String(b.leave_type_id || '');
-      if (reqTotals && String(b.leave_year) === leaveYearForReq) {
-        if (reqTotals.usedByType.hasOwnProperty(tid)) used = Number(reqTotals.usedByType[tid]) || 0;
-        if (reqTotals.pendingByType.hasOwnProperty(tid)) pending = Number(reqTotals.pendingByType[tid]) || 0;
-      }
-      var available = (typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays)
-        ? LeaveEngine.availableDays({
-          entitled_days: entitled,
-          carried_forward_days: cf,
-          used_days: used,
-          pending_days: pending
-        })
-        : Number(b.available_days) || 0;
+    var balanceViews = EmployeeRepository.listLeaveBalances(emp.employee_id).map(function (b) {
       return {
         leave_balance_id: b.leave_balance_id,
         leave_type_id: b.leave_type_id,
         leave_type_name: typeName[b.leave_type_id] || b.leave_type_id,
         leave_year: String(b.leave_year),
-        entitled_days: entitled,
-        used_days: used,
-        pending_days: pending,
-        carried_forward_days: cf,
-        available_days: available
+        entitled_days: Number(b.entitled_days) || 0,
+        used_days: Number(b.used_days) || 0,
+        pending_days: Number(b.pending_days) || 0,
+        carried_forward_days: Number(b.carried_forward_days) || 0,
+        available_days: Number(b.available_days) || 0,
+        requires_balance: true
       };
-    }).sort(function (a, b) {
-      var yearCmp = String(b.leave_year).localeCompare(String(a.leave_year));
-      if (yearCmp) return yearCmp;
+    });
+    if (leaveYearForReq && reqTotals && typeof LeaveService !== 'undefined' && LeaveService.applyRequestTotalsToYearBalances) {
+      balanceViews = LeaveService.applyRequestTotalsToYearBalances(balanceViews, reqTotals, leaveYearForReq);
+    } else if (leaveYearForReq) {
+      balanceViews = balanceViews.filter(function (b) { return String(b.leave_year) === leaveYearForReq; });
+    }
+    if (leaveYearForReq && balanceViews.length === 0 && reqTotals &&
+        (Number(reqTotals.usedTotal) > 0 || Number(reqTotals.pendingTotal) > 0)) {
+      var policyEnt = 0;
+      if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement) {
+        try { policyEnt = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYearForReq)) || 0; } catch (ignorePe) {}
+      }
+      var usedT = Number(reqTotals.usedTotal) || 0;
+      var pendT = Number(reqTotals.pendingTotal) || 0;
+      balanceViews.push({
+        leave_balance_id: '',
+        leave_type_id: '',
+        leave_type_name: 'Leave',
+        leave_year: leaveYearForReq,
+        entitled_days: policyEnt,
+        used_days: usedT,
+        pending_days: pendT,
+        carried_forward_days: 0,
+        available_days: Math.max(0, policyEnt - usedT - pendT),
+        requires_balance: true
+      });
+    }
+    balanceViews.sort(function (a, b) {
       return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
     });
+    var balances = balanceViews;
     var leaveYear = '';
     if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
       try { leaveYear = String(LeaveService.currentLeaveYear()); } catch (ignoreLy) {}

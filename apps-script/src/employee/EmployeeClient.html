@@ -1219,7 +1219,9 @@
         return;
       }
       if (rows.length) {
-        html += '<h3 class="section-title">Leave balance</h3><div class="table-wrap"><table class="data-table"><thead><tr>' +
+        html += '<h3 class="section-title">Leave balance' +
+          (pack.leave_year ? ' (leave year ' + escapeHtml(pack.leave_year) + ')' : '') +
+          '</h3><div class="table-wrap"><table class="data-table"><thead><tr>' +
           '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
           '</tr></thead><tbody>' + rows.map(function (r) {
             return '<tr><td>' + escapeHtml(r.leave_type_name) + '</td><td>' + escapeHtml(r.leave_year) + '</td>' +

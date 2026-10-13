@@ -66,21 +66,40 @@ var LeaveService = (function () {
   /**
    * Approved / pending days for a leave year from LeaveRequests (source of truth for directory UI).
    */
+  function defaultLeaveTypeIdForRequest_() {
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.ensureGeneralLeaveType) {
+      var t = LeavePolicyService.ensureGeneralLeaveType();
+      if (t && t.leave_type_id) return String(t.leave_type_id);
+    }
+    return '';
+  }
+
+  function requestInLeaveYear_(row, leaveYear, startMonth) {
+    leaveYear = String(leaveYear || '');
+    if (!leaveYear) return false;
+    var start = LeaveEngine.toDateOnly(row.start_date);
+    var end = LeaveEngine.toDateOnly(row.end_date) || start;
+    if (!start && !end) return false;
+    if (start && String(LeaveEngine.getLeaveYear(start, startMonth)) === leaveYear) return true;
+    if (end && String(LeaveEngine.getLeaveYear(end, startMonth)) === leaveYear) return true;
+    return false;
+  }
+
   function summarizeLeaveYearFromRequests_(employeeId, leaveYear) {
     employeeId = String(employeeId || '').trim();
     leaveYear = String(leaveYear || currentLeaveYear_());
     var startMonth = leaveYearStartMonth_();
+    var defaultTypeId = defaultLeaveTypeIdForRequest_();
     var usedByType = {};
     var pendingByType = {};
     var usedTotal = 0;
     var pendingTotal = 0;
     DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
       if (!employeeIdsMatch_(r.employee_id, employeeId)) return;
-      var y = String(LeaveEngine.getLeaveYear(r.start_date, startMonth));
-      if (y !== leaveYear) return;
+      if (!requestInLeaveYear_(r, leaveYear, startMonth)) return;
       var days = LeaveEngine.toNumber(r.total_days);
-      var tid = String(r.leave_type_id || '');
-      var st = String(r.status || '').toUpperCase();
+      var tid = String(r.leave_type_id || '').trim() || defaultTypeId || '_UNKNOWN';
+      var st = String(r.status || '').trim().toUpperCase();
       if (st === HRMS.LEAVE_STATUS.APPROVED) {
         usedTotal += days;
         usedByType[tid] = (usedByType[tid] || 0) + days;
@@ -120,6 +139,39 @@ var LeaveService = (function () {
       });
     }
     return view;
+  }
+
+  /** Apply approved/pending totals from requests onto balance rows for one leave year. */
+  function applyRequestTotalsToYearBalances_(balances, reqTotals, leaveYear) {
+    leaveYear = String(leaveYear || '');
+    if (!reqTotals || !leaveYear) return balances || [];
+    var rows = (balances || []).filter(function (b) {
+      return String(b.leave_year) === leaveYear;
+    });
+    var defaultTypeId = defaultLeaveTypeIdForRequest_();
+    rows.forEach(function (b) {
+      mergeRequestTotalsIntoBalanceView_(b, reqTotals, b.leave_type_id);
+    });
+    var assignedUsed = 0;
+    Object.keys(reqTotals.usedByType || {}).forEach(function (tid) {
+      assignedUsed += LeaveEngine.toNumber(reqTotals.usedByType[tid]);
+    });
+    var orphanUsed = LeaveEngine.toNumber(reqTotals.usedTotal) - assignedUsed;
+    if (orphanUsed > 0.001) {
+      var target = rows.filter(function (b) { return String(b.leave_type_id) === defaultTypeId; })[0] || rows[0];
+      if (target) {
+        target.used_days = LeaveEngine.toNumber(target.used_days) + orphanUsed;
+        if (target.requires_balance !== false) {
+          target.available_days = LeaveEngine.availableDays({
+            entitled_days: target.entitled_days,
+            carried_forward_days: target.carried_forward_days,
+            used_days: target.used_days,
+            pending_days: target.pending_days
+          });
+        }
+      }
+    }
+    return rows;
   }
 
   function notificationsEnabled_() {
@@ -1810,6 +1862,7 @@ var LeaveService = (function () {
     listEmployeeOptions: listEmployeeOptions,
     currentLeaveYear: currentLeaveYear_,
     summarizeLeaveYearFromRequests: summarizeLeaveYearFromRequests_,
+    applyRequestTotalsToYearBalances: applyRequestTotalsToYearBalances_,
     getApprovedLopForPayroll: function (employeeId, periodYear, periodMonth) {
       return LeaveLopService.computeLopFromLeave(employeeId, periodYear, periodMonth);
     }

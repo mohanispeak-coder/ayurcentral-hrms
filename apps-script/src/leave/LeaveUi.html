@@ -828,6 +828,7 @@
           '<td data-label="Department">' + c.escapeHtml(r.department || '') + '</td>' +
           '<td data-label="Vertical">' + c.escapeHtml(r.vertical_name || '') + '</td>' +
           '<td class="num" data-label="Year entitled">' + fmtDays(ls.leave_year_entitled) + '</td>' +
+          '<td class="num" data-label="Year carry">' + fmtDays(ls.leave_year_carried) + '</td>' +
           '<td class="num" data-label="Year used">' + fmtDays(ls.leave_year_used) + '</td>' +
           '<td class="num" data-label="Pending">' + fmtDays(ls.leave_year_pending) + '</td>' +
           '<td class="num" data-label="Year available"><strong>' + fmtDays(ls.leave_year_available) + '</strong></td>' +
@@ -840,7 +841,7 @@
       }).join('');
       var tbody = document.getElementById('leave-bal-tbody');
       if (tbody) {
-        tbody.innerHTML = rows || '<tr class="table-empty-row"><td colspan="13"><div class="empty-state empty-state-inline">' +
+        tbody.innerHTML = rows || '<tr class="table-empty-row"><td colspan="14"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p></div></td></tr>';
         tbody.querySelectorAll('tr.table-row-click').forEach(function (tr) {
           tr.addEventListener('click', function () {
@@ -923,9 +924,9 @@
       '<p id="leave-bal-meta" class="hint"></p>' +
       '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md">' +
       '<thead><tr><th>Employee ID</th><th>Name</th><th>Dept</th><th>Vertical</th>' +
-      '<th class="num">Year entitled</th><th class="num">Year used</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
+      '<th class="num">Year entitled</th><th class="num">Year carry</th><th class="num">Year used</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
       '<th class="num">Open carry</th><th class="num">Month grant</th><th class="num">Month used</th><th class="num">Month paid</th><th class="num">Month LOP</th></tr></thead>' +
-      '<tbody id="leave-bal-tbody">' + u.skRows(13, 6) + '</tbody></table></div>' +
+      '<tbody id="leave-bal-tbody">' + u.skRows(14, 6) + '</tbody></table></div>' +
       '<div class="pagination" id="leave-bal-pagination"></div></div>';
 
     document.getElementById('leave-bal-apply').addEventListener('click', function () {
