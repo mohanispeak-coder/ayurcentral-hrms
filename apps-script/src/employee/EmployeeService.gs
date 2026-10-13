@@ -425,7 +425,8 @@ var EmployeeService = (function () {
       leave_year_entitled: 0,
       month_grant: 0,
       month_used: 0,
-      month_available: 0
+      month_available: 0,
+      month_lop: 0
     };
     if (!employeeId) return out;
     var leaveYear = '';
@@ -468,11 +469,15 @@ var EmployeeService = (function () {
             ? Number(MonthlyLeaveService.adjustmentForEmployeeMonth_(employeeId, y, m)) || 0
             : 0;
           out.month_available = Math.max(0, opening + out.month_grant + adj - out.month_used);
+          if (MonthlyLeaveService.lopFromExcessLeave_) {
+            out.month_lop = Number(MonthlyLeaveService.lopFromExcessLeave_(employeeId, y, m, emp, counts)) || 0;
+          }
         } else if (MonthlyLeaveService.getSnapshot) {
           var snap = MonthlyLeaveService.getSnapshot(employeeId, y, m);
           out.month_grant = Number(snap.grant_days) || 0;
           out.month_used = Number(snap.used_days) || 0;
           out.month_available = Number(snap.available_days) || 0;
+          out.month_lop = Number(snap.lop_days) || 0;
         }
       } catch (ignoreSnap) {}
     }

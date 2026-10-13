@@ -423,7 +423,7 @@
         return;
       }
       tr.innerHTML = '<th>Employee ID</th><th>Name</th><th class="num">Year avail.</th><th class="num">Year used</th>' +
-        '<th class="num">Pending</th><th class="num">Month avail.</th><th>Department</th><th>Status</th><th>Manager</th>';
+        '<th class="num">Pending</th><th class="num">Month avail.</th><th class="num">Month LOP</th><th>Department</th><th>Status</th><th>Manager</th>';
     }
 
     function renderTable(data) {
@@ -431,7 +431,7 @@
       if (!tbody) return;
       var showLeave = !!(listState.team && data.rows && data.rows.length && data.rows[0].leave_summary);
       syncTeamLeaveTableHead_(showLeave);
-      var colCount = showLeave ? 9 : 9;
+      var colCount = showLeave ? 10 : 9;
       if (!data.rows || !data.rows.length) {
         tbody.innerHTML = '<tr class="table-empty-row"><td colspan="' + colCount + '"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p>' +
@@ -447,6 +447,7 @@
               '<td class="num" data-label="Year used">' + (ls.leave_year_used != null ? ls.leave_year_used : '-') + '</td>' +
               '<td class="num" data-label="Pending">' + (ls.leave_year_pending != null ? ls.leave_year_pending : '-') + '</td>' +
               '<td class="num" data-label="Month available">' + (ls.month_available != null ? ls.month_available : '-') + '</td>' +
+              '<td class="num" data-label="Month LOP">' + (ls.month_lop != null ? ls.month_lop : '-') + '</td>' +
               '<td data-label="Department">' + escapeHtml(r.department) + '</td>' +
               '<td data-label="Status">' + statusBadge(r.status) + '</td>' +
               '<td data-label="Manager">' + escapeHtml(r.manager_name || r.manager_employee_id || '-') + '</td>' +
@@ -1191,15 +1192,17 @@
         var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
         html += '<div class="card" style="margin-bottom:16px"><h3 class="section-title">Monthly leave — ' + escapeHtml(periodLabel) + '</h3>' +
           '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
+          'LOP is leave recorded in the register above the monthly pool (grant + carry + adjustment). ' +
           escapeHtml(snap.carry_forward_note || '') + '</p>' +
           '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-          '<th>Period</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Adjustment</th><th class="num">Available</th>' +
+          '<th>Period</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Adjustment</th><th class="num">Available</th><th class="num">LOP</th>' +
           '</tr></thead><tbody><tr>' +
           '<td>' + escapeHtml(periodLabel) + '</td>' +
           '<td class="num">' + snap.grant_days + '</td>' +
           '<td class="num">' + snap.used_days + '</td>' +
           '<td class="num">' + snap.adjustment_days + '</td>' +
           '<td class="num"><strong>' + snap.available_days + '</strong></td>' +
+          '<td class="num">' + (snap.lop_days != null ? snap.lop_days : 0) + '</td>' +
           '</tr></tbody></table></div></div>';
       }
       if (!rows.length && !snap) {

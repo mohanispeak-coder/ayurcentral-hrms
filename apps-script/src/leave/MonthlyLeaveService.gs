@@ -137,6 +137,26 @@ var MonthlyLeaveService = (function () {
     return opening + grant + adj;
   }
 
+  /**
+   * LOP days from leave (L / ML / half-day) recorded in attendance when usage exceeds the monthly pool.
+   * Same rule as attendance register → payroll (lop_from_excess_leave).
+   */
+  function lopFromExcessLeave_(employeeId, year, month, emp, counts) {
+    employeeId = trim_(employeeId);
+    year = Number(year);
+    month = Number(month);
+    if (!emp && employeeId) {
+      emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    }
+    counts = counts || emptyCountsFromPayrollInput_(employeeId, year, month);
+    var used = leaveUsedFromCounts_(counts);
+    var pool = monthlyEntitlementPool_(emp || {}, employeeId, year, month);
+    if (typeof AttendanceRegisterService !== 'undefined' && AttendanceRegisterService.leavePaidAndLopSplit_) {
+      return AttendanceRegisterService.leavePaidAndLopSplit_(used, pool).lop_from_excess_leave;
+    }
+    return Math.max(0, used - pool);
+  }
+
   function getSnapshot(employeeId, year, month) {
     employeeId = trim_(employeeId);
     year = Number(year);
@@ -153,6 +173,8 @@ var MonthlyLeaveService = (function () {
       ? 'Includes ' + openingCf + ' day(s) carried forward from the prior month.'
       : '';
     var available = Math.max(0, openingCf + grant + adj - used);
+    var entitlementPool = monthlyEntitlementPool_(emp, employeeId, year, month);
+    var lopDays = lopFromExcessLeave_(employeeId, year, month, emp, counts);
     var yearMode = typeof LeavePolicyService !== 'undefined' && LeavePolicyService.leaveYearMode
       ? LeavePolicyService.leaveYearMode()
       : String(ConfigService.getSetting('leave_year_mode', 'CALENDAR') || 'CALENDAR').toUpperCase();
@@ -163,9 +185,11 @@ var MonthlyLeaveService = (function () {
       vertical_name: vertical,
       opening_carry_forward_days: openingCf,
       grant_days: grant,
+      entitlement_pool_days: entitlementPool,
       used_days: used,
       adjustment_days: adj,
       available_days: available,
+      lop_days: lopDays,
       carry_forward_days: openingCf,
       carry_forward_note: carryNote || (openingCf > 0 ? 'Includes carried-forward balance from prior month.' : ''),
       leave_year_mode: yearMode,
@@ -233,6 +257,7 @@ var MonthlyLeaveService = (function () {
     baseMonthlyGrant_: baseMonthlyGrant_,
     adjustmentForEmployeeMonth_: adjustmentForEmployeeMonth_,
     monthlyEntitlementPool_: monthlyEntitlementPool_,
+    lopFromExcessLeave_: lopFromExcessLeave_,
     readOpeningCarry_: readOpeningCarry_,
     emptyCountsFromPayrollInput_: emptyCountsFromPayrollInput_,
     getSnapshot: getSnapshot,
