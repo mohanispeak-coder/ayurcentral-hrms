@@ -29,6 +29,10 @@ var SchemaService = (function () {
     'opening_cf_days', 'grant_days', 'used_days', 'adjustment_days',
     'closing_balance', 'carry_to_next_days', 'processed_at'
   ];
+  SHEET_HEADERS_[HRMS.SHEETS.HOLIDAY_CALENDAR] = [
+    'holiday_id', 'calendar_year', 'holiday_date', 'name', 'scope', 'scope_value',
+    'optional', 'register_code', 'source', 'created_at', 'created_by_email'
+  ];
   SHEET_HEADERS_[HRMS.SHEETS.USERS] = [
     'google_email', 'employee_id', 'role', 'status',
     'access_documents', 'access_upload_documents', 'access_payslips', 'access_leave',
@@ -111,6 +115,7 @@ var SchemaService = (function () {
     ['seq_leave_type', '0', 'NUMBER', 'Last leave type sequence', true],
     ['seq_leave_request', '0', 'NUMBER', 'Last leave request sequence', true],
     ['seq_leave_balance', '0', 'NUMBER', 'Last leave balance sequence', true],
+    ['seq_holiday', '0', 'NUMBER', 'Last holiday sequence', true],
     ['seq_salary_structure', '0', 'NUMBER', 'Last salary structure sequence', true],
     ['seq_employee_field_def', '0', 'NUMBER', 'Last employee custom field def sequence', true],
     ['leave_year_start_month', '1', 'NUMBER', 'Leave year starts (1-12)', false],

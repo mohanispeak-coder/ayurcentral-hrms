@@ -7,7 +7,7 @@ var HRMS_MODULE_UI_FILES_ = {
   employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient', 'employee/EmployeeMandatoryFieldsClient'],
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
   payroll: ['payroll/PayrollClient'],
-  'payroll-attendance': ['payroll/AttendanceClient', 'payroll/FormTClient'],
+  'payroll-attendance': ['payroll/AttendanceClient', 'payroll/FormTClient', 'payroll/HolidayCalendarClient'],
   'payroll-structure': ['payroll/SalaryStructureClient'],
   'payroll-statement': ['payroll/SalaryStatementClient'],
   ats: ['ats/AtsClient'],

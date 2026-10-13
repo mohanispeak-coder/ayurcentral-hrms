@@ -180,6 +180,9 @@ var AttendanceBulkService = (function () {
     }
 
     var verticalCode = assertVertical_(verticalName);
+    var holidayDays = (typeof HolidayCalendarService !== 'undefined' && HolidayCalendarService.dayCodesForMonth)
+      ? HolidayCalendarService.dayCodesForMonth(year, month, verticalCode)
+      : {};
     var headers = AttendanceRegisterService.buildTemplateHeaders_(year, month);
     var dim = headers.daysInMonth;
     var employees = AttendanceRegisterService.filterEmployeesByVertical_(
@@ -204,6 +207,7 @@ var AttendanceBulkService = (function () {
         ['Eligible ACTIVE employees for this payroll month are listed (roster is built live from HRMS each download).'],
         ['Vertical: ' + verticalCode + ' (employees filtered to this vertical).'],
         ['Fill one code per day: P, W/H (Work from Home; or WH), A, L, WO, ML (Maternity Leave; legacy S = ML), H.'],
+        ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
         ['Summary columns (P, W/H, A, L, WO, ML, H, Leave Balance, DAYS) calculate in Excel.'],
         ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']
@@ -224,7 +228,10 @@ var AttendanceBulkService = (function () {
             AttendanceRegisterService.employeeDisplayName_(emp),
             trim_(emp.vertical_name)
           ];
-          for (var d = 1; d <= dim; d++) row.push('');
+          for (var d = 1; d <= dim; d++) {
+            var dayKey = AttendanceRegisterService.pad2_(d);
+            row.push(holidayDays[dayKey] || '');
+          }
           return row;
         });
         // SpreadsheetApp.getRange(row, column, numRows, numColumns) — 3rd/4th are counts, not end row/col.
@@ -269,6 +276,9 @@ var AttendanceBulkService = (function () {
     var year = Number(run.period_year);
     var month = Number(run.period_month);
     var verticalCode = assertVertical_(verticalName);
+    var holidayDays = (typeof HolidayCalendarService !== 'undefined' && HolidayCalendarService.dayCodesForMonth)
+      ? HolidayCalendarService.dayCodesForMonth(year, month, verticalCode)
+      : {};
     var headers = AttendanceRegisterService.buildTemplateHeaders_(year, month);
     var dim = headers.daysInMonth;
     var employees = AttendanceRegisterService.filterEmployeesByVertical_(
@@ -289,7 +299,10 @@ var AttendanceBulkService = (function () {
         AttendanceRegisterService.employeeDisplayName_(emp),
         trim_(emp.vertical_name)
       ];
-      for (var d = 1; d <= dim; d++) row.push('');
+      for (var d = 1; d <= dim; d++) {
+        var dayKey = AttendanceRegisterService.pad2_(d);
+        row.push(holidayDays[dayKey] || '');
+      }
       AttendanceRegisterService.SUMMARY_HEADERS.forEach(function () { row.push(''); });
       lines.push(row.map(esc).join(','));
     });
