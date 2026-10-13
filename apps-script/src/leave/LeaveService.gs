@@ -638,14 +638,13 @@ var LeaveService = (function () {
       entitled = LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYear);
       cf = LeavePolicyService.yearlyCarryForwardAmount(employeeId, leaveYear, balanceIndex);
     } else {
-      var prev = findBalance_(employeeId, type.leave_type_id, LeaveEngine.previousLeaveYear(leaveYear), balanceIndex);
-      cf = LeaveEngine.carryForwardDays(prev, type.carry_forward_max_days);
       entitled = LeaveEngine.entitledDaysForLeaveYear(
         joiningDate,
         leaveYear,
         startMonth != null ? startMonth : leaveYearStartMonth_(),
         type.annual_entitlement_days
       );
+      cf = 0;
     }
     var record = {
       leave_balance_id: nextLeaveBalanceIdLocked_(),

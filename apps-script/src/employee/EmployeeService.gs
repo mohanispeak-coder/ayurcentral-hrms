@@ -747,9 +747,15 @@ var EmployeeService = (function () {
             break;
           }
         }
-        var cf = (typeof LeaveEngine !== 'undefined' && LeaveEngine.carryForwardDays)
-          ? LeaveEngine.carryForwardDays(prev, t.carry_forward_max_days)
-          : 0;
+        var cf = 0;
+        if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.yearlyCarryForwardAmount) {
+          var generalType = LeavePolicyService.ensureGeneralLeaveType
+            ? LeavePolicyService.ensureGeneralLeaveType()
+            : null;
+          if (generalType && String(t.leave_type_id) === String(generalType.leave_type_id)) {
+            cf = LeavePolicyService.yearlyCarryForwardAmount(employeeId, year, null);
+          }
+        }
         var record = {
           leave_balance_id: DbService.generateId('LB'),
           employee_id: employeeId,

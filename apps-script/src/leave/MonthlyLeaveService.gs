@@ -124,9 +124,6 @@ var MonthlyLeaveService = (function () {
     if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthlyOpeningCarryReadOnly) {
       return LeavePolicyService.monthlyOpeningCarryReadOnly(employeeId, year, month);
     }
-    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.monthlyOpeningCarry) {
-      return LeavePolicyService.monthlyOpeningCarry(employeeId, year, month);
-    }
     return 0;
   }
 

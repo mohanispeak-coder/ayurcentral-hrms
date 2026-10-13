@@ -96,6 +96,8 @@
           escapeHtml(String(v.carry_forward_max_days != null ? v.carry_forward_max_days : 0)) + '"></td></tr>';
       });
       leavePolicyHtml += '</tbody></table></div>' +
+        '<p class="hint">Carry-forward applies only when the checkbox is on <strong>and</strong> CF max is set. ' +
+        'Monthly CF flows through attendance; yearly CF applies at leave-year balance grant (Settings only — not leave-type admin).</p>' +
         '<p class="hint">Changing policy does not rewrite historical leave requests or past balance rows; current-year entitlement syncs upward when policy increases.</p>' +
         '<button type="button" class="btn btn-secondary" id="btn-save-leave-policy" style="margin-top:12px">Save leave policy</button></div>';
 
@@ -210,16 +212,26 @@
       if (btnLp) {
         btnLp.addEventListener('click', function () {
           var verticals = [];
+          try {
           Array.prototype.forEach.call(body.querySelectorAll('[data-vert-row]'), function (tr) {
             var name = tr.getAttribute('data-vert-row');
+            var cfOn = tr.querySelector('[data-vert-cf-enabled]').checked;
+            var cfMax = tr.querySelector('[data-vert-cf-max]').value;
+            if (cfOn && (!cfMax || Number(cfMax) <= 0)) {
+              throw new Error('Set CF max (days) for ' + name + ' when carry-forward is enabled.');
+            }
             verticals.push({
               vertical_name: name,
               monthly_leave_days: tr.querySelector('[data-vert-monthly]').value,
-              carry_forward_enabled: tr.querySelector('[data-vert-cf-enabled]').checked,
+              carry_forward_enabled: cfOn,
               carry_forward_frequency: tr.querySelector('[data-vert-cf-freq]').value,
-              carry_forward_max_days: tr.querySelector('[data-vert-cf-max]').value
+              carry_forward_max_days: cfOn ? cfMax : 0
             });
           });
+          } catch (valErr) {
+            showToast(valErr.message || 'Invalid carry-forward settings', 'error');
+            return;
+          }
           callServer('apiLeaveSavePolicySettings', {
             global: {
               leave_year_mode: $('lp-year-mode').value,

@@ -134,6 +134,11 @@ var LeavePolicyService = (function () {
     }
     var cfMax = num_(payload.carry_forward_max_days, 0);
     if (cfMax < 0) throw validationError_('Maximum carry-forward cannot be negative.');
+    if (!cfEnabled) {
+      cfMax = 0;
+    } else if (cfMax <= 0) {
+      throw validationError_('Set maximum carry-forward days when carry-forward is enabled.');
+    }
     var row = getVerticalRow_(name);
     if (!row) throw notFoundError_('Vertical not found: ' + name);
     DbService.updateRecord(HRMS.SHEETS.VERTICALS, 'vertical_name', name, {
@@ -437,6 +442,10 @@ var LeavePolicyService = (function () {
     var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
     if (!emp) return null;
     var policy = coerceVerticalPolicy_(getVerticalRow_(emp.vertical_name));
+    if (!policy.carry_forward_enabled) {
+      refreshMonthlyLedger_(employeeId, year, month);
+      return findLedgerRow_(employeeId, year, month);
+    }
     if (policy.carry_forward_enabled && policy.carry_forward_frequency === 'MONTHLY') {
       var prevMonth = month === 1 ? { year: year - 1, month: 12 } : { year: year, month: month - 1 };
       if (findLedgerRow_(employeeId, prevMonth.year, prevMonth.month)) {
