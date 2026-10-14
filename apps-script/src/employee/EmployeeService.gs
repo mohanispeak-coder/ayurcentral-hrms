@@ -1407,16 +1407,21 @@ var EmployeeService = (function () {
         LeaveService.recalculateEntitlementsAfterJoiningDateChange(emp.employee_id, { alreadyLocked: true });
       } catch (ignoreRecalcAll) {}
     }
+    var calMonth = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
+    if (typeof LeaveService !== 'undefined' && LeaveService.getCurrentCalendarMonth) {
+      try { calMonth = LeaveService.getCurrentCalendarMonth(); } catch (ignoreCal) {}
+    }
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.refreshMonthlyLedger && calMonth) {
+      try {
+        LeavePolicyService.refreshMonthlyLedger(emp.employee_id, calMonth.year, calMonth.month);
+      } catch (ignoreLedRefresh) {}
+    }
     var types = [];
     try {
       types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);
     } catch (ignore) {}
     var typeName = {};
     types.forEach(function (t) { typeName[t.leave_type_id] = t.name || t.code; });
-    var calMonth = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
-    if (typeof LeaveService !== 'undefined' && LeaveService.getCurrentCalendarMonth) {
-      try { calMonth = LeaveService.getCurrentCalendarMonth(); } catch (ignoreCal) {}
-    }
     var monthlySnapshot = null;
     if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.getSnapshot) {
       try {

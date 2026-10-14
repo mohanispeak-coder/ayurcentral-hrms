@@ -26,7 +26,8 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_MONTHLY_LEDGER] = [
     'ledger_id', 'employee_id', 'period_year', 'period_month',
-    'opening_cf_days', 'grant_days', 'used_days', 'adjustment_days',
+    'opening_cf_days', 'grant_days', 'adjustment_days', 'pool_days',
+    'used_days', 'paid_leave_days', 'available_days', 'lop_days',
     'closing_balance', 'carry_to_next_days', 'processed_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.HOLIDAY_CALENDAR] = [
@@ -45,7 +46,10 @@ var SchemaService = (function () {
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_BALANCES] = [
     'leave_balance_id', 'employee_id', 'leave_type_id', 'leave_year', 'entitled_days',
-    'used_days', 'pending_days', 'carried_forward_days', 'available_days', 'updated_at'
+    'used_days', 'pending_days', 'carried_forward_days', 'available_days',
+    'period_year', 'period_month', 'monthly_carry_forwarded', 'assigned_monthly_leave',
+    'total_leave_days', 'monthly_used_leaves', 'paid_leaves_used', 'monthly_lop',
+    'updated_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_REQUESTS] = [
     'leave_request_id', 'employee_id', 'leave_type_id', 'start_date', 'end_date',

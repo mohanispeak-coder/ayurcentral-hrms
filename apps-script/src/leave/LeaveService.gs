@@ -1006,7 +1006,17 @@ var LeaveService = (function () {
     return mgr && mgr.work_email ? String(mgr.work_email).trim() : '';
   }
 
+  function refreshMonthlyLedgerForLeaveDates_(employeeId, startDate, endDate) {
+    if (typeof LeavePolicyService === 'undefined' || !LeavePolicyService.refreshMonthlyLedger) return;
+    try {
+      LeaveEngine.monthsTouched(startDate, endDate).forEach(function (p) {
+        LeavePolicyService.refreshMonthlyLedger(employeeId, p.year, p.month);
+      });
+    } catch (ignoreLed) {}
+  }
+
   function refreshLopIfNeeded_(type, employeeId, start, end) {
+    refreshMonthlyLedgerForLeaveDates_(employeeId, start, end);
     if (!type || !type.counts_as_lop) return;
     try {
       // Caller (approve/cancel) already holds the script lock.
@@ -1801,10 +1811,14 @@ var LeaveService = (function () {
       return v === verticalName;
     });
     var rowsUpdated = 0;
+    var cal = typeof getCurrentCalendarMonth_ === 'function' ? getCurrentCalendarMonth_() : null;
     employees.forEach(function (e) {
       try {
         var res = recalculateEntitlementsAfterJoiningDateChange_(e.employee_id, { balanceIndex: balanceIndex });
         rowsUpdated += Number(res && res.updated) || 0;
+        if (cal && typeof LeavePolicyService !== 'undefined' && LeavePolicyService.refreshMonthlyLedger) {
+          LeavePolicyService.refreshMonthlyLedger(e.employee_id, cal.year, cal.month);
+        }
       } catch (ignoreRec) {}
     });
     return { employees: employees.length, balance_rows_updated: rowsUpdated };
