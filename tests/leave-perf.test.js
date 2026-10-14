@@ -58,7 +58,8 @@ check('get-my-leave-uses-index', /function getMyLeave[\s\S]*loadBalanceIndex_/.t
 check('get-my-leave-no-per-type-scan', !/function getMyLeave[\s\S]*findBalance_\([^,]+,[^,]+,[^,]+\)\s*;/.test(leave));
 check('get-my-leave-grants-through-current', /function getMyLeave[\s\S]*grantBalancesForEmployee/.test(leave));
 check('admin-status-filter-helper', /matchesStatusFilter/.test(leave));
-check('my-leave-profile-layout', /profileYearBalancesHtml/.test(ui) && /monthlyLeaveBlockHtml/.test(ui));
+check('my-leave-profile-layout', /HrmsLeaveView/.test(fs.readFileSync(path.join(src, 'ui', 'LeaveViewShared.html'), 'utf8')) &&
+  /employeeLeaveLayoutHtml/.test(ui));
 check('admin-pending-status-filter', /PENDING_MANAGER/.test(ui) && /Awaiting approval/.test(ui));
 
 const startYearFn = fnBlock(leave, 'startLeaveYear', 'getApplyBootstrap');

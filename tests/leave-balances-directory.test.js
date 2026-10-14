@@ -37,8 +37,9 @@ check('profile-leave-summary-policy-sync', /syncCurrentYearBalanceFromPolicy/.te
   /yearsToMerge/.test(emp));
 check('my-leave-matches-profile-payload', /buildLeaveSummaryPayload/.test(emp) &&
   /year_balances/.test(leaveSvc) && /monthly_snapshot/.test(leaveSvc));
-check('my-leave-ui-profile-layout', /monthlyLeaveBlockHtml/.test(leaveUi) &&
-  /profileYearBalancesHtml/.test(leaveUi));
+check('my-leave-ui-profile-layout', /HrmsLeaveView/.test(fs.readFileSync(path.join(root, 'ui', 'LeaveViewShared.html'), 'utf8')) &&
+  /employeeLeaveLayoutHtml/.test(leaveUi));
+check('index-includes-leave-view-shared', /LeaveViewShared/.test(fs.readFileSync(path.join(root, 'ui', 'Index.html'), 'utf8')));
 check('month-used-includes-approved', /approvedLeaveDaysInCalendarMonth_/.test(leaveSvc) &&
   /approvedLeaveDaysMapForCalendarMonth_/.test(leaveSvc) &&
   /monthLeaveUsedDays_/.test(fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8')));

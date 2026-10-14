@@ -1,0 +1,90 @@
+<script>
+(function () {
+  'use strict';
+
+  function fmtDays(n) {
+    if (n === null || n === undefined || n === '') return '-';
+    return Number(n).toFixed(Number(n) % 1 ? 1 : 0);
+  }
+
+  function publicHolidaysHintHtml(holidays, leaveYear, escapeHtml) {
+    escapeHtml = escapeHtml || function (s) { return String(s == null ? '' : s); };
+    var count = (holidays && holidays.length) ? holidays.length : 0;
+    var label = 'Public holidays' + (leaveYear ? ' (leave year ' + escapeHtml(String(leaveYear)) + ')' : '');
+    return '<p class="hint" style="margin:0 0 12px">' + label + ': <strong>' + count + '</strong>. ' +
+      'Leave cannot be applied on these dates.</p>';
+  }
+
+  function monthlyLeaveBlockHtml(snap, escapeHtml) {
+    escapeHtml = escapeHtml || function (s) { return String(s == null ? '' : s); };
+    if (!snap) return '';
+    var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
+    return '<div class="card" style="margin-bottom:16px"><h2 class="section-title">Monthly leave — ' + escapeHtml(periodLabel) + '</h2>' +
+      '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
+      'Pool = opening carry + grant + adjustment. Leave in the register uses the pool first (<strong>paid</strong>); only the remainder is <strong>LOP</strong>. ' +
+      escapeHtml(snap.carry_forward_note || '') + '</p>' +
+      '<div class="table-wrap"><table class="data-table data-table--stack-md"><thead><tr>' +
+      '<th>Period</th><th class="num">Open carry</th><th class="num">Grant</th><th class="num">Adj</th><th class="num">Pool</th>' +
+      '<th class="num">Used</th><th class="num">Paid</th><th class="num">Avail</th><th class="num">LOP</th>' +
+      '</tr></thead><tbody><tr>' +
+      '<td data-label="Period">' + escapeHtml(periodLabel) + '</td>' +
+      '<td class="num" data-label="Open carry">' + fmtDays(snap.opening_carry_forward_days != null ? snap.opening_carry_forward_days : 0) + '</td>' +
+      '<td class="num" data-label="Grant">' + fmtDays(snap.grant_days) + '</td>' +
+      '<td class="num" data-label="Adj">' + fmtDays(snap.adjustment_days) + '</td>' +
+      '<td class="num" data-label="Pool"><strong>' + fmtDays(snap.entitlement_pool_days != null ? snap.entitlement_pool_days : 0) + '</strong></td>' +
+      '<td class="num" data-label="Used">' + fmtDays(snap.used_days) + '</td>' +
+      '<td class="num" data-label="Paid">' + fmtDays(snap.paid_leave_days != null ? snap.paid_leave_days : 0) + '</td>' +
+      '<td class="num" data-label="Avail">' + fmtDays(snap.available_days) + '</td>' +
+      '<td class="num" data-label="LOP">' + fmtDays(snap.lop_days != null ? snap.lop_days : 0) + '</td>' +
+      '</tr></tbody></table></div></div>';
+  }
+
+  function profileYearBalancesHtml(rows, escapeHtml) {
+    escapeHtml = escapeHtml || function (s) { return String(s == null ? '' : s); };
+    rows = rows || [];
+    if (!rows.length) {
+      return '<div class="card"><div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p>' +
+        '<p class="empty-state-text">Monthly allowance appears here once attendance or payroll is set for this month.</p></div></div>';
+    }
+    return '<div class="card"><h2 class="section-title">Leave balance</h2>' +
+      '<div class="table-wrap table-wrap--contain"><table class="data-table data-table--stack-md"><thead><tr>' +
+      '<th>Type</th><th>Year</th><th class="num">Entitled</th><th class="num">Used</th><th class="num">Pending</th><th class="num">Carried</th><th class="num">Available</th>' +
+      '</tr></thead><tbody>' + rows.map(function (r) {
+        return '<tr><td data-label="Type">' + escapeHtml(r.leave_type_name || r.name || '') + '</td>' +
+          '<td data-label="Year">' + escapeHtml(r.leave_year) + '</td>' +
+          '<td class="num" data-label="Entitled">' + fmtDays(r.entitled_days) + '</td>' +
+          '<td class="num" data-label="Used">' + fmtDays(r.used_days) + '</td>' +
+          '<td class="num" data-label="Pending">' + fmtDays(r.pending_days) + '</td>' +
+          '<td class="num" data-label="Carried">' + fmtDays(r.carried_forward_days) + '</td>' +
+          '<td class="num" data-label="Available">' + fmtDays(r.available_days) + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
+
+  /**
+   * Standard employee leave layout: holidays hint, monthly allowance, year balances.
+   * @param {Object} pack { monthly_snapshot, balances, public_holidays, leave_year }
+   */
+  function employeeLeaveLayoutHtml(pack, escapeHtml) {
+    pack = pack || {};
+    escapeHtml = escapeHtml || function (s) { return String(s == null ? '' : s); };
+    var html = publicHolidaysHintHtml(pack.public_holidays, pack.leave_year, escapeHtml);
+    html += monthlyLeaveBlockHtml(pack.monthly_snapshot, escapeHtml);
+    html += profileYearBalancesHtml(pack.balances, escapeHtml);
+    if (!pack.monthly_snapshot && (!pack.balances || !pack.balances.length) &&
+        !(pack.public_holidays && pack.public_holidays.length)) {
+      html = '<div class="empty-state empty-state-inline"><p class="empty-state-title">No leave balances yet</p>' +
+        '<p class="empty-state-text">Monthly allowance appears here once attendance or payroll is set for this month.</p></div>';
+    }
+    return html;
+  }
+
+  window.HrmsLeaveView = {
+    fmtDays: fmtDays,
+    publicHolidaysHintHtml: publicHolidaysHintHtml,
+    monthlyLeaveBlockHtml: monthlyLeaveBlockHtml,
+    profileYearBalancesHtml: profileYearBalancesHtml,
+    employeeLeaveLayoutHtml: employeeLeaveLayoutHtml
+  };
+})();
+</script>

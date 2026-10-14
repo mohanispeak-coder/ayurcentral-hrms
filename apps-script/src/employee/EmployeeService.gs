@@ -1424,6 +1424,28 @@ var EmployeeService = (function () {
         }
       } catch (ignoreSnap) {}
     }
+    if (!monthlySnapshot && typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.fillMonthPoolSummary_) {
+      try {
+        var monthStub = {};
+        MonthlyLeaveService.fillMonthPoolSummary_(monthStub, emp.employee_id, calMonth.year, calMonth.month, emp);
+        var vCode = emp.vertical_name || String(emp.employee_id || '').split('-')[0] || '';
+        monthlySnapshot = {
+          employee_id: emp.employee_id,
+          period_year: calMonth.year,
+          period_month: calMonth.month,
+          vertical_name: vCode,
+          opening_carry_forward_days: monthStub.month_opening_carry || 0,
+          grant_days: monthStub.month_grant || 0,
+          adjustment_days: monthStub.month_adjustment || 0,
+          entitlement_pool_days: monthStub.month_pool || 0,
+          used_days: monthStub.month_used || 0,
+          paid_leave_days: monthStub.month_paid || 0,
+          available_days: monthStub.month_available || 0,
+          lop_days: monthStub.month_lop || 0,
+          carry_forward_note: ''
+        };
+      } catch (ignoreMonthStub) {}
+    }
     var reqTotals = null;
     if (leaveYearForReq && typeof LeaveService !== 'undefined' && LeaveService.summarizeLeaveYearFromRequests) {
       try {
@@ -1482,26 +1504,34 @@ var EmployeeService = (function () {
         });
       }
     }
-    if (leaveYearForReq && balanceViews.length === 0 && reqTotals &&
-        (Number(reqTotals.usedTotal) > 0 || Number(reqTotals.pendingTotal) > 0)) {
+    if (leaveYearForReq && balanceViews.length === 0) {
       var policyEnt = 0;
       if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement) {
         try { policyEnt = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYearForReq)) || 0; } catch (ignorePe) {}
       }
-      var usedT = Number(reqTotals.usedTotal) || 0;
-      var pendT = Number(reqTotals.pendingTotal) || 0;
-      balanceViews.push({
-        leave_balance_id: '',
-        leave_type_id: '',
-        leave_type_name: 'Leave',
-        leave_year: leaveYearForReq,
-        entitled_days: policyEnt,
-        used_days: usedT,
-        pending_days: pendT,
-        carried_forward_days: 0,
-        available_days: Math.max(0, policyEnt - usedT - pendT),
-        requires_balance: true
-      });
+      var usedT = reqTotals ? Number(reqTotals.usedTotal) || 0 : 0;
+      var pendT = reqTotals ? Number(reqTotals.pendingTotal) || 0 : 0;
+      if (policyEnt > 0 || usedT > 0 || pendT > 0) {
+        var genTypeName = 'General Leave';
+        if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.ensureGeneralLeaveType) {
+          try {
+            var genT = LeavePolicyService.ensureGeneralLeaveType();
+            if (genT && genT.name) genTypeName = genT.name;
+          } catch (ignoreGt) {}
+        }
+        balanceViews.push({
+          leave_balance_id: '',
+          leave_type_id: '',
+          leave_type_name: genTypeName,
+          leave_year: leaveYearForReq,
+          entitled_days: policyEnt,
+          used_days: usedT,
+          pending_days: pendT,
+          carried_forward_days: 0,
+          available_days: Math.max(0, policyEnt - usedT - pendT),
+          requires_balance: true
+        });
+      }
     }
     balanceViews.sort(function (a, b) {
       var yc = String(b.leave_year).localeCompare(String(a.leave_year));
