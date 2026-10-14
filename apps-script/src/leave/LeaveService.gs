@@ -1528,23 +1528,39 @@ var LeaveService = (function () {
       var row = findBalance_(target, t.leave_type_id, year, balanceIndex);
       return mergeRequestTotalsIntoBalanceView_(serializeBalanceRow_(t, row, year), reqTotals, t.leave_type_id);
     });
+    var profilePack = null;
+    if (typeof EmployeeService !== 'undefined' && EmployeeService.buildLeaveSummaryPayload) {
+      try {
+        profilePack = EmployeeService.buildLeaveSummaryPayload(emp);
+      } catch (ignoreProfilePack) {}
+    }
     var tmap = typeMap_();
     var emap = empMap_();
-    var requests = DbService.findRecords(HRMS.SHEETS.LEAVE_REQUESTS, { employee_id: target })
-      .map(function (r) { return serializeRequest_(r, tmap, emap); })
+    var targetNorm = LeaveEngine.normalizeEmployeeId(target);
+    var requests = DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).filter(function (r) {
+      return LeaveEngine.normalizeEmployeeId(r.employee_id) === targetNorm;
+    }).map(function (r) { return serializeRequest_(r, tmap, emap); })
       .sort(function (a, b) { return String(b.created_at) > String(a.created_at) ? 1 : -1; });
+    var summaryYear = profilePack && profilePack.leave_year ? String(profilePack.leave_year) : year;
+    var summaryHolidays = profilePack && profilePack.public_holidays
+      ? profilePack.public_holidays
+      : publicHolidaysForEmployeeLeaveYear_(emp, summaryYear);
     return {
       employee: publicEmployee_(emp),
-      leave_year: year,
+      leave_year: summaryYear,
       current_leave_year: currentYear,
       joining_leave_year: joinYear,
       available_years: availableYears.length ? availableYears : [year],
       balances: balances,
+      year_balances: profilePack && profilePack.balances ? profilePack.balances : [],
+      monthly_snapshot: profilePack ? profilePack.monthly_snapshot : null,
       requests: requests,
       types: listBalanceTypes_(true),
       can_proxy: PermissionService.isHrOrAdmin(session),
-      public_holidays: publicHolidaysForEmployeeLeaveYear_(emp, year),
-      public_holidays_note: 'Public holidays are listed for reference. Leave cannot be applied on these dates.'
+      public_holidays: summaryHolidays,
+      public_holidays_note: profilePack && profilePack.public_holidays_note
+        ? profilePack.public_holidays_note
+        : 'Public holidays are listed for reference. Leave cannot be applied on these dates.'
     };
   }
 

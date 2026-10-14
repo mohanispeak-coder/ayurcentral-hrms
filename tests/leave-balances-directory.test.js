@@ -35,6 +35,10 @@ check('apply-request-totals-balances', /applyRequestTotalsToYearBalances_/.test(
   /return balances \|\| \[\]/.test(leaveSvc));
 check('profile-leave-summary-policy-sync', /syncCurrentYearBalanceFromPolicy/.test(emp) &&
   /yearsToMerge/.test(emp));
+check('my-leave-matches-profile-payload', /buildLeaveSummaryPayload/.test(emp) &&
+  /year_balances/.test(leaveSvc) && /monthly_snapshot/.test(leaveSvc));
+check('my-leave-ui-profile-layout', /monthlyLeaveBlockHtml/.test(leaveUi) &&
+  /profileYearBalancesHtml/.test(leaveUi));
 check('month-used-includes-approved', /approvedLeaveDaysInCalendarMonth_/.test(leaveSvc) &&
   /approvedLeaveDaysMapForCalendarMonth_/.test(leaveSvc) &&
   /monthLeaveUsedDays_/.test(fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8')));

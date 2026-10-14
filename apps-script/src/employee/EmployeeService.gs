@@ -1374,15 +1374,11 @@ var EmployeeService = (function () {
     return MonthlyLeaveService.getSnapshot(emp.employee_id, year, month);
   }
 
-  function getLeaveSummary(session, employeeId) {
-    AuthService.requireAuth();
-    var emp = EmployeeRepository.findById(trim_(employeeId));
-    if (!emp) throw notFoundError_('Employee not found.');
-    if (!canAccessEmployee_(session, emp)) throw authorizationError_();
-    var view = sanitizeForViewer(emp, session);
-    if (!view.can_view_leave) {
-      throw authorizationError_('You do not have access to leave information.');
-    }
+  /**
+   * Profile-style leave payload (monthly allowance + all leave years). Caller must enforce AuthZ.
+   */
+  function buildLeaveSummaryPayload_(emp) {
+    emp = emp || {};
     if (String(emp.status || '').toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE &&
         typeof LeaveService !== 'undefined' && LeaveService.grantBalancesForEmployee) {
       try {
@@ -1533,6 +1529,18 @@ var EmployeeService = (function () {
     };
   }
 
+  function getLeaveSummary(session, employeeId) {
+    AuthService.requireAuth();
+    var emp = EmployeeRepository.findById(trim_(employeeId));
+    if (!emp) throw notFoundError_('Employee not found.');
+    if (!canAccessEmployee_(session, emp)) throw authorizationError_();
+    var view = sanitizeForViewer(emp, session);
+    if (!view.can_view_leave) {
+      throw authorizationError_('You do not have access to leave information.');
+    }
+    return buildLeaveSummaryPayload_(emp);
+  }
+
   function isActive(employeeId) {
     var row = EmployeeRepository.findById(employeeId);
     return !!(row && String(row.status).toUpperCase() === HRMS.EMPLOYEE_STATUS.ACTIVE);
@@ -1591,6 +1599,7 @@ var EmployeeService = (function () {
     uploadDocuments: uploadDocuments,
     downloadDocument: downloadDocument,
     getLeaveSummary: getLeaveSummary,
+    buildLeaveSummaryPayload: buildLeaveSummaryPayload_,
     getMonthlyLeaveSnapshot: getMonthlyLeaveSnapshot,
     isActive: isActive,
     getMasterRecord: getMasterRecord,
