@@ -1389,22 +1389,44 @@ var EmployeeService = (function () {
         LeaveService.grantBalancesForEmployee(emp.employee_id, null, { alreadyLocked: true });
       } catch (ignore) {}
     }
+    var leaveYearForReq = '';
+    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
+      try { leaveYearForReq = String(LeaveService.currentLeaveYear()); } catch (ignoreLy2) {}
+    }
+    if (leaveYearForReq &&
+        typeof LeavePolicyService !== 'undefined' &&
+        LeavePolicyService.syncCurrentYearBalanceFromPolicy) {
+      try {
+        LeavePolicyService.syncCurrentYearBalanceFromPolicy(emp.employee_id, leaveYearForReq, null, emp);
+      } catch (ignorePolSync) {}
+    }
     var types = [];
     try {
       types = DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES);
     } catch (ignore) {}
     var typeName = {};
     types.forEach(function (t) { typeName[t.leave_type_id] = t.name || t.code; });
-    var now = new Date();
+    var calMonth = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
+    if (typeof LeaveService !== 'undefined' && LeaveService.getCurrentCalendarMonth) {
+      try { calMonth = LeaveService.getCurrentCalendarMonth(); } catch (ignoreCal) {}
+    }
     var monthlySnapshot = null;
     if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.getSnapshot) {
       try {
-        monthlySnapshot = MonthlyLeaveService.getSnapshot(emp.employee_id, now.getFullYear(), now.getMonth() + 1);
+        monthlySnapshot = MonthlyLeaveService.getSnapshot(emp.employee_id, calMonth.year, calMonth.month);
+        if (MonthlyLeaveService.fillMonthPoolSummary_) {
+          var monthPatch = {};
+          MonthlyLeaveService.fillMonthPoolSummary_(monthPatch, emp.employee_id, calMonth.year, calMonth.month, emp);
+          monthlySnapshot.used_days = monthPatch.month_used;
+          monthlySnapshot.paid_leave_days = monthPatch.month_paid;
+          monthlySnapshot.lop_days = monthPatch.month_lop;
+          monthlySnapshot.available_days = monthPatch.month_available;
+          monthlySnapshot.entitlement_pool_days = monthPatch.month_pool;
+          monthlySnapshot.opening_carry_forward_days = monthPatch.month_opening_carry;
+          monthlySnapshot.grant_days = monthPatch.month_grant;
+          monthlySnapshot.adjustment_days = monthPatch.month_adjustment;
+        }
       } catch (ignoreSnap) {}
-    }
-    var leaveYearForReq = '';
-    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
-      try { leaveYearForReq = String(LeaveService.currentLeaveYear()); } catch (ignoreLy2) {}
     }
     var reqTotals = null;
     if (leaveYearForReq && typeof LeaveService !== 'undefined' && LeaveService.summarizeLeaveYearFromRequests) {
@@ -1426,10 +1448,43 @@ var EmployeeService = (function () {
         requires_balance: true
       };
     });
-    if (leaveYearForReq && reqTotals && typeof LeaveService !== 'undefined' && LeaveService.applyRequestTotalsToYearBalances) {
-      balanceViews = LeaveService.applyRequestTotalsToYearBalances(balanceViews, reqTotals, leaveYearForReq);
-    } else if (leaveYearForReq) {
-      balanceViews = balanceViews.filter(function (b) { return String(b.leave_year) === leaveYearForReq; });
+    if (typeof LeaveService !== 'undefined' &&
+        LeaveService.summarizeLeaveYearFromRequests &&
+        LeaveService.applyRequestTotalsToYearBalances) {
+      var yearsToMerge = {};
+      balanceViews.forEach(function (b) {
+        if (b && b.leave_year) yearsToMerge[String(b.leave_year)] = true;
+      });
+      if (leaveYearForReq) yearsToMerge[leaveYearForReq] = true;
+      Object.keys(yearsToMerge).forEach(function (y) {
+        try {
+          var yrTotals = y === leaveYearForReq && reqTotals
+            ? reqTotals
+            : LeaveService.summarizeLeaveYearFromRequests(emp.employee_id, y);
+          balanceViews = LeaveService.applyRequestTotalsToYearBalances(balanceViews, yrTotals, y);
+        } catch (ignoreMergeY) {}
+      });
+    }
+    if (leaveYearForReq &&
+        typeof LeavePolicyService !== 'undefined' &&
+        LeavePolicyService.computeLeaveYearEntitlement) {
+      var policyEntCurrent = 0;
+      try {
+        policyEntCurrent = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYearForReq)) || 0;
+      } catch (ignorePe2) {}
+      if (policyEntCurrent > 0) {
+        balanceViews.forEach(function (b) {
+          if (String(b.leave_year) !== leaveYearForReq) return;
+          var ent = Number(b.entitled_days) || 0;
+          if (policyEntCurrent > ent) {
+            b.entitled_days = policyEntCurrent;
+            b.available_days = typeof LeaveEngine !== 'undefined' && LeaveEngine.availableDays
+              ? LeaveEngine.availableDays(b)
+              : Math.max(0, policyEntCurrent + (Number(b.carried_forward_days) || 0) -
+                (Number(b.used_days) || 0) - (Number(b.pending_days) || 0));
+          }
+        });
+      }
     }
     if (leaveYearForReq && balanceViews.length === 0 && reqTotals &&
         (Number(reqTotals.usedTotal) > 0 || Number(reqTotals.pendingTotal) > 0)) {
@@ -1453,6 +1508,8 @@ var EmployeeService = (function () {
       });
     }
     balanceViews.sort(function (a, b) {
+      var yc = String(b.leave_year).localeCompare(String(a.leave_year));
+      if (yc !== 0) return yc;
       return String(a.leave_type_name).localeCompare(String(b.leave_type_name));
     });
     var balances = balanceViews;

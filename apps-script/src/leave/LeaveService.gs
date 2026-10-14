@@ -246,7 +246,7 @@ var LeaveService = (function () {
         }
       }
     }
-    return rows;
+    return balances || [];
   }
 
   function notificationsEnabled_() {

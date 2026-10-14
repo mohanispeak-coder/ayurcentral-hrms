@@ -31,7 +31,10 @@ check('module-routes-all-registered', /keys\.every/.test(scripts));
 check('leave-summary-month-lop', /month_lop/.test(emp) && /month_paid/.test(emp));
 check('leave-year-used-from-requests', /summarizeLeaveYearFromRequests/.test(leaveSvc) && /summarizeLeaveYearFromRequests/.test(emp));
 check('request-in-leave-year', /requestInLeaveYear_/.test(leaveSvc));
-check('apply-request-totals-balances', /applyRequestTotalsToYearBalances_/.test(leaveSvc));
+check('apply-request-totals-balances', /applyRequestTotalsToYearBalances_/.test(leaveSvc) &&
+  /return balances \|\| \[\]/.test(leaveSvc));
+check('profile-leave-summary-policy-sync', /syncCurrentYearBalanceFromPolicy/.test(emp) &&
+  /yearsToMerge/.test(emp));
 check('month-used-includes-approved', /approvedLeaveDaysInCalendarMonth_/.test(leaveSvc) &&
   /approvedLeaveDaysMapForCalendarMonth_/.test(leaveSvc) &&
   /monthLeaveUsedDays_/.test(fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8')));
