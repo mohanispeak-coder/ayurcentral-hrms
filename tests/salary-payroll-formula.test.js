@@ -80,6 +80,20 @@ var payHalf = Engine.calculateEmployee({
 });
 check('half month earned gross below full', payHalf.gross_earnings < ctc, 'gross=' + payHalf.gross_earnings);
 
+var templateFactor = JSON.parse(JSON.stringify(template));
+templateFactor[5].calc_method = 'PRORATE_FACTOR';
+var payFactor = Engine.calculateEmployee({
+  structure: { salary_structure_id: 'SS-1', ctc_monthly: ctc },
+  components: Expand.expandTemplateComponents(templateFactor, ctc),
+  templateComponents: templateFactor,
+  payroll_rules: { earned_prorate: 'FACTOR' },
+  inputs: { working_days: 30, paid_days: 15 },
+  settings: {},
+  employee: { employee_id: 'E1' }
+});
+check('legacy PRORATE_FACTOR matches daily rate', payFactor.gross_earnings === payHalf.gross_earnings,
+  'factor gross=' + payFactor.gross_earnings + ' daily=' + payHalf.gross_earnings);
+
 var breakdown = JSON.parse(pay.component_breakdown || '{}');
 check('breakdown has four sections', breakdown.sections && breakdown.sections.rate_of_pay &&
   breakdown.sections.earned_pay && breakdown.sections.deduction_formulas && breakdown.sections.manual_deductions);

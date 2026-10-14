@@ -59,10 +59,8 @@
   var SECTION_EARNED_ = 'EARNED_PAY';
   var SECTION_DED_ = 'DEDUCTION';
   var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
-  var EARNED_METHODS_ = [
-    ['PRORATE_ROUND_LINE', 'Daily rate × paid days (round each line)'],
-    ['PRORATE_FACTOR', 'Monthly rate × (paid days ÷ working days)']
-  ];
+  var EARNED_CALC_METHOD_ = 'PRORATE_ROUND_LINE';
+  var EARNED_CALC_LABEL_ = 'Daily rate × paid days (round each line)';
 
   var RATE_METHODS_ = [
     ['PERCENT', '% of base'],
@@ -90,8 +88,7 @@
     var m = String(c.calc_method || '').toUpperCase();
     if (section === SECTION_MANUAL_) return { method: 'MANUAL', base: '' };
     if (section === SECTION_EARNED_) {
-      if (m === 'PRORATE_FACTOR') return { method: 'PRORATE_FACTOR', base: '' };
-      return { method: 'PRORATE_ROUND_LINE', base: '' };
+      return { method: EARNED_CALC_METHOD_, base: '' };
     }
     if (section === SECTION_DED_) {
       if (DED_METHODS_.some(function (x) { return x[0] === m; })) return { method: m, base: String(c.percent_base || c.cond_ref || '').toUpperCase() };
@@ -301,13 +298,11 @@
     });
   }
 
-  function parseRulesJson_(raw) {
-    var earned = 'ROUND_LINE';
-    try {
-      var o = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
-      if (o && o.earned_prorate) earned = String(o.earned_prorate);
-    } catch (ignore) {}
-    return earned;
+  function normalizeEarnedComponent_(c) {
+    c = c || {};
+    c.calc_method = EARNED_CALC_METHOD_;
+    if (!c.structure_section) c.structure_section = SECTION_EARNED_;
+    return c;
   }
 
   function rateRowHtml_(c, index, allRate) {
@@ -408,11 +403,7 @@
   }
 
   function earnedRowHtml_(c, rateComps) {
-    c = c || {};
-    var ui = uiFromStoredRow_(c, SECTION_EARNED_);
-    var methodOpts = EARNED_METHODS_.map(function (k) {
-      return '<option value="' + k[0] + '"' + (ui.method === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
-    }).join('');
+    c = normalizeEarnedComponent_(c || {});
     var roundSel = String(c.round_mode || 'ROUND').toUpperCase();
     var roundOpts = ROUND_MODES_.map(function (r) {
       return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
@@ -427,7 +418,8 @@
     return '<tr class="sst-comp-row" data-section="' + SECTION_EARNED_ + '">' +
       '<td><select class="form-select sst-c-earned-code">' + codeOpts + '</select></td>' +
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || 'Earned pay') + '"></td>' +
-      '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
+      '<td class="hint">' + esc_(EARNED_CALC_LABEL_) +
+        '<input type="hidden" class="sst-c-method" value="' + EARNED_CALC_METHOD_ + '"></td>' +
       '<td><select class="form-select sst-c-round">' + roundOpts + '</select></td>' +
       '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
       '</tr>';
@@ -469,14 +461,13 @@
     if (!m) return;
     existing = existing || {};
     var parts = splitComponents_(existing.components || []);
+    parts.earned = parts.earned.map(normalizeEarnedComponent_);
     if (!parts.earned.length) {
-      parts.earned.push({
-        structure_section: SECTION_EARNED_,
+      parts.earned.push(normalizeEarnedComponent_({
         component_code: '*',
         component_name: 'All rate lines',
-        calc_method: parseRulesJson_(existing.payroll_rules_json) === 'FACTOR' ? 'PRORATE_FACTOR' : 'PRORATE_ROUND_LINE',
         round_mode: 'ROUND'
-      });
+      }));
     }
     var currentVertical = String(existing.vertical_name || '').toUpperCase();
     var vertOpts = '<option value="">Select vertical</option>' + (verticals || []).map(function (v) {
@@ -506,7 +497,7 @@
         '<h3>2. Earned pay (attendance)</h3>' +
         '<div class="sst-callout"><strong>No rupee amounts here.</strong> This section only says how Section 1 monthly amounts become ' +
         '<em>earned</em> pay when payroll applies <strong>working days</strong> and <strong>paid days</strong> (from attendance / payroll input).</div>' +
-        '<table class="data-table"><thead><tr><th>Which Section 1 line</th><th>Label</th><th>How to calculate earned</th><th>Round</th><th></th></tr></thead>' +
+        '<table class="data-table"><thead><tr><th>Which Section 1 line</th><th>Label</th><th>Earned formula</th><th>Round</th><th></th></tr></thead>' +
         '<tbody id="sst-earned-body">' + parts.earned.map(function (c) { return earnedRowHtml_(c, parts.rate); }).join('') + '</tbody></table>' +
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-earned">+ Add earned rule</button>' +
       '</div>' +
@@ -722,7 +713,7 @@
       if (section === SECTION_EARNED_) {
         c.component_kind = 'EARNING';
         c.component_code = tr.querySelector('.sst-c-earned-code').value;
-        c.calc_method = tr.querySelector('.sst-c-method').value;
+        c.calc_method = EARNED_CALC_METHOD_;
         c.round_mode = tr.querySelector('.sst-c-round').value;
         out.push(c);
         return;

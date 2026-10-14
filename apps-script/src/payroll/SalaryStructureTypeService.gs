@@ -152,10 +152,6 @@ var SalaryStructureTypeService = (function () {
       if (!code || !name) {
         throw validationError_('Each component needs a code and a name.');
       }
-      if (seen[code]) {
-        throw validationError_('Duplicate component code: ' + code + '.');
-      }
-      seen[code] = true;
       if (VALID_KINDS_.indexOf(kind) < 0) {
         throw validationError_('component_kind must be EARNING, DEDUCTION, or EMPLOYER.');
       }
@@ -170,10 +166,18 @@ var SalaryStructureTypeService = (function () {
         if (!percentBase) percentBase = 'BP';
       }
       var structureSection = inferSection_(c, kind, method);
+      var seenKey = structureSection + '::' + code;
+      if (seen[seenKey]) {
+        throw validationError_('Duplicate component code in section ' + structureSection + ': ' + code + '.');
+      }
+      seen[seenKey] = true;
       if (structureSection === HRMS.STRUCTURE_SECTION.EARNED_PAY) {
         if (method !== HRMS.CALC_METHOD.PRORATE_ROUND_LINE &&
             method !== HRMS.CALC_METHOD.PRORATE_FACTOR) {
           throw validationError_(code + ': earned pay lines must use PRORATE_ROUND_LINE or PRORATE_FACTOR.');
+        }
+        if (method === HRMS.CALC_METHOD.PRORATE_FACTOR) {
+          method = HRMS.CALC_METHOD.PRORATE_ROUND_LINE;
         }
         kind = HRMS.COMPONENT_KIND.EARNING;
       }

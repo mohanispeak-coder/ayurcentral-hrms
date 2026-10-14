@@ -129,11 +129,15 @@ var SalaryPayrollFormulaService = (function () {
   }
 
   function defaultEarnedRule_(rules) {
-    var legacy = trim_(rules.earned_prorate).toUpperCase();
-    if (legacy === 'FACTOR') {
-      return { calc_method: HRMS.CALC_METHOD.PRORATE_FACTOR, round_mode: HRMS.FORMULA_ROUND.ROUND };
-    }
     return { calc_method: HRMS.CALC_METHOD.PRORATE_ROUND_LINE, round_mode: HRMS.FORMULA_ROUND.ROUND };
+  }
+
+  function normalizeEarnedMethod_(method) {
+    method = trim_(method).toUpperCase();
+    if (method === HRMS.CALC_METHOD.PRORATE_FACTOR) {
+      return HRMS.CALC_METHOD.PRORATE_ROUND_LINE;
+    }
+    return method;
   }
 
   function earnedRuleForCode_(code, earnedTemplateRows, rules) {
@@ -148,7 +152,7 @@ var SalaryPayrollFormulaService = (function () {
     var row = specific || wildcard;
     if (!row) return defaultEarnedRule_(rules);
     return {
-      calc_method: method_(row),
+      calc_method: normalizeEarnedMethod_(method_(row)),
       round_mode: trim_(row.round_mode).toUpperCase() || HRMS.FORMULA_ROUND.ROUND
     };
   }
