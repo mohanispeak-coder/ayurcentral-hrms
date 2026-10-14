@@ -217,8 +217,12 @@ var SalaryStructureTypeService = (function () {
         percentBase = '';
       } else if (method === HRMS.CALC_METHOD.MANUAL) {
         percent = '';
-        amount = '';
         percentBase = '';
+        if (c.amount === '' || c.amount == null) {
+          amount = 0;
+        } else {
+          amount = parseNonNegative_(c.amount, code + ' amount');
+        }
       } else if (method === HRMS.CALC_METHOD.PRORATE_ROUND_LINE ||
                  method === HRMS.CALC_METHOD.PRORATE_FACTOR) {
         percent = '';

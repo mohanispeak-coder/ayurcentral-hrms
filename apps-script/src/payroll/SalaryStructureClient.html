@@ -59,7 +59,7 @@
   var SECTION_EARNED_ = 'EARNED_PAY';
   var SECTION_DED_ = 'DEDUCTION';
   var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
-  var SST_UI_BUILD_ = '2026.10.14.17';
+  var SST_UI_BUILD_ = '2026.10.14.18';
   var EARNED_CALC_METHOD_ = 'PRORATE_ROUND_LINE';
   var EARNED_CALC_LABEL_ = 'Daily rate × paid days (round each line)';
 
@@ -440,10 +440,11 @@
 
   function manualRowHtml_(c) {
     c = c || {};
+    var amt = c.amount != null && c.amount !== '' ? c.amount : '';
     return '<tr class="sst-comp-row" data-section="' + SECTION_MANUAL_ + '">' +
       '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="ADVANCE"></td>' +
       '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Advance"></td>' +
-      '<td class="hint">Entered each payroll run (not stored in structure)</td>' +
+      '<td><input class="form-input sst-c-manual-amt mono" type="text" inputmode="decimal" value="' + esc_(amt) + '" placeholder="0"></td>' +
       '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
       '</tr>';
   }
@@ -504,7 +505,8 @@
         '<div class="form-group"><label class="form-label">Status</label>' +
           '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
       '</div>' +
-      '<p class="hint">Payroll runs in order: <strong>1 Rate</strong> \u2192 <strong>2 Earned</strong> \u2192 <strong>3 Deduction formulas</strong> \u2192 <strong>4 Manual</strong>.</p>' +
+      '<p class="hint">Payroll runs in order: <strong>1 Rate</strong> \u2192 <strong>2 Earned</strong> \u2192 <strong>3 Deduction formulas</strong> \u2192 <strong>4 Manual</strong>. ' +
+        '<span class="mono">Editor ' + esc_(SST_UI_BUILD_) + '</span></p>' +
       '<div class="sst-section">' +
         '<h3>1. Rate of pay (monthly)</h3>' +
         '<p class="page-lede">Defines contractual monthly amounts from employee CTC. Use <strong>Remainder of CTC</strong> once for special allowance (balance after other earnings).</p>' +
@@ -535,9 +537,9 @@
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-ded">+ Add custom formula</button>' +
       '</div>' +
       '<div class="sst-section">' +
-        '<h3>4. Manual deductions (payroll entry)</h3>' +
-        '<div class="sst-callout"><strong>Amounts are entered in Payroll each month</strong> (Advance, TDS, LCD, LWF). ' +
-        'This section only lists the deduction <em>names</em> so payslip and payroll know they exist.</div>' +
+        '<h3>4. Manual deductions (fixed amounts)</h3>' +
+        '<div class="sst-callout"><strong>Enter the monthly fixed \u20b9 amount for each line.</strong> Payroll uses these on calculate. ' +
+        'You can still override <strong>TDS</strong> per employee on the payroll run; <strong>Advance</strong> can use payroll <em>other deductions</em> when the amount here is 0.</div>' +
         '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Amount</th><th></th></tr></thead>' +
         '<tbody id="sst-manual-body">' + parts.manual.map(function (c) { return manualRowHtml_(c); }).join('') + '</tbody></table>' +
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-manual">+ Add manual line</button>' +
@@ -752,6 +754,9 @@
       if (section === SECTION_MANUAL_) {
         c.component_kind = 'DEDUCTION';
         c.calc_method = 'MANUAL';
+        var amtEl = tr.querySelector('.sst-c-manual-amt');
+        var amtRaw = amtEl ? String(amtEl.value || '').trim() : '';
+        c.amount = amtRaw === '' ? 0 : amtRaw;
         out.push(c);
         return;
       }

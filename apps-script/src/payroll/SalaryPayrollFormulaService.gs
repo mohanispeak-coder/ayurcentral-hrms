@@ -74,6 +74,22 @@ var SalaryPayrollFormulaService = (function () {
     return 0;
   }
 
+  /** Section 4: structure fixed amount; payroll inputs override TDS / legacy Advance bucket when set. */
+  function resolveManualDeductionAmount_(raw, inputs) {
+    raw = raw || {};
+    inputs = inputs || {};
+    var code = trim_(raw.component_code).toUpperCase();
+    var structureAmt = num_(raw.amount);
+    if (code === 'TDS') {
+      var tdsPay = num_(inputs.tds_amount);
+      if (tdsPay > 0) return tdsPay;
+      return structureAmt;
+    }
+    if (structureAmt > 0) return structureAmt;
+    if (code === 'ADVANCE') return num_(inputs.other_deductions);
+    return 0;
+  }
+
   function parseRules_(rules) {
     var out = {
       earned_prorate: 'ROUND_LINE',
@@ -259,12 +275,12 @@ var SalaryPayrollFormulaService = (function () {
     return { lines: lines, total: total, employer: employer };
   }
 
-  /** Section 4 — payroll-input deductions. */
+  /** Section 4 — fixed amounts on structure; optional payroll override for TDS / Advance. */
   function executeManualDeductions_(manualRows, inputs) {
     var lines = [];
     var total = 0;
     (manualRows || []).forEach(function (raw) {
-      var amt = manualAmount_(raw.component_code, inputs);
+      var amt = resolveManualDeductionAmount_(raw, inputs);
       lines.push({
         component_code: raw.component_code,
         component_name: raw.component_name,
