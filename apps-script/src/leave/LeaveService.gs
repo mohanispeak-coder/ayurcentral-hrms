@@ -1749,6 +1749,42 @@ var LeaveService = (function () {
   }
 
   /**
+   * Rewrite entitled_days on all balance rows from monthly policy (joining date, vertical grant).
+   * Preserves used, pending, and carry; entitled never drops below consumed days.
+   */
+  function recalculateEntitlementsAfterJoiningDateChange_(employeeId, options) {
+    options = options || {};
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) return { updated: 0 };
+    var emp = employeeForLeave_(employeeId);
+    if (!emp) return { updated: 0 };
+    var balanceIndex = options.balanceIndex || loadBalanceIndex_();
+    var updated = 0;
+    existingKeysForEmployee_(balanceIndex, employeeId).forEach(function (key) {
+      var bal = findBalance_(employeeId, key.leave_type_id, key.leave_year, balanceIndex);
+      if (!bal) return;
+      var entitled = 0;
+      if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement) {
+        try {
+          entitled = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, key.leave_year)) || 0;
+        } catch (ignoreEnt) {}
+      }
+      var used = LeaveEngine.toNumber(bal.used_days);
+      var pending = LeaveEngine.toNumber(bal.pending_days);
+      var cf = LeaveEngine.toNumber(bal.carried_forward_days);
+      var minEntitled = used + pending - cf;
+      if (minEntitled < 0) minEntitled = 0;
+      if (entitled < minEntitled) entitled = minEntitled;
+      entitled = Math.round(entitled * 100) / 100;
+      if (Math.abs(LeaveEngine.toNumber(bal.entitled_days) - entitled) < 0.001) return;
+      bal.entitled_days = entitled;
+      writeBalance_(bal, balanceIndex);
+      updated += 1;
+    });
+    return { updated: updated };
+  }
+
+  /**
    * Persist leave balances from joining year through the target/current leave year.
    * Existing rows are never overwritten. Called on hire, reactivation, profile/leave
    * reads, and HR "start leave year".
@@ -1947,6 +1983,7 @@ var LeaveService = (function () {
     saveType: saveType,
     getTypes: getTypes,
     grantBalancesForEmployee: grantBalancesForEmployee,
+    recalculateEntitlementsAfterJoiningDateChange: recalculateEntitlementsAfterJoiningDateChange_,
     startLeaveYear: startLeaveYear,
     getApplyBootstrap: getApplyBootstrap,
     previewDays: previewDays,

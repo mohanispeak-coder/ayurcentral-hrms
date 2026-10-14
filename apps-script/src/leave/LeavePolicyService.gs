@@ -288,9 +288,7 @@ var LeavePolicyService = (function () {
   }
 
   function effectiveEntitledDays_(balanceRow, emp, leaveYear) {
-    var stored = LeaveEngine.toNumber(balanceRow && balanceRow.entitled_days);
-    var policy = computeLeaveYearEntitlement(emp, leaveYear);
-    return Math.max(stored, policy);
+    return computeLeaveYearEntitlement(emp, leaveYear);
   }
 
   function syncCurrentYearBalanceFromPolicy_(employeeId, leaveYear, balanceIndex, emp) {
