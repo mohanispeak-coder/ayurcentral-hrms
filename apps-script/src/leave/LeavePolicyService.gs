@@ -1,6 +1,10 @@
 /**
  * Central leave policy: leave year mode, vertical monthly entitlement, carry-forward, pro-rata entitlement.
- * Monthly attendance buckets use MonthlyLeaveService usage; yearly leave applications use LeaveBalances.
+ *
+ * Sheet roles (single source of truth each):
+ * - LeaveBalances: leave year entitlement and application totals (entitled / used / pending / CF).
+ * - LeaveMonthlyLedger: calendar month pool, used, paid leave, LOP, carry to next month.
+ * - LeaveRequests: applications; LeaveMonthlyAdjustments: HR month tweaks.
  */
 var LeavePolicyService = (function () {
   var GENERAL_TYPE_CODE_ = 'GENERAL';
@@ -394,44 +398,6 @@ var LeavePolicyService = (function () {
     };
   }
 
-  function syncLeaveBalanceMonthlySnapshot_(employeeId, year, month, fields) {
-    if (!fields) return;
-    employeeId = trim_(employeeId);
-    year = Number(year);
-    month = Number(month);
-    var type = ensureGeneralLeaveType_();
-    if (!type || !employeeId) return;
-    var leaveYear = '';
-    if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
-      try { leaveYear = String(LeaveService.currentLeaveYear()); } catch (ignoreLy) {}
-    }
-    if (!leaveYear && typeof LeaveEngine !== 'undefined' && LeaveEngine.getLeaveYear) {
-      var sm = leaveYearStartMonth();
-      leaveYear = String(LeaveEngine.getLeaveYear(year + '-' + month + '-01', sm));
-    }
-    if (!leaveYear) return;
-    var rows = DbService.findRecords(HRMS.SHEETS.LEAVE_BALANCES, {
-      employee_id: employeeId,
-      leave_year: String(leaveYear)
-    }).filter(function (b) {
-      return String(b.leave_type_id) === String(type.leave_type_id);
-    });
-    var bal = rows[0];
-    if (!bal) return;
-    var patch = {
-      period_year: year,
-      period_month: month,
-      monthly_carry_forwarded: num_(fields.opening_cf_days, 0),
-      assigned_monthly_leave: num_(fields.grant_days, 0),
-      total_leave_days: num_(fields.pool_days, 0),
-      monthly_used_leaves: num_(fields.used_days, 0),
-      paid_leaves_used: num_(fields.paid_leave_days, 0),
-      monthly_lop: num_(fields.lop_days, 0),
-      updated_at: new Date().toISOString()
-    };
-    DbService.updateRecord(HRMS.SHEETS.LEAVE_BALANCES, 'leave_balance_id', bal.leave_balance_id, patch);
-  }
-
   function refreshMonthlyLedger_(employeeId, year, month) {
     employeeId = trim_(employeeId);
     year = Number(year);
@@ -439,7 +405,6 @@ var LeavePolicyService = (function () {
     if (typeof SchemaService !== 'undefined' && SchemaService.ensureSheetHeaders) {
       try {
         SchemaService.ensureSheetHeaders(HRMS.SHEETS.LEAVE_MONTHLY_LEDGER);
-        SchemaService.ensureSheetHeaders(HRMS.SHEETS.LEAVE_BALANCES);
       } catch (ignoreHdr) {}
     }
     var fields = computeMonthlyLedgerFields_(employeeId, year, month);
@@ -468,8 +433,11 @@ var LeavePolicyService = (function () {
     } else {
       DbService.appendRecord(HRMS.SHEETS.LEAVE_MONTHLY_LEDGER, merged);
     }
-    syncLeaveBalanceMonthlySnapshot_(employeeId, year, month, fields);
     return merged;
+  }
+
+  function getMonthlyLedgerRow_(employeeId, year, month) {
+    return findLedgerRow_(employeeId, year, month);
   }
 
   function processMonthlyPeriod_(employeeId, year, month) {
@@ -547,6 +515,7 @@ var LeavePolicyService = (function () {
     syncCurrentYearBalanceFromPolicy: syncCurrentYearBalanceFromPolicy_,
     processMonthlyPeriod: processMonthlyPeriod_,
     refreshMonthlyLedger: refreshMonthlyLedger_,
+    getMonthlyLedgerRow: getMonthlyLedgerRow_,
     syncMonthlyLedgerAfterAttendance: syncMonthlyLedgerAfterAttendance_,
     monthlyOpeningCarry: monthlyOpeningCarry_,
     monthlyOpeningCarryReadOnly: monthlyOpeningCarryReadOnly_,

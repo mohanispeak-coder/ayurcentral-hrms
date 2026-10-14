@@ -34,6 +34,10 @@ check('attendance-sync-ledger', /syncMonthlyLedgerForAttendance_/.test(bulk));
 var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 check('month-pool-summary', /fillMonthPoolSummary_/.test(monthly) && /paid_leave_days/.test(monthly));
 check('ledger-sheet', /LEAVE_MONTHLY_LEDGER/.test(constantsSrc) && /LEAVE_MONTHLY_LEDGER/.test(schemaSrc));
+check('balances-annual-only', !/paid_leaves_used/.test(schemaSrc.match(/LEAVE_BALANCES[\s\S]*?LEAVE_REQUESTS/) ?
+  schemaSrc.match(/LEAVE_BALANCES[\s\S]*?updated_at/)[0] : '') &&
+  !/syncLeaveBalanceMonthlySnapshot/.test(policySrc));
+check('ledger-row-api', /getMonthlyLedgerRow/.test(policySrc));
 check('vertical-cf-columns', /leave_carry_forward_enabled/.test(schemaSrc));
 check('policy-api', /apiLeaveGetPolicySettings/.test(apiLeave) && /apiLeaveSavePolicySettings/.test(apiLeave));
 check('settings-leave-policy-ui', /Leave policy/.test(settingsUi) && /apiLeaveSavePolicySettings/.test(settingsUi));

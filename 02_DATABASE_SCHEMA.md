@@ -131,6 +131,54 @@ No per-employment-type policies in Phase 1 (FUTURE).
 | available_days | Number | Y | entitled + CF − used − pending (recompute on write) |
 | updated_at | Datetime | Y | |
 
+Do **not** store calendar-month paid leave or LOP on this sheet; use **LeaveMonthlyLedger**.
+
+---
+
+## 5b. LeaveMonthlyLedger
+
+**Purpose:** One row per employee per calendar month — monthly pool, usage, paid leave vs LOP, and carry to the next month.  
+**PK:** `ledger_id`  
+**Unique:** `employee_id` + `period_year` + `period_month`
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| ledger_id | String | Y | |
+| employee_id | String | Y | |
+| period_year | Number | Y | Calendar year |
+| period_month | Number | Y | 1–12 |
+| opening_cf_days | Number | Y | Carry from prior month |
+| grant_days | Number | Y | Vertical monthly grant (join rules applied) |
+| adjustment_days | Number | Y | Sum of LeaveMonthlyAdjustments |
+| pool_days | Number | Y | opening + grant + adjustment |
+| used_days | Number | Y | max(register L/ML/½P, approved leave in month) |
+| paid_leave_days | Number | Y | Days paid from monthly pool |
+| available_days | Number | Y | pool − used (≥ 0) |
+| lop_days | Number | Y | Loss of pay when used exceeds pool |
+| closing_balance | Number | Y | End-of-month balance in pool |
+| carry_to_next_days | Number | Y | Capped carry per vertical policy |
+| processed_at | Datetime | Y | Last recompute |
+
+Refreshed when leave is approved/cancelled, attendance is saved, or leave policy changes.
+
+---
+
+## 5c. LeaveMonthlyAdjustments
+
+**Purpose:** HR adjustments to an employee’s monthly leave pool.  
+**PK:** `adjustment_id`
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| adjustment_id | String | Y | |
+| employee_id | String | Y | |
+| period_year | Number | Y | |
+| period_month | Number | Y | |
+| adjustment_days | Number | Y | Signed days (+/−) |
+| reason | String | Y | |
+| created_at | Datetime | Y | |
+| created_by_email | String | Y | |
+
 ---
 
 ## 6. LeaveRequests

@@ -47,8 +47,6 @@ var SchemaService = (function () {
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_BALANCES] = [
     'leave_balance_id', 'employee_id', 'leave_type_id', 'leave_year', 'entitled_days',
     'used_days', 'pending_days', 'carried_forward_days', 'available_days',
-    'period_year', 'period_month', 'monthly_carry_forwarded', 'assigned_monthly_leave',
-    'total_leave_days', 'monthly_used_leaves', 'paid_leaves_used', 'monthly_lop',
     'updated_at'
   ];
   SHEET_HEADERS_[HRMS.SHEETS.LEAVE_REQUESTS] = [

@@ -204,12 +204,58 @@ var MonthlyLeaveService = (function () {
     return Math.max(0, used - pool);
   }
 
+  function snapshotFromLedgerRow_(ledger, emp, employeeId, year, month) {
+    if (!ledger) return null;
+    employeeId = trim_(employeeId);
+    var vertical = verticalCode_(emp);
+    var openingCf = num_(ledger.opening_cf_days, 0);
+    var grant = num_(ledger.grant_days, 0);
+    var adj = num_(ledger.adjustment_days, 0);
+    var used = num_(ledger.used_days, 0);
+    var entitlementPool = num_(ledger.pool_days, openingCf + grant + adj);
+    var available = num_(ledger.available_days, Math.max(0, entitlementPool - used));
+    var paidLeaveDays = num_(ledger.paid_leave_days, 0);
+    var lopDays = num_(ledger.lop_days, 0);
+    var carryNote = openingCf > 0
+      ? 'Includes ' + openingCf + ' day(s) carried forward from the prior month.'
+      : '';
+    var yearMode = typeof LeavePolicyService !== 'undefined' && LeavePolicyService.leaveYearMode
+      ? LeavePolicyService.leaveYearMode()
+      : String(ConfigService.getSetting('leave_year_mode', 'CALENDAR') || 'CALENDAR').toUpperCase();
+    return {
+      employee_id: employeeId,
+      period_year: year,
+      period_month: month,
+      vertical_name: vertical,
+      opening_carry_forward_days: openingCf,
+      grant_days: grant,
+      entitlement_pool_days: entitlementPool,
+      used_days: used,
+      adjustment_days: adj,
+      available_days: available,
+      paid_leave_days: paidLeaveDays,
+      lop_days: lopDays,
+      carry_forward_days: openingCf,
+      carry_forward_note: carryNote || (openingCf > 0 ? 'Includes carried-forward balance from prior month.' : ''),
+      leave_year_mode: yearMode,
+      join_grant_after_day: joinGrantAfterDay_(),
+      code_counts: emptyCountsFromPayrollInput_(employeeId, year, month),
+      source: 'leave_monthly_ledger',
+      ledger_processed_at: ledger.processed_at || ''
+    };
+  }
+
   function getSnapshot(employeeId, year, month) {
     employeeId = trim_(employeeId);
     year = Number(year);
     month = Number(month);
     var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
     if (!emp) throw notFoundError_('Employee not found.');
+    if (typeof LeavePolicyService !== 'undefined' && LeavePolicyService.getMonthlyLedgerRow) {
+      var ledgerRow = LeavePolicyService.getMonthlyLedgerRow(employeeId, year, month);
+      var fromLedger = snapshotFromLedgerRow_(ledgerRow, emp, employeeId, year, month);
+      if (fromLedger) return fromLedger;
+    }
     var vertical = verticalCode_(emp);
     var grant = grantForEmployeeMonth_(emp, year, month);
     var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
