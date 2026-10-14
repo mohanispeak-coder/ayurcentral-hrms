@@ -107,14 +107,16 @@ var SalaryStructureTypeService = (function () {
     return !!row && trim_(row.structure_name) !== '' && trim_(row.employee_id) === '';
   }
 
-  /** Short, readable, sequential id (SS-001, SS-002, ...). Caller holds the script lock. */
-  function nextStructureId_() {
-    var seq = DbService.nextSequenceAssumingLocked
-      ? DbService.nextSequenceAssumingLocked('seq_salary_structure')
-      : DbService.nextSequence('seq_salary_structure');
-    var n = String(seq);
-    while (n.length < 3) n = '0' + n;
-    return 'SS-' + n;
+  /** Manual structure IDs — validated on create; PK is never changed on edit. */
+  function normalizeStructureId_(raw, label) {
+    label = label || 'Structure ID';
+    var id = trim_(raw);
+    if (!id) throw validationError_(label + ' is required.');
+    if (id.length > 64) throw validationError_(label + ' is too long (max 64 characters).');
+    if (!/^[\w.\-/]+$/.test(id)) {
+      throw validationError_(label + ' can only use letters, numbers, hyphen, underscore, dot, and slash.');
+    }
+    return id;
   }
 
   function parseNonNegative_(value, label) {
@@ -407,7 +409,7 @@ var SalaryStructureTypeService = (function () {
     var components = normalizeComponents_(payload.components);
     var warning = earningsPercentWarning_(components);
     var payrollRules = trim_(payload.payroll_rules_json) || defaultPayrollRules_();
-    var structureId = trim_(payload.salary_structure_id);
+    var structureId = normalizeStructureId_(payload.salary_structure_id);
 
     return withScriptLock_(function () {
       var all = DbService.getAllRecords(HRMS.SHEETS.SALARY_STRUCTURES).filter(isTypeRow_);
@@ -418,10 +420,9 @@ var SalaryStructureTypeService = (function () {
       if (duplicate) throw validationError_('A structure with this name already exists.');
 
       var now = new Date();
-      var savedId;
-      if (structureId) {
-        var existing = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, { salary_structure_id: structureId });
-        if (!isTypeRow_(existing)) throw notFoundError_('Salary structure not found.');
+      var savedId = structureId;
+      var existing = DbService.findOne(HRMS.SHEETS.SALARY_STRUCTURES, { salary_structure_id: structureId });
+      if (existing && isTypeRow_(existing)) {
         DbService.updateRecord(HRMS.SHEETS.SALARY_STRUCTURES, 'salary_structure_id', structureId, {
           structure_name: name,
           vertical_name: vertical,
@@ -431,9 +432,9 @@ var SalaryStructureTypeService = (function () {
           updated_at: now,
           updated_by_email: session.email
         });
-        savedId = structureId;
+      } else if (existing) {
+        throw conflictError_('Structure ID already in use: ' + structureId);
       } else {
-        savedId = nextStructureId_();
         DbService.insertRecord(HRMS.SHEETS.SALARY_STRUCTURES, {
           salary_structure_id: savedId,
           structure_name: name,

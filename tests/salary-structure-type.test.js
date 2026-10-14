@@ -59,7 +59,6 @@ const context = {
   conflictError_: function (m) { return hrmsError(m); },
   systemError_: function (m) { return hrmsError(m); }
 };
-// Throwing versions must actually throw when used as `throw validationError_(...)`.
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(src, 'foundation', 'Constants.gs'), 'utf8'), context);
 vm.runInContext(fs.readFileSync(path.join(src, 'payroll', 'SalaryComponentExpandService.gs'), 'utf8'), context);
@@ -79,8 +78,12 @@ function expectThrow(name, fn, matchText) {
   }
 }
 
+var ID_SAPL = 'SAPL-EXEC-CUSTOM';
+var ID_AOPL = 'AOPL-PARTIAL';
+
 // Create a valid structure (earnings total 100% → no warning).
 var created = Svc.saveStructureType({
+  salary_structure_id: ID_SAPL,
   structure_name: 'SAPL Executive',
   vertical_name: 'sapl',
   status: 'ACTIVE',
@@ -91,8 +94,7 @@ var created = Svc.saveStructureType({
     { component_code: 'pf', component_name: 'PF', component_kind: 'DEDUCTION', calc_method: 'FIXED', amount: 1800 }
   ]
 });
-check('create returns id', !!created.salary_structure_id, created.salary_structure_id);
-check('id is short sequential (SS-###)', /^SS-\d{3}$/.test(created.salary_structure_id), created.salary_structure_id);
+check('create returns id', created.salary_structure_id === ID_SAPL, created.salary_structure_id);
 check('create uppercases vertical', created.vertical_name === 'SAPL');
 check('create default active', created.status === 'ACTIVE');
 check('create stores components', created.components.length === 4);
@@ -102,6 +104,7 @@ check('type row has empty employee_id', db._store.SalaryStructures[0].employee_i
 
 // Warning when earnings don't total 100%.
 var warned = Svc.saveStructureType({
+  salary_structure_id: ID_AOPL,
   structure_name: 'AOPL Partial',
   vertical_name: 'AOPL',
   components: [
@@ -110,44 +113,50 @@ var warned = Svc.saveStructureType({
 });
 check('incomplete structure warns', /sample CTC|earnings total/i.test(warned.warning || ''), warned.warning || '');
 
+expectThrow('missing structure id rejected', function () {
+  Svc.saveStructureType({ salary_structure_id: '', structure_name: 'NoId', vertical_name: 'SAPL', components: [
+    { component_code: 'BP', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 100 }
+  ] });
+}, 'Structure ID is required');
+
 // Duplicate name rejected.
 expectThrow('duplicate name rejected', function () {
-  Svc.saveStructureType({ structure_name: 'sapl executive', vertical_name: 'SAPL', components: [
+  Svc.saveStructureType({ salary_structure_id: 'SAPL-OTHER', structure_name: 'sapl executive', vertical_name: 'SAPL', components: [
     { component_code: 'BP', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 100 }
   ] });
 }, 'already exists');
 
 // Invalid vertical rejected.
 expectThrow('invalid vertical rejected', function () {
-  Svc.saveStructureType({ structure_name: 'Zeta', vertical_name: 'NOPE', components: [
+  Svc.saveStructureType({ salary_structure_id: 'ZETA-1', structure_name: 'Zeta', vertical_name: 'NOPE', components: [
     { component_code: 'BP', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 100 }
   ] });
 }, 'valid vertical');
 
 // Component validation.
 expectThrow('missing component code', function () {
-  Svc.saveStructureType({ structure_name: 'NoCode', vertical_name: 'SAPL', components: [
+  Svc.saveStructureType({ salary_structure_id: 'NOCODE-1', structure_name: 'NoCode', vertical_name: 'SAPL', components: [
     { component_code: '', component_name: 'X', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 10 }
   ] });
 }, 'code and a name');
 expectThrow('bad kind rejected', function () {
-  Svc.saveStructureType({ structure_name: 'BadKind', vertical_name: 'SAPL', components: [
+  Svc.saveStructureType({ salary_structure_id: 'BADKIND-1', structure_name: 'BadKind', vertical_name: 'SAPL', components: [
     { component_code: 'X', component_name: 'X', component_kind: 'BONUS', calc_method: 'PERCENT_OF_CTC', percent: 10 }
   ] });
 }, 'component_kind');
 expectThrow('duplicate component code', function () {
-  Svc.saveStructureType({ structure_name: 'Dup', vertical_name: 'SAPL', components: [
+  Svc.saveStructureType({ salary_structure_id: 'DUP-1', structure_name: 'Dup', vertical_name: 'SAPL', components: [
     { component_code: 'BP', component_name: 'a', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50 },
     { component_code: 'bp', component_name: 'b', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 50 }
   ] });
 }, 'Duplicate component code');
 expectThrow('percent over 100 rejected', function () {
-  Svc.saveStructureType({ structure_name: 'Over', vertical_name: 'SAPL', components: [
+  Svc.saveStructureType({ salary_structure_id: 'OVER-1', structure_name: 'Over', vertical_name: 'SAPL', components: [
     { component_code: 'BP', component_name: 'a', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 150 }
   ] });
 }, 'cannot exceed 100');
 expectThrow('empty components rejected', function () {
-  Svc.saveStructureType({ structure_name: 'Empty', vertical_name: 'SAPL', components: [] });
+  Svc.saveStructureType({ salary_structure_id: 'EMPTY-1', structure_name: 'Empty', vertical_name: 'SAPL', components: [] });
 }, 'at least one');
 
 // Listing + lookups.
@@ -191,6 +200,7 @@ check('client-structure-sections', /sst-rate-body/.test(clientHtml) && /sst-earn
   /sst-ded-body/.test(clientHtml) && /sst-manual-body/.test(clientHtml));
 check('client-four-section-labels', /2\. Earned pay/.test(clientHtml) && /4\. Manual deductions/.test(clientHtml));
 check('client-payroll-rules', /execution_sections/.test(clientHtml) && /payroll_rules_json/.test(clientHtml));
+check('client-manual-structure-id', /sst-structure-id/.test(clientHtml));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

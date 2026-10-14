@@ -474,10 +474,16 @@
       return '<option value="' + esc_(v) + '"' + (currentVertical === String(v).toUpperCase() ? ' selected' : '') + '>' + esc_(v) + '</option>';
     }).join('');
     var active = String(existing.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+    var isEdit = !!String(existing.salary_structure_id || '').trim();
+    var idField = isEdit
+      ? '<div class="form-group"><label class="form-label" for="sst-structure-id">Structure ID</label>' +
+        '<input class="form-input mono" id="sst-structure-id" value="' + esc_(existing.salary_structure_id) + '" readonly></div>'
+      : '<div class="form-group"><label class="form-label" for="sst-structure-id">Structure ID</label>' +
+        '<input class="form-input mono" id="sst-structure-id" value="" placeholder="e.g. SAPL-EXEC-2026" autocomplete="off">' +
+        '<p class="hint">Choose a unique ID. Employees and payroll reference this value.</p></div>';
     m.innerHTML =
       '<div class="card">' +
-      '<input type="hidden" id="sst-id" value="' + esc_(existing.salary_structure_id || '') + '">' +
-      '<div class="form-row">' +
+      '<div class="form-row">' + idField +
         '<div class="form-group"><label class="form-label" for="sst-name">Structure name</label>' +
           '<input class="form-input" id="sst-name" value="' + esc_(existing.structure_name || '') + '" placeholder="e.g. SAPL Standard"></div>' +
         '<div class="form-group"><label class="form-label" for="sst-vertical">Vertical</label>' +
@@ -774,8 +780,14 @@
   }
 
   function save_(btn) {
+    var idEl = document.getElementById('sst-structure-id');
+    var structureId = idEl ? String(idEl.value || '').trim() : '';
+    if (!structureId) {
+      showToast('Structure ID is required.', 'error');
+      return;
+    }
     var payload = {
-      salary_structure_id: document.getElementById('sst-id').value,
+      salary_structure_id: structureId,
       structure_name: document.getElementById('sst-name').value.trim(),
       vertical_name: document.getElementById('sst-vertical').value,
       status: document.getElementById('sst-active').checked ? 'ACTIVE' : 'INACTIVE',
