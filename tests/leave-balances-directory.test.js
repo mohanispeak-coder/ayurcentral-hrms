@@ -50,7 +50,8 @@ check('calendar-month-timezone', /getCurrentCalendarMonth_/.test(leaveSvc) &&
 check('no-all-years-fallback', !/if \(!general\.length\) general = balances/.test(emp));
 var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));
-check('leave-balances-lop-column', /Month LOP/.test(leaveUi));
+check('leave-balances-lop-column', /Paid leaves used/.test(leaveUi) && /Total leaves/.test(leaveUi) &&
+  /Carry forwarded/.test(leaveUi) && /Used leaves/.test(leaveUi));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');

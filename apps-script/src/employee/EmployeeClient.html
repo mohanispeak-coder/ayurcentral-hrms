@@ -423,7 +423,9 @@
         return;
       }
       tr.innerHTML = '<th>Employee ID</th><th>Name</th><th class="num">Year avail.</th><th class="num">Year used</th>' +
-        '<th class="num">Pending</th><th class="num">Open CF</th><th class="num">Month paid</th><th class="num">Month LOP</th><th>Department</th><th>Status</th><th>Manager</th>';
+        '<th class="num">Pending</th><th class="num">Carry forwarded</th><th class="num">Assigned monthly leave</th>' +
+        '<th class="num">Total leaves</th><th class="num">Used leaves</th><th class="num">Paid leaves used</th><th class="num">LOP</th>' +
+        '<th>Department</th><th>Status</th><th>Manager</th>';
     }
 
     function renderTable(data) {
@@ -431,7 +433,7 @@
       if (!tbody) return;
       var showLeave = !!(listState.team && data.rows && data.rows.length && data.rows[0].leave_summary);
       syncTeamLeaveTableHead_(showLeave);
-      var colCount = showLeave ? 10 : 9;
+      var colCount = showLeave ? 14 : 9;
       if (!data.rows || !data.rows.length) {
         tbody.innerHTML = '<tr class="table-empty-row"><td colspan="' + colCount + '"><div class="empty-state empty-state-inline">' +
           '<p class="empty-state-title">No matching employees</p>' +
@@ -446,9 +448,12 @@
               '<td class="num" data-label="Year available">' + (ls.leave_year_available != null ? ls.leave_year_available : '-') + '</td>' +
               '<td class="num" data-label="Year used">' + (ls.leave_year_used != null ? ls.leave_year_used : '-') + '</td>' +
               '<td class="num" data-label="Pending">' + (ls.leave_year_pending != null ? ls.leave_year_pending : '-') + '</td>' +
-              '<td class="num" data-label="Open carry">' + (ls.month_opening_carry != null ? ls.month_opening_carry : '-') + '</td>' +
-              '<td class="num" data-label="Month paid">' + (ls.month_paid != null ? ls.month_paid : '-') + '</td>' +
-              '<td class="num" data-label="Month LOP">' + (ls.month_lop != null ? ls.month_lop : '-') + '</td>' +
+              '<td class="num" data-label="Carry forwarded">' + (ls.month_opening_carry != null ? ls.month_opening_carry : '-') + '</td>' +
+              '<td class="num" data-label="Assigned monthly leave">' + (ls.month_grant != null ? ls.month_grant : '-') + '</td>' +
+              '<td class="num" data-label="Total leaves">' + (ls.month_pool != null ? ls.month_pool : '-') + '</td>' +
+              '<td class="num" data-label="Used leaves">' + (ls.month_used != null ? ls.month_used : '-') + '</td>' +
+              '<td class="num" data-label="Paid leaves used">' + (ls.month_paid != null ? ls.month_paid : '-') + '</td>' +
+              '<td class="num" data-label="LOP">' + (ls.month_lop != null ? ls.month_lop : '-') + '</td>' +
               '<td data-label="Department">' + escapeHtml(r.department) + '</td>' +
               '<td data-label="Status">' + statusBadge(r.status) + '</td>' +
               '<td data-label="Manager">' + escapeHtml(r.manager_name || r.manager_employee_id || '-') + '</td>' +
