@@ -27,6 +27,7 @@ var leaveUi = fs.readFileSync(path.join(root, 'leave', 'LeaveUi.html'), 'utf8');
 var apiLeave = fs.readFileSync(path.join(root, 'leave', 'ApiLeave.gs'), 'utf8');
 
 check('leave-policy-service', /LeavePolicyService/.test(policySrc) && /computeLeaveYearEntitlement/.test(policySrc));
+check('policy-save-batch-recalc', /runPolicySaveRecalc_/.test(policySrc) && /refreshMonthlyLedger: false/.test(policySrc));
 check('monthly-carry-read-only', /monthlyOpeningCarryReadOnly/.test(policySrc));
 check('ledger-refresh-on-attendance', /syncMonthlyLedgerAfterAttendance/.test(policySrc) && /refreshMonthlyLedger_/.test(policySrc));
 var bulk = fs.readFileSync(path.join(root, 'payroll', 'AttendanceBulkService.gs'), 'utf8');

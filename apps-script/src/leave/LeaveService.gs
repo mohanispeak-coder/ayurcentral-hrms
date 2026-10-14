@@ -1798,7 +1798,8 @@ var LeaveService = (function () {
    * After vertical or global leave policy changes: refresh LeaveBalances entitled from current policy.
    * @param {string=} verticalName Optional vertical code (e.g. SAPL); omit to recalc all active employees.
    */
-  function recalculateEntitlementsForActiveEmployees_(verticalName) {
+  function recalculateEntitlementsForActiveEmployees_(verticalName, options) {
+    options = options || {};
     verticalName = verticalName ? String(verticalName).trim().toUpperCase() : '';
     var balanceIndex = loadBalanceIndex_();
     var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(function (e) {
@@ -1811,7 +1812,8 @@ var LeaveService = (function () {
       return v === verticalName;
     });
     var rowsUpdated = 0;
-    var cal = typeof getCurrentCalendarMonth_ === 'function' ? getCurrentCalendarMonth_() : null;
+    var refreshLedger = options.refreshMonthlyLedger === true;
+    var cal = refreshLedger && typeof getCurrentCalendarMonth_ === 'function' ? getCurrentCalendarMonth_() : null;
     employees.forEach(function (e) {
       try {
         var res = recalculateEntitlementsAfterJoiningDateChange_(e.employee_id, { balanceIndex: balanceIndex });

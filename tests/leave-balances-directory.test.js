@@ -38,8 +38,11 @@ check('profile-leave-summary-policy-sync', /syncCurrentYearBalanceFromPolicy/.te
   /yearsToMerge/.test(emp));
 check('join-date-recalc-entitlements', /recalculateEntitlementsAfterJoiningDateChange_/.test(leaveSvc) &&
   /recalculateEntitlementsAfterJoiningDateChange/.test(emp));
-check('policy-save-recalc-vertical', /recalculateEntitlementsForActiveEmployees/.test(leaveSvc) &&
-  /recalculateEntitlementsForActiveEmployees\(name\)/.test(fs.readFileSync(path.join(root, 'leave', 'LeavePolicyService.gs'), 'utf8')));
+var policyGs = fs.readFileSync(path.join(root, 'leave', 'LeavePolicyService.gs'), 'utf8');
+check('policy-save-recalc-vertical', /runPolicySaveRecalc_/.test(policyGs) &&
+  /monthly_entitlement_changed/.test(policyGs) && /recalculateEntitlementsForActiveEmployees/.test(leaveSvc));
+check('policy-save-skips-unchanged-global', /recalcAllEntitlements/.test(policyGs));
+check('policy-save-no-per-vertical-inline-recalc', !/saveVerticalPolicy_[\s\S]*recalculateEntitlementsForActiveEmployees\(name\)/.test(policyGs));
 check('my-leave-matches-profile-payload', /buildLeaveSummaryPayload/.test(emp) &&
   /year_balances/.test(leaveSvc) && /monthly_snapshot/.test(leaveSvc));
 check('my-leave-ui-profile-layout', /HrmsLeaveView/.test(fs.readFileSync(path.join(root, 'ui', 'LeaveViewShared.html'), 'utf8')) &&

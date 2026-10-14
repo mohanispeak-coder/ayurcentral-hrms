@@ -47,14 +47,25 @@ var LeavePolicyService = (function () {
     return Math.floor(d);
   }
 
+  function verticalPoliciesEqual_(a, b) {
+    a = coerceVerticalPolicy_(a || {});
+    b = coerceVerticalPolicy_(b || {});
+    return a.monthly_leave_days === b.monthly_leave_days &&
+      a.carry_forward_enabled === b.carry_forward_enabled &&
+      a.carry_forward_frequency === b.carry_forward_frequency &&
+      a.carry_forward_max_days === b.carry_forward_max_days;
+  }
+
   function saveGlobalPolicy_(session, payload) {
     if (!PermissionService.isHrOrAdmin(session)) throw authorizationError_();
     payload = payload || {};
+    var recalcAllEntitlements = false;
     if (payload.leave_year_mode != null) {
       var mode = String(payload.leave_year_mode).toUpperCase();
       if (mode !== 'CALENDAR' && mode !== 'FINANCIAL') {
         throw validationError_('Leave year must be CALENDAR or FINANCIAL.');
       }
+      if (mode !== leaveYearMode_()) recalcAllEntitlements = true;
       upsertSetting_('leave_year_mode', mode, session);
       var startMonth = mode === 'FINANCIAL' ? 4 : 1;
       upsertSetting_('leave_year_start_month', String(startMonth), session);
@@ -64,13 +75,29 @@ var LeavePolicyService = (function () {
       if (!isFinite(cut) || cut < 1 || cut > 28) {
         throw validationError_('Joining-date cut-off must be between 1 and 28.');
       }
-      upsertSetting_('leave_join_grant_after_day', String(Math.floor(cut)), session);
+      var cutInt = Math.floor(cut);
+      if (cutInt !== joinGrantAfterDay_()) recalcAllEntitlements = true;
+      upsertSetting_('leave_join_grant_after_day', String(cutInt), session);
     }
-    if (typeof LeaveService !== 'undefined' && LeaveService.recalculateEntitlementsForActiveEmployees) {
-      try {
-        LeaveService.recalculateEntitlementsForActiveEmployees();
-      } catch (ignoreGlobalRecalc) {}
-    }
+    return { recalcAllEntitlements: recalcAllEntitlements };
+  }
+
+  function runPolicySaveRecalc_(globalFlags, changedVerticalNames) {
+    if (typeof LeaveService === 'undefined' || !LeaveService.recalculateEntitlementsForActiveEmployees) return;
+    var opts = { refreshMonthlyLedger: false };
+    try {
+      if (globalFlags && globalFlags.recalcAllEntitlements) {
+        LeaveService.recalculateEntitlementsForActiveEmployees(null, opts);
+        return;
+      }
+      var seen = {};
+      (changedVerticalNames || []).forEach(function (name) {
+        var n = trim_(name).toUpperCase();
+        if (!n || seen[n]) return;
+        seen[n] = true;
+        LeaveService.recalculateEntitlementsForActiveEmployees(n, opts);
+      });
+    } catch (ignoreRecalcBatch) {}
   }
 
   function upsertSetting_(key, value, session) {
@@ -150,18 +177,29 @@ var LeavePolicyService = (function () {
     }
     var row = getVerticalRow_(name);
     if (!row) throw notFoundError_('Vertical not found: ' + name);
+    var before = coerceVerticalPolicy_(row);
+    var nextMonthly = monthly === '' ? null : monthly;
+    var nextPolicy = {
+      vertical_name: name,
+      monthly_leave_days: nextMonthly,
+      carry_forward_enabled: cfEnabled,
+      carry_forward_frequency: freq,
+      carry_forward_max_days: cfMax
+    };
+    var policyChanged = !verticalPoliciesEqual_(before, nextPolicy);
+    var monthlyChanged = before.monthly_leave_days !== nextMonthly;
     DbService.updateRecord(HRMS.SHEETS.VERTICALS, 'vertical_name', name, {
       monthly_leave_days: monthly === '' ? '' : monthly,
       leave_carry_forward_enabled: cfEnabled ? 'TRUE' : 'FALSE',
       leave_carry_forward_frequency: freq,
       leave_carry_forward_max_days: cfMax
     });
-    if (typeof LeaveService !== 'undefined' && LeaveService.recalculateEntitlementsForActiveEmployees) {
-      try {
-        LeaveService.recalculateEntitlementsForActiveEmployees(name);
-      } catch (ignoreVertRecalc) {}
-    }
-    return coerceVerticalPolicy_(DbService.findOne(HRMS.SHEETS.VERTICALS, { vertical_name: name }));
+    return {
+      policy: coerceVerticalPolicy_(DbService.findOne(HRMS.SHEETS.VERTICALS, { vertical_name: name })),
+      vertical_name: name,
+      policy_changed: policyChanged,
+      monthly_entitlement_changed: monthlyChanged
+    };
   }
 
   function getGlobalPolicyForClient_() {
@@ -186,15 +224,21 @@ var LeavePolicyService = (function () {
   function savePolicyBundle(session, payload) {
     if (!PermissionService.isHrOrAdmin(session)) throw authorizationError_();
     payload = payload || {};
-    saveGlobalPolicy_(session, payload.global || payload);
+    var globalFlags = saveGlobalPolicy_(session, payload.global || payload);
     var verticals = payload.verticals || [];
     var saved = [];
+    var verticalsNeedingEntitlementRecalc = [];
     verticals.forEach(function (v) {
-      saved.push(saveVerticalPolicy_(session, v));
+      var result = saveVerticalPolicy_(session, v);
+      saved.push(result.policy);
+      if (result.monthly_entitlement_changed) verticalsNeedingEntitlementRecalc.push(result.vertical_name);
     });
     if (payload.vertical && !verticals.length) {
-      saved.push(saveVerticalPolicy_(session, payload.vertical));
+      var single = saveVerticalPolicy_(session, payload.vertical);
+      saved.push(single.policy);
+      if (single.monthly_entitlement_changed) verticalsNeedingEntitlementRecalc.push(single.vertical_name);
     }
+    runPolicySaveRecalc_(globalFlags, verticalsNeedingEntitlementRecalc);
     AuditService.log('LEAVE_POLICY_SAVE', 'LeavePolicy', 'org', 'Updated leave policy settings', session.employee_id || '');
     return {
       global: getGlobalPolicyForClient_(),
