@@ -54,7 +54,7 @@ var SalaryStructureTypeService = (function () {
         round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 6 },
       { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'PF', component_name: 'PF',
         component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_CAPPED,
-        percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 10 },
+        percent_base: 'RATE_LINE:BP', percent: 12, cap_amount: 25000, round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 10 },
       { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'ESIC', component_name: 'ESIC',
         component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_IF,
         cond_ref: HRMS.FORMULA_REF.RATE_GROSS, cond_op: 'LT', cond_value: 21001,
@@ -125,6 +125,24 @@ var SalaryStructureTypeService = (function () {
     if (!isFinite(n)) throw validationError_(label + ' must be a valid number.');
     if (n < 0) throw validationError_(label + ' cannot be negative.');
     return n;
+  }
+
+  function lineRefInner_(ref) {
+    ref = trim_(ref).toUpperCase();
+    if (ref.indexOf('RATE_LINE:') === 0) return ref.substring(10);
+    if (ref.indexOf('EARNED_LINE:') === 0) return ref.substring(12);
+    return ref;
+  }
+
+  function isAllowedFormulaRef_(ref, codesSoFar) {
+    ref = trim_(ref).toUpperCase();
+    if (!ref) return false;
+    if (ref === HRMS.PERCENT_BASE_CTC || ref === 'CTC') return true;
+    if (ref === HRMS.FORMULA_REF.RATE_GROSS || ref === HRMS.FORMULA_REF.EARNED_GROSS) return true;
+    if (ref.indexOf('RATE_LINE:') === 0 || ref.indexOf('EARNED_LINE:') === 0) {
+      return !!codesSoFar[lineRefInner_(ref)];
+    }
+    return !!codesSoFar[ref];
   }
 
   function allowedVerticals_() {
@@ -212,10 +230,7 @@ var SalaryStructureTypeService = (function () {
         if (method === HRMS.CALC_METHOD.PERCENT && percentBase === HRMS.PERCENT_BASE_CTC && percent > 100) {
           throw validationError_(code + ': percent of CTC cannot exceed 100.');
         }
-        if (percentBase !== HRMS.PERCENT_BASE_CTC &&
-            percentBase !== HRMS.FORMULA_REF.RATE_GROSS &&
-            percentBase !== HRMS.FORMULA_REF.EARNED_GROSS &&
-            !codesSoFar[percentBase]) {
+        if (!isAllowedFormulaRef_(percentBase, codesSoFar)) {
           throw validationError_(code + ': base "' + percentBase + '" must be defined above or be a formula ref.');
         }
         if (method === HRMS.CALC_METHOD.PERCENT_CAPPED) {
@@ -224,12 +239,21 @@ var SalaryStructureTypeService = (function () {
       } else if (method === HRMS.CALC_METHOD.PERCENT_IF) {
         percent = parseNonNegative_(c.percent, code + ' percent');
         if (!condRef) throw validationError_(code + ': condition reference is required.');
+        if (!isAllowedFormulaRef_(condRef, codesSoFar)) {
+          throw validationError_(code + ': condition ref "' + condRef + '" is not valid.');
+        }
         if (!condOp) condOp = 'LT';
         condValue = parseNonNegative_(c.cond_value, code + ' condition value');
         if (!percentBase) percentBase = HRMS.FORMULA_REF.EARNED_GROSS;
+        if (!isAllowedFormulaRef_(percentBase, codesSoFar)) {
+          throw validationError_(code + ': percent base "' + percentBase + '" is not valid.');
+        }
       } else if (method === HRMS.CALC_METHOD.THRESHOLD_FEE) {
         amount = parseNonNegative_(c.amount, code + ' fee amount');
         if (!condRef) condRef = HRMS.FORMULA_REF.EARNED_GROSS;
+        if (!isAllowedFormulaRef_(condRef, codesSoFar)) {
+          throw validationError_(code + ': condition ref "' + condRef + '" is not valid.');
+        }
         if (!condOp) condOp = 'LTE';
         condValue = parseNonNegative_(c.cond_value, code + ' threshold');
       } else if (method === HRMS.CALC_METHOD.FIXED) {

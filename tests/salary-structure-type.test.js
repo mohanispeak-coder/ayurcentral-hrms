@@ -159,12 +159,28 @@ expectThrow('empty components rejected', function () {
   Svc.saveStructureType({ salary_structure_id: 'EMPTY-1', structure_name: 'Empty', vertical_name: 'SAPL', components: [] });
 }, 'at least one');
 
+// Rate BP + earned rule for BP (same code, different sections) must save.
+var bothSections = Svc.saveStructureType({
+  salary_structure_id: 'BOTH-SEC-TEST',
+  structure_name: 'Both Sections BP',
+  vertical_name: 'SAPL',
+  components: [
+    { structure_section: 'RATE_OF_PAY', component_code: 'BP', component_name: 'Basic', component_kind: 'EARNING',
+      calc_method: 'PERCENT_OF_CTC', percent: 100 },
+    { structure_section: 'EARNED_PAY', component_code: 'BP', component_name: 'Earned', component_kind: 'EARNING',
+      calc_method: 'PRORATE_ROUND_LINE', round_mode: 'ROUND' },
+    { structure_section: 'DEDUCTION', component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION',
+      calc_method: 'PERCENT_CAPPED', percent_base: 'RATE_LINE:BP', percent: 12, cap_amount: 25000 }
+  ]
+});
+check('rate and earned same code saves', bothSections.salary_structure_id === 'BOTH-SEC-TEST');
+
 // Listing + lookups.
-check('listStructureTypes returns all', Svc.listStructureTypes(false).length === 2);
+check('listStructureTypes returns all', Svc.listStructureTypes(false).length === 3);
 check('findTypeByName case-insensitive', !!Svc.findTypeByName('sapl executive'));
 check('findTypeById works', !!Svc.findTypeById(created.salary_structure_id));
 var opts = Svc.listStructureTypeOptions({ activeOnly: true });
-check('options include name+vertical', opts.length === 2 && opts[0].structure_name && opts[0].vertical_name);
+check('options include name+vertical', opts.length === 3 && opts[0].structure_name && opts[0].vertical_name);
 check('options filter by vertical', Svc.listStructureTypeOptions({ vertical_name: 'AOPL' }).length === 1);
 
 // Update existing (edit) keeps single row and replaces components.
@@ -179,13 +195,13 @@ var edited = Svc.saveStructureType({
 });
 check('edit keeps same id', edited.salary_structure_id === created.salary_structure_id);
 check('edit replaces components', edited.components.length === 1);
-check('edit did not add a row', Svc.listStructureTypes(false).length === 2);
+check('edit did not add a row', Svc.listStructureTypes(false).length === 3);
 
 // Status toggle + activeOnly filter.
 Svc.setStructureTypeStatus(created.salary_structure_id, 'INACTIVE');
 check('setStatus inactive', Svc.getStructureType(created.salary_structure_id).status === 'INACTIVE');
-check('activeOnly excludes inactive', Svc.listStructureTypes(true).length === 1);
-check('inactive excluded from options', Svc.listStructureTypeOptions({ activeOnly: true }).length === 1);
+check('activeOnly excludes inactive', Svc.listStructureTypes(true).length === 2);
+check('inactive excluded from options', Svc.listStructureTypeOptions({ activeOnly: true }).length === 2);
 
 // Legacy per-employee row must not be treated as a type.
 db.insertRecord('SalaryStructures', { salary_structure_id: 'SS-legacy', employee_id: 'EMP001', status: 'CURRENT', structure_name: '' });

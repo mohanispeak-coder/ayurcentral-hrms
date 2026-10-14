@@ -68,14 +68,14 @@
     ['BALANCE_OF_CTC', 'Remainder of CTC']
   ];
   var DED_METHODS_ = [
-    ['PERCENT_CAPPED', 'Percentage of an amount (with optional maximum base) — e.g. PF'],
-    ['PERCENT_IF', 'Percentage only when a condition is true — e.g. ESIC'],
-    ['THRESHOLD_FEE', 'Fixed fee when salary is above a limit — e.g. PT'],
+    ['PERCENT_CAPPED', 'Percentage of an amount (with optional maximum base) - e.g. PF'],
+    ['PERCENT_IF', 'Percentage only when a condition is true - e.g. ESIC'],
+    ['THRESHOLD_FEE', 'Fixed fee when salary is above a limit - e.g. PT'],
     ['PERCENT', 'Simple percentage of an amount'],
     ['FIXED', 'Same fixed ₹ every month (not typed in payroll)']
   ];
   var DED_PRESETS_ = {
-    PF: { component_code: 'PF', component_name: 'PF', calc_method: 'PERCENT_CAPPED', percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: 'ROUND' },
+    PF: { component_code: 'PF', component_name: 'PF', calc_method: 'PERCENT_CAPPED', percent_base: 'RATE_LINE:BP', percent: 12, cap_amount: 25000, round_mode: 'ROUND' },
     ESIC: { component_code: 'ESIC', component_name: 'ESIC', calc_method: 'PERCENT_IF', cond_ref: 'RATE_GROSS', cond_op: 'LT', cond_value: 21001, percent_base: 'EARNED_GROSS', percent: 0.75, round_mode: 'ROUNDUP' },
     PT: { component_code: 'PT', component_name: 'Professional tax', calc_method: 'THRESHOLD_FEE', cond_ref: 'EARNED_GROSS', cond_op: 'LTE', cond_value: 25000, amount: 200, round_mode: 'ROUND' }
   };
@@ -142,21 +142,33 @@
     var sel = String(selected || 'CTC').toUpperCase();
     var html = '<option value="CTC"' + (sel === 'CTC' ? ' selected' : '') + '>Monthly CTC (employee)</option>';
     (priorCodes || []).forEach(function (code) {
-      html += '<option value="' + esc_(code) + '"' + (sel === code ? ' selected' : '') + '>Section 1 line — ' + esc_(code) + '</option>';
+      html += '<option value="' + esc_(code) + '"' + (sel === code ? ' selected' : '') + '>Section 1 line - ' + esc_(code) + '</option>';
     });
     return html;
   }
 
-  /** Where a deduction formula takes its amount from (sections 1, 2, or CTC). */
-  function amountSourceOptionsHtml_(selected, rateCodes) {
+  function normalizeAmountSourceRef_(selected, rateCodes) {
     var sel = String(selected || 'EARNED_GROSS').toUpperCase();
+    if (sel === 'CTC' || sel === 'RATE_GROSS' || sel === 'EARNED_GROSS') return sel;
+    if (sel.indexOf('RATE_LINE:') === 0 || sel.indexOf('EARNED_LINE:') === 0) return sel;
+    if ((rateCodes || []).indexOf(sel) >= 0) return 'RATE_LINE:' + sel;
+    return sel;
+  }
+
+  /** Where a deduction formula takes its amount from (sections 1, 2, or CTC). */
+  function amountSourceOptionsHtml_(selected, rateCodes, earnedCodes) {
+    var sel = normalizeAmountSourceRef_(selected, rateCodes);
+    earnedCodes = earnedCodes || rateCodes || [];
     var opts = [
       ['CTC', 'Monthly CTC (employee profile)'],
-      ['RATE_GROSS', 'Section 1 — Total monthly gross (rate)'],
-      ['EARNED_GROSS', 'Section 2 — Total earned gross']
+      ['RATE_GROSS', 'Section 1 - Total monthly gross (rate)'],
+      ['EARNED_GROSS', 'Section 2 - Total earned gross']
     ];
     (rateCodes || []).forEach(function (code) {
-      opts.push([code, 'Section 1 — ' + code + ' (monthly rate amount)']);
+      opts.push(['RATE_LINE:' + code, 'Section 1 - ' + code + ' (monthly rate)']);
+    });
+    (earnedCodes || []).forEach(function (code) {
+      opts.push(['EARNED_LINE:' + code, 'Section 2 - ' + code + ' (earned amount)']);
     });
     return opts.map(function (o) {
       return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + esc_(o[1]) + '</option>';
@@ -165,7 +177,7 @@
 
   function dedMethodHint_(m) {
     if (m === 'PERCENT_CAPPED') {
-      return 'Pick which amount the % applies to, enter the %, and optional maximum base (PF wage ceiling). Calculated at payroll — no ₹ typed here.';
+      return 'Pick which amount the % applies to, enter the %, and optional maximum base (PF wage ceiling). Calculated at payroll - no ₹ typed here.';
     }
     if (m === 'PERCENT_IF') {
       return 'If the first amount meets the condition, system deducts % of the second amount (ESIC-style). Calculated at payroll.';
@@ -338,7 +350,7 @@
     }).join('');
     var rateCodes = priorRateCodes_(allRate, allRate.length);
     var m = ui.method;
-    var baseSel = (m === 'PERCENT_IF' || m === 'THRESHOLD_FEE') ? (c.cond_ref || 'RATE_GROSS') : (c.percent_base || 'BP');
+    var baseSel = (m === 'PERCENT_IF' || m === 'THRESHOLD_FEE') ? (c.cond_ref || 'RATE_GROSS') : (c.percent_base || 'RATE_LINE:BP');
     var roundSel = String(c.round_mode || 'ROUND').toUpperCase();
     var roundOpts = ROUND_MODES_.map(function (r) {
       return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
@@ -386,7 +398,7 @@
           '</div>' +
           '<div class="sst-ded-block sst-ded-pct-simple">' +
             '<label>Take amount from</label>' +
-            '<select class="form-select sst-c-base-simple">' + amountSourceOptionsHtml_(c.percent_base || 'BP', rateCodes) + '</select>' +
+            '<select class="form-select sst-c-base-simple">' + amountSourceOptionsHtml_(c.percent_base || 'RATE_LINE:BP', rateCodes) + '</select>' +
             '<label>Percentage (%)</label>' +
             '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '">' +
           '</div>' +
@@ -511,7 +523,7 @@
         '<h3>3. Deduction formulas (automatic)</h3>' +
         '<div class="sst-callout"><strong>You choose the rule, not the rupee amount.</strong> Pick <em>which section</em> the amount comes from ' +
         '(e.g. Basic from Section 1, earned gross from Section 2), enter <em>percentage</em> or <em>fee</em>. ' +
-        'PF / ESIC / PT are <strong>calculated at payroll</strong> — nothing to type per employee in this screen.</div>' +
+        'PF / ESIC / PT are <strong>calculated at payroll</strong> - nothing to type per employee in this screen.</div>' +
         '<div class="sst-preset-btns">' +
           '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="PF">+ PF preset</button>' +
           '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="ESIC">+ ESIC preset</button>' +
@@ -597,9 +609,32 @@
     });
   }
 
+  function collectEarnedLineCodes_() {
+    var codes = [];
+    var seen = {};
+    function addCode(cd) {
+      cd = String(cd || '').trim().toUpperCase();
+      if (!cd || cd === '*' || cd === 'ALL') return;
+      if (!seen[cd]) { seen[cd] = true; codes.push(cd); }
+    }
+    document.querySelectorAll('#sst-earned-body .sst-c-earned-code').forEach(function (sel) {
+      var v = String(sel.value || '').trim().toUpperCase();
+      if (v === '*' || v === 'ALL') {
+        collectRateOnly_().forEach(function (r) { addCode(r.component_code); });
+      } else {
+        addCode(v);
+      }
+    });
+    if (!codes.length) {
+      collectRateOnly_().forEach(function (r) { addCode(r.component_code); });
+    }
+    return codes;
+  }
+
   function refreshRateBaseSelects_() {
     var rows = allRateRows_();
     var codes = [];
+    var earnedCodes = collectEarnedLineCodes_();
     rows.forEach(function (tr) {
       var baseSel = tr.querySelector('.sst-c-base');
       var methodSel = tr.querySelector('.sst-c-method');
@@ -613,7 +648,7 @@
     });
     document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) {
       tr.querySelectorAll('.sst-c-base, .sst-c-base-if, .sst-c-base-th, .sst-c-base-simple, .sst-c-pct-base').forEach(function (sel) {
-        sel.innerHTML = amountSourceOptionsHtml_(sel.value, codes);
+        sel.innerHTML = amountSourceOptionsHtml_(sel.value, codes, earnedCodes);
       });
     });
   }
@@ -673,6 +708,9 @@
       };
     });
     refreshEarnedCodeSelects_();
+    document.querySelectorAll('#sst-earned-body .sst-c-earned-code').forEach(function (sel) {
+      sel.onchange = function () { refreshRateBaseSelects_(); };
+    });
     document.querySelectorAll('#sst-rate-body .sst-c-method').forEach(function (sel) {
       sel.onchange = function () { syncRateRowUi_(sel.closest('tr')); };
     });

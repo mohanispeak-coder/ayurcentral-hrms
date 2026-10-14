@@ -50,9 +50,17 @@ var SalaryPayrollFormulaService = (function () {
     ref = trim_(ref).toUpperCase();
     if (ref === HRMS.FORMULA_REF.RATE_GROSS) return ctx.rateGross;
     if (ref === HRMS.FORMULA_REF.EARNED_GROSS) return ctx.earnedGross;
-    if (ref === HRMS.PERCENT_BASE_CTC) return ctx.ctcMonthly;
-    if (ctx.earnedByCode[ref] != null) return ctx.earnedByCode[ref];
+    if (ref === HRMS.PERCENT_BASE_CTC || ref === 'CTC') return ctx.ctcMonthly;
+    if (ref.indexOf('RATE_LINE:') === 0) {
+      var rateCode = ref.substring(10);
+      return ctx.rateByCode[rateCode] != null ? ctx.rateByCode[rateCode] : 0;
+    }
+    if (ref.indexOf('EARNED_LINE:') === 0) {
+      var earnedCode = ref.substring(12);
+      return ctx.earnedByCode[earnedCode] != null ? ctx.earnedByCode[earnedCode] : 0;
+    }
     if (ctx.rateByCode[ref] != null) return ctx.rateByCode[ref];
+    if (ctx.earnedByCode[ref] != null) return ctx.earnedByCode[ref];
     return 0;
   }
 
