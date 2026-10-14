@@ -22,20 +22,18 @@
     var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
     return '<div class="card" style="margin-bottom:16px"><h2 class="section-title">Monthly leave - ' + escapeHtml(periodLabel) + '</h2>' +
       '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
-      'Pool = opening carry + grant + adjustment. Leave in the register uses the pool first (<strong>paid</strong>); only the remainder is <strong>LOP</strong>. ' +
+      '<strong>Total leaves</strong> = carry forwarded + assigned monthly leave. Leave uses total leaves first (<strong>paid leaves used</strong>); only the remainder is <strong>LOP</strong>. ' +
       escapeHtml(snap.carry_forward_note || '') + '</p>' +
       '<div class="table-wrap"><table class="data-table data-table--stack-md"><thead><tr>' +
-      '<th>Period</th><th class="num">Open carry</th><th class="num">Grant</th><th class="num">Adj</th><th class="num">Pool</th>' +
-      '<th class="num">Used</th><th class="num">Paid</th><th class="num">Avail</th><th class="num">LOP</th>' +
+      '<th>Period</th><th class="num">Carry forwarded</th><th class="num">Assigned monthly leave</th><th class="num">Total leaves</th>' +
+      '<th class="num">Used leaves</th><th class="num">Paid leaves used</th><th class="num">LOP</th>' +
       '</tr></thead><tbody><tr>' +
       '<td data-label="Period">' + escapeHtml(periodLabel) + '</td>' +
-      '<td class="num" data-label="Open carry">' + fmtDays(snap.opening_carry_forward_days != null ? snap.opening_carry_forward_days : 0) + '</td>' +
-      '<td class="num" data-label="Grant">' + fmtDays(snap.grant_days) + '</td>' +
-      '<td class="num" data-label="Adj">' + fmtDays(snap.adjustment_days) + '</td>' +
-      '<td class="num" data-label="Pool"><strong>' + fmtDays(snap.entitlement_pool_days != null ? snap.entitlement_pool_days : 0) + '</strong></td>' +
-      '<td class="num" data-label="Used">' + fmtDays(snap.used_days) + '</td>' +
-      '<td class="num" data-label="Paid">' + fmtDays(snap.paid_leave_days != null ? snap.paid_leave_days : 0) + '</td>' +
-      '<td class="num" data-label="Avail">' + fmtDays(snap.available_days) + '</td>' +
+      '<td class="num" data-label="Carry forwarded">' + fmtDays(snap.opening_carry_forward_days != null ? snap.opening_carry_forward_days : 0) + '</td>' +
+      '<td class="num" data-label="Assigned monthly leave">' + fmtDays(snap.grant_days) + '</td>' +
+      '<td class="num" data-label="Total leaves"><strong>' + fmtDays(snap.entitlement_pool_days != null ? snap.entitlement_pool_days : 0) + '</strong></td>' +
+      '<td class="num" data-label="Used leaves">' + fmtDays(snap.used_days) + '</td>' +
+      '<td class="num" data-label="Paid leaves used">' + fmtDays(snap.paid_leave_days != null ? snap.paid_leave_days : 0) + '</td>' +
       '<td class="num" data-label="LOP">' + fmtDays(snap.lop_days != null ? snap.lop_days : 0) + '</td>' +
       '</tr></tbody></table></div></div>';
   }
