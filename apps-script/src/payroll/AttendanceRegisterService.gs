@@ -90,6 +90,9 @@ var AttendanceRegisterService = (function () {
   }
 
   function leaveBalanceMaxForVertical_(verticalCode) {
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.baseMonthlyGrant_) {
+      return Number(MonthlyLeaveService.baseMonthlyGrant_(verticalCode)) || 0;
+    }
     var v = trim_(verticalCode).toUpperCase();
     var map = HRMS.ATTENDANCE_LEAVE_BALANCE_MAX || {};
     if (map.hasOwnProperty(v)) return Number(map[v]) || 0;
@@ -103,7 +106,7 @@ var AttendanceRegisterService = (function () {
     }
     var max = leaveBalanceMaxForVertical_(verticalCode);
     var half = (Number(counts['1/2P']) || 0) * 0.5;
-    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + half;
+    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + half + (Number(counts.A) || 0);
     return Math.max(0, max - used);
   }
 
@@ -218,10 +221,12 @@ var AttendanceRegisterService = (function () {
     return true;
   }
 
+  var TEMPLATE_POOL_COL_ = 4;
+
   function buildTemplateHeaders_(year, month) {
     var dim = daysInMonth_(year, month);
-    var row1 = ['', '', ''];
-    var row2 = ['employee_id', 'display_name', 'vertical_name'];
+    var row1 = ['', '', '', 'Pool'];
+    var row2 = ['employee_id', 'display_name', 'vertical_name', 'leave_pool'];
     for (var d = 1; d <= dim; d++) {
       row1.push(dayAbbr_(year, month, d));
       row2.push(pad2_(d));
@@ -230,7 +235,17 @@ var AttendanceRegisterService = (function () {
       row1.push('');
       row2.push(h);
     });
-    return { row1: row1, row2: row2, daysInMonth: dim, dayStartCol: 4 };
+    return { row1: row1, row2: row2, daysInMonth: dim, dayStartCol: TEMPLATE_POOL_COL_ + 1, poolCol: TEMPLATE_POOL_COL_ };
+  }
+
+  function monthlyPoolForTemplateRow_(emp, year, month) {
+    year = Number(year);
+    month = Number(month);
+    if (!emp) return 0;
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.monthlyEntitlementPool_) {
+      return MonthlyLeaveService.monthlyEntitlementPool_(emp, emp.employee_id, year, month);
+    }
+    return leaveBalanceMaxForVertical_(emp.vertical_name);
   }
 
   function colToLetter_(col) {
@@ -243,21 +258,22 @@ var AttendanceRegisterService = (function () {
     return s;
   }
 
-  function leaveBalanceFormula_(range, verticalCell) {
+  function leaveBalanceFormula_(range, poolCell) {
     var l = 'COUNTIF(' + range + ',"L")';
     var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
-    var maxExpr = 'IF(' + verticalCell + '="SAPL",2,IF(' + verticalCell + '="AOPL",2,IF(' + verticalCell + '="AOMS",1,2)))';
-    return '=MAX(0,' + maxExpr + '-(' + l + '+' + ml + '))';
+    var half = 'COUNTIF(' + range + ',"1/2P")*0.5';
+    var absent = 'COUNTIF(' + range + ',"A")';
+    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + half + '+' + absent + '))';
   }
 
   function summaryFormulasForRow_(sheetRow, year, month) {
     var dim = daysInMonth_(year, month);
-    var firstCol = 4;
+    var firstCol = TEMPLATE_POOL_COL_ + 1;
     var lastDayCol = firstCol + dim - 1;
     var start = colToLetter_(firstCol) + sheetRow;
     var end = colToLetter_(lastDayCol) + sheetRow;
     var range = start + ':' + end;
-    var verticalCell = 'C' + sheetRow;
+    var poolCell = colToLetter_(TEMPLATE_POOL_COL_) + sheetRow;
     var dayParts = [];
     ['P', 'W/H', 'L', 'WO', 'ML', 'H'].forEach(function (code) {
       if (code === 'W/H') {
@@ -276,8 +292,8 @@ var AttendanceRegisterService = (function () {
       WO: '=COUNTIF(' + range + ',"WO")',
       ML: '=COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")',
       H: '=COUNTIF(' + range + ',"H")',
-      'Leave Balance': leaveBalanceFormula_(range, verticalCell),
-      'Leave Balan': leaveBalanceFormula_(range, verticalCell),
+      'Leave Balance': leaveBalanceFormula_(range, poolCell),
+      'Leave Balan': leaveBalanceFormula_(range, poolCell),
       DAYS: '=' + dayParts.join('+')
     };
     return formulas;
@@ -296,6 +312,7 @@ var AttendanceRegisterService = (function () {
       if (key === 'employee_id') empId = valStr;
       else if (key === 'display_name') displayName = valStr;
       else if (key === 'vertical_name' || key === 'vertical') vertical = valStr;
+      else if (key === 'leave_pool') { /* snapshot at download; formulas use live pool in sheet */ }
       else {
         var dayKey = '';
         if (/^\d{1,2}$/.test(key)) dayKey = pad2_(key);
@@ -454,6 +471,8 @@ var AttendanceRegisterService = (function () {
     derivePayrollDays_: derivePayrollDays_,
     isRegisterComplete_: isRegisterComplete_,
     buildTemplateHeaders_: buildTemplateHeaders_,
+    monthlyPoolForTemplateRow_: monthlyPoolForTemplateRow_,
+    templatePoolCol_: function () { return TEMPLATE_POOL_COL_; },
     colToLetter_: colToLetter_,
     summaryFormulasForRow_: summaryFormulasForRow_,
     rowFromSheetValues_: rowFromSheetValues_,

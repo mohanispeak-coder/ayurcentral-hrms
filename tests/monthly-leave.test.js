@@ -35,6 +35,9 @@ check('attendance-preview-grid-wired', /paintPreviewGrid_/.test(attClient) &&
 check('payroll-preview-grid', /paintAttendanceValidGrid_/.test(payrollClient) &&
   /Validation result/.test(payrollClient));
 check('bulk-preview-leave-fields', /monthly_grant/.test(bulkSrc) && /leave_balance/.test(bulkSrc));
+check('template-leave-pool-column', /leave_pool/.test(regSrc) && /monthlyPoolForTemplateRow_/.test(regSrc));
+check('template-leave-balance-absent', /COUNTIF\(.+,"A"\)/.test(regSrc) && /leave_pool/.test(regSrc));
+check('template-version-5', /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
 check('validate-returns-period', /period_year: run\.period_year/.test(bulkSrc));
 
 function loadRegister() {
@@ -44,7 +47,7 @@ function loadRegister() {
     ConfigService: { getSetting: function (k, d) { return d; } },
     MonthlyLeaveService: {
       availableAfterCounts_: function (emp, y, m, counts) {
-        var used = (counts.L || 0) + (counts.ML || 0) + ((counts['1/2P'] || 0) * 0.5);
+        var used = (counts.L || 0) + (counts.ML || 0) + ((counts['1/2P'] || 0) * 0.5) + (counts.A || 0);
         return Math.max(0, 2 - used);
       },
       grantForEmployeeMonth_: function () { return 2; }
@@ -59,6 +62,8 @@ function loadRegister() {
 var Reg = loadRegister();
 var sum = Reg.summarize_({ '01': '1/2P', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
 check('half-day-leave-math', sum.leave_days === 1.5 && sum.present === 0.5);
+var sumAbsent = Reg.summarize_({ '01': 'A', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
+check('leave-balance-reduces-absent', sumAbsent.code_counts.A === 1 && sumAbsent.leave_balance === 0);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');

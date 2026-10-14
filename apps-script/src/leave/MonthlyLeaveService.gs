@@ -90,6 +90,12 @@ var MonthlyLeaveService = (function () {
     return num_(counts.L, 0) + num_(counts.ML, 0) + (half * 0.5);
   }
 
+  /** Days on the attendance register that reduce the monthly leave pool (L, ML, ½P, and absent). */
+  function registerPoolConsumingDays_(counts) {
+    counts = counts || {};
+    return leaveUsedFromCounts_(counts) + num_(counts.A, 0);
+  }
+
   function adjustmentForEmployeeMonth_(employeeId, year, month) {
     employeeId = trim_(employeeId);
     if (!employeeId) return 0;
@@ -110,13 +116,10 @@ var MonthlyLeaveService = (function () {
   }
 
   function availableAfterCounts_(emp, year, month, counts) {
-    var grant = grantForEmployeeMonth_(emp, year, month);
-    var used = leaveUsedFromCounts_(counts);
-    var adj = emp && emp.employee_id
-      ? adjustmentForEmployeeMonth_(emp.employee_id, year, month)
-      : 0;
-    var opening = readOpeningCarry_(emp && emp.employee_id, year, month);
-    return Math.max(0, opening + grant + adj - used);
+    var employeeId = emp && emp.employee_id ? emp.employee_id : '';
+    var pool = monthlyEntitlementPool_(emp || {}, employeeId, year, month);
+    var used = registerPoolConsumingDays_(counts);
+    return Math.max(0, pool - used);
   }
 
   function readOpeningCarry_(employeeId, year, month) {
@@ -349,6 +352,7 @@ var MonthlyLeaveService = (function () {
   return {
     grantForEmployeeMonth_: grantForEmployeeMonth_,
     leaveUsedFromCounts_: leaveUsedFromCounts_,
+    registerPoolConsumingDays_: registerPoolConsumingDays_,
     availableAfterCounts_: availableAfterCounts_,
     baseMonthlyGrant_: baseMonthlyGrant_,
     adjustmentForEmployeeMonth_: adjustmentForEmployeeMonth_,

@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '4';
+  var TEMPLATE_VERSION_ = '5';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -101,10 +101,11 @@ var AttendanceBulkService = (function () {
     }
   }
 
-  function applyAttendanceHeaderStyles_(sheet, year, month, dim) {
+  function applyAttendanceHeaderStyles_(sheet, year, month, dim, dayStartCol) {
+    dayStartCol = dayStartCol || 5;
     var summaryLen = AttendanceRegisterService.SUMMARY_HEADERS.length;
-    var totalCols = 3 + dim + summaryLen;
-    var dayStartCol = 4;
+    var identityCols = dayStartCol - 1;
+    var totalCols = identityCols + dim + summaryLen;
 
     sheet.getRange(1, 1, 2, totalCols)
       .setFontWeight('bold')
@@ -112,7 +113,7 @@ var AttendanceBulkService = (function () {
       .setVerticalAlignment('middle')
       .setWrap(true);
 
-    sheet.getRange(1, 1, 2, 3).setBackground('#2d5a3d').setFontColor('#ffffff');
+    sheet.getRange(1, 1, 2, identityCols).setBackground('#2d5a3d').setFontColor('#ffffff');
 
     for (var d = 1; d <= dim; d++) {
       var abbr = AttendanceRegisterService.dayAbbr_(year, month, d);
@@ -132,14 +133,17 @@ var AttendanceBulkService = (function () {
     sheet.setColumnWidth(1, 108);
     sheet.setColumnWidth(2, 200);
     sheet.setColumnWidth(3, 96);
+    sheet.setColumnWidth(4, 72);
     for (var c = dayStartCol; c < dayStartCol + dim; c++) {
       sheet.setColumnWidth(c, 34);
     }
   }
 
-  function applySummaryFormulas_(sheet, rowNum, year, month, dim) {
+  function applySummaryFormulas_(sheet, rowNum, year, month, dim, dayStartCol) {
+    dayStartCol = dayStartCol || (AttendanceRegisterService.templatePoolCol_
+      ? AttendanceRegisterService.templatePoolCol_() + 1 : 5);
     var formulas = AttendanceRegisterService.summaryFormulasForRow_(rowNum, year, month);
-    var summaryStart = 4 + dim;
+    var summaryStart = dayStartCol + dim;
     var keys = AttendanceRegisterService.SUMMARY_HEADERS;
     for (var c = 0; c < keys.length; c++) {
       try {
@@ -208,7 +212,9 @@ var AttendanceBulkService = (function () {
         ['Vertical: ' + verticalCode + ' (employees filtered to this vertical).'],
         ['Fill one code per day: P, W/H (Work from Home; or WH), A, L, WO, ML (Maternity Leave; legacy S = ML), H.'],
         ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
-        ['Summary columns (P, W/H, A, L, WO, ML, H, Leave Balance, DAYS) calculate in Excel.'],
+        ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
+        ['Leave Balance = leave_pool minus L, ML, ½P, and A (absent) days entered in the register.'],
+        ['Summary columns (P, W/H, A, L, WO, ML, H, 1/2P, Leave Balance, DAYS) calculate in Excel.'],
         ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']
       ];
@@ -217,7 +223,7 @@ var AttendanceBulkService = (function () {
       var sheet = ss.insertSheet('Attendance');
       sheet.getRange(1, 1, 1, headers.row1.length).setValues([headers.row1]);
       sheet.getRange(2, 1, 1, headers.row2.length).setValues([headers.row2]);
-      applyAttendanceHeaderStyles_(sheet, year, month, dim);
+      applyAttendanceHeaderStyles_(sheet, year, month, dim, headers.dayStartCol);
       sheet.setFrozenRows(2);
 
       if (employees.length) {
@@ -226,7 +232,8 @@ var AttendanceBulkService = (function () {
           var row = [
             emp.employee_id,
             AttendanceRegisterService.employeeDisplayName_(emp),
-            trim_(emp.vertical_name)
+            trim_(emp.vertical_name),
+            AttendanceRegisterService.monthlyPoolForTemplateRow_(emp, year, month)
           ];
           for (var d = 1; d <= dim; d++) {
             var dayKey = AttendanceRegisterService.pad2_(d);
@@ -236,9 +243,9 @@ var AttendanceBulkService = (function () {
         });
         // SpreadsheetApp.getRange(row, column, numRows, numColumns) — 3rd/4th are counts, not end row/col.
         var numEmpRows = data.length;
-        var numIdentityDayCols = 3 + dim;
+        var numIdentityDayCols = headers.dayStartCol - 1 + dim;
         sheet.getRange(dataStartRow, 1, numEmpRows, numIdentityDayCols).setValues(data);
-        var summaryStart = 4 + dim;
+        var summaryStart = headers.dayStartCol + dim;
         var summaryLen = AttendanceRegisterService.SUMMARY_HEADERS.length;
         var formulaGrid = [];
         for (var i = 0; i < employees.length; i++) {
@@ -297,7 +304,8 @@ var AttendanceBulkService = (function () {
       var row = [
         emp.employee_id,
         AttendanceRegisterService.employeeDisplayName_(emp),
-        trim_(emp.vertical_name)
+        trim_(emp.vertical_name),
+        AttendanceRegisterService.monthlyPoolForTemplateRow_(emp, year, month)
       ];
       for (var d = 1; d <= dim; d++) {
         var dayKey = AttendanceRegisterService.pad2_(d);
