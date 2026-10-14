@@ -20,7 +20,7 @@
     if (!snap) return '';
     var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var periodLabel = (monthNames[snap.period_month - 1] || snap.period_month) + ' ' + snap.period_year;
-    return '<div class="card" style="margin-bottom:16px"><h2 class="section-title">Monthly leave — ' + escapeHtml(periodLabel) + '</h2>' +
+    return '<div class="card" style="margin-bottom:16px"><h2 class="section-title">Monthly leave - ' + escapeHtml(periodLabel) + '</h2>' +
       '<p class="hint">Allowance for <strong>' + escapeHtml(snap.vertical_name || '') + '</strong> vertical (same as attendance register). ' +
       'Pool = opening carry + grant + adjustment. Leave in the register uses the pool first (<strong>paid</strong>); only the remainder is <strong>LOP</strong>. ' +
       escapeHtml(snap.carry_forward_note || '') + '</p>' +
