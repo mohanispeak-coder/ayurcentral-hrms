@@ -413,7 +413,9 @@
     }
 
     function syncTeamLeaveTableHead_(showLeave) {
-      var table = document.querySelector('.data-table--stack-md');
+      var tbody = $('emp-table-body');
+      if (!tbody || !tbody.closest) return;
+      var table = tbody.closest('table');
       if (!table) return;
       var tr = table.querySelector('thead tr');
       if (!tr) return;

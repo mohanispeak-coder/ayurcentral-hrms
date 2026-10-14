@@ -15,6 +15,7 @@ function check(name, cond) {
 }
 
 var emp = fs.readFileSync(path.join(root, 'employee', 'EmployeeService.gs'), 'utf8');
+var empClient = fs.readFileSync(path.join(root, 'employee', 'EmployeeClient.html'), 'utf8');
 var leaveSvc = fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8');
 var api = fs.readFileSync(path.join(root, 'employee', 'ApiEmployee.gs'), 'utf8');
 var perm = fs.readFileSync(path.join(root, 'foundation', 'PermissionService.gs'), 'utf8');
@@ -54,6 +55,9 @@ var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs')
 check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));
 check('leave-balances-lop-column', /Paid leaves used/.test(leaveUi) && /Total leaves/.test(leaveUi) &&
   /Carry forwarded/.test(leaveUi) && /Used leaves/.test(leaveUi));
+check('my-team-leave-headers-sync', /syncTeamLeaveTableHead_/.test(empClient) &&
+  /closest\('table'\)/.test(empClient) && /Year avail\./.test(empClient) &&
+  /Paid leaves used/.test(empClient));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');
