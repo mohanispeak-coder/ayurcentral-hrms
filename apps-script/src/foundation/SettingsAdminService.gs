@@ -146,10 +146,19 @@ var AdminSettingsService = (function () {
     return true;
   }
 
+  function resolveModuleForAction_(role, action) {
+    var mod = ACTION_MODULE_MAP_[action];
+    if (!mod) return null;
+    role = String(role || '').toUpperCase();
+    // Managers use My Team (my_team), not the HR Employees directory (employees).
+    if (action === 'EMPLOYEE_DIRECTORY' && role === 'MANAGER') return 'my_team';
+    return mod;
+  }
+
   function isActionAllowedForRole_(role, action) {
     role = String(role || '').toUpperCase();
     if (role === 'OWNER') return true;
-    var mod = ACTION_MODULE_MAP_[action];
+    var mod = resolveModuleForAction_(role, action);
     if (!mod) return true;
     return isModuleEnabledForRole_(role, mod);
   }
