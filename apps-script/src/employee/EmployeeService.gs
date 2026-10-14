@@ -449,15 +449,18 @@ var EmployeeService = (function () {
     var entitledSum = 0;
     var cfSum = 0;
     general.forEach(function (b) {
-      entitledSum += Number(b.entitled_days) || 0;
       cfSum += Number(b.carried_forward_days) || 0;
     });
+    if (leaveYear && typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement && emp) {
+      try {
+        entitledSum = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYear)) || 0;
+      } catch (ignoreEnt) {}
+    } else {
+      general.forEach(function (b) {
+        entitledSum += Number(b.entitled_days) || 0;
+      });
+    }
     if (reqTotals) {
-      if (entitledSum <= 0 && typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement && emp) {
-        try {
-          entitledSum = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYear)) || 0;
-        } catch (ignoreEnt) {}
-      }
       out.leave_year_entitled = entitledSum;
       out.leave_year_carried = cfSum;
       out.leave_year_used = Number(reqTotals.usedTotal) || 0;

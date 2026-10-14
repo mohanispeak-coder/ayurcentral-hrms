@@ -37,6 +37,8 @@ check('profile-leave-summary-policy-sync', /syncCurrentYearBalanceFromPolicy/.te
   /yearsToMerge/.test(emp));
 check('join-date-recalc-entitlements', /recalculateEntitlementsAfterJoiningDateChange_/.test(leaveSvc) &&
   /recalculateEntitlementsAfterJoiningDateChange/.test(emp));
+check('policy-save-recalc-vertical', /recalculateEntitlementsForActiveEmployees/.test(leaveSvc) &&
+  /recalculateEntitlementsForActiveEmployees\(name\)/.test(fs.readFileSync(path.join(root, 'leave', 'LeavePolicyService.gs'), 'utf8')));
 check('my-leave-matches-profile-payload', /buildLeaveSummaryPayload/.test(emp) &&
   /year_balances/.test(leaveSvc) && /monthly_snapshot/.test(leaveSvc));
 check('my-leave-ui-profile-layout', /HrmsLeaveView/.test(fs.readFileSync(path.join(root, 'ui', 'LeaveViewShared.html'), 'utf8')) &&

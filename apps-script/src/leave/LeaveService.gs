@@ -1785,6 +1785,32 @@ var LeaveService = (function () {
   }
 
   /**
+   * After vertical or global leave policy changes: refresh LeaveBalances entitled from current policy.
+   * @param {string=} verticalName Optional vertical code (e.g. SAPL); omit to recalc all active employees.
+   */
+  function recalculateEntitlementsForActiveEmployees_(verticalName) {
+    verticalName = verticalName ? String(verticalName).trim().toUpperCase() : '';
+    var balanceIndex = loadBalanceIndex_();
+    var employees = DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).filter(function (e) {
+      if (!isActiveEmployeeForLeave_(e)) return false;
+      if (!verticalName) return true;
+      var v = String(e.vertical_name || '').trim().toUpperCase();
+      if (!v && e.employee_id) {
+        v = String(e.employee_id).split('-')[0].trim().toUpperCase();
+      }
+      return v === verticalName;
+    });
+    var rowsUpdated = 0;
+    employees.forEach(function (e) {
+      try {
+        var res = recalculateEntitlementsAfterJoiningDateChange_(e.employee_id, { balanceIndex: balanceIndex });
+        rowsUpdated += Number(res && res.updated) || 0;
+      } catch (ignoreRec) {}
+    });
+    return { employees: employees.length, balance_rows_updated: rowsUpdated };
+  }
+
+  /**
    * Persist leave balances from joining year through the target/current leave year.
    * Existing rows are never overwritten. Called on hire, reactivation, profile/leave
    * reads, and HR "start leave year".
@@ -1984,6 +2010,7 @@ var LeaveService = (function () {
     getTypes: getTypes,
     grantBalancesForEmployee: grantBalancesForEmployee,
     recalculateEntitlementsAfterJoiningDateChange: recalculateEntitlementsAfterJoiningDateChange_,
+    recalculateEntitlementsForActiveEmployees: recalculateEntitlementsForActiveEmployees_,
     startLeaveYear: startLeaveYear,
     getApplyBootstrap: getApplyBootstrap,
     previewDays: previewDays,

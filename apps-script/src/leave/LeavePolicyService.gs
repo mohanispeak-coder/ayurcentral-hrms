@@ -62,6 +62,11 @@ var LeavePolicyService = (function () {
       }
       upsertSetting_('leave_join_grant_after_day', String(Math.floor(cut)), session);
     }
+    if (typeof LeaveService !== 'undefined' && LeaveService.recalculateEntitlementsForActiveEmployees) {
+      try {
+        LeaveService.recalculateEntitlementsForActiveEmployees();
+      } catch (ignoreGlobalRecalc) {}
+    }
   }
 
   function upsertSetting_(key, value, session) {
@@ -147,6 +152,11 @@ var LeavePolicyService = (function () {
       leave_carry_forward_frequency: freq,
       leave_carry_forward_max_days: cfMax
     });
+    if (typeof LeaveService !== 'undefined' && LeaveService.recalculateEntitlementsForActiveEmployees) {
+      try {
+        LeaveService.recalculateEntitlementsForActiveEmployees(name);
+      } catch (ignoreVertRecalc) {}
+    }
     return coerceVerticalPolicy_(DbService.findOne(HRMS.SHEETS.VERTICALS, { vertical_name: name }));
   }
 
