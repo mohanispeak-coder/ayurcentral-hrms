@@ -136,9 +136,9 @@ var HrmsContentTemplateService = (function () {
       id: 'pdf_ats_offer',
       kind: 'pdf_layout',
       label: 'Recruitment - offer letter PDF',
-      description: 'Attached when HR sends offer from a HIRED application. Includes CTC summary and monthly salary breakup from the selected structure.',
+      description: 'Attached when HR sends offer from a HIRED application. Shows monthly CTC and role details (no component breakup).',
       managedIn: 'AtsLetterPdfService.gs',
-      placeholders: ['Candidate, role, structure, CTC, component breakup, vertical logo']
+      placeholders: ['Candidate, role, monthly CTC, location, vertical logo']
     },
     {
       id: 'pdf_ats_appointment',
@@ -146,7 +146,7 @@ var HrmsContentTemplateService = (function () {
       label: 'Recruitment - appointment letter PDF',
       description: 'Attached when HR sends appointment letter. Includes joining date, role, and compensation summary.',
       managedIn: 'AtsLetterPdfService.gs',
-      placeholders: ['Candidate, joining date, role, structure, CTC, vertical logo']
+      placeholders: ['Candidate, joining date, role, monthly CTC, vertical logo']
     }
   ];
 

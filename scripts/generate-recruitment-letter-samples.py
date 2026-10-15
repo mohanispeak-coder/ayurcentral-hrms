@@ -155,8 +155,7 @@ def offer_letter_pdf(path: Path):
         ),
         (
             "3. Compensation",
-            ["Your Cost to Company (CTC) will be <b>₹ 6,50,000</b> per annum, structured as per "
-             "company salary policy. A detailed break-up will be shared at onboarding."],
+            ["Your monthly Cost to Company (CTC) will be <b>₹ 54,167</b> (annual CTC <b>₹ 6,50,000</b>)."],
         ),
         (
             "4. Probation",
@@ -250,8 +249,7 @@ def appointment_letter_pdf(path: Path):
         ),
         (
             "2. Compensation",
-            ["Remuneration shall be as per the salary structure communicated to you, totalling "
-             "<b>₹ 6,50,000</b> CTC per annum, subject to statutory deductions."],
+            ["Your monthly Cost to Company (CTC) is <b>₹ 54,167</b>, subject to statutory deductions as applicable."],
         ),
         (
             "3. Probation",

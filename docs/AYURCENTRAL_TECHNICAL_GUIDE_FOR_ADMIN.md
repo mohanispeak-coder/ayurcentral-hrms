@@ -148,7 +148,7 @@ Full list: `ApiPayroll.gs`.
 
 - Stages in `AtsConstants` / `AtsEngine`; terminal hire stage `HIRED`.
 - Letters: PDF generation + email (templates in Settings + code-managed HTML layouts).
-- `CompensationService` + `PayrollEngine` for offer salary breakup on PDF.
+- Offer/appointment letter PDFs show monthly CTC only (no component breakup on the letter).
 - Create employee from hire: RPC creates `Employees` row with new ID; links application to employee.
 
 See `docs/ATS_INTEGRATION_NOTES.md`.

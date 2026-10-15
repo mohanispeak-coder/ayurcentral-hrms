@@ -27,7 +27,9 @@ const schema = read('AtsSchemaService.gs');
 
 check('hire-schema-columns', /hire_salary_structure_id/.test(schema) && /hire_joining_date/.test(schema) &&
   /appointment_letter_sent_at/.test(schema));
-check('hire-offer-breakup', /salaryBreakupTableHtml_/.test(read('AtsLetterPdfService.gs')));
+check('hire-offer-ctc-only', /Monthly CTC \(Cost to Company\)/.test(read('AtsLetterPdfService.gs')) &&
+  !/salaryBreakupTableHtml_/.test(read('AtsLetterPdfService.gs')) &&
+  !/Monthly salary breakup/.test(read('AtsLetterPdfService.gs')));
 check('hire-appointment-joining', /hire_joining_date/.test(hire) && /joiningDate/.test(read('AtsAppointmentLetterService.gs')));
 check('hire-service', /saveHireCompensation_/.test(hire) && /createEmployeeFromHire_/.test(hire));
 check('hire-schema-ensure', /ensureHireApplicationColumns_/.test(hire) && /assertHireCompensationReady_/.test(hire));
