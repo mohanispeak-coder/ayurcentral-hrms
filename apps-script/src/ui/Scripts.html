@@ -462,9 +462,12 @@
     if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
       return;
     }
+    if (ROUTE_MODULE[parsed.route] || parsed.route === 'dashboard') {
+      parsed.params = mergePayrollPeriodContext_(parsed.params || {});
+    }
     suppressHistoryPush_ = true;
     try {
-      navigate(parsed.route, parsed.params, { fromHistory: true });
+      navigate(parsed.route, parsed.params, { fromHistory: true, replaceHistory: true });
     } finally {
       suppressHistoryPush_ = false;
     }
@@ -1939,8 +1942,14 @@
       }
       persistPayrollPeriodContext_(params);
       if ((route === 'attendance-bulk-upload' || route === 'attendance-form-t') && params.runId) {
-        invalidateModuleViewCache('attendance-bulk-upload');
-        invalidateModuleViewCache('attendance-form-t');
+        var nextRun = String(params.runId);
+        ['attendance-bulk-upload', 'attendance-form-t'].forEach(function (attRoute) {
+          var rec = moduleViewCache_[attRoute];
+          var cachedRun = rec && rec.params && rec.params.runId ? String(rec.params.runId) : '';
+          if (cachedRun && cachedRun !== nextRun) {
+            invalidateModuleViewCache(attRoute);
+          }
+        });
       }
     }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];

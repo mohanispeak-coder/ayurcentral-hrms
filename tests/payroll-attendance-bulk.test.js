@@ -55,8 +55,9 @@ check('attendance-payroll-extra-columns', /TDS, Advance, LCD, LWF/.test(bulkSrc)
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
-check('api-attendance-auto-sync', /apiListAttendanceRegister[\s\S]*syncEligibleEmployees/.test(api) &&
-  /includeRegister:\s*false/.test(api));
+check('api-attendance-sync-optional', /syncEmployeesOrToken/.test(api) &&
+  /syncEmployees = syncEmployeesOrToken === true/.test(api) && /includeRegister:\s*false/.test(api));
+check('attendance-list-cache', /listCacheByRun_/.test(attClient) && /fetchAttendanceList_/.test(attClient));
 check('register-list-run-vertical', /runVerticalFromRun_/.test(regSrc) &&
   /filterEmployeesByVertical_\(employees, runVertical\)/.test(regSrc));
 check('attendance-register-no-full-payroll-on-open',

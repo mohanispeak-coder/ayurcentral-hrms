@@ -9,6 +9,15 @@
 .att-page .att-vertical-section { margin-top: 16px; }
 .att-page .att-preview-grid { font-size: 12px; overflow-x: auto; }
 .att-page .att-preview-grid td, .att-page .att-preview-grid th { padding: 4px 6px; text-align: center; }
+.att-page .bulk-action-bar .btn { min-height: var(--touch-min, 44px); }
+.att-page .att-vertical-section summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+@media (max-width: 768px) {
+  .att-page .form-row { flex-direction: column; align-items: stretch; }
+  .att-page .bulk-action-bar { flex-direction: column; align-items: stretch; }
+  .att-page .bulk-action-bar .btn { width: 100%; }
+  .att-page .data-table { font-size: 12px; }
+  .att-page .att-vertical-section .table-wrap { margin: 0 -4px; }
+}
 </style>
 <script>
 (function () {
@@ -21,6 +30,7 @@
   var catalog_ = [];
   var viewCache_ = null;
   var runsCache_ = [];
+  var listCacheByRun_ = {};
 
   function verticalFromRunId_(runId) {
     var parts = String(runId || '').trim().split('-');
@@ -125,16 +135,54 @@
       if (params.runId) bulkState_.runId = String(params.runId).trim();
     }
 
-    function shouldRestoreCachedView_(params, restore) {
-      if (!restore || !viewCache_ || !viewCache_.run || viewCache_.periodKey !== periodKey_()) return false;
-      if (params.year && Number(params.year) !== Number(viewCache_.run.period_year)) return false;
-      if (params.month && Number(params.month) !== Number(viewCache_.run.period_month)) return false;
-      if (params.runId && viewCache_.run.payroll_run_id !== String(params.runId).trim()) return false;
-      if (bulkState_.runId && viewCache_.run.payroll_run_id !== bulkState_.runId) return false;
+    function invalidateListCache_(runId) {
+      if (runId) delete listCacheByRun_[runId];
+      else listCacheByRun_ = {};
+    }
+
+    function fetchAttendanceList_(runId, options) {
+      options = options || {};
+      var sync = !!options.syncEmployees;
+      var id = String(runId || '').trim();
+      if (!id) return Promise.resolve([]);
+      if (!sync && listCacheByRun_[id] && listCacheByRun_[id].list) {
+        return Promise.resolve(listCacheByRun_[id].list);
+      }
+      var rpcArgs = sync ? [id, true] : [id];
+      return callServer.apply(null, ['apiListAttendanceRegister'].concat(rpcArgs)).then(function (list) {
+        list = list || [];
+        listCacheByRun_[id] = { list: list, at: Date.now() };
+        return list;
+      });
+    }
+
+    function applyViewCacheState_(params) {
+      if (!viewCache_ || !viewCache_.run) return false;
+      var run = viewCache_.run;
+      var wantRunId = params.runId || bulkState_.runId;
+      if (wantRunId && run.payroll_run_id !== String(wantRunId).trim()) return false;
       var wantV = params.vertical ? String(params.vertical).trim().toUpperCase() : '';
-      var cacheRunV = verticalFromRun_(viewCache_.run);
+      var cacheRunV = verticalFromRun_(run);
       if (wantV && cacheRunV && cacheRunV !== wantV) return false;
+      period_.year = Number(run.period_year);
+      period_.month = Number(run.period_month);
+      bulkState_.runId = run.payroll_run_id;
+      if (viewCache_.bulkState) {
+        bulkState_.vertical = viewCache_.bulkState.vertical || bulkState_.vertical;
+        bulkState_.fileMeta = viewCache_.bulkState.fileMeta || null;
+        bulkState_.fileName = viewCache_.bulkState.fileName || '';
+        bulkState_.uploadId = viewCache_.bulkState.uploadId || null;
+        bulkState_.preview = viewCache_.bulkState.preview || null;
+      }
+      if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
+      catalog_ = viewCache_.catalog || catalog_;
       return true;
+    }
+
+    function tryRestoreCachedView_(params, forceRefresh) {
+      if (forceRefresh) return false;
+      if (!applyViewCacheState_(params)) return false;
+      return !!(viewCache_.list && viewCache_.run);
     }
 
     function resolveRunForAttendance_(runs) {
@@ -179,26 +227,14 @@
       if (!page) return;
 
       var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
-      var restore = !forceRefresh && App.consumeModuleViewRestore && App.consumeModuleViewRestore(MODULE_KEY_);
-      if (shouldRestoreCachedView_(params, restore)) {
-        catalog_ = viewCache_.catalog || catalog_;
-        if (viewCache_.bulkState) {
-          var cacheRunV = verticalFromRun_(viewCache_.run);
-          var cachedVert = viewCache_.bulkState.vertical;
-          if (!cacheRunV || !cachedVert ||
-              cacheRunV === String(cachedVert).trim().toUpperCase()) {
-            bulkState_.vertical = cachedVert || bulkState_.vertical;
-          }
-          bulkState_.fileMeta = viewCache_.bulkState.fileMeta || null;
-          bulkState_.fileName = viewCache_.bulkState.fileName || '';
-          bulkState_.uploadId = viewCache_.bulkState.uploadId || null;
-          bulkState_.preview = viewCache_.bulkState.preview || null;
-        }
-        bulkState_.runId = viewCache_.run.payroll_run_id;
+      if (tryRestoreCachedView_(params, forceRefresh)) {
         page.innerHTML =
           '<div class="att-page"><div class="page-header"><h2>Register</h2></div><div id="att-mount"></div></div>';
         paintMain_(viewCache_.run, viewCache_.list || [], {});
-        if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+        if (App.consumeModuleViewRestore) App.consumeModuleViewRestore(MODULE_KEY_);
+        if (App.markModuleViewLoaded) {
+          App.markModuleViewLoaded(MODULE_KEY_, { params: params });
+        }
         return;
       }
 
@@ -262,7 +298,12 @@
         }
         bulkState_.runId = run.payroll_run_id;
         if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
-        callServer('apiListAttendanceRegister', run.payroll_run_id).then(function (list) {
+        var syncList = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
+        var cached = !syncList && listCacheByRun_[run.payroll_run_id];
+        if (cached && cached.list) {
+          paintMain_(run, cached.list);
+        }
+        fetchAttendanceList_(run.payroll_run_id, { syncEmployees: syncList }).then(function (list) {
           if (App.persistPayrollPeriodContext) {
             App.persistPayrollPeriodContext({
               year: run.period_year,
@@ -271,7 +312,11 @@
               vertical: bulkState_.vertical || verticalFromRun_(run)
             });
           }
-          paintMain_(run, list || []);
+          if (!cached || !cached.list) {
+            paintMain_(run, list || []);
+          } else if (list && list.length !== cached.list.length) {
+            paintMain_(run, list || []);
+          }
         }).catch(function (err) {
           var m = document.getElementById('att-mount');
           if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load attendance.') + '</div>';
@@ -338,7 +383,7 @@
       if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
       var mount = document.getElementById('att-mount');
       if (mount) mount.innerHTML = skeletonMount_(window.HrmsApp);
-      return callServer('apiListAttendanceRegister', run.payroll_run_id).then(function (list) {
+      return fetchAttendanceList_(run.payroll_run_id, { syncEmployees: true }).then(function (list) {
         paintMain_(run, list || []);
       });
     }
@@ -426,8 +471,8 @@
         var headCodes = codes.map(function (c) { return '<th class="num">' + esc_(c) + '</th>'; }).join('');
         return '<details class="card att-vertical-section"' + openAttr + '><summary><strong>' + esc_(v) +
           '</strong> <span class="hint">(' + rows.length + ')</span></summary>' +
-          '<table class="data-table"><thead><tr><th>ID</th><th>Name</th>' + headCodes +
-          '<th class="num">DAYS</th><th>Complete</th></tr></thead><tbody>' + body + '</tbody></table></details>';
+          '<div class="table-wrap table-wrap--scroll-hint"><table class="data-table"><thead><tr><th>ID</th><th>Name</th>' + headCodes +
+          '<th class="num">DAYS</th><th>Complete</th></tr></thead><tbody>' + body + '</tbody></table></div></details>';
       }).join('');
     }
 
@@ -739,6 +784,7 @@
               if (nameEl) nameEl.textContent = 'No file selected.';
               if (viewCache_ && viewCache_.run) syncBulkViewCache_(viewCache_.run, viewCache_.list || []);
               clearStagedUpload_();
+              invalidateListCache_(commitRunId);
               showToast('Attendance imported (' + preview.readyCount + '). Re-upload overwrites existing days.', 'success');
               if (preview.errorCount > 0) {
                 showToast(preview.errorCount + ' row(s) skipped - fix the file and validate again.', 'warning');
@@ -846,6 +892,13 @@
 
     function daysInMonth_(y, m) {
       return new Date(y, m, 0).getDate();
+    }
+
+    if (App.registerModuleDataCacheClear) {
+      App.registerModuleDataCacheClear(function () {
+        listCacheByRun_ = {};
+        viewCache_ = null;
+      });
     }
 
     App.registerRoute('attendance-bulk-upload', { title: 'Register', render: render_ });

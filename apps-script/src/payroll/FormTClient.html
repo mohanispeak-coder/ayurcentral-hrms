@@ -193,18 +193,21 @@
       if (!page) return;
 
       var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
-      var restore = !forceRefresh && App.consumeModuleViewRestore && App.consumeModuleViewRestore(MODULE_KEY_);
-      if (restore && viewCache_ && viewCache_.periodKey === periodKey_() && viewCache_.run &&
-          (!params.year || Number(params.year) === Number(viewCache_.run.period_year)) &&
-          (!params.month || Number(params.month) === Number(viewCache_.run.period_month))) {
-        catalog_ = viewCache_.catalog || catalog_;
-        runState_.runId = viewCache_.run.payroll_run_id;
-        if (viewCache_.selectedVertical) runState_.vertical = viewCache_.selectedVertical;
-        page.innerHTML =
-          '<div class="formt-page"><div class="page-header"><h2>Form T</h2></div><div id="formt-mount"></div></div>';
-        paintMain_(viewCache_.run, viewCache_.selectedVertical, viewCache_.statusHtml, viewCache_.canDownload);
-        if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
-        return;
+      if (!forceRefresh && viewCache_ && viewCache_.run) {
+        var wantRunId = params.runId || runState_.runId;
+        if (!wantRunId || viewCache_.run.payroll_run_id === String(wantRunId).trim()) {
+          period_.year = Number(viewCache_.run.period_year);
+          period_.month = Number(viewCache_.run.period_month);
+          catalog_ = viewCache_.catalog || catalog_;
+          runState_.runId = viewCache_.run.payroll_run_id;
+          if (viewCache_.selectedVertical) runState_.vertical = viewCache_.selectedVertical;
+          page.innerHTML =
+            '<div class="formt-page"><div class="page-header"><h2>Form T</h2></div><div id="formt-mount"></div></div>';
+          paintMain_(viewCache_.run, viewCache_.selectedVertical, viewCache_.statusHtml, viewCache_.canDownload);
+          if (App.consumeModuleViewRestore) App.consumeModuleViewRestore(MODULE_KEY_);
+          if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_, { params: params });
+          return;
+        }
       }
 
       page.innerHTML =

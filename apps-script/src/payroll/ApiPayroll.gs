@@ -155,10 +155,18 @@ function apiCommitAttendanceRegisterUpload(runId, uploadId, sessionToken) {
   }, sessionToken);
 }
 
-function apiListAttendanceRegister(runId, sessionToken) {
+function apiListAttendanceRegister(runId, syncEmployeesOrToken, sessionToken) {
+  var syncEmployees = false;
+  var token = sessionToken;
+  if (syncEmployeesOrToken === true || syncEmployeesOrToken === false) {
+    syncEmployees = syncEmployeesOrToken === true;
+    token = sessionToken;
+  } else {
+    token = syncEmployeesOrToken;
+  }
   return hrmsRun_(function () {
     var id = String(runId || '').trim();
-    if (id) {
+    if (id && syncEmployees) {
       try {
         var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: id });
         var st = run ? String(run.status || '').toUpperCase() : '';
@@ -170,7 +178,7 @@ function apiListAttendanceRegister(runId, sessionToken) {
       }
     }
     return AttendanceRegisterService.listSummariesForRun_(id, { includeRegister: false });
-  }, sessionToken);
+  }, token);
 }
 
 function apiSaveAttendanceRegister(runId, employeeId, register, sessionToken) {

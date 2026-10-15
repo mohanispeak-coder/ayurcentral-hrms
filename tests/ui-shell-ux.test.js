@@ -19,6 +19,8 @@ function check(name, cond) {
 check('format-vertical-label', /formatVerticalOptionLabel_/.test(scripts));
 check('fetch-payroll-runs-cache', /fetchPayrollRunsList_/.test(scripts));
 check('module-cache-assets-version', /clientAssetsVersion/.test(scripts));
+check('attendance-nav-invalidate-selective', /cachedRun && cachedRun !== nextRun/.test(scripts));
+check('popstate-payroll-merge', /onPopState_[\s\S]*mergePayrollPeriodContext_/.test(scripts));
 
 var htmlDir = path.join(__dirname, '..', 'apps-script', 'src');
 function walkHtml(dir, acc) {
