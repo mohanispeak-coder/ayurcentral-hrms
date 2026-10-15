@@ -350,7 +350,7 @@ var SalaryStatementService = (function () {
       warnings.push('No salary structure for this month');
     }
     if (!ctx.run) {
-      warnings.push('No payroll run for this vertical and month — only rate of pay is shown.');
+      warnings.push('No payroll run for this vertical and month - only rate of pay is shown.');
     }
 
     var fixedDays = ctx.fixedDays;
@@ -557,7 +557,7 @@ var SalaryStatementService = (function () {
     var previewMode = !run;
     var statusMessage = '';
     if (!vertical) {
-      statusMessage = 'Select a vertical — salary statement uses that vertical’s org-wide payroll run for the month (same run for all HR/Admin users).';
+      statusMessage = 'Select a vertical - salary statement uses that vertical\'s org-wide payroll run for the month (same run for all HR/Admin users).';
     } else if (previewMode) {
       statusMessage = 'No payroll run for ' + vertical + ' in ' + monthLabel_(year, month) +
         '. Start payroll and lock the run to populate earned pay, deductions, and net.';

@@ -207,6 +207,56 @@
    * @param {Array} runs
    * @param {string=} preferredVertical
    */
+  var payrollRunsListCache_ = { promise: null, data: null, at: 0, version: '' };
+
+  function currentClientAssetsVersion_() {
+    return (state.app && state.app.clientAssetsVersion) ? String(state.app.clientAssetsVersion) : '';
+  }
+
+  /** User-facing vertical dropdown label (hyphen only, no em dash). */
+  function formatVerticalOptionLabel_(code, legalName) {
+    var c = String(code == null ? '' : code).trim();
+    var n = String(legalName == null ? '' : legalName).trim();
+    if (!c) return n;
+    if (!n) return c;
+    return c + ' - ' + n;
+  }
+
+  function mergePayrollRouteParams_(params) {
+    return mergePayrollPeriodContext_(params || {});
+  }
+
+  function invalidatePayrollRunsListCache_() {
+    payrollRunsListCache_ = { promise: null, data: null, at: 0, version: '' };
+  }
+
+  /**
+   * Deduped payroll runs list for the current session (short TTL). Same org data for all HR/Admin.
+   * @param {function(string): Promise} callServerFn
+   */
+  function fetchPayrollRunsList_(callServerFn) {
+    var ver = currentClientAssetsVersion_();
+    var now = Date.now();
+    if (payrollRunsListCache_.data && payrollRunsListCache_.version === ver &&
+        (now - payrollRunsListCache_.at) < 10000) {
+      return Promise.resolve(payrollRunsListCache_.data);
+    }
+    if (payrollRunsListCache_.promise && payrollRunsListCache_.version === ver) {
+      return payrollRunsListCache_.promise;
+    }
+    payrollRunsListCache_.version = ver;
+    payrollRunsListCache_.promise = (callServerFn || callServer)('apiListPayrollRuns').then(function (runs) {
+      payrollRunsListCache_.data = runs || [];
+      payrollRunsListCache_.at = Date.now();
+      payrollRunsListCache_.promise = null;
+      return payrollRunsListCache_.data;
+    }).catch(function (err) {
+      payrollRunsListCache_.promise = null;
+      throw err;
+    });
+    return payrollRunsListCache_.promise;
+  }
+
   function suggestPayrollPeriodFromRuns_(runs, preferredVertical) {
     runs = (runs || []).slice();
     if (!runs.length) return null;
@@ -557,6 +607,8 @@
     var sk = sessionCacheKey_();
     if (!sk || !rec.sessionKey || rec.sessionKey !== sk) return false;
     if (rec.consumedNavSeq === state.navSeq) return false;
+    var assetsVer = currentClientAssetsVersion_();
+    if (assetsVer && rec.clientAssetsVersion && rec.clientAssetsVersion !== assetsVer) return false;
     return true;
   }
 
@@ -577,6 +629,7 @@
       lastLoadedAt: Date.now(),
       consumedNavSeq: state.navSeq,
       sessionKey: sessionCacheKey_(),
+      clientAssetsVersion: currentClientAssetsVersion_(),
       route: (meta && meta.route) || state.currentRoute,
       params: (meta && meta.params) || state.routeParams || {},
       moduleId: (meta && meta.moduleId) || moduleIdForRoute_(state.currentRoute)
@@ -699,6 +752,7 @@
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
+    invalidatePayrollRunsListCache_();
   }
 
   function invalidateModuleViewCache(keys) {
@@ -2400,6 +2454,7 @@
         moduleLoaded_ = {};
         moduleLoading_ = {};
         clearModuleViewCache();
+        invalidatePayrollRunsListCache_();
         moduleDataCacheClearHooks_.forEach(function (fn) {
           try { fn(); } catch (ignore) {}
         });
@@ -3247,6 +3302,10 @@
     runVerticalFromRow: runVerticalFromRow_,
     findRunForVerticalMonth: findRunForVerticalMonth_,
     suggestPayrollPeriodFromRuns: suggestPayrollPeriodFromRuns_,
+    mergePayrollRouteParams: mergePayrollRouteParams_,
+    formatVerticalOptionLabel: formatVerticalOptionLabel_,
+    fetchPayrollRunsList: fetchPayrollRunsList_,
+    invalidatePayrollRunsListCache: invalidatePayrollRunsListCache_,
     enablePerfTiming: function () {
       try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
       window.HRMS_PERF_TIMING = 1;

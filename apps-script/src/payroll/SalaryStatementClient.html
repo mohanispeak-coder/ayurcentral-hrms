@@ -107,17 +107,22 @@
       var opts = '<option value="">Select vertical…</option>' +
         catalog_.map(function (v) {
           var code = String(v.vertical_name || '').trim().toUpperCase();
-          return '<option value="' + esc_(code) + '">' + esc_(code) + ' — ' + esc_(v.legal_name || '') + '</option>';
+          var label = App.formatVerticalOptionLabel
+            ? App.formatVerticalOptionLabel(code, v.legal_name)
+            : (code + ' - ' + (v.legal_name || ''));
+          return '<option value="' + esc_(code) + '">' + esc_(label) + '</option>';
         }).join('');
       var html = '<select class="form-input" id="sal-stmt-vertical">' + opts + '</select>';
       return html;
     }
 
     function render_(params) {
-      params = params || {};
+      params = App.mergePayrollRouteParams ? App.mergePayrollRouteParams(params || {}) : (params || {});
+      initFilterFromContext_();
       if (params.year) filter_.year = Number(params.year);
       if (params.month) filter_.month = Number(params.month);
-      initFilterFromContext_();
+      if (params.vertical) filter_.vertical = String(params.vertical).trim().toUpperCase();
+      if (params.runId) filter_.runId = String(params.runId).trim();
       var page = pageEl_();
       if (!page) return;
       page.innerHTML =
@@ -125,9 +130,12 @@
         '<p class="page-lede">SAPL-style monthly statement tied to a vertical payroll run: rate of pay, worked days, earned pay, deductions, and net. ' +
         'Payroll runs are shared for all HR/Admin on the same HRMS. Without a run for the selected vertical and month, only contractual rate of pay is shown.</p></div>' +
         '<div id="sal-stmt-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
       Promise.all([
         callServer('apiGetVerticalCatalog'),
-        callServer('apiListPayrollRuns')
+        runsRpc
       ]).then(function (res) {
         catalog_ = res[0] || [];
         if (!filter_.vertical && catalog_.length) {
@@ -226,7 +234,7 @@
       var rows = data.rows || [];
       var runHint = data.payroll_run_id
         ? 'Payroll run ' + esc_(data.payroll_run_id) + ' (' + esc_(data.payroll_status) + ')'
-        : (data.preview_mode ? 'Preview — no payroll run' : 'No payroll run');
+        : (data.preview_mode ? 'Preview - no payroll run' : 'No payroll run');
       var statusLine = data.status_message ? esc_(data.status_message) : '';
       var alertClass = data.preview_mode && filter_.vertical ? 'alert alert-warning' : 'hint';
 

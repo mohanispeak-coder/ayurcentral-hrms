@@ -149,6 +149,7 @@
     }
 
     function invalidateAllPayrollViews_() {
+      if (App.invalidatePayrollRunsListCache) App.invalidatePayrollRunsListCache();
       invalidatePayrollHome_();
       invalidateAttendanceBulk_();
       invalidateCompensation_();
@@ -191,7 +192,10 @@
 
     function loadPayrollContext_(seq, params, routeGuard, callback) {
       applyPayrollRouteParams_(params);
-      return callServer('apiListPayrollRuns').then(function (runs) {
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
+      return runsRpc.then(function (runs) {
         if (!routeGuard()) return;
         homeState.runs = runs || [];
         if (App.reconcilePayrollPeriodWithRuns) {

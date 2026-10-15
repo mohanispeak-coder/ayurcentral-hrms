@@ -194,7 +194,9 @@
 
       var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
       var restore = !forceRefresh && App.consumeModuleViewRestore && App.consumeModuleViewRestore(MODULE_KEY_);
-      if (restore && viewCache_ && viewCache_.periodKey === periodKey_() && viewCache_.run) {
+      if (restore && viewCache_ && viewCache_.periodKey === periodKey_() && viewCache_.run &&
+          (!params.year || Number(params.year) === Number(viewCache_.run.period_year)) &&
+          (!params.month || Number(params.month) === Number(viewCache_.run.period_month))) {
         catalog_ = viewCache_.catalog || catalog_;
         runState_.runId = viewCache_.run.payroll_run_id;
         if (viewCache_.selectedVertical) runState_.vertical = viewCache_.selectedVertical;
@@ -209,9 +211,12 @@
         '<div class="formt-page"><div class="page-header"><h2>Form T</h2></div>' +
         '<div id="formt-mount">' + skeletonMount_() + '</div></div>';
 
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
       Promise.all([
         callServer('apiGetVerticalCatalog').catch(function () { return []; }),
-        callServer('apiListPayrollRuns')
+        runsRpc
       ]).then(function (boot) {
         catalog_ = boot[0] || [];
         runsCache_ = boot[1] || [];
@@ -258,7 +263,10 @@
         afterRuns_(runsCache_);
         return;
       }
-      callServer('apiListPayrollRuns').then(afterRuns_).catch(function (err) {
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
+      runsRpc.then(afterRuns_).catch(function (err) {
         var m = document.getElementById('formt-mount');
         if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load.') + '</div>';
       });

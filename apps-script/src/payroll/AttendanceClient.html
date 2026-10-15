@@ -88,8 +88,10 @@
     function verticalOptionsHtml_(selected) {
       return (catalog_ || []).map(function (v) {
         var sel = selected === v.vertical_name ? ' selected' : '';
-        return '<option value="' + esc_(v.vertical_name) + '"' + sel + '>' +
-          esc_(v.vertical_name) + ' - ' + esc_(v.legal_name) + '</option>';
+        var label = App.formatVerticalOptionLabel
+          ? App.formatVerticalOptionLabel(v.vertical_name, v.legal_name)
+          : (v.vertical_name + ' - ' + (v.legal_name || ''));
+        return '<option value="' + esc_(v.vertical_name) + '"' + sel + '>' + esc_(label) + '</option>';
       }).join('');
     }
 
@@ -125,6 +127,8 @@
 
     function shouldRestoreCachedView_(params, restore) {
       if (!restore || !viewCache_ || !viewCache_.run || viewCache_.periodKey !== periodKey_()) return false;
+      if (params.year && Number(params.year) !== Number(viewCache_.run.period_year)) return false;
+      if (params.month && Number(params.month) !== Number(viewCache_.run.period_month)) return false;
       if (params.runId && viewCache_.run.payroll_run_id !== String(params.runId).trim()) return false;
       if (bulkState_.runId && viewCache_.run.payroll_run_id !== bulkState_.runId) return false;
       var wantV = params.vertical ? String(params.vertical).trim().toUpperCase() : '';
@@ -201,9 +205,12 @@
       page.innerHTML =
         '<div class="att-page"><div class="page-header"><h2>Register</h2></div>' +
         '<div id="att-mount">' + skeletonMount_(App) + '</div></div>';
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
       Promise.all([
         callServer('apiGetVerticalCatalog').catch(function () { return []; }),
-        callServer('apiListPayrollRuns')
+        runsRpc
       ]).then(function (boot) {
         catalog_ = boot[0] || [];
         runsCache_ = boot[1] || [];
@@ -274,7 +281,10 @@
         afterRuns_(runsCache_);
         return;
       }
-      callServer('apiListPayrollRuns').then(afterRuns_).catch(function (err) {
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
+      runsRpc.then(afterRuns_).catch(function (err) {
         var m = document.getElementById('att-mount');
         if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load payroll runs.') + '</div>';
       });
@@ -347,7 +357,7 @@
           el.innerHTML = '<strong>Public holidays (' + list.length + '):</strong> ' +
             list.map(function (h) {
               return esc_(h.holiday_date) + ' ' + esc_(h.name);
-            }).join(' · ') + ' — register download pre-fills <strong>H</strong> on these days.';
+            }).join(' · ') + ' - register download pre-fills <strong>H</strong> on these days.';
         })
         .catch(function () {
           el.textContent = '';
@@ -426,7 +436,7 @@
       if (!m) return;
       m.innerHTML =
         '<div class="card"><h2>' + esc_(fmtPeriod_(period_.year, period_.month)) + '</h2>' +
-        '<p class="page-lede">No payroll run for this month and vertical. Payroll runs are shared for all HR/Admin users on the same HRMS sheet — pick the correct year/month, or start payroll if none exists yet.</p>' +
+        '<p class="page-lede">No payroll run for this month and vertical. Payroll runs are shared for all HR/Admin users on the same HRMS sheet - pick the correct year/month, or start payroll if none exists yet.</p>' +
         '<div class="form-row">' +
         '<div class="form-group"><label class="form-label">Year</label><input class="form-input" id="att-year" type="number" value="' + period_.year + '"></div>' +
         '<div class="form-group"><label class="form-label">Month</label><input class="form-input" id="att-month" type="number" min="1" max="12" value="' + period_.month + '"></div>' +
@@ -438,6 +448,7 @@
         var btn = this;
         callServer('apiCreatePayrollRunsAllVerticals', period_.year, period_.month, '', { button: btn, loadingText: 'Starting…' })
           .then(function () {
+            if (App.invalidatePayrollRunsListCache) App.invalidatePayrollRunsListCache();
             showToast('Payroll started.', 'success');
             loadContext_();
           })
