@@ -107,6 +107,12 @@ function loadApp(controller) {
     setItem: function (k, v) { store[k] = String(v); },
     removeItem: function (k) { delete store[k]; }
   };
+  var localStore = {};
+  var localStorage = {
+    getItem: function (k) { return localStore.hasOwnProperty(k) ? localStore[k] : null; },
+    setItem: function (k, v) { localStore[k] = String(v); },
+    removeItem: function (k) { delete localStore[k]; }
+  };
 
   controller.calls = [];
   controller.success = null;
@@ -147,6 +153,7 @@ function loadApp(controller) {
     document: document,
     google: { script: { run: runObj } },
     sessionStorage: sessionStorage,
+    localStorage: localStorage,
     Promise: Promise,
     Date: Date,
     Array: Array,
@@ -402,6 +409,14 @@ function runAsync() {
       var args = ctrl.calls[0] && ctrl.calls[0].args;
       check('two string args keep OTP token last',
         args && args.length === 3 && args[0] === 'LR1' && args[1] === 'ok' && args[2] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.calls = [];
+    var holQuery = { calendar_year: 2026, scope: 'ALL' };
+    return App.callServer('apiHolidayList', holQuery, null).then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('null action opts are not sent as sessionToken',
+        args && args.length === 2 && args[0] === holQuery && args[1] === 'otp_session_token_demo');
     });
   }).then(function () {
     ctrl.mode = 'throw';

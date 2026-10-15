@@ -32,6 +32,7 @@ check('holiday-skip-blank-import-rows', /!trim_\(r\.holiday_date\) && !trim_\(r\
 check('holiday-preset-national', /IN_NATIONAL_FIXED/.test(svc) && /Republic Day/.test(svc));
 check('holiday-import-feedback-ui', /hol-import-feedback/.test(client) && /paintImportPreview_/.test(client));
 check('holiday-status-banner', /hol-status-banner/.test(client) && /holNotify_/.test(client));
+check('holiday-list-rpc-no-null-action', /callServer\('apiHolidayList', query\)/.test(client));
 check('holiday-preset-hyphen', /India - fixed national holidays/.test(svc) && !/India — fixed/.test(svc));
 check('holiday-template-one-example', /exampleTemplateRow_/.test(svc) && !/blankRows = 54/.test(svc));
 check('holiday-leave-year-list', /listHolidaysForLeaveYear/.test(svc));

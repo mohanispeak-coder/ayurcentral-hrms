@@ -244,12 +244,11 @@
       var runsRpc = App.fetchPayrollRunsList
         ? App.fetchPayrollRunsList(callServer)
         : callServer('apiListPayrollRuns');
-      Promise.all([
-        (App.fetchVerticalCatalog ? App.fetchVerticalCatalog(callServer) : callServer('apiGetVerticalCatalog')).catch(function () { return []; }),
-        runsRpc
-      ]).then(function (boot) {
-        catalog_ = boot[0] || [];
-        runsCache_ = boot[1] || [];
+      (App.fetchVerticalCatalog ? App.fetchVerticalCatalog(callServer) : callServer('apiGetVerticalCatalog'))
+        .catch(function () { return []; })
+        .then(function (cat) { catalog_ = cat || []; });
+      runsRpc.then(function (runs) {
+        runsCache_ = runs || [];
         loadContext_(true);
       }).catch(function (err) {
         var m = document.getElementById('att-mount');

@@ -97,8 +97,10 @@
       opts = opts || {};
       if (!opts.quietSuccess) holNotify_('Refreshing holiday list…', 'busy', false);
       var refreshBtn = $('hol-refresh');
-      var action = refreshBtn ? { button: refreshBtn, loadingText: 'Refreshing…' } : null;
-      var p = callServer('apiHolidayList', { calendar_year: state.year, scope: state.scope }, action);
+      var query = { calendar_year: state.year, scope: state.scope };
+      var p = refreshBtn
+        ? callServer('apiHolidayList', query, { button: refreshBtn, loadingText: 'Refreshing…' })
+        : callServer('apiHolidayList', query);
       p.then(function (data) {
         if (!stillOn(seq)) return;
         paint(data);

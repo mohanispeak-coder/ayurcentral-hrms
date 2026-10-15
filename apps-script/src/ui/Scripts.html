@@ -967,6 +967,13 @@
     return false;
   }
 
+  /** Optional callServer UI args are often passed as null; never send them to google.script.run. */
+  function stripTrailingNullishRpcArgs_(args) {
+    while (args.length && args[args.length - 1] == null) {
+      args.pop();
+    }
+  }
+
   /**
    * google.script.run maps arguments by position. sessionToken must be appended last.
    * Strip leaked UI objects only - never treat business strings (module ids, EMP001, run ids)
@@ -977,7 +984,7 @@
       args.pop();
     }
     var token = getSessionToken();
-    if (token && args.length && args[args.length - 1] === token) return;
+    if (args.length && args[args.length - 1] === token) return;
     args.push(token);
   }
 
@@ -1280,6 +1287,7 @@
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
     var action = extractActionOpts_(args);
+    stripTrailingNullishRpcArgs_(args);
     prepareGoogleScriptArgs_(args);
 
     var button = action && (action.button || action.loadingButton);
