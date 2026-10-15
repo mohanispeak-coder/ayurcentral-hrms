@@ -134,7 +134,7 @@
         ? App.fetchPayrollRunsList(callServer)
         : callServer('apiListPayrollRuns');
       Promise.all([
-        callServer('apiGetVerticalCatalog'),
+        (App.fetchVerticalCatalog ? App.fetchVerticalCatalog(callServer) : callServer('apiGetVerticalCatalog')),
         runsRpc
       ]).then(function (res) {
         catalog_ = res[0] || [];

@@ -100,6 +100,14 @@ function apiLeaveGetAdminList(filters, sessionToken) {
   }, sessionToken);
 }
 
+/** Single execution: admin requests + types + employee filter list. */
+function apiLeaveGetAdminBundle(filters, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.getAdminBundle(session, filters || {});
+  }, sessionToken);
+}
+
 function apiLeaveSaveType(payload, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

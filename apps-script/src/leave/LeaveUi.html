@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LEAVE_UI_BUILD_ = '2026.09.16-names-settings-v2';
+  var LEAVE_UI_BUILD_ = '2026.10.15-perf-v2';
 
   function ctx() {
     if (window.HrmsApp) {
@@ -58,12 +58,15 @@
   }
 
   function tryRestoreLeave_(key, paint) {
-    if (!leaveViewCache[key]) return false;
-    if (window.HrmsApp && window.HrmsApp.consumeModuleViewRestore && window.HrmsApp.consumeModuleViewRestore(key)) {
-      paint(leaveViewCache[key]);
-      return true;
+    if (window.HrmsApp && window.HrmsApp.isModuleRefresh && window.HrmsApp.isModuleRefresh(key)) {
+      return false;
     }
-    return false;
+    if (!leaveViewCache[key]) return false;
+    paint(leaveViewCache[key]);
+    if (window.HrmsApp && window.HrmsApp.consumeModuleViewRestore) {
+      window.HrmsApp.consumeModuleViewRestore(key);
+    }
+    return true;
   }
 
   function keepLeavePaint_(key) {
@@ -81,13 +84,24 @@
 
   function invalidateLeaveAfterRequestMutation_() {
     invalidateLeaveViews_(
-      ['my-leave', 'leave-apply', 'leave-approvals', 'leave-admin', 'leave-calendar'],
+      ['my-leave', 'leave-apply', 'leave-approvals', 'leave-admin', 'leave-calendar', 'leave-balances'],
       { dashboard: true }
     );
   }
 
   function invalidateLeaveAfterAdminConfig_() {
-    invalidateLeaveViews_(['my-leave', 'leave-apply', 'leave-admin'], { dashboard: true });
+    invalidateLeaveViews_(['my-leave', 'leave-apply', 'leave-admin', 'leave-balances'], { dashboard: true });
+  }
+
+  function leaveBalCacheKey_(state) {
+    state = state || {};
+    return JSON.stringify({
+      q: state.q || '',
+      department: state.department || '',
+      vertical: state.vertical || '',
+      page: state.page || 1,
+      pageSize: state.pageSize || 50
+    });
   }
 
   if (window.HrmsApp && window.HrmsApp.registerModuleDataCacheClear) {
@@ -806,6 +820,14 @@
     var u = uiHelpers();
     var state = { page: 1, pageSize: 50, q: '', department: '', vertical: '' };
 
+    function paintFromCache_(cached) {
+      if (!cached || !cached.data) return false;
+      if (cached.key !== leaveBalCacheKey_(state)) return false;
+      fillFilters_(cached.data);
+      paintTable(cached.data);
+      return true;
+    }
+
     function paintTable(data) {
       var rows = (data.rows || []).map(function (r) {
         var ls = r.leave_summary || {};
@@ -848,8 +870,8 @@
           '<button type="button" class="btn btn-secondary btn-sm" id="leave-bal-next" ' + (page >= pages ? 'disabled' : '') + '>Next</button></span>';
         var prev = document.getElementById('leave-bal-prev');
         var next = document.getElementById('leave-bal-next');
-        if (prev) prev.addEventListener('click', function () { state.page = Math.max(1, page - 1); load(); });
-        if (next) next.addEventListener('click', function () { state.page = page + 1; load(); });
+        if (prev) prev.addEventListener('click', function () { state.page = Math.max(1, page - 1); load(true); });
+        if (next) next.addEventListener('click', function () { state.page = page + 1; load(true); });
       }
       var meta = document.getElementById('leave-bal-meta');
       if (meta) {
@@ -873,7 +895,33 @@
       });
     }
 
-    function load() {
+    function mountLeaveBalancesShell_(withSkeleton) {
+      var body = withSkeleton ? u.skRows(13, 6) : '';
+      page.innerHTML =
+        flashHtml('leave-balances') +
+        pageHead('Leave balances', 'View leave year and current-month allowance for everyone in one table.') +
+        '<div id="leave-bal-feedback" class="action-feedback hidden" role="status"></div>' +
+        '<div class="card"><div class="page-toolbar filters">' +
+        '<div class="form-group"><label class="form-label" for="leave-bal-search">Search</label>' +
+        '<input class="form-input search-input" id="leave-bal-search" type="search" placeholder="Employee ID or name" value="' +
+          c.escapeHtml(state.q) + '"></div>' +
+        '<div class="form-group"><label class="form-label" for="leave-bal-dept">Department</label>' +
+        '<select class="form-select" id="leave-bal-dept"><option value="">All</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="leave-bal-vert">Vertical</label>' +
+        '<select class="form-select" id="leave-bal-vert"><option value="">All</option></select></div>' +
+        '<button type="button" class="btn btn-secondary" id="leave-bal-apply">Apply</button>' +
+        '<button type="button" class="btn btn-secondary" id="leave-bal-refresh">Refresh</button></div>' +
+        '<p id="leave-bal-meta" class="hint"></p>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md">' +
+        '<thead><tr><th>Employee ID</th><th>Name</th><th>Dept</th><th>Vertical</th>' +
+        '<th class="num">Year entitled</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
+        '<th class="num">Carry forwarded</th><th class="num">Assigned monthly leave</th><th class="num">Total leaves</th>' +
+        '<th class="num">Used leaves</th><th class="num">Paid leaves used</th><th class="num">LOP</th></tr></thead>' +
+        '<tbody id="leave-bal-tbody">' + body + '</tbody></table></div>' +
+        '<div class="pagination" id="leave-bal-pagination"></div></div>';
+    }
+
+    function load(forceNetwork) {
       var fb = document.getElementById('leave-bal-feedback');
       if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loading…', 'info');
       c.callServer('apiGetLeaveBalancesDirectory', {
@@ -885,46 +933,48 @@
         pageSize: state.pageSize
       }).then(function (data) {
         if (!onRoute('leave-balances')) return;
+        leaveViewCache['leave-balances'] = { key: leaveBalCacheKey_(state), data: data };
+        markLeaveView_('leave-balances');
         fillFilters_(data);
         paintTable(data);
         if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loaded ' + (data.total || 0) + ' employee(s).', 'success');
       }).catch(function (err) {
+        failLeaveRefresh_();
         if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, err.message || 'Failed to load', 'error');
         else helpers.showToast(err.message || 'Failed to load', 'error');
       });
     }
 
-    page.innerHTML =
-      flashHtml('leave-balances') +
-      pageHead('Leave balances', 'View leave year and current-month allowance for everyone in one table.') +
-      '<div id="leave-bal-feedback" class="action-feedback hidden" role="status"></div>' +
-      '<div class="card"><div class="page-toolbar filters">' +
-      '<div class="form-group"><label class="form-label" for="leave-bal-search">Search</label>' +
-      '<input class="form-input search-input" id="leave-bal-search" type="search" placeholder="Employee ID or name"></div>' +
-      '<div class="form-group"><label class="form-label" for="leave-bal-dept">Department</label>' +
-      '<select class="form-select" id="leave-bal-dept"><option value="">All</option></select></div>' +
-      '<div class="form-group"><label class="form-label" for="leave-bal-vert">Vertical</label>' +
-      '<select class="form-select" id="leave-bal-vert"><option value="">All</option></select></div>' +
-      '<button type="button" class="btn btn-secondary" id="leave-bal-apply">Apply</button>' +
-      '<button type="button" class="btn btn-secondary" id="leave-bal-refresh">Refresh</button></div>' +
-      '<p id="leave-bal-meta" class="hint"></p>' +
-      '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint"><table class="data-table data-table--stack-md">' +
-      '<thead><tr><th>Employee ID</th><th>Name</th><th>Dept</th><th>Vertical</th>' +
-      '<th class="num">Year entitled</th><th class="num">Pending</th><th class="num">Year avail.</th>' +
-      '<th class="num">Carry forwarded</th><th class="num">Assigned monthly leave</th><th class="num">Total leaves</th>' +
-      '<th class="num">Used leaves</th><th class="num">Paid leaves used</th><th class="num">LOP</th></tr></thead>' +
-      '<tbody id="leave-bal-tbody">' + u.skRows(13, 6) + '</tbody></table></div>' +
-      '<div class="pagination" id="leave-bal-pagination"></div></div>';
+    if (tryRestoreLeave_('leave-balances', function (cached) {
+      mountLeaveBalancesShell_(false);
+      bindLeaveBalancesChrome_(helpers, state, load);
+      paintFromCache_(cached);
+    })) return;
 
-    document.getElementById('leave-bal-apply').addEventListener('click', function () {
-      state.q = (document.getElementById('leave-bal-search') || {}).value || '';
-      state.department = (document.getElementById('leave-bal-dept') || {}).value || '';
-      state.vertical = (document.getElementById('leave-bal-vert') || {}).value || '';
-      state.page = 1;
-      load();
-    });
-    document.getElementById('leave-bal-refresh').addEventListener('click', function () { load(); });
-    load();
+    if (!keepLeavePaint_('leave-balances')) {
+      mountLeaveBalancesShell_(true);
+    }
+    bindLeaveBalancesChrome_(helpers, state, load);
+    load(!!keepLeavePaint_('leave-balances'));
+  }
+
+  function bindLeaveBalancesChrome_(helpers, state, loadFn) {
+    var applyBtn = document.getElementById('leave-bal-apply');
+    if (applyBtn && applyBtn.getAttribute('data-leave-bal-bound') === '1') return;
+    var refreshBtn = document.getElementById('leave-bal-refresh');
+    if (applyBtn) applyBtn.setAttribute('data-leave-bal-bound', '1');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', function () {
+        state.q = (document.getElementById('leave-bal-search') || {}).value || '';
+        state.department = (document.getElementById('leave-bal-dept') || {}).value || '';
+        state.vertical = (document.getElementById('leave-bal-vert') || {}).value || '';
+        state.page = 1;
+        loadFn(true);
+      });
+    }
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function () { loadFn(true); });
+    }
   }
 
   function renderAdmin(page, helpers) {
@@ -947,14 +997,16 @@
       '</div></div>';
     }
 
-    Promise.all([
-      c.callServer('apiLeaveGetAdminList', {}),
-      c.callServer('apiLeaveListEmployees')
-    ]).then(function (parts) {
+    c.callServer('apiLeaveGetAdminBundle', {}).then(function (bundle) {
       if (!onRoute('leave-admin')) return;
-      leaveViewCache['leave-admin'] = { data: parts[0], employees: parts[1] || [] };
+      var employees = bundle.employees || [];
+      var data = {
+        requests: bundle.requests || [],
+        types: bundle.types || []
+      };
+      leaveViewCache['leave-admin'] = { data: data, employees: employees };
       markLeaveView_('leave-admin');
-      paintAdmin_(page, helpers, parts[0], parts[1] || []);
+      paintAdmin_(page, helpers, data, employees);
     }).catch(function (err) {
       failLeaveRefresh_();
       u.paintErr(page, err.message || 'Failed to load', function () { renderAdmin(page, helpers); });

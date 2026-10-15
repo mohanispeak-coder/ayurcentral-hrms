@@ -58,6 +58,8 @@ check('no-post-login-herd', !/setTimeout\(preloadModulesFromNav,\s*0\)/.test(scr
 check('emp-restore-list', /consumeModuleViewRestore\(key\)/.test(emp) && /apiGetEmployeeDirectory/.test(emp));
 check('emp-restore-profile', /consumeModuleViewRestore\(key\)/.test(emp) && /apiGetEmployee/.test(emp));
 check('leave-restore', /tryRestoreLeave_/.test(leaveUi) && /apiLeaveGetMyLeave/.test(leaveUi));
+check('leave-admin-bundle', /apiLeaveGetAdminBundle/.test(leaveUi) && /apiLeaveGetAdminBundle/.test(apiLeave));
+check('vertical-catalog-cache', /fetchVerticalCatalog_/.test(scripts) && /fetchVerticalCatalog:/.test(scripts));
 check('leave-approve-still-rpc', /apiLeaveApprove/.test(leaveUi));
 check('payroll-restore-home', /consumeModuleViewRestore\('payroll'\)/.test(payroll));
 check('payroll-finalize-still-rpc', /apiFinalizePayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));

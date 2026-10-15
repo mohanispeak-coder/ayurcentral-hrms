@@ -277,7 +277,10 @@
       var sel = $('pr-vertical');
       if (!sel) return Promise.resolve();
       selected = String(selected || homeState.vertical || '').trim().toUpperCase();
-      return callServer('apiGetVerticalCatalog').then(function (cat) {
+      var catalogRpc = App.fetchVerticalCatalog
+        ? App.fetchVerticalCatalog(callServer)
+        : callServer('apiGetVerticalCatalog');
+      return catalogRpc.then(function (cat) {
         var rows = cat || [];
         var legacyOpt = '<option value="' + LEGACY_VERTICAL_ + '">Combined (legacy payroll)</option>';
         if (!rows.length) {
@@ -1809,7 +1812,10 @@
       var sel = page.querySelector('#att-bulk-vertical');
       if (!sel) return;
       preferred = String(preferred || homeState.vertical || '').trim().toUpperCase();
-      callServer('apiGetVerticalCatalog').then(function (cat) {
+      var catalogRpc = App.fetchVerticalCatalog
+        ? App.fetchVerticalCatalog(callServer)
+        : callServer('apiGetVerticalCatalog');
+      catalogRpc.then(function (cat) {
         var rows = cat || [];
         if (!rows.length) {
           sel.innerHTML = '<option value="">No verticals configured</option>';

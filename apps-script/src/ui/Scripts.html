@@ -230,6 +230,39 @@
     payrollRunsListCache_ = { promise: null, data: null, at: 0, version: '' };
   }
 
+  var verticalCatalogCache_ = { promise: null, data: null, at: 0, version: '' };
+
+  function invalidateVerticalCatalogCache_() {
+    verticalCatalogCache_ = { promise: null, data: null, at: 0, version: '' };
+  }
+
+  /**
+   * Deduped vertical catalog for payroll/attendance dropdowns (short TTL).
+   * @param {function(string): Promise} callServerFn
+   */
+  function fetchVerticalCatalog_(callServerFn) {
+    var ver = currentClientAssetsVersion_();
+    var now = Date.now();
+    if (verticalCatalogCache_.data && verticalCatalogCache_.version === ver &&
+        (now - verticalCatalogCache_.at) < 60000) {
+      return Promise.resolve(verticalCatalogCache_.data);
+    }
+    if (verticalCatalogCache_.promise && verticalCatalogCache_.version === ver) {
+      return verticalCatalogCache_.promise;
+    }
+    verticalCatalogCache_.version = ver;
+    verticalCatalogCache_.promise = (callServerFn || callServer)('apiGetVerticalCatalog').then(function (cat) {
+      verticalCatalogCache_.data = cat || [];
+      verticalCatalogCache_.at = Date.now();
+      verticalCatalogCache_.promise = null;
+      return verticalCatalogCache_.data;
+    }).catch(function (err) {
+      verticalCatalogCache_.promise = null;
+      throw err;
+    });
+    return verticalCatalogCache_.promise;
+  }
+
   /**
    * Deduped payroll runs list for the current session (short TTL). Same org data for all HR/Admin.
    * @param {function(string): Promise} callServerFn
@@ -3315,6 +3348,8 @@
     formatVerticalOptionLabel: formatVerticalOptionLabel_,
     fetchPayrollRunsList: fetchPayrollRunsList_,
     invalidatePayrollRunsListCache: invalidatePayrollRunsListCache_,
+    fetchVerticalCatalog: fetchVerticalCatalog_,
+    invalidateVerticalCatalogCache: invalidateVerticalCatalogCache_,
     enablePerfTiming: function () {
       try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
       window.HRMS_PERF_TIMING = 1;

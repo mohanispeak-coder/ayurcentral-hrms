@@ -161,35 +161,53 @@ var LeaveService = (function () {
   }
 
   function summarizeLeaveYearFromRequests_(employeeId, leaveYear) {
-    employeeId = String(employeeId || '').trim();
+    var map = summarizeLeaveYearRequestTotalsMap_(leaveYear);
+    var norm = LeaveEngine.normalizeEmployeeId(employeeId);
+    if (map[norm]) return map[norm];
+    if (employeeId && employeeId !== norm && map[employeeId]) return map[employeeId];
+    leaveYear = String(leaveYear || currentLeaveYear_());
+    return {
+      leave_year: leaveYear,
+      usedByType: {},
+      pendingByType: {},
+      usedTotal: 0,
+      pendingTotal: 0
+    };
+  }
+
+  /** One sheet read: normalized employee_id → leave-year used/pending totals. */
+  function summarizeLeaveYearRequestTotalsMap_(leaveYear) {
     leaveYear = String(leaveYear || currentLeaveYear_());
     var startMonth = leaveYearStartMonth_();
     var defaultTypeId = defaultLeaveTypeIdForRequest_();
-    var usedByType = {};
-    var pendingByType = {};
-    var usedTotal = 0;
-    var pendingTotal = 0;
+    var map = {};
     DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
-      if (!employeeIdsMatch_(r.employee_id, employeeId)) return;
       if (!requestInLeaveYear_(r, leaveYear, startMonth)) return;
+      var eid = LeaveEngine.normalizeEmployeeId(r.employee_id);
+      if (!eid) return;
+      var bucket = map[eid];
+      if (!bucket) {
+        bucket = {
+          leave_year: leaveYear,
+          usedByType: {},
+          pendingByType: {},
+          usedTotal: 0,
+          pendingTotal: 0
+        };
+        map[eid] = bucket;
+      }
       var days = LeaveEngine.toNumber(r.total_days);
       var tid = String(r.leave_type_id || '').trim() || defaultTypeId || '_UNKNOWN';
       var st = String(r.status || '').trim().toUpperCase();
       if (st === HRMS.LEAVE_STATUS.APPROVED) {
-        usedTotal += days;
-        usedByType[tid] = (usedByType[tid] || 0) + days;
+        bucket.usedTotal += days;
+        bucket.usedByType[tid] = (bucket.usedByType[tid] || 0) + days;
       } else if (LeaveEngine.isPendingApprovalStatus(r.status) || st === HRMS.LEAVE_STATUS.SUBMITTED) {
-        pendingTotal += days;
-        pendingByType[tid] = (pendingByType[tid] || 0) + days;
+        bucket.pendingTotal += days;
+        bucket.pendingByType[tid] = (bucket.pendingByType[tid] || 0) + days;
       }
     });
-    return {
-      leave_year: leaveYear,
-      usedByType: usedByType,
-      pendingByType: pendingByType,
-      usedTotal: usedTotal,
-      pendingTotal: pendingTotal
-    };
+    return map;
   }
 
   function mergeRequestTotalsIntoBalanceView_(view, reqTotals, leaveTypeId) {
@@ -1547,9 +1565,16 @@ var LeaveService = (function () {
     var tmap = typeMap_();
     var emap = empMap_();
     var targetNorm = LeaveEngine.normalizeEmployeeId(target);
-    var requests = DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).filter(function (r) {
-      return LeaveEngine.normalizeEmployeeId(r.employee_id) === targetNorm;
-    }).map(function (r) { return serializeRequest_(r, tmap, emap); })
+    var reqRows = DbService.findRecords(HRMS.SHEETS.LEAVE_REQUESTS, { employee_id: target }) || [];
+    if (!reqRows.length && target !== targetNorm) {
+      reqRows = DbService.findRecords(HRMS.SHEETS.LEAVE_REQUESTS, { employee_id: targetNorm }) || [];
+    }
+    if (!reqRows.length) {
+      reqRows = DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).filter(function (r) {
+        return LeaveEngine.normalizeEmployeeId(r.employee_id) === targetNorm;
+      });
+    }
+    var requests = reqRows.map(function (r) { return serializeRequest_(r, tmap, emap); })
       .sort(function (a, b) { return String(b.created_at) > String(a.created_at) ? 1 : -1; });
     var summaryYear = profilePack && profilePack.leave_year ? String(profilePack.leave_year) : year;
     var summaryHolidays = profilePack && profilePack.public_holidays
@@ -1610,6 +1635,12 @@ var LeaveService = (function () {
         return serializeRequest_(r, tmap, emap);
       })
     };
+  }
+
+  function getAdminBundle(session, filters) {
+    var admin = getAdminList(session, filters);
+    admin.employees = listEmployeeOptions(session);
+    return admin;
   }
 
   function getAdminList(session, filters) {
@@ -2021,6 +2052,7 @@ var LeaveService = (function () {
     getApprovals: getApprovals,
     getApprovalQueueSummary: getApprovalQueueSummary,
     getAdminList: getAdminList,
+    getAdminBundle: getAdminBundle,
     getCalendar: getCalendar,
     saveType: saveType,
     getTypes: getTypes,
@@ -2033,6 +2065,8 @@ var LeaveService = (function () {
     listEmployeeOptions: listEmployeeOptions,
     currentLeaveYear: currentLeaveYear_,
     summarizeLeaveYearFromRequests: summarizeLeaveYearFromRequests_,
+    summarizeLeaveYearRequestTotalsMap: summarizeLeaveYearRequestTotalsMap_,
+    buildLeaveBalanceIndex: loadBalanceIndex_,
     applyRequestTotalsToYearBalances: applyRequestTotalsToYearBalances_,
     approvedLeaveDaysInCalendarMonth: approvedLeaveDaysInCalendarMonth_,
     approvedLeaveDaysMapForCalendarMonth: approvedLeaveDaysMapForCalendarMonth_,
