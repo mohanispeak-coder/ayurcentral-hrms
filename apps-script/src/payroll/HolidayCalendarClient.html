@@ -114,10 +114,11 @@
         }
       }).catch(function (err) {
         if (!stillOn(seq)) return;
-        holNotify_(err.message || 'Failed to load holidays', 'error', true);
+        var msg = err.message || 'Failed to load holidays';
+        holNotify_(msg, 'error', true);
         var body = $('holiday-cal-body');
         if (body) {
-          body.innerHTML = '<div class="alert alert-danger">' + escapeHtml(err.message || 'Failed to load') + '</div>';
+          body.innerHTML = '<p class="hint">If you are signed in as <strong>HR</strong> or <strong>Admin</strong> and still see this, refresh the page after IT deploys the latest HRMS build, or use the header <strong>Refresh</strong> button.</p>';
         }
       });
       return p;

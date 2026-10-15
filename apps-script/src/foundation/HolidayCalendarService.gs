@@ -165,7 +165,7 @@ var HolidayCalendarService = (function () {
   }
 
   function listForClient(session, query) {
-    requireManage_();
+    requireManage_(session);
     query = query || {};
     var year = Number(query.calendar_year) || new Date().getFullYear();
     var scopeFilter = trim_(query.scope).toUpperCase();

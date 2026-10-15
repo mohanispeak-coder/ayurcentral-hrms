@@ -24,6 +24,11 @@ check('attendance-prefill', /HolidayCalendarService\.dayCodesForMonth/.test(bulk
 check('holiday-ui-route', /holiday-calendar/.test(client) && /apiHolidayValidateImport/.test(client));
 check('holiday-ui-when-app-ready', /whenAppReady/.test(client) && /registerRoute\('holiday-calendar'/.test(client));
 check('holiday-hr-admin-access', /isHrOrAdmin/.test(svc) && /holiday-calendar/.test(svc));
+check('holiday-list-passes-session-to-manage', /requireManage_\(session\)/.test(svc));
+var perm = fs.readFileSync(path.join(root, 'foundation', 'PermissionService.gs'), 'utf8');
+check('holiday-nav-hr-admin', /id: 'holiday-calendar'/.test(perm) && /roles: \['OWNER', 'ADMIN', 'HR'\]/.test(perm));
+var adminSettings = fs.readFileSync(path.join(root, 'foundation', 'SettingsAdminService.gs'), 'utf8');
+check('holiday-attendance-module-nav', /navIds: \['attendance-bulk-upload', 'attendance-form-t', 'holiday-calendar'\]/.test(adminSettings));
 check('year-excel-template', /downloadYearTemplate/.test(svc) && /apiHolidayDownloadYearTemplate/.test(fs.readFileSync(path.join(root, 'foundation', 'ApiHoliday.gs'), 'utf8')));
 check('leave-calendar-holidays', /public_holidays/.test(fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8')));
 check('holiday-date-parser', /parseHolidayDate_/.test(svc) && /canonicalImportHeader_/.test(svc));

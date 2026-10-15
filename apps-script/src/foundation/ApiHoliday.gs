@@ -2,11 +2,24 @@
  * Holiday calendar APIs (HR / attendance).
  */
 
+function normalizeHolidayListRpcArgs_(query, sessionToken) {
+  var q = query;
+  var token = sessionToken;
+  if (typeof q === 'string' && hrmsCoerceSessionToken_(q)) {
+    return { query: {}, sessionToken: q };
+  }
+  if (q && typeof q === 'object' && !Array.isArray(q) && (token === null || token === undefined)) {
+    token = '';
+  }
+  return { query: q || {}, sessionToken: token };
+}
+
 function apiHolidayList(query, sessionToken) {
+  var norm = normalizeHolidayListRpcArgs_(query, sessionToken);
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return HolidayCalendarService.listForClient(session, query || {});
-  }, sessionToken);
+    return HolidayCalendarService.listForClient(session, norm.query);
+  }, norm.sessionToken);
 }
 
 function apiHolidaySave(payload, sessionToken) {
