@@ -38,6 +38,36 @@ var FormTService = (function () {
     return code;
   }
 
+  function runVerticalFromRun_(run) {
+    var v = trim_(run && run.vertical_name).toUpperCase();
+    if (v) return v;
+    var parts = String(run && run.payroll_run_id || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var token = trim_(parts[3]);
+    if (!token || /^C\d+$/i.test(token)) return '';
+    return token.toUpperCase();
+  }
+
+  /** Use the vertical-specific payroll run when the UI run id does not match the selected vertical. */
+  function resolveRunIdForVertical_(runId, verticalCode) {
+    var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
+    if (!run) throw notFoundError_('Payroll run not found.');
+    var want = normalizeVertical_(verticalCode);
+    var runVert = runVerticalFromRun_(run);
+    if (!runVert || runVert === want) return runId;
+    var year = Number(run.period_year);
+    var month = Number(run.period_month);
+    var candidates = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).filter(function (r) {
+      return Number(r.period_year) === year && Number(r.period_month) === month &&
+        runVerticalFromRun_(r) === want;
+    });
+    var open = candidates.filter(function (r) {
+      return String(r.status || '').toUpperCase() !== 'LOCKED';
+    });
+    var pick = (open.length ? open[0] : candidates[0]);
+    return pick ? pick.payroll_run_id : runId;
+  }
+
   function verticalCatalogEntry_(verticalCode) {
     var catalog = EmployeeRepository.listVerticalCatalog();
     for (var i = 0; i < catalog.length; i++) {
@@ -161,6 +191,7 @@ var FormTService = (function () {
   function getStatus(runId, verticalName) {
     requireAttendanceAccess_();
     var verticalCode = normalizeVertical_(verticalName);
+    runId = resolveRunIdForVertical_(runId, verticalCode);
     var check = canGenerateFormT_(runId, verticalCode);
     var rows = employeesForVerticalRun_(runId, verticalCode);
     return {
@@ -314,7 +345,9 @@ var FormTService = (function () {
   }
 
   function download(runId, verticalName) {
+    requireAttendanceAccess_();
     var verticalCode = normalizeVertical_(verticalName);
+    runId = resolveRunIdForVertical_(runId, verticalCode);
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
     if (!run) throw notFoundError_('Payroll run not found.');
     var blob = buildFormT(runId, verticalCode);
