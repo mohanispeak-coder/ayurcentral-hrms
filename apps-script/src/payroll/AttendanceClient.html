@@ -363,7 +363,7 @@
 
     function renderVerticalSections_(list) {
       var groups = groupByVertical_(list);
-      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
       var verticals = Object.keys(groups).sort();
       if (!verticals.length) return '<p class="hint">No employees in this payroll run yet.</p>';
       return verticals.map(function (v, idx) {
@@ -372,7 +372,10 @@
         var body = rows.map(function (r) {
           var cc = r.code_counts || (r.summary && r.summary.code_counts) || {};
           var codeCells = codes.map(function (c) {
-            return '<td class="num">' + esc_(cc[c] != null ? cc[c] : 0) + '</td>';
+            var val = c === 'P'
+              ? (r.days_present != null ? r.days_present : (r.summary && r.summary.present != null ? r.summary.present : 0))
+              : (cc[c] != null ? cc[c] : 0);
+            return '<td class="num">' + esc_(val) + '</td>';
           }).join('');
           var complete = r.register_complete ? 'Yes' : 'No';
           return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td>' +
@@ -444,7 +447,7 @@
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
         '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · ' +
         '<strong>L</strong> paid leave (uses monthly pool; excess → LOP) · <strong>A</strong> LOP (unpaid absence) · ' +
-        '<strong>1/2P</strong> half day (½ present, ½ paid leave pool) · <strong>WO</strong> weekly off · ' +
+        '<strong>1/2P</strong> on a day = half-day present (0.5 in P; other 0.5 is LOP) · <strong>WO</strong> weekly off · ' +
         '<strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
         '<div id="att-holidays-banner" class="hint" style="margin:8px 0"></div>' +
         '<p class="hint">Payroll run, vertical, and template must all match (e.g. PR-2026-10-AOPL with AOPL). ' +
@@ -709,7 +712,7 @@
 
     function paintPreviewGrid_(validRows, dim) {
       if (!validRows || !validRows.length) return '';
-      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
       var head = '<tr><th>ID</th><th>Name</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Avail</th>';
       for (var d = 1; d <= dim; d++) {
         var key = (d < 10 ? '0' : '') + d;
@@ -729,7 +732,8 @@
           line += '<td>' + esc_(reg[k] || '') + '</td>';
         }
         codes.forEach(function (c) {
-          line += '<td class="num">' + esc_(cc[c] != null ? cc[c] : 0) + '</td>';
+          var val = c === 'P' && row.days_present != null ? row.days_present : (cc[c] != null ? cc[c] : 0);
+          line += '<td class="num">' + esc_(val) + '</td>';
         });
         line += '<td class="num">' + esc_(row.days_total != null ? row.days_total : '') + '</td></tr>';
         return line;

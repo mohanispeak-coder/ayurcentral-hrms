@@ -21,7 +21,7 @@ var AttendanceRegisterService = (function () {
     HP: '1/2P'
   };
 
-  var SUMMARY_HEADERS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P', 'Leave Balance', 'DAYS'];
+  var SUMMARY_HEADERS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', 'Leave Balance', 'DAYS'];
   var CODE_KEYS_ = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
 
   function trim_(v) {
@@ -83,11 +83,18 @@ var AttendanceRegisterService = (function () {
     return JSON.stringify(reg || {});
   }
 
+  function halfDayCount_(counts) {
+    return Number(counts && counts['1/2P']) || 0;
+  }
+
+  function halfDayPresent_(counts) {
+    return halfDayCount_(counts) * 0.5;
+  }
+
   function computeDaysTotal_(counts) {
     counts = counts || {};
-    var half = Number(counts['1/2P']) || 0;
     return (Number(counts.P) || 0) + (Number(counts['W/H']) || 0) + (Number(counts.L) || 0) +
-      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0) + half;
+      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0) + halfDayPresent_(counts);
   }
 
   function leaveBalanceMaxForVertical_(verticalCode) {
@@ -106,8 +113,7 @@ var AttendanceRegisterService = (function () {
       return MonthlyLeaveService.availableAfterCounts_(emp || { vertical_name: verticalCode }, year, month, counts);
     }
     var max = leaveBalanceMaxForVertical_(verticalCode);
-    var half = (Number(counts['1/2P']) || 0) * 0.5;
-    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + half;
+    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0);
     return Math.max(0, max - used);
   }
 
@@ -119,8 +125,10 @@ var AttendanceRegisterService = (function () {
       var code = normalizeCode_(reg[pad2_(d)]);
       if (code && counts.hasOwnProperty(code)) counts[code]++;
     }
-    var halfCount = Number(counts['1/2P']) || 0;
-    var leaveDays = counts.L + counts.ML + (halfCount * 0.5);
+    var halfCount = halfDayCount_(counts);
+    var halfPresent = halfDayPresent_(counts);
+    var halfLop = halfPresent;
+    var leaveDays = counts.L + counts.ML;
     var daysTotal = computeDaysTotal_(counts);
     var vertical = trim_(verticalCode).toUpperCase();
     var monthlyGrant = (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.grantForEmployeeMonth_)
@@ -133,7 +141,8 @@ var AttendanceRegisterService = (function () {
     }
     var leaveSplit = leavePaidAndLopSplit_(leaveDays, entitlementPool);
     return {
-      present: counts.P + (halfCount * 0.5),
+      present: counts.P + halfPresent,
+      half_day_lop: halfLop,
       week_off_holiday: counts['W/H'],
       absent: counts.A,
       leave: counts.L,
@@ -166,6 +175,7 @@ var AttendanceRegisterService = (function () {
     summary = summary || {};
     var present = Number(summary.present) || 0;
     var absent = Number(summary.absent) || 0;
+    var halfLop = Number(summary.half_day_lop) || 0;
     var leaveDays = Number(summary.leave_days) || 0;
     var pool = Number(summary.monthly_entitlement_pool);
     if (!isFinite(pool)) pool = Number(summary.monthly_grant) || 0;
@@ -178,7 +188,7 @@ var AttendanceRegisterService = (function () {
     var daysTotal = Number(summary.days_total);
     if (isFinite(daysTotal) && daysTotal >= 0) {
       var paidFromTotal = Math.max(0, daysTotal - lopFromLeave);
-      var lopTotal = absent + lopFromLeave;
+      var lopTotal = absent + lopFromLeave + halfLop;
       return {
         working_days: paidFromTotal + lopTotal,
         paid_days: paidFromTotal,
@@ -199,7 +209,7 @@ var AttendanceRegisterService = (function () {
     }
     if (working <= 0) working = dim || 0;
     var paid = present + split.paid_leave_days;
-    var lop = absent + lopFromLeave;
+    var lop = absent + lopFromLeave + halfLop;
     if (paid + lop > working) {
       working = paid + lop;
     }
@@ -272,8 +282,7 @@ var AttendanceRegisterService = (function () {
   function leaveBalanceFormula_(range, poolCell) {
     var l = 'COUNTIF(' + range + ',"L")';
     var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
-    var half = halfDayCountExpr_(range, true);
-    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + half + '))';
+    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '))';
   }
 
   function summaryFormulasForRow_(sheetRow, year, month) {
@@ -296,14 +305,13 @@ var AttendanceRegisterService = (function () {
       }
     });
     var formulas = {
-      P: '=COUNTIF(' + range + ',"P")',
+      P: '=COUNTIF(' + range + ',"P")+' + halfDayCountExpr_(range, true),
       'W/H': '=COUNTIF(' + range + ',"W"&CHAR(47)&"H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")',
       A: '=COUNTIF(' + range + ',"A")',
       L: '=COUNTIF(' + range + ',"L")',
       WO: '=COUNTIF(' + range + ',"WO")',
       ML: '=COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")',
       H: '=COUNTIF(' + range + ',"H")',
-      '1/2P': '=' + halfDayCountExpr_(range, false),
       'Leave Balance': leaveBalanceFormula_(range, poolCell),
       'Leave Balan': leaveBalanceFormula_(range, poolCell),
       DAYS: '=' + dayParts.join('+') + '+' + halfDayPart

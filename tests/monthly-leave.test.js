@@ -38,7 +38,9 @@ check('bulk-preview-leave-fields', /monthly_grant/.test(bulkSrc) && /leave_balan
 check('template-leave-pool-column', /leave_pool/.test(regSrc) && /monthlyPoolForTemplateRow_/.test(regSrc));
 check('template-leave-balance-no-absent-in-pool', /leave_pool/.test(regSrc) &&
   /function leaveBalanceFormula_/.test(regSrc) && !/leaveBalanceFormula_[\s\S]{0,400}COUNTIF\(.+,"A"\)/.test(regSrc));
-check('template-version-6', /TEMPLATE_VERSION_ = '6'/.test(bulkSrc));
+check('template-version-7', /TEMPLATE_VERSION_ = '7'/.test(bulkSrc));
+check('template-p-includes-half', /P: '=COUNTIF/.test(regSrc) && /halfDayCountExpr_\(range, true\)/.test(regSrc));
+check('template-no-half-column', !/'1\/2P': '=/.test(regSrc));
 check('validate-returns-period', /period_year: run\.period_year/.test(bulkSrc));
 
 function loadRegister() {
@@ -48,7 +50,7 @@ function loadRegister() {
     ConfigService: { getSetting: function (k, d) { return d; } },
     MonthlyLeaveService: {
       availableAfterCounts_: function (emp, y, m, counts) {
-        var used = (counts.L || 0) + (counts.ML || 0) + ((counts['1/2P'] || 0) * 0.5);
+        var used = (counts.L || 0) + (counts.ML || 0);
         return Math.max(0, 2 - used);
       },
       grantForEmployeeMonth_: function () { return 2; }
@@ -62,7 +64,7 @@ function loadRegister() {
 
 var Reg = loadRegister();
 var sum = Reg.summarize_({ '01': '1/2P', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
-check('half-day-leave-math', sum.leave_days === 1.5 && sum.present === 0.5);
+check('half-day-leave-math', sum.leave_days === 1 && sum.present === 0.5 && sum.half_day_lop === 0.5);
 var sumAbsent = Reg.summarize_({ '01': 'A', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
 check('lop-absent-does-not-eat-leave-pool', sumAbsent.code_counts.A === 1 && sumAbsent.leave_balance === 1);
 var derivedAbsent = Reg.derivePayrollDays_(sumAbsent);

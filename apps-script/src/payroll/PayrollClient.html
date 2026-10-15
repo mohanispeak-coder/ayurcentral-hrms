@@ -1323,7 +1323,7 @@
       var valid = preview.valid || [];
       if (!valid.length) return '';
       var dim = daysInMonthForPreview_(preview);
-      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
       var head = '<tr><th>ID</th><th>Name</th><th class="num">Grant</th><th class="num">Used</th><th class="num">Avail</th>';
       for (var d = 1; d <= dim; d++) {
         var key = (d < 10 ? '0' : '') + d;
@@ -1343,7 +1343,8 @@
           line += '<td>' + escapeHtml(reg[k] || '') + '</td>';
         }
         codes.forEach(function (c) {
-          line += '<td class="num">' + escapeHtml(cc[c] != null ? cc[c] : 0) + '</td>';
+          var val = c === 'P' && row.days_present != null ? row.days_present : (cc[c] != null ? cc[c] : 0);
+          line += '<td class="num">' + escapeHtml(val) + '</td>';
         });
         line += '<td class="num">' + escapeHtml(row.days_total != null ? row.days_total : '') + '</td></tr>';
         return line;

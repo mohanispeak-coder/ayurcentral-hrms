@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '6';
+  var TEMPLATE_VERSION_ = '7';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -219,11 +219,11 @@ var AttendanceBulkService = (function () {
         ['Rows 1–2 on the Attendance sheet are headers only. Employee data starts on row 3.'],
         ['Eligible ACTIVE employees for this payroll month are listed (roster is built live from HRMS each download).'],
         ['Vertical: ' + verticalCode + ' (employees filtered to this vertical).'],
-        ['Fill one code per day: P, W/H (Work from Home; or WH), A, L, WO, ML (Maternity Leave; legacy S = ML), H, 1/2P (half day present; or 1/2 P, HP).'],
+        ['Fill one code per day: P, W/H, A, L, WO, ML (legacy S = ML), H. Half-day present: enter 1/2P (or 1/2 P, HP) on that day — counts as 0.5 in the P column.'],
         ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
         ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
         ['Leave Balance = leave_pool minus L, ML, and ½P (paid leave usage). Code A (LOP) does not reduce this balance.'],
-        ['Summary columns (P, W/H, A, L, WO, ML, H, 1/2P, Leave Balance, DAYS) calculate in Excel.'],
+        ['Summary columns (P includes half-days, W/H, A, L, WO, ML, H, Leave Balance, DAYS) calculate in Excel.'],
         ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']
       ];
