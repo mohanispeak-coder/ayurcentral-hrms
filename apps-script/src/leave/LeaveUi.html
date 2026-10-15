@@ -104,9 +104,32 @@
     });
   }
 
+  var LEAVE_BAL_SESSION_KEY_ = 'hrms_leave_balances_dir_v1';
+  var LEAVE_BAL_SESSION_TTL_MS_ = 120000;
+
+  function readLeaveBalSessionCache_(key) {
+    try {
+      var raw = sessionStorage.getItem(LEAVE_BAL_SESSION_KEY_);
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      if (!o || o.key !== key || !o.data) return null;
+      if (Date.now() - (o.at || 0) > LEAVE_BAL_SESSION_TTL_MS_) return null;
+      return o.data;
+    } catch (ignore) {
+      return null;
+    }
+  }
+
+  function writeLeaveBalSessionCache_(key, data) {
+    try {
+      sessionStorage.setItem(LEAVE_BAL_SESSION_KEY_, JSON.stringify({ key: key, at: Date.now(), data: data }));
+    } catch (ignore) {}
+  }
+
   if (window.HrmsApp && window.HrmsApp.registerModuleDataCacheClear) {
     window.HrmsApp.registerModuleDataCacheClear(function () {
       leaveViewCache = {};
+      try { sessionStorage.removeItem(LEAVE_BAL_SESSION_KEY_); } catch (ignore) {}
     });
   }
 
@@ -922,26 +945,50 @@
     }
 
     function load(forceNetwork) {
+      var cacheKey = leaveBalCacheKey_(state);
       var fb = document.getElementById('leave-bal-feedback');
-      if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loading…', 'info');
-      c.callServer('apiGetLeaveBalancesDirectory', {
+      var refreshBtn = document.getElementById('leave-bal-refresh');
+      var stale = !forceNetwork ? readLeaveBalSessionCache_(cacheKey) : null;
+      if (stale) {
+        fillFilters_(stale);
+        paintTable(stale);
+        if (fb && helpers.setActionFeedback) {
+          helpers.setActionFeedback(fb, 'Showing cached list — refreshing…', 'info');
+        }
+      } else if (fb && helpers.setActionFeedback) {
+        helpers.setActionFeedback(fb, 'Loading…', 'info');
+      }
+      var rpcOpts = refreshBtn ? { button: refreshBtn, loadingText: 'Refreshing…' } : null;
+      var rpcArgs = ['apiGetLeaveBalancesDirectory', {
         q: state.q,
         department: state.department,
         vertical_name: state.vertical,
         status: 'ACTIVE',
         page: state.page,
         pageSize: state.pageSize
-      }).then(function (data) {
+      }];
+      if (rpcOpts) rpcArgs.push(rpcOpts);
+      c.callServer.apply(null, rpcArgs).then(function (data) {
         if (!onRoute('leave-balances')) return;
-        leaveViewCache['leave-balances'] = { key: leaveBalCacheKey_(state), data: data };
+        leaveViewCache['leave-balances'] = { key: cacheKey, data: data };
+        writeLeaveBalSessionCache_(cacheKey, data);
         markLeaveView_('leave-balances');
+        if (window.HrmsApp && window.HrmsApp.markModuleViewLoaded) {
+          window.HrmsApp.markModuleViewLoaded('leave-balances');
+        }
         fillFilters_(data);
         paintTable(data);
-        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, 'Loaded ' + (data.total || 0) + ' employee(s).', 'success');
+        if (fb && helpers.setActionFeedback) {
+          helpers.setActionFeedback(fb, 'Loaded ' + (data.total || 0) + ' employee(s).', 'success');
+        }
       }).catch(function (err) {
         failLeaveRefresh_();
-        if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, err.message || 'Failed to load', 'error');
-        else helpers.showToast(err.message || 'Failed to load', 'error');
+        if (!stale) {
+          if (fb && helpers.setActionFeedback) helpers.setActionFeedback(fb, err.message || 'Failed to load', 'error');
+          else helpers.showToast(err.message || 'Failed to load', 'error');
+        } else if (fb && helpers.setActionFeedback) {
+          helpers.setActionFeedback(fb, (err.message || 'Refresh failed') + ' — showing cached data.', 'error');
+        }
       });
     }
 

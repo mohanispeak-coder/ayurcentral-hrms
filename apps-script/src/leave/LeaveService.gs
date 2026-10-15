@@ -177,37 +177,64 @@ var LeaveService = (function () {
 
   /** One sheet read: normalized employee_id → leave-year used/pending totals. */
   function summarizeLeaveYearRequestTotalsMap_(leaveYear) {
+    return summarizeDirectoryLeaveRequestMaps_(leaveYear, 0, 0).reqTotalsByEmployee;
+  }
+
+  /**
+   * Single LeaveRequests scan for leave balances directory (year totals + calendar-month approved days).
+   * @param {string} leaveYear
+   * @param {number} periodYear 0 to skip month map
+   * @param {number} periodMonth 0 to skip month map
+   */
+  function summarizeDirectoryLeaveRequestMaps_(leaveYear, periodYear, periodMonth) {
     leaveYear = String(leaveYear || currentLeaveYear_());
     var startMonth = leaveYearStartMonth_();
     var defaultTypeId = defaultLeaveTypeIdForRequest_();
-    var map = {};
+    var reqTotals = {};
+    var approvedBy = {};
+    periodYear = Number(periodYear);
+    periodMonth = Number(periodMonth);
+    var includeMonth = periodYear && periodMonth >= 1 && periodMonth <= 12;
+    var method = includeMonth ? countMethod_() : null;
     DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS).forEach(function (r) {
-      if (!requestInLeaveYear_(r, leaveYear, startMonth)) return;
       var eid = LeaveEngine.normalizeEmployeeId(r.employee_id);
       if (!eid) return;
-      var bucket = map[eid];
-      if (!bucket) {
-        bucket = {
-          leave_year: leaveYear,
-          usedByType: {},
-          pendingByType: {},
-          usedTotal: 0,
-          pendingTotal: 0
-        };
-        map[eid] = bucket;
+      if (requestInLeaveYear_(r, leaveYear, startMonth)) {
+        var bucket = reqTotals[eid];
+        if (!bucket) {
+          bucket = {
+            leave_year: leaveYear,
+            usedByType: {},
+            pendingByType: {},
+            usedTotal: 0,
+            pendingTotal: 0
+          };
+          reqTotals[eid] = bucket;
+        }
+        var days = LeaveEngine.toNumber(r.total_days);
+        var tid = String(r.leave_type_id || '').trim() || defaultTypeId || '_UNKNOWN';
+        var st = String(r.status || '').trim().toUpperCase();
+        if (st === HRMS.LEAVE_STATUS.APPROVED) {
+          bucket.usedTotal += days;
+          bucket.usedByType[tid] = (bucket.usedByType[tid] || 0) + days;
+        } else if (LeaveEngine.isPendingApprovalStatus(r.status) || st === HRMS.LEAVE_STATUS.SUBMITTED) {
+          bucket.pendingTotal += days;
+          bucket.pendingByType[tid] = (bucket.pendingByType[tid] || 0) + days;
+        }
       }
-      var days = LeaveEngine.toNumber(r.total_days);
-      var tid = String(r.leave_type_id || '').trim() || defaultTypeId || '_UNKNOWN';
-      var st = String(r.status || '').trim().toUpperCase();
-      if (st === HRMS.LEAVE_STATUS.APPROVED) {
-        bucket.usedTotal += days;
-        bucket.usedByType[tid] = (bucket.usedByType[tid] || 0) + days;
-      } else if (LeaveEngine.isPendingApprovalStatus(r.status) || st === HRMS.LEAVE_STATUS.SUBMITTED) {
-        bucket.pendingTotal += days;
-        bucket.pendingByType[tid] = (bucket.pendingByType[tid] || 0) + days;
+      if (includeMonth) {
+        var monthDays = approvedDaysForRequestInMonth_(r, periodYear, periodMonth, method);
+        if (monthDays) {
+          approvedBy[eid] = (approvedBy[eid] || 0) + monthDays;
+        }
       }
     });
-    return map;
+    if (includeMonth) {
+      Object.keys(approvedBy).forEach(function (k) {
+        approvedBy[k] = Math.round(approvedBy[k] * 100) / 100;
+      });
+    }
+    return { reqTotalsByEmployee: reqTotals, approvedByEmployee: approvedBy };
   }
 
   function mergeRequestTotalsIntoBalanceView_(view, reqTotals, leaveTypeId) {
@@ -2066,6 +2093,7 @@ var LeaveService = (function () {
     currentLeaveYear: currentLeaveYear_,
     summarizeLeaveYearFromRequests: summarizeLeaveYearFromRequests_,
     summarizeLeaveYearRequestTotalsMap: summarizeLeaveYearRequestTotalsMap_,
+    summarizeDirectoryLeaveRequestMaps: summarizeDirectoryLeaveRequestMaps_,
     buildLeaveBalanceIndex: loadBalanceIndex_,
     applyRequestTotalsToYearBalances: applyRequestTotalsToYearBalances_,
     approvedLeaveDaysInCalendarMonth: approvedLeaveDaysInCalendarMonth_,

@@ -20,6 +20,7 @@ var leaveSvc = fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf
 var api = fs.readFileSync(path.join(root, 'employee', 'ApiEmployee.gs'), 'utf8');
 var perm = fs.readFileSync(path.join(root, 'foundation', 'PermissionService.gs'), 'utf8');
 var leaveUi = fs.readFileSync(path.join(root, 'leave', 'LeaveUi.html'), 'utf8');
+var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
 var scripts = fs.readFileSync(path.join(root, 'ui', 'Scripts.html'), 'utf8');
 
 check('list-leave-balances-service', /listLeaveBalancesDirectory/.test(emp));
@@ -51,12 +52,18 @@ check('index-includes-leave-view-shared', /LeaveViewShared/.test(fs.readFileSync
 check('month-used-includes-approved', /approvedLeaveDaysInCalendarMonth_/.test(leaveSvc) &&
   /approvedLeaveDaysMapForCalendarMonth_/.test(leaveSvc) &&
   /monthLeaveUsedDays_/.test(fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8')));
-check('calendar-month-timezone', /getCurrentCalendarMonth_/.test(leaveSvc) &&
-  /approvedLeaveDaysMapForCalendarMonth/.test(emp));
+check('calendar-month-timezone', /getCurrentCalendarMonth/.test(leaveSvc) &&
+  /summarizeDirectoryLeaveRequestMaps/.test(emp));
 check('leave-balances-batch-context', /leave_summary_context/.test(emp) &&
-  /summarizeLeaveYearRequestTotalsMap/.test(leaveSvc) && /buildLeaveBalanceIndex/.test(leaveSvc));
+  /summarizeDirectoryLeaveRequestMaps/.test(leaveSvc) && /buildLeaveBalanceIndex/.test(leaveSvc));
+check('leave-balances-page-scoped-month-batch', /pageEmployeeIds/.test(emp) &&
+  /buildMonthDirectoryBatchContext_\([\s\S]*pageEmployeeIds/.test(emp));
+check('leave-requests-single-scan', /summarizeDirectoryLeaveRequestMaps_/.test(leaveSvc) &&
+  /approvedByEmployee/.test(leaveSvc));
+check('month-batch-only-employee-ids', /onlyEmployeeIds/.test(monthly) && /onlySet/.test(monthly));
 check('leave-balances-ui-cache', /leave-balances/.test(leaveUi) && /leaveBalCacheKey_/.test(leaveUi));
-var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
+check('leave-balances-session-cache', /readLeaveBalSessionCache_/.test(leaveUi) && /writeLeaveBalSessionCache_/.test(leaveUi));
+check('leave-balances-mark-loaded', /markModuleViewLoaded\('leave-balances'\)/.test(leaveUi));
 check('leave-balances-month-batch', /buildMonthDirectoryBatchContext_/.test(monthly) &&
   /monthBatch/.test(emp));
 check('no-all-years-fallback', !/if \(!general\.length\) general = balances/.test(emp));

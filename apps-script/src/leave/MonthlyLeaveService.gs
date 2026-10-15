@@ -308,12 +308,30 @@ var MonthlyLeaveService = (function () {
   /**
    * One pass per directory page load: ledger, adjustments, attendance counts for a calendar month.
    */
-  function buildMonthDirectoryBatchContext_(year, month) {
+  function employeeNormSet_(ids) {
+    if (!ids || !ids.length) return null;
+    var set = {};
+    ids.forEach(function (id) {
+      var norm = typeof LeaveEngine !== 'undefined'
+        ? LeaveEngine.normalizeEmployeeId(id)
+        : trim_(id).toUpperCase();
+      if (norm) set[norm] = true;
+    });
+    return set;
+  }
+
+  /**
+   * @param {number} year
+   * @param {number} month
+   * @param {Array.<string>=} onlyEmployeeIds When set, attendance register scan is limited to these employees (directory page).
+   */
+  function buildMonthDirectoryBatchContext_(year, month, onlyEmployeeIds) {
     year = Number(year);
     month = Number(month);
     var ledgerByEmp = {};
     var adjByEmp = {};
     var countsByEmp = {};
+    var onlySet = employeeNormSet_(onlyEmployeeIds);
     if (!year || month < 1 || month > 12) {
       return { ledgerByEmp: ledgerByEmp, adjByEmp: adjByEmp, countsByEmp: countsByEmp, year: year, month: month };
     }
@@ -345,6 +363,7 @@ var MonthlyLeaveService = (function () {
         var norm = typeof LeaveEngine !== 'undefined'
           ? LeaveEngine.normalizeEmployeeId(inp.employee_id)
           : trim_(inp.employee_id).toUpperCase();
+        if (onlySet && !onlySet[norm]) return;
         if (!norm || countsByEmp[norm] || !inp.daily_attendance_json) return;
         var reg = AttendanceRegisterService.parseRegister_(inp.daily_attendance_json);
         var counts = { P: 0, 'W/H': 0, A: 0, L: 0, WO: 0, ML: 0, H: 0, '1/2P': 0 };

@@ -335,8 +335,7 @@ var EmployeeService = (function () {
     return out;
   }
 
-  function listDirectory(session, query) {
-    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DIRECTORY);
+  function filterDirectoryEmployees_(session, query) {
     query = query || {};
     if (session.role === HRMS.ROLES.EMPLOYEE) {
       throw authorizationError_('Employees cannot open the company directory.');
@@ -370,7 +369,21 @@ var EmployeeService = (function () {
     filtered.sort(function (a, b) {
       return String(a.employee_id).localeCompare(String(b.employee_id));
     });
-    var nameMap = managerNameMap_(org);
+    return {
+      org: org,
+      all: all,
+      filtered: filtered,
+      nameMap: managerNameMap_(org)
+    };
+  }
+
+  function listDirectory(session, query, directoryPrep) {
+    PermissionService.require(HRMS.ACTIONS.EMPLOYEE_DIRECTORY);
+    query = query || {};
+    var prep = directoryPrep || filterDirectoryEmployees_(session, query);
+    var filtered = prep.filtered;
+    var all = prep.all;
+    var nameMap = prep.nameMap;
     var pageSize = Number(query.pageSize) || 25;
     if (pageSize < 1) pageSize = 25;
     var page = Number(query.page) || 1;
@@ -568,11 +581,19 @@ var EmployeeService = (function () {
     if (typeof LeaveService !== 'undefined' && LeaveService.currentLeaveYear) {
       try { leaveYear = String(LeaveService.currentLeaveYear()); } catch (ignoreLy) {}
     }
+    var prep = filterDirectoryEmployees_(session, query);
+    var pageSize = Number(query.pageSize) || 25;
+    if (pageSize < 1) pageSize = 25;
+    var page = Number(query.page) || 1;
+    if (page < 1) page = 1;
+    var start = (page - 1) * pageSize;
+    var pageEmployeeIds = prep.filtered.slice(start, start + pageSize).map(function (e) {
+      return e.employee_id;
+    });
     if (typeof LeaveService !== 'undefined' &&
         LeaveService.buildLeaveBalanceIndex &&
-        LeaveService.summarizeLeaveYearRequestTotalsMap &&
-        LeaveService.getCurrentCalendarMonth &&
-        LeaveService.approvedLeaveDaysMapForCalendarMonth) {
+        LeaveService.summarizeDirectoryLeaveRequestMaps &&
+        LeaveService.getCurrentCalendarMonth) {
       try {
         var balanceIndex = LeaveService.buildLeaveBalanceIndex();
         var balanceRowsByEmployee = {};
@@ -584,19 +605,22 @@ var EmployeeService = (function () {
           balanceRowsByEmployee[eid].push(balanceIndex[key]);
         });
         var calMonth = LeaveService.getCurrentCalendarMonth();
+        var reqMaps = LeaveService.summarizeDirectoryLeaveRequestMaps(
+          leaveYear, calMonth.year, calMonth.month);
         var monthBatch = null;
         if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.buildMonthDirectoryBatchContext_) {
-          monthBatch = MonthlyLeaveService.buildMonthDirectoryBatchContext_(calMonth.year, calMonth.month);
+          monthBatch = MonthlyLeaveService.buildMonthDirectoryBatchContext_(
+            calMonth.year, calMonth.month, pageEmployeeIds);
         }
         query.leave_summary_context = {
           balanceRowsByEmployee: balanceRowsByEmployee,
-          reqTotalsByEmployee: LeaveService.summarizeLeaveYearRequestTotalsMap(leaveYear),
-          approvedByEmployee: LeaveService.approvedLeaveDaysMapForCalendarMonth(calMonth.year, calMonth.month),
+          reqTotalsByEmployee: reqMaps.reqTotalsByEmployee,
+          approvedByEmployee: reqMaps.approvedByEmployee,
           monthBatch: monthBatch
         };
       } catch (ignoreCtx) {}
     }
-    var result = listDirectory(session, query);
+    var result = listDirectory(session, query, prep);
     result.leave_year = leaveYear;
     result.scope = session.role === HRMS.ROLES.MANAGER ? 'TEAM' : 'COMPANY';
     return result;
