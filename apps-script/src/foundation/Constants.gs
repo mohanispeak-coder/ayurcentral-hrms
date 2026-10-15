@@ -221,12 +221,11 @@ HRMS.STRUCTURE_SECTION = {
   MANUAL_DEDUCTION: 'MANUAL_DEDUCTION'
 };
 
-/** Fixed four-phase payroll execution order for type templates. */
+/** Payroll execution order for type templates (manual deductions come from attendance register). */
 HRMS.SALARY_EXECUTION_SECTIONS = [
   HRMS.STRUCTURE_SECTION.RATE_OF_PAY,
   HRMS.STRUCTURE_SECTION.EARNED_PAY,
-  HRMS.STRUCTURE_SECTION.DEDUCTION,
-  HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION
+  HRMS.STRUCTURE_SECTION.DEDUCTION
 ];
 
 /** Payroll-time formula references (not component codes). */
@@ -312,7 +311,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.15.7';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.15.8';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

@@ -214,7 +214,8 @@ check('client-binds-showtoast', /var showToast = App\.showToast/.test(clientHtml
 check('client-percent-base-ui', /sst-c-base/.test(clientHtml) && /Remainder of CTC/.test(clientHtml));
 check('client-structure-sections', /sst-rate-body/.test(clientHtml) && /sst-earned-body/.test(clientHtml) &&
   /sst-ded-body/.test(clientHtml) && /sst-manual-body/.test(clientHtml));
-check('client-four-section-labels', /2\. Earned pay/.test(clientHtml) && /4\. Manual deductions \(fixed amounts\)/.test(clientHtml));
+check('client-three-section-labels', /2\. Earned pay/.test(clientHtml) && /3\. Deduction formulas/.test(clientHtml) &&
+  /attendance register/.test(clientHtml) && !/4\. Manual deductions/.test(clientHtml));
 check('client-manual-amount-inputs', /sst-c-manual-amt/.test(clientHtml));
 check('client-payroll-rules', /execution_sections/.test(clientHtml) && /payroll_rules_json/.test(clientHtml));
 check('client-manual-structure-id', /sst-structure-id/.test(clientHtml));

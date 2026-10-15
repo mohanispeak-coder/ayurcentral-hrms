@@ -49,7 +49,9 @@ check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
   /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
 check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '10'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '11'/.test(bulkSrc));
+check('attendance-payroll-extra-columns', /TDS, Advance, LCD, LWF/.test(bulkSrc) &&
+  /AttendancePayrollExtras/.test(regSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));

@@ -328,6 +328,15 @@ var SalaryStatementService = (function () {
     if (earnedBuckets.ded['TDS'] == null && tds > 0) {
       earnedBuckets.ded['TDS'] = tds;
     }
+    if (inputsEarned.deduction_advance > 0 && earnedBuckets.ded['ADVANCE'] == null) {
+      earnedBuckets.ded['ADVANCE'] = round2_(inputsEarned.deduction_advance);
+    }
+    if (inputsEarned.deduction_lcd > 0 && earnedBuckets.ded['LCD'] == null) {
+      earnedBuckets.ded['LCD'] = round2_(inputsEarned.deduction_lcd);
+    }
+    if (inputsEarned.deduction_lwf > 0 && earnedBuckets.ded['LWF'] == null) {
+      earnedBuckets.ded['LWF'] = round2_(inputsEarned.deduction_lwf);
+    }
     if (inputsEarned.other_deductions > 0 && earnedBuckets.ded['ADVANCE'] == null) {
       earnedBuckets.ded['ADVANCE'] = round2_(inputsEarned.other_deductions);
     }

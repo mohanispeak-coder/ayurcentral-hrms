@@ -506,7 +506,8 @@
         '<div class="form-group"><label class="form-label">Status</label>' +
           '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
       '</div>' +
-      '<p class="hint">Payroll runs in order: <strong>1 Rate</strong> \u2192 <strong>2 Earned</strong> \u2192 <strong>3 Deduction formulas</strong> \u2192 <strong>4 Manual</strong>. ' +
+      '<p class="hint">Payroll runs in order: <strong>1 Rate</strong> \u2192 <strong>2 Earned</strong> \u2192 <strong>3 Deduction formulas</strong>. ' +
+        'TDS, Advance, LCD, LWF, and Arrears are entered on the <strong>attendance register</strong>, not here. ' +
         '<span class="mono">Editor ' + esc_(SST_UI_BUILD_) + '</span></p>' +
       '<div class="sst-section">' +
         '<h3>1. Rate of pay (monthly)</h3>' +
@@ -537,14 +538,6 @@
         '<tbody id="sst-ded-body">' + parts.ded.map(function (c, i) { return dedRowHtml_(c, i, parts.rate); }).join('') + '</tbody></table>' +
         '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-ded">+ Add custom formula</button>' +
       '</div>' +
-      '<div class="sst-section">' +
-        '<h3>4. Manual deductions (fixed amounts)</h3>' +
-        '<div class="sst-callout"><strong>Enter the monthly fixed \u20b9 amount for each line.</strong> Payroll uses these on calculate. ' +
-        'You can still override <strong>TDS</strong> per employee on the payroll run; <strong>Advance</strong> can use payroll <em>other deductions</em> when the amount here is 0.</div>' +
-        '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Amount</th><th></th></tr></thead>' +
-        '<tbody id="sst-manual-body">' + parts.manual.map(function (c) { return manualRowHtml_(c); }).join('') + '</tbody></table>' +
-        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-manual">+ Add manual line</button>' +
-      '</div>' +
       '<div class="form-actions" style="margin-top:16px;">' +
         '<button type="button" class="btn btn-primary" id="sst-save">Save structure</button> ' +
         '<button type="button" class="btn btn-secondary" id="sst-cancel">Cancel</button>' +
@@ -553,7 +546,6 @@
     document.getElementById('sst-add-rate').addEventListener('click', function () { addRow_(SECTION_RATE_); });
     document.getElementById('sst-add-earned').addEventListener('click', function () { addRow_(SECTION_EARNED_); });
     document.getElementById('sst-add-ded').addEventListener('click', function () { addRow_(SECTION_DED_); });
-    document.getElementById('sst-add-manual').addEventListener('click', function () { addRow_(SECTION_MANUAL_); });
     document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
     document.querySelectorAll('.sst-ded-preset').forEach(function (btn) {
       btn.addEventListener('click', function () { addDedPreset_(btn.getAttribute('data-preset')); });
@@ -820,7 +812,6 @@
     document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_RATE_); });
     document.querySelectorAll('#sst-earned-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_EARNED_); });
     document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_DED_); });
-    document.querySelectorAll('#sst-manual-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_MANUAL_); });
     return out;
   }
 
@@ -837,8 +828,7 @@
       vertical_name: document.getElementById('sst-vertical').value,
       status: document.getElementById('sst-active').checked ? 'ACTIVE' : 'INACTIVE',
       payroll_rules_json: JSON.stringify({
-        execution_sections: [SECTION_RATE_, SECTION_EARNED_, SECTION_DED_, SECTION_MANUAL_],
-        arrears_add_codes: ['ARREARS']
+        execution_sections: [SECTION_RATE_, SECTION_EARNED_, SECTION_DED_]
       }),
       components: collectComponents_()
     };

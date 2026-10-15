@@ -264,7 +264,21 @@ var AttendanceRegisterService = (function () {
       row1.push('');
       row2.push(h);
     });
-    return { row1: row1, row2: row2, daysInMonth: dim, dayStartCol: TEMPLATE_POOL_COL_ + 1, poolCol: TEMPLATE_POOL_COL_ };
+    var extraHeaders = (typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.templateHeaders)
+      ? AttendancePayrollExtras.templateHeaders() : [];
+    extraHeaders.forEach(function (h) {
+      row1.push('Payroll');
+      row2.push(h);
+    });
+    return {
+      row1: row1,
+      row2: row2,
+      daysInMonth: dim,
+      dayStartCol: TEMPLATE_POOL_COL_ + 1,
+      poolCol: TEMPLATE_POOL_COL_,
+      payrollExtraHeaders: extraHeaders,
+      payrollExtraStartCol: row2.length - extraHeaders.length + 1
+    };
   }
 
   function monthlyPoolForTemplateRow_(emp, year, month) {
@@ -374,11 +388,20 @@ var AttendanceRegisterService = (function () {
         }
       }
     });
+    var payrollExtras = null;
+    if (typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.parseFromSheetRow) {
+      try {
+        payrollExtras = AttendancePayrollExtras.parseFromSheetRow(line, headers);
+      } catch (parseErr) {
+        payrollExtras = { _error: parseErr.message || String(parseErr) };
+      }
+    }
     return {
       employee_id: empId,
       display_name: displayName,
       vertical_name: vertical,
-      register: reg
+      register: reg,
+      payroll_extras: payrollExtras
     };
   }
 
@@ -486,23 +509,31 @@ var AttendanceRegisterService = (function () {
         register_complete: inp ? isRegisterComplete_(reg, year, month) : false,
         register: reg,
         code_counts: sum.code_counts,
-        summary: sum
+        summary: sum,
+        payroll_extras: inp && typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.readFromInput
+          ? AttendancePayrollExtras.readFromInput(inp) : null
       };
     });
   }
 
-  function saveRegisterForInput_(inp, reg, year, month, verticalCode) {
+  function saveRegisterForInput_(inp, reg, year, month, verticalCode, payrollExtras) {
     var emp = inp && inp.employee_id
       ? DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: inp.employee_id })
       : null;
     var summary = summarize_(reg, year, month, verticalCode, emp);
     var derived = derivePayrollDays_(summary);
-    return {
+    var updates = {
       daily_attendance_json: stringifyRegister_(reg),
       working_days: derived.working_days,
       paid_days: derived.paid_days,
       lop_days: derived.lop_days
     };
+    if (payrollExtras && typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.normalizeInputUpdates) {
+      if (payrollExtras._error) throw validationError_(payrollExtras._error);
+      var extraFields = AttendancePayrollExtras.normalizeInputUpdates(payrollExtras);
+      Object.keys(extraFields).forEach(function (k) { updates[k] = extraFields[k]; });
+    }
+    return updates;
   }
 
   /** Recompute working / paid / LOP from daily_attendance_json (includes ½P in paid_days). */

@@ -1,6 +1,7 @@
 /**
- * Payroll calculate using salary structure four execution sections:
- * 1 RATE_OF_PAY → 2 EARNED_PAY → 3 DEDUCTION (formulas) → 4 MANUAL_DEDUCTION.
+ * Payroll calculate using salary structure sections:
+ * 1 RATE_OF_PAY → 2 EARNED_PAY → 3 DEDUCTION (formulas).
+ * Manual deductions and arrears come from attendance register (PayrollInputs).
  */
 var SalaryPayrollFormulaService = (function () {
   function trim_(v) {
@@ -72,32 +73,6 @@ var SalaryPayrollFormulaService = (function () {
     }
     if (ctx.rateByCode[ref] != null) return ctx.rateByCode[ref];
     if (ctx.earnedByCode[ref] != null) return ctx.earnedByCode[ref];
-    return 0;
-  }
-
-  function manualAmount_(code, inputs) {
-    code = trim_(code).toUpperCase();
-    inputs = inputs || {};
-    if (code === 'TDS') return num_(inputs.tds_amount);
-    if (code === 'ADVANCE' || code === 'LCD' || code === 'LWF' || code === 'LWE') {
-      return num_(inputs.other_deductions);
-    }
-    return 0;
-  }
-
-  /** Section 4: structure fixed amount; payroll inputs override TDS / legacy Advance bucket when set. */
-  function resolveManualDeductionAmount_(raw, inputs) {
-    raw = raw || {};
-    inputs = inputs || {};
-    var code = trim_(raw.component_code).toUpperCase();
-    var structureAmt = num_(raw.amount);
-    if (code === 'TDS') {
-      var tdsPay = num_(inputs.tds_amount);
-      if (tdsPay > 0) return tdsPay;
-      return structureAmt;
-    }
-    if (structureAmt > 0) return structureAmt;
-    if (code === 'ADVANCE') return num_(inputs.other_deductions);
     return 0;
   }
 
@@ -299,25 +274,11 @@ var SalaryPayrollFormulaService = (function () {
     return { lines: lines, total: total, employer: employer };
   }
 
-  /** Section 4 — fixed amounts on structure; optional payroll override for TDS / Advance. */
-  function executeManualDeductions_(manualRows, inputs) {
-    var lines = [];
-    var total = 0;
-    (manualRows || []).forEach(function (raw) {
-      var amt = resolveManualDeductionAmount_(raw, inputs);
-      lines.push({
-        component_code: raw.component_code,
-        component_name: raw.component_name,
-        component_kind: raw.component_kind,
-        structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION,
-        phase: 'DEDUCTION',
-        contractual: amt,
-        amount: amt,
-        calc_method: HRMS.CALC_METHOD.MANUAL
-      });
-      total = PayrollEngine.round2(total + amt);
-    });
-    return { lines: lines, total: total };
+  function executeAttendanceDeductions_(inputs) {
+    if (typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.buildManualDeductionLines) {
+      return AttendancePayrollExtras.buildManualDeductionLines(inputs);
+    }
+    return { lines: [], total: 0 };
   }
 
   function calculateEmployee_(args) {
@@ -369,19 +330,11 @@ var SalaryPayrollFormulaService = (function () {
     }
     var formulaDed = executeDeductionFormulas_(dedRows, ctx);
 
-    var manualRows = templateBySection_(templateComponents, HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION);
-    if (!manualRows.length) {
-      manualRows = (templateComponents || []).filter(function (raw) {
-        return section_(raw) === HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION ||
-          method_(raw) === HRMS.CALC_METHOD.MANUAL;
-      });
-    }
-    var manualDed = executeManualDeductions_(manualRows, inputs);
+    var manualDed = executeAttendanceDeductions_(inputs);
 
-    var arrears = 0;
-    (rules.arrears_add_codes || []).forEach(function (code) {
-      arrears = PayrollEngine.round2(arrears + manualAmount_(code, inputs));
-    });
+    var arrears = (typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.arrearsFromInput)
+      ? AttendancePayrollExtras.arrearsFromInput(inputs)
+      : 0;
 
     var bonus = PayrollEngine.round2(num_(inputs.bonus));
     var incentive = PayrollEngine.round2(num_(inputs.incentive));
@@ -400,7 +353,7 @@ var SalaryPayrollFormulaService = (function () {
     var breakdown = {
       meta: {
         employee_id: employee.employee_id || '',
-        formula_engine: 'template_v2_four_sections',
+        formula_engine: 'template_v2_attendance_extras',
         execution_sections: rules.execution_sections
       },
       factor: factorInfo.factor,
@@ -464,6 +417,6 @@ var SalaryPayrollFormulaService = (function () {
     executeRateOfPay: executeRateOfPay_,
     executeEarnedPay: executeEarnedPay_,
     executeDeductionFormulas: executeDeductionFormulas_,
-    executeManualDeductions: executeManualDeductions_
+    executeAttendanceDeductions: executeAttendanceDeductions_
   };
 })();

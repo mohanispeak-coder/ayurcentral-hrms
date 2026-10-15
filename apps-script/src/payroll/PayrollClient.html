@@ -1309,7 +1309,7 @@
           '<span class="hint">Bulk-apply suggested LOP from approved leave, then save before calculating.</span></div>';
       }
       return '<div class="card" id="payroll-data-card"><h2>Attendance manual entry</h2>' +
-        '<p class="page-lede">Enter working days, paid days, and LOP in the table below. Save before opening Payroll to calculate.</p>' +
+        '<p class="page-lede">Enter working days, paid days, and LOP in the table below. TDS, Advance, LCD, LWF, and Arrears are captured on the attendance register (upload or Attendance step). Save before calculating.</p>' +
         bulkBar + tableHtml + '</div>';
     }
 
@@ -2559,13 +2559,11 @@
       if (Number(inputValue_(inp, 'bonus')) > 0) bits.push('bonus');
       if (Number(inputValue_(inp, 'incentive')) > 0) bits.push('incentive');
       if (Number(inputValue_(inp, 'other_earnings')) > 0) bits.push('other earn');
-      if (Number(inputValue_(inp, 'other_deductions')) > 0) bits.push('other ded');
-      if (Number(inputValue_(inp, 'tds_amount')) > 0) bits.push('TDS');
       return bits.length ? '<div class="hint">' + escapeHtml(bits.join(', ')) + '</div>' : '';
     }
 
     function extrasEditorNote_() {
-      return '<details style="margin-top:12px" id="pr-extras-details"><summary>Bonus, incentive, TDS &amp; other amounts</summary>' +
+      return '<details style="margin-top:12px" id="pr-extras-details"><summary>Bonus, incentive &amp; other earnings</summary>' +
         '<p class="hint">These amounts are not prorated. They are included the next time you calculate. Edits on hidden pages are kept until you save or calculate.</p>' +
         '<div id="pr-extras-mount"></div></details>';
     }
@@ -2607,7 +2605,7 @@
         return;
       }
       var html = '<div class="table-wrap" style="margin-top:8px"><table class="data-table"><thead><tr>' +
-        '<th>Employee</th><th>Bonus</th><th>Incentive</th><th>Other earn</th><th>Other ded</th><th>TDS</th></tr></thead><tbody>';
+        '<th>Employee</th><th>Bonus</th><th>Incentive</th><th>Other earn</th></tr></thead><tbody>';
       rows.forEach(function (row) {
         var inp = row.input;
         var emp = row.employee;
@@ -2619,8 +2617,7 @@
         }
         html += '<tr><td>' + escapeHtml(emp.display_name) + '</td>' +
           cell('bonus') + cell('incentive') +
-          cell('other_earnings') + cell('other_deductions') +
-          cell('tds_amount') + '</tr>';
+          cell('other_earnings') + '</tr>';
       });
       html += '</tbody></table></div>';
       mount.innerHTML = html;
@@ -2802,7 +2799,7 @@
     function collectInputs_(page) {
       rememberInputs_(page);
       var rows = (payrollState.detail && payrollState.detail.rows) || [];
-      var fields = ['working_days', 'paid_days', 'lop_days', 'bonus', 'incentive', 'other_earnings', 'other_deductions', 'tds_amount'];
+      var fields = ['working_days', 'paid_days', 'lop_days', 'bonus', 'incentive', 'other_earnings'];
       return rows.map(function (row) {
         var inp = row.input || {};
         var out = { payroll_input_id: inp.payroll_input_id };

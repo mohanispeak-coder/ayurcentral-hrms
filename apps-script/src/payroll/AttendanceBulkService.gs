@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '10';
+  var TEMPLATE_VERSION_ = '11';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -224,6 +224,7 @@ var AttendanceBulkService = (function () {
         ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
         ['Leave Balance = leave_pool minus L, ML, and ½P (paid leave usage). Code A (LOP) does not reduce this balance.'],
         ['Summary columns (P includes half-days, W/H, A, L, WO, ML, H, Leave Balance, DAYS) calculate in Excel.'],
+        ['After DAYS: TDS, Advance, LCD, LWF (deductions) and Arrears (adds to net pay). Leave blank for 0.'],
         ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']
       ];
@@ -236,6 +237,12 @@ var AttendanceBulkService = (function () {
       sheet.setFrozenRows(2);
 
       if (employees.length) {
+        var inputByEmp = {};
+        DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: run.payroll_run_id })
+          .forEach(function (inp) {
+            var key = empKey_(inp.employee_id);
+            if (key) inputByEmp[key] = inp;
+          });
         var dataStartRow = 3;
         var data = employees.map(function (emp) {
           var row = [
@@ -269,6 +276,15 @@ var AttendanceBulkService = (function () {
         }
         if (formulaGrid.length) {
           sheet.getRange(dataStartRow, summaryStart, formulaGrid.length, summaryLen).setFormulas(formulaGrid);
+        }
+        var extraLen = (headers.payrollExtraHeaders || []).length;
+        if (extraLen && typeof AttendancePayrollExtras !== 'undefined') {
+          var extraStart = summaryStart + summaryLen;
+          var extraGrid = employees.map(function (emp) {
+            var inp = inputByEmp[empKey_(emp.employee_id)] || null;
+            return AttendancePayrollExtras.templateValuesFromInput_(inp);
+          });
+          sheet.getRange(dataStartRow, extraStart, extraGrid.length, extraLen).setValues(extraGrid);
         }
       }
 
@@ -321,6 +337,9 @@ var AttendanceBulkService = (function () {
         row.push(holidayDays[dayKey] || '');
       }
       AttendanceRegisterService.SUMMARY_HEADERS.forEach(function () { row.push(''); });
+      if (typeof AttendancePayrollExtras !== 'undefined') {
+        AttendancePayrollExtras.templateHeaders().forEach(function () { row.push(''); });
+      }
       lines.push(row.map(esc).join(','));
     });
     var name = 'HRMS_Attendance_Register_' + verticalCode + '_' + year + '_' +
@@ -465,6 +484,9 @@ var AttendanceBulkService = (function () {
       if (!Object.keys(reg).length) {
         rowErrors.push({ field: 'attendance', message: 'Enter at least one day code (P, W/H, A, L, WO, ML, H, 1/2P).' });
       }
+      if (parsedRow.payroll_extras && parsedRow.payroll_extras._error) {
+        rowErrors.push({ field: 'payroll_extras', message: parsedRow.payroll_extras._error });
+      }
 
       if (rowErrors.length) {
         errors.push({ rowNumber: item.rowNumber, employee_id: empId, messages: rowErrors });
@@ -476,6 +498,7 @@ var AttendanceBulkService = (function () {
           employee_id: empRecord.employee_id,
           payroll_input_id: inputMap[empId].payroll_input_id,
           register: reg,
+          payroll_extras: parsedRow.payroll_extras,
           preview: {
             employee_id: empRecord.employee_id,
             display_name: AttendanceRegisterService.employeeDisplayName_(empRecord),
@@ -493,7 +516,8 @@ var AttendanceBulkService = (function () {
             monthly_entitlement_pool: sum.monthly_entitlement_pool,
             days_total: sum.days_total,
             code_counts: sum.code_counts,
-            register: reg
+            register: reg,
+            payroll_extras: parsedRow.payroll_extras
           }
         });
       }
@@ -528,7 +552,7 @@ var AttendanceBulkService = (function () {
       if (!inp) throw validationError_('Invalid payroll input for ' + p.employee_id);
       var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: p.employee_id });
       var updates = AttendanceRegisterService.saveRegisterForInput_(
-        inp, p.register, year, month, emp ? emp.vertical_name : '');
+        inp, p.register, year, month, emp ? emp.vertical_name : '', p.payroll_extras);
       return { pk: p.payroll_input_id, updates: updates, employee_id: p.employee_id };
     });
     if (items.length) DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', items);
@@ -599,11 +623,17 @@ var AttendanceBulkService = (function () {
     if (!inp) {
       throw validationError_('Employee is not in this payroll month. Sync employees on the Payroll screen first.');
     }
-    var reg = AttendanceRegisterService.parseRegister_(register);
+    var regPayload = register;
+    var extras = null;
+    if (register && register.register && typeof register.register === 'object') {
+      regPayload = register.register;
+      extras = register.payroll_extras || register.extras || null;
+    }
+    var reg = AttendanceRegisterService.parseRegister_(regPayload);
     var emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: trim_(employeeId) });
     return withScriptLock_(function () {
       var updates = AttendanceRegisterService.saveRegisterForInput_(
-        inp, reg, run.period_year, run.period_month, emp ? emp.vertical_name : '');
+        inp, reg, run.period_year, run.period_month, emp ? emp.vertical_name : '', extras);
       DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', inp.payroll_input_id, updates);
       syncMonthlyLedgerForAttendance_(employeeId, run.period_year, run.period_month);
       return AttendanceRegisterService.listSummariesForRun_(runId).filter(function (r) {

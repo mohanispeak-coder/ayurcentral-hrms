@@ -112,39 +112,48 @@ var breakdown = JSON.parse(pay.component_breakdown || '{}');
 check('breakdown has four sections', breakdown.sections && breakdown.sections.rate_of_pay &&
   breakdown.sections.earned_pay && breakdown.sections.deduction_formulas && breakdown.sections.manual_deductions);
 
-var templateManual = JSON.parse(JSON.stringify(template));
-templateManual.push(
-  { structure_section: 'MANUAL_DEDUCTION', component_code: 'TDS', component_name: 'TDS',
-    component_kind: 'DEDUCTION', calc_method: 'MANUAL', amount: 1000, sort_order: 20 },
-  { structure_section: 'MANUAL_DEDUCTION', component_code: 'LCD', component_name: 'LCD',
-    component_kind: 'DEDUCTION', calc_method: 'MANUAL', amount: 200, sort_order: 21 }
-);
-var payManual = Engine.calculateEmployee({
-  structure: { salary_structure_id: 'SS-1', ctc_monthly: ctc },
-  components: Expand.expandTemplateComponents(templateManual, ctc),
-  templateComponents: templateManual,
-  inputs: { working_days: 30, paid_days: 30, tds_amount: 0, other_deductions: 0 },
-  settings: {},
-  employee: { employee_id: 'E1' }
-});
-var bdManual = JSON.parse(payManual.component_breakdown || '{}');
-var manualTotal = bdManual.sections && bdManual.sections.manual_deductions
-  ? bdManual.sections.manual_deductions.total : 0;
-check('manual structure amounts sum', manualTotal === 1200, 'manual total=' + manualTotal);
+var extrasSrc = fs.readFileSync(path.join(src, 'payroll', 'AttendancePayrollExtras.gs'), 'utf8');
+vm.runInContext(extrasSrc, context);
 
-var payTdsOverride = Engine.calculateEmployee({
+var payAttendanceDed = Engine.calculateEmployee({
   structure: { salary_structure_id: 'SS-1', ctc_monthly: ctc },
-  components: Expand.expandTemplateComponents(templateManual, ctc),
-  templateComponents: templateManual,
-  inputs: { working_days: 30, paid_days: 30, tds_amount: 1500, other_deductions: 0 },
+  components: Expand.expandTemplateComponents(template, ctc),
+  templateComponents: template,
+  inputs: {
+    working_days: 30, paid_days: 30,
+    tds_amount: 1000, deduction_advance: 0, deduction_lcd: 200, deduction_lwf: 0, arrears_amount: 0
+  },
   settings: {},
   employee: { employee_id: 'E1' }
 });
-var bdOv = JSON.parse(payTdsOverride.component_breakdown || '{}');
-var tdsLine = (bdOv.sections.manual_deductions.lines || []).filter(function (l) {
-  return String(l.component_code).toUpperCase() === 'TDS';
-})[0];
-check('payroll TDS overrides structure', tdsLine && tdsLine.amount === 1500, 'tds=' + (tdsLine ? tdsLine.amount : ''));
+var bdAtt = JSON.parse(payAttendanceDed.component_breakdown || '{}');
+var manualTotal = bdAtt.sections && bdAtt.sections.manual_deductions
+  ? bdAtt.sections.manual_deductions.total : 0;
+check('attendance register deductions sum', manualTotal === 1200, 'manual total=' + manualTotal);
+
+var payFullBase = Engine.calculateEmployee({
+  structure: { salary_structure_id: 'SS-1', ctc_monthly: ctc },
+  components: Expand.expandTemplateComponents(template, ctc),
+  templateComponents: template,
+  inputs: { working_days: 30, paid_days: 30, tds_amount: 0, arrears_amount: 0 },
+  settings: {},
+  employee: { employee_id: 'E1' }
+});
+var payArrears = Engine.calculateEmployee({
+  structure: { salary_structure_id: 'SS-1', ctc_monthly: ctc },
+  components: Expand.expandTemplateComponents(template, ctc),
+  templateComponents: template,
+  inputs: {
+    working_days: 30, paid_days: 30,
+    tds_amount: 0, deduction_advance: 0, deduction_lcd: 0, deduction_lwf: 0, arrears_amount: 500
+  },
+  settings: {},
+  employee: { employee_id: 'E1' }
+});
+check('arrears add to net not gross', payArrears.net_pay === payFullBase.net_pay + 500,
+  'net=' + payArrears.net_pay + ' base=' + payFullBase.net_pay);
+check('arrears not in gross', payArrears.gross_earnings === payFullBase.gross_earnings,
+  'gross=' + payArrears.gross_earnings);
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');

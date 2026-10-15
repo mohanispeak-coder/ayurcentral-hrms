@@ -63,14 +63,6 @@ var SalaryStructureTypeService = (function () {
         component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.THRESHOLD_FEE,
         cond_ref: HRMS.FORMULA_REF.EARNED_GROSS, cond_op: 'LTE', cond_value: 25000, amount: 200,
         round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 12 },
-      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'ADVANCE', component_name: 'Advance',
-        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 20 },
-      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'TDS', component_name: 'TDS',
-        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 21 },
-      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'LCD', component_name: 'LCD',
-        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 22 },
-      { structure_section: HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION, component_code: 'LWF', component_name: 'LWF',
-        component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.MANUAL, sort_order: 23 }
     ];
   }
 
@@ -159,6 +151,14 @@ var SalaryStructureTypeService = (function () {
   function normalizeComponents_(list) {
     if (!list || !list.length) {
       throw validationError_('Add at least one salary component.');
+    }
+    list = (list || []).filter(function (c) {
+      var sec = trim_((c && c.structure_section) || '').toUpperCase();
+      var method = trim_((c && c.calc_method) || '').toUpperCase();
+      return sec !== HRMS.STRUCTURE_SECTION.MANUAL_DEDUCTION && method !== HRMS.CALC_METHOD.MANUAL;
+    });
+    if (!list.length) {
+      throw validationError_('Add at least one salary component (manual deductions belong on the attendance register).');
     }
     var seen = {};
     var out = [];

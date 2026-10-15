@@ -777,6 +777,10 @@ var PayslipService = (function () {
     var earnRows = '';
     EARNING_ROWS_.forEach(function (row, idx) {
       var actual = sumFromLines_(earnLines, row.codes, 'amount');
+      if (row.label === 'Arrears') {
+        var fromBreakdown = breakdown.arrears != null ? Number(breakdown.arrears) : 0;
+        if (fromBreakdown > 0) actual = round2_(fromBreakdown);
+      }
       if (row.label === 'Other Allowance') {
         actual = round2_(actual + (Number(rec.bonus) || 0) + (Number(rec.incentive) || 0) +
           (Number(rec.other_earnings) || 0));

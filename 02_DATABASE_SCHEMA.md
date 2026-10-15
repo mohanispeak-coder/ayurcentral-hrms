@@ -299,8 +299,13 @@ At most one **non-LOCKED** run per year+month (a correction run may exist while 
 | bonus | Number | Y | ≥ 0 INR |
 | incentive | Number | Y | ≥ 0 |
 | other_earnings | Number | Y | ≥ 0 (includes OT if any) |
-| other_deductions | Number | Y | ≥ 0 |
-| tds_amount | Number | Y | ≥ 0; HR/accounts input |
+| other_deductions | Number | Y | ≥ 0; sum of Advance+LCD+LWF (synced from attendance) |
+| tds_amount | Number | Y | ≥ 0; from attendance register |
+| deduction_advance | Number | Y | ≥ 0; from attendance register |
+| deduction_lcd | Number | Y | ≥ 0; from attendance register |
+| deduction_lwf | Number | Y | ≥ 0; from attendance register |
+| arrears_amount | Number | Y | ≥ 0; from attendance register; adds to net after deductions |
+| daily_attendance_json | String | N | Daily codes (attendance register) |
 | lop_from_leave | Number | N | Suggestion; HR may override lop_days |
 | remarks | String | N | |
 

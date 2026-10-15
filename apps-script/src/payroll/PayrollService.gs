@@ -1151,6 +1151,10 @@ var PayrollService = (function () {
       other_earnings: sourceInp.other_earnings,
       other_deductions: sourceInp.other_deductions,
       tds_amount: sourceInp.tds_amount,
+      deduction_advance: sourceInp.deduction_advance || 0,
+      deduction_lcd: sourceInp.deduction_lcd || 0,
+      deduction_lwf: sourceInp.deduction_lwf || 0,
+      arrears_amount: sourceInp.arrears_amount || 0,
       remarks: sourceInp.remarks || ''
     };
   }
@@ -1255,6 +1259,10 @@ var PayrollService = (function () {
           other_earnings: fields.other_earnings,
           other_deductions: fields.other_deductions,
           tds_amount: fields.tds_amount,
+          deduction_advance: fields.deduction_advance,
+          deduction_lcd: fields.deduction_lcd,
+          deduction_lwf: fields.deduction_lwf,
+          arrears_amount: fields.arrears_amount,
           lop_from_leave: fields.lop_from_leave,
           remarks: fields.remarks
         });
@@ -1315,6 +1323,11 @@ var PayrollService = (function () {
       other_earnings: 0,
       other_deductions: 0,
       tds_amount: 0,
+      deduction_advance: 0,
+      deduction_lcd: 0,
+      deduction_lwf: 0,
+      arrears_amount: 0,
+      daily_attendance_json: '',
       lop_from_leave: lopFromMap_(lopMap, emp.employee_id),
       remarks: ''
     };
@@ -1427,6 +1440,10 @@ var PayrollService = (function () {
         other_earnings: inp.other_earnings,
         other_deductions: inp.other_deductions,
         tds_amount: inp.tds_amount,
+        deduction_advance: inp.deduction_advance || 0,
+        deduction_lcd: inp.deduction_lcd || 0,
+        deduction_lwf: inp.deduction_lwf || 0,
+        arrears_amount: inp.arrears_amount || 0,
         lop_from_leave: lopLeave,
         remarks: inp.remarks || ''
       };
