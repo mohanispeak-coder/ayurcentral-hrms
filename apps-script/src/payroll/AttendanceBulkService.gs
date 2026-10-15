@@ -282,7 +282,7 @@ var AttendanceBulkService = (function () {
           var extraStart = summaryStart + summaryLen;
           var extraGrid = employees.map(function (emp) {
             var inp = inputByEmp[empKey_(emp.employee_id)] || null;
-            return AttendancePayrollExtras.templateValuesFromInput_(inp);
+            return AttendancePayrollExtras.templateValuesFromInput(inp);
           });
           sheet.getRange(dataStartRow, extraStart, extraGrid.length, extraLen).setValues(extraGrid);
         }
