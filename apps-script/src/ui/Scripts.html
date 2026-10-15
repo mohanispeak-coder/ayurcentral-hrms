@@ -1389,6 +1389,10 @@
     if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'payroll-employee-salary')) return true;
     if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
+    if ((itemRoute === 'attendance-bulk-upload' || itemRoute === 'attendance-form-t' || itemRoute === 'holiday-calendar') &&
+        (current === 'attendance-bulk-upload' || current === 'attendance-form-t' || current === 'holiday-calendar')) {
+      return true;
+    }
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
     if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;
@@ -1646,6 +1650,8 @@
       html = sectionSkeleton({ variant: 'card', label: 'Loading salary structures' }) + '<div id="sst-mount"></div>';
     } else if (route === 'payroll-employee-salary') {
       html = sectionSkeleton({ variant: 'card', label: 'Loading employee salary' }) + '<div id="salary-structure-mount"></div>';
+    } else if (route === 'holiday-calendar') {
+      html = '<div class="card"><h2>Holiday calendar</h2>' + sectionSkeleton({ label: 'Loading holidays', lines: 4 }) + '</div>';
     } else if (route === 'attendance-bulk-upload' || route === 'attendance-form-t') {
       html = skeletonKpiRow(['Period', 'Status', 'Employees']) +
         '<div class="card"><h2>' + escapeHtml(route === 'attendance-form-t' ? 'Form T' : 'Register') + '</h2>' +
@@ -1705,10 +1711,11 @@
     });
   }
 
-  function moduleRoutesRegistered_(moduleId) {
+  function moduleRoutesRegistered_(moduleId, onlyRoute) {
     if (!moduleId) return true;
     var keys = Object.keys(ROUTE_MODULE).filter(function (r) { return ROUTE_MODULE[r] === moduleId; });
-    if (!keys.length) return true;
+    if (onlyRoute) keys = keys.filter(function (r) { return r === onlyRoute; });
+    if (!keys.length) return onlyRoute ? !!(ROUTES[onlyRoute] && ROUTES[onlyRoute].render && !ROUTES[onlyRoute]._lazy) : true;
     return keys.every(function (r) {
       return ROUTES[r] && ROUTES[r].render && !ROUTES[r]._lazy;
     });
@@ -1742,15 +1749,16 @@
     return false;
   }
 
-  function waitForModuleRoutes_(moduleId, attempts) {
+  function waitForModuleRoutes_(moduleId, attempts, onlyRoute) {
     attempts = attempts || 0;
-    if (moduleRoutesRegistered_(moduleId)) return Promise.resolve();
+    if (moduleRoutesRegistered_(moduleId, onlyRoute)) return Promise.resolve();
     if (attempts > 80) {
-      return Promise.reject({ message: 'Module UI did not initialize (' + moduleId + '). Refresh the page and try again.' });
+      var detail = onlyRoute ? (moduleId + ', route ' + onlyRoute) : moduleId;
+      return Promise.reject({ message: 'Module UI did not initialize (' + detail + '). Refresh the page and try again.' });
     }
     return new Promise(function (resolve, reject) {
       setTimeout(function () {
-        waitForModuleRoutes_(moduleId, attempts + 1).then(resolve, reject);
+        waitForModuleRoutes_(moduleId, attempts + 1, onlyRoute).then(resolve, reject);
       }, 10);
     });
   }
@@ -1759,7 +1767,7 @@
     opts = opts || {};
     if (opts.userInitiated) pauseBackgroundPreload();
     if (moduleLoaded_[moduleId]) {
-      if (moduleRoutesRegistered_(moduleId)) {
+      if (moduleRoutesRegistered_(moduleId, opts.forRoute)) {
         return Promise.resolve();
       }
       delete moduleLoaded_[moduleId];
@@ -1775,7 +1783,7 @@
       .then(function (data) {
         var tInject = Date.now();
         injectModuleHtml(data && data.html ? data.html : '');
-        return waitForModuleRoutes_(moduleId).then(function () {
+        return waitForModuleRoutes_(moduleId, 0, opts.forRoute).then(function () {
           logClientPerf_({
             kind: 'module-ui',
             moduleId: moduleId,
@@ -1856,7 +1864,7 @@
           var tNav = Date.now();
           var viewKey = moduleViewKey(route, params);
           if (moduleLoaded_[moduleId] && shouldRestoreModuleView(viewKey)) {
-            ensureModule(moduleId, { userInitiated: true })
+            ensureModule(moduleId, { userInitiated: true, forRoute: route })
               .then(function () {
                 if (seq !== state.navSeq || state.currentRoute !== route) return;
                 if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
@@ -1866,7 +1874,7 @@
           // Paint layout immediately - never wait for module RPC.
           paintPendingModuleShell(route);
           logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
-          ensureModule(moduleId, { userInitiated: true })
+          ensureModule(moduleId, { userInitiated: true, forRoute: route })
             .then(function () {
               logClientPerf_({
                 kind: 'nav-module-ready',

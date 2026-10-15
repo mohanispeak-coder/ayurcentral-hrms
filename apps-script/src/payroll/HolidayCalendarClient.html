@@ -2,14 +2,24 @@
 (function () {
   'use strict';
 
-  function ready(fn) {
-    if (window.HrmsApp) fn();
-    else document.addEventListener('DOMContentLoaded', fn);
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      if (run() || ++tries > 200) clearInterval(timer);
+    }, 25);
   }
 
-  ready(function () {
-    var App = window.HrmsApp;
-    if (!App) return;
+  whenAppReady(function (App) {
+    if (window.__hrmsHolidayCalInit_) return;
+    window.__hrmsHolidayCalInit_ = true;
+
     var $ = App.$;
     var escapeHtml = App.escapeHtml;
     var callServer = App.callServer;

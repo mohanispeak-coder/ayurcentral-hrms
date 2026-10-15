@@ -14,8 +14,21 @@ var HolidayCalendarService = (function () {
     return s === 'TRUE' || s === 'YES' || s === 'Y' || s === '1';
   }
 
-  function requireManage_() {
-    PermissionService.requireAttendanceAccess();
+  /**
+   * HR/Admin/Owner with Holidays nav, or attendance/payroll managers via requireAttendanceAccess.
+   * @param {Object=} session
+   */
+  function requireManage_(session) {
+    session = session || AuthService.requireAuth();
+    if (PermissionService.isHrOrAdmin(session)) {
+      if (typeof AdminSettingsService !== 'undefined' &&
+          AdminSettingsService.isNavAllowedForRole &&
+          !AdminSettingsService.isNavAllowedForRole(session.role, 'holiday-calendar')) {
+        throw authorizationError_('Holiday calendar is turned off for your role in Settings.');
+      }
+      return session;
+    }
+    return PermissionService.requireAttendanceAccess(session);
   }
 
   function parseIsoDate_(s) {

@@ -22,6 +22,8 @@ check('holiday-service', /HolidayCalendarService/.test(svc) && /dayCodesForMonth
 check('holiday-sheet', /HOLIDAY_CALENDAR/.test(fs.readFileSync(path.join(root, 'foundation', 'Constants.gs'), 'utf8')));
 check('attendance-prefill', /HolidayCalendarService\.dayCodesForMonth/.test(bulk));
 check('holiday-ui-route', /holiday-calendar/.test(client) && /apiHolidayValidateImport/.test(client));
+check('holiday-ui-when-app-ready', /whenAppReady/.test(client) && /registerRoute\('holiday-calendar'/.test(client));
+check('holiday-hr-admin-access', /isHrOrAdmin/.test(svc) && /holiday-calendar/.test(svc));
 check('year-excel-template', /downloadYearTemplate/.test(svc) && /apiHolidayDownloadYearTemplate/.test(fs.readFileSync(path.join(root, 'foundation', 'ApiHoliday.gs'), 'utf8')));
 check('leave-calendar-holidays', /public_holidays/.test(fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8')));
 check('holiday-date-parser', /parseHolidayDate_/.test(svc) && /canonicalImportHeader_/.test(svc));
