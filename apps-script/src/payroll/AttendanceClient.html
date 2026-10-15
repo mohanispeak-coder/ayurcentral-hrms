@@ -201,12 +201,18 @@
       page.innerHTML =
         '<div class="att-page"><div class="page-header"><h2>Register</h2></div>' +
         '<div id="att-mount">' + skeletonMount_(App) + '</div></div>';
-      callServer('apiGetVerticalCatalog').then(function (cat) {
-        catalog_ = cat || [];
-        loadContext_();
-      }).catch(function () {
-        catalog_ = [];
-        loadContext_();
+      Promise.all([
+        callServer('apiGetVerticalCatalog').catch(function () { return []; }),
+        callServer('apiListPayrollRuns')
+      ]).then(function (boot) {
+        catalog_ = boot[0] || [];
+        runsCache_ = boot[1] || [];
+        loadContext_(true);
+      }).catch(function (err) {
+        var m = document.getElementById('att-mount');
+        if (m) {
+          m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load attendance.') + '</div>';
+        }
       });
     }
 
@@ -225,8 +231,8 @@
       if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(rec);
     }
 
-    function loadContext_() {
-      callServer('apiListPayrollRuns').then(function (runs) {
+    function loadContext_(runsAlreadyLoaded) {
+      function afterRuns_(runs) {
         runsCache_ = runs || [];
         reconcilePeriodWithRuns_(runsCache_);
         var run = resolveRunForAttendance_(runsCache_);
@@ -236,10 +242,7 @@
         }
         bulkState_.runId = run.payroll_run_id;
         if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
-        Promise.all([
-          callServer('apiListAttendanceRegister', run.payroll_run_id),
-          callServer('apiGetPayrollRun', run.payroll_run_id)
-        ]).then(function (res) {
+        callServer('apiListAttendanceRegister', run.payroll_run_id).then(function (list) {
           if (App.persistPayrollPeriodContext) {
             App.persistPayrollPeriodContext({
               year: run.period_year,
@@ -248,12 +251,17 @@
               vertical: bulkState_.vertical || verticalFromRun_(run)
             });
           }
-          paintMain_(run, res[0] || [], res[1] || {});
+          paintMain_(run, list || []);
         }).catch(function (err) {
           var m = document.getElementById('att-mount');
           if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load attendance.') + '</div>';
         });
-      }).catch(function (err) {
+      }
+      if (runsAlreadyLoaded) {
+        afterRuns_(runsCache_);
+        return;
+      }
+      callServer('apiListPayrollRuns').then(afterRuns_).catch(function (err) {
         var m = document.getElementById('att-mount');
         if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load payroll runs.') + '</div>';
       });
@@ -307,11 +315,8 @@
       if (verticalFromRun_(run)) bulkState_.vertical = verticalFromRun_(run);
       var mount = document.getElementById('att-mount');
       if (mount) mount.innerHTML = skeletonMount_(window.HrmsApp);
-      return Promise.all([
-        callServer('apiListAttendanceRegister', run.payroll_run_id),
-        callServer('apiGetPayrollRun', run.payroll_run_id)
-      ]).then(function (res) {
-        paintMain_(run, res[0] || [], res[1] || {});
+      return callServer('apiListAttendanceRegister', run.payroll_run_id).then(function (list) {
+        paintMain_(run, list || []);
       });
     }
 
@@ -428,7 +433,7 @@
       if (App.markModuleViewLoaded) App.markModuleViewLoaded('attendance-bulk-upload');
     }
 
-    function paintMain_(run, list, detail) {
+    function paintMain_(run, list) {
       var m = document.getElementById('att-mount');
       if (!m) return;
       var st = String(run.status || '').toUpperCase();
