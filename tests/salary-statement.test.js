@@ -28,7 +28,7 @@ check('client-download', /apiDownloadSalaryStatement/.test(client));
 check('basic-da-codes', /'DA'/.test(src) && /Basic\+DA/.test(src));
 check('arrears-label', /label: 'Arrears'/.test(src) && !/Arrers/.test(src));
 check('rate-earned-sections', /linesFromResult_\(rateResult, 'rate'\)/.test(src));
-check('payroll-run-vertical', /findPayrollRun_\(year, month, vertical\)/.test(src));
+check('payroll-run-vertical', /resolveRunForPeriod/.test(src) && /preferredRunId/.test(src));
 check('preview-mode', /preview_mode/.test(src));
 check('vertical-catalog', /apiGetVerticalCatalog/.test(client));
 check('vertical-select', /sal-stmt-vertical/.test(client) && /<select/.test(client));

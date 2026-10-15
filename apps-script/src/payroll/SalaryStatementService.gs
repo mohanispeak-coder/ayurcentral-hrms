@@ -136,17 +136,25 @@ var SalaryStatementService = (function () {
     return null;
   }
 
-  function findPayrollRun_(year, month, verticalName) {
+  function findPayrollRun_(year, month, verticalName, preferredRunId) {
+    if (typeof PayrollService !== 'undefined' && PayrollService.resolveRunForPeriod) {
+      return PayrollService.resolveRunForPeriod(year, month, verticalName, preferredRunId);
+    }
+    var vertical = trim_(verticalName).toUpperCase();
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
     var y = Number(year);
     var m = Number(month);
-    var vertical = trim_(verticalName).toUpperCase();
     var pool = runs.filter(function (r) {
       return Number(r.period_year) === y && Number(r.period_month) === m;
     });
     if (vertical) {
       pool = pool.filter(function (r) {
-        return String(r.vertical_name || '').toUpperCase() === vertical;
+        var rv = String(r.vertical_name || '').toUpperCase();
+        if (!rv && r.payroll_run_id) {
+          var parts = String(r.payroll_run_id).split('-');
+          if (parts[0] === 'PR' && parts.length >= 4) rv = String(parts[3]).toUpperCase();
+        }
+        return rv === vertical;
       });
       if (!pool.length) return null;
     }
@@ -498,7 +506,10 @@ var SalaryStatementService = (function () {
     var year = Number(options.period_year || options.year) || now.getFullYear();
     var month = Number(options.period_month || options.month) || (now.getMonth() + 1);
     var vertical = trim_(options.vertical_name || options.vertical);
-    var run = vertical ? findPayrollRun_(year, month, vertical) : null;
+    var preferredRunId = trim_(options.payroll_run_id || options.runId);
+    var run = vertical
+      ? findPayrollRun_(year, month, vertical, preferredRunId)
+      : null;
     var maps = loadPayrollMaps_(run ? run.payroll_run_id : '');
     var fixedDays = daysInMonth_(year, month);
     if (run && Number(run.working_days_default) > 0) fixedDays = Number(run.working_days_default);
@@ -546,7 +557,7 @@ var SalaryStatementService = (function () {
     var previewMode = !run;
     var statusMessage = '';
     if (!vertical) {
-      statusMessage = 'Select a vertical — salary statement is tied to that vertical’s payroll run for the month.';
+      statusMessage = 'Select a vertical — salary statement uses that vertical’s org-wide payroll run for the month (same run for all HR/Admin users).';
     } else if (previewMode) {
       statusMessage = 'No payroll run for ' + vertical + ' in ' + monthLabel_(year, month) +
         '. Start payroll and lock the run to populate earned pay, deductions, and net.';

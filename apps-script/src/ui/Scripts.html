@@ -203,6 +203,40 @@
   }
 
   /**
+   * When session has no payroll month, align UI to the latest org-wide run (same sheet for all HR/Admin).
+   * @param {Array} runs
+   * @param {string=} preferredVertical
+   */
+  function suggestPayrollPeriodFromRuns_(runs, preferredVertical) {
+    runs = (runs || []).slice();
+    if (!runs.length) return null;
+    var want = String(preferredVertical || '').trim().toUpperCase();
+    runs.sort(function (a, b) {
+      var ya = Number(b.period_year) - Number(a.period_year);
+      if (ya !== 0) return ya > 0 ? 1 : -1;
+      var ma = Number(b.period_month) - Number(a.period_month);
+      if (ma !== 0) return ma > 0 ? 1 : -1;
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+    var pick = null;
+    if (want) {
+      for (var i = 0; i < runs.length; i++) {
+        if (runVerticalFromRow_(runs[i]) === want) {
+          pick = runs[i];
+          break;
+        }
+      }
+    }
+    if (!pick) pick = runs[0];
+    return {
+      year: Number(pick.period_year),
+      month: Number(pick.period_month),
+      runId: pick.payroll_run_id,
+      vertical: runVerticalFromRow_(pick)
+    };
+  }
+
+  /**
    * Keep payroll run id and vertical consistent when both are present (session context drift).
    * Prefers vertical when a matching run exists for that month; otherwise aligns vertical to the run.
    */
@@ -3212,6 +3246,7 @@
     verticalFromPayrollRunId: verticalFromPayrollRunId_,
     runVerticalFromRow: runVerticalFromRow_,
     findRunForVerticalMonth: findRunForVerticalMonth_,
+    suggestPayrollPeriodFromRuns: suggestPayrollPeriodFromRuns_,
     enablePerfTiming: function () {
       try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
       window.HRMS_PERF_TIMING = 1;

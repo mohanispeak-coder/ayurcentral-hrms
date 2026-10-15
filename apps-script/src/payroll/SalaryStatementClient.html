@@ -8,7 +8,7 @@
   'use strict';
   var initialized_ = false;
   var catalog_ = [];
-  var filter_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, vertical: '' };
+  var filter_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, vertical: '', runId: '' };
 
   function whenAppReady(fn) {
     function run() {
@@ -64,8 +64,39 @@
       return {
         period_year: filter_.year,
         period_month: filter_.month,
-        vertical_name: filter_.vertical || ''
+        vertical_name: filter_.vertical || '',
+        payroll_run_id: filter_.runId || ''
       };
+    }
+
+    function reconcileFilterWithRuns_(runs) {
+      if (!runs || !runs.length) return;
+      if (App.reconcilePayrollPeriodWithRuns) {
+        var rec = App.reconcilePayrollPeriodWithRuns({
+          year: filter_.year,
+          month: filter_.month,
+          runId: filter_.runId,
+          vertical: filter_.vertical
+        }, runs);
+        if (rec.year) filter_.year = rec.year;
+        if (rec.month) filter_.month = rec.month;
+        if (rec.runId) filter_.runId = rec.runId;
+        if (rec.vertical) filter_.vertical = rec.vertical;
+        return;
+      }
+      if (!App.suggestPayrollPeriodFromRuns) return;
+      var hasRun = runs.some(function (r) {
+        return Number(r.period_year) === filter_.year &&
+          Number(r.period_month) === filter_.month &&
+          (!filter_.vertical || (App.runVerticalFromRow && App.runVerticalFromRow(r) === filter_.vertical));
+      });
+      if (hasRun) return;
+      var sug = App.suggestPayrollPeriodFromRuns(runs, filter_.vertical);
+      if (!sug) return;
+      filter_.year = sug.year;
+      filter_.month = sug.month;
+      filter_.runId = sug.runId || '';
+      if (sug.vertical) filter_.vertical = sug.vertical;
     }
 
     function verticalSelectHtml_(selected) {
@@ -92,12 +123,24 @@
       page.innerHTML =
         '<div class="sal-stmt-page"><div class="page-header"><h2>Salary Statement</h2>' +
         '<p class="page-lede">SAPL-style monthly statement tied to a vertical payroll run: rate of pay, worked days, earned pay, deductions, and net. ' +
-        'Without a run for the selected vertical and month, only contractual rate of pay is shown.</p></div>' +
+        'Payroll runs are shared for all HR/Admin on the same HRMS. Without a run for the selected vertical and month, only contractual rate of pay is shown.</p></div>' +
         '<div id="sal-stmt-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
-      callServer('apiGetVerticalCatalog').then(function (cat) {
-        catalog_ = cat || [];
+      Promise.all([
+        callServer('apiGetVerticalCatalog'),
+        callServer('apiListPayrollRuns')
+      ]).then(function (res) {
+        catalog_ = res[0] || [];
         if (!filter_.vertical && catalog_.length) {
           filter_.vertical = String(catalog_[0].vertical_name || '').trim().toUpperCase();
+        }
+        reconcileFilterWithRuns_(res[1] || []);
+        if (App.persistPayrollPeriodContext) {
+          App.persistPayrollPeriodContext({
+            year: filter_.year,
+            month: filter_.month,
+            vertical: filter_.vertical,
+            runId: filter_.runId
+          });
         }
         load_();
       }).catch(function () {

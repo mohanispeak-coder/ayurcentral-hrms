@@ -225,11 +225,24 @@
       if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(rec);
     }
 
+    function applySuggestedPeriodIfNeeded_(runs) {
+      var run = resolveRunForAttendance_(runs);
+      if (run || !runs || !runs.length || !App.suggestPayrollPeriodFromRuns) return run;
+      var sug = App.suggestPayrollPeriodFromRuns(runs, bulkState_.vertical);
+      if (!sug) return null;
+      period_.year = sug.year;
+      period_.month = sug.month;
+      if (sug.runId) bulkState_.runId = sug.runId;
+      if (sug.vertical) bulkState_.vertical = sug.vertical;
+      reconcilePeriodWithRuns_(runs);
+      return resolveRunForAttendance_(runs);
+    }
+
     function loadContext_() {
       callServer('apiListPayrollRuns').then(function (runs) {
         runsCache_ = runs || [];
         reconcilePeriodWithRuns_(runsCache_);
-        var run = resolveRunForAttendance_(runsCache_);
+        var run = applySuggestedPeriodIfNeeded_(runsCache_);
         if (!run) {
           paintNoRun_();
           return;
@@ -408,7 +421,7 @@
       if (!m) return;
       m.innerHTML =
         '<div class="card"><h2>' + esc_(fmtPeriod_(period_.year, period_.month)) + '</h2>' +
-        '<p class="page-lede">Start payroll for this month first, then upload or enter attendance.</p>' +
+        '<p class="page-lede">No payroll run for this month and vertical. Payroll runs are shared for all HR/Admin users on the same HRMS sheet — pick the correct year/month, or start payroll if none exists yet.</p>' +
         '<div class="form-row">' +
         '<div class="form-group"><label class="form-label">Year</label><input class="form-input" id="att-year" type="number" value="' + period_.year + '"></div>' +
         '<div class="form-group"><label class="form-label">Month</label><input class="form-input" id="att-month" type="number" min="1" max="12" value="' + period_.month + '"></div>' +

@@ -23,6 +23,10 @@
 
   var viewCache_ = null;
 
+  var runsCache_ = [];
+
+  var bulkState_ = { runId: null, vertical: null };
+
 
 
   function whenAppReady(fn) {
@@ -123,14 +127,83 @@
 
 
 
-    function findRunForPeriod_(runs, year, month) {
+    function verticalFromRun_(run) {
+      if (App.runVerticalFromRow) return App.runVerticalFromRow(run);
+      var v = String(run && run.vertical_name || '').trim().toUpperCase();
+      if (v) return v;
+      if (App.verticalFromPayrollRunId) return App.verticalFromPayrollRunId(run && run.payroll_run_id);
+      return '';
+    }
 
-      return (runs || []).filter(function (r) {
+    function mergePayrollNavParams_(params) {
+      params = params || {};
+      if (App.readPayrollPeriodContext) {
+        var ctx = App.readPayrollPeriodContext();
+        if (ctx) {
+          if (ctx.year != null && params.year == null) params.year = ctx.year;
+          if (ctx.month != null && params.month == null) params.month = ctx.month;
+          if (ctx.runId && params.runId == null) params.runId = ctx.runId;
+          if (ctx.vertical && params.vertical == null) params.vertical = ctx.vertical;
+        }
+      }
+      return params;
+    }
 
+    function applyRouteParams_(params) {
+      if (params.year) period_.year = Number(params.year);
+      if (params.month) period_.month = Number(params.month);
+      if (params.vertical) bulkState_.vertical = String(params.vertical).trim().toUpperCase();
+      if (params.runId) bulkState_.runId = String(params.runId).trim();
+    }
+
+    function reconcilePeriodWithRuns_(runs) {
+      if (!App.reconcilePayrollPeriodWithRuns) return;
+      var rec = App.reconcilePayrollPeriodWithRuns({
+        year: period_.year,
+        month: period_.month,
+        runId: bulkState_.runId,
+        vertical: bulkState_.vertical
+      }, runs || []);
+      if (rec.year) period_.year = rec.year;
+      if (rec.month) period_.month = rec.month;
+      if (rec.runId) bulkState_.runId = rec.runId;
+      if (rec.vertical) bulkState_.vertical = rec.vertical;
+      if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(rec);
+    }
+
+    function findRunForPeriod_(runs, year, month, vertical) {
+      runs = runs || [];
+      if (bulkState_.runId) {
+        var byId = runs.filter(function (r) { return r.payroll_run_id === bulkState_.runId; })[0];
+        if (byId) return byId;
+      }
+      if (App.findRunForVerticalMonth && vertical) {
+        var match = App.findRunForVerticalMonth(runs, year, month, vertical);
+        if (match) return match;
+      }
+      var list = runs.filter(function (r) {
         return Number(r.period_year) === year && Number(r.period_month) === month;
+      });
+      var want = vertical ? String(vertical).trim().toUpperCase() : '';
+      if (want) {
+        var vertMatch = list.filter(function (r) { return verticalFromRun_(r) === want; });
+        if (vertMatch.length) return vertMatch[0];
+      }
+      return list[0] || null;
+    }
 
-      })[0] || null;
-
+    function applySuggestedPeriodIfNeeded_(runs) {
+      var vertical = bulkState_.vertical || (catalog_.length ? catalog_[0].vertical_name : '');
+      var run = findRunForPeriod_(runs, period_.year, period_.month, vertical);
+      if (run || !runs || !runs.length || !App.suggestPayrollPeriodFromRuns) return run;
+      var sug = App.suggestPayrollPeriodFromRuns(runs, vertical);
+      if (!sug) return null;
+      period_.year = sug.year;
+      period_.month = sug.month;
+      if (sug.runId) bulkState_.runId = sug.runId;
+      if (sug.vertical) bulkState_.vertical = sug.vertical;
+      reconcilePeriodWithRuns_(runs);
+      return findRunForPeriod_(runs, period_.year, period_.month, bulkState_.vertical || vertical);
     }
 
 
@@ -153,11 +226,11 @@
 
     function render_(params) {
 
-      params = params || {};
+      params = mergePayrollNavParams_(params || {});
 
-      if (params.year) period_.year = Number(params.year);
+      applyRouteParams_(params);
 
-      if (params.month) period_.month = Number(params.month);
+      if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(params);
 
       var page = pageEl_();
 
@@ -215,7 +288,15 @@
 
       callServer('apiListPayrollRuns').then(function (runs) {
 
-        var run = findRunForPeriod_(runs || [], period_.year, period_.month);
+        runsCache_ = runs || [];
+
+        reconcilePeriodWithRuns_(runsCache_);
+
+        if (!bulkState_.vertical && catalog_.length) {
+          bulkState_.vertical = String(catalog_[0].vertical_name || '').trim().toUpperCase();
+        }
+
+        var run = applySuggestedPeriodIfNeeded_(runsCache_);
 
         if (!run) {
 
@@ -225,7 +306,24 @@
 
         }
 
-        paintMain_(run, catalog_.length ? catalog_[0].vertical_name : '', '', false, true);
+        bulkState_.runId = run.payroll_run_id;
+
+        var runVert = verticalFromRun_(run);
+
+        if (runVert) bulkState_.vertical = runVert;
+
+        var defaultVertical = bulkState_.vertical || runVert || (catalog_.length ? catalog_[0].vertical_name : '');
+
+        if (App.persistPayrollPeriodContext) {
+          App.persistPayrollPeriodContext({
+            year: run.period_year,
+            month: run.period_month,
+            runId: run.payroll_run_id,
+            vertical: defaultVertical
+          });
+        }
+
+        paintMain_(run, defaultVertical, '', false, true);
 
       }).catch(function (err) {
 
@@ -249,7 +347,8 @@
 
         '<div class="card"><p class="hint">No payroll run for ' + esc_(fmtPeriod_(period_.year, period_.month)) +
 
-        '. Start payroll first.</p><button type="button" class="btn btn-secondary" id="formt-goto-payroll">Open Payroll</button></div>';
+        '. Runs are shared for all HR/Admin on this HRMS — check year/month and vertical, or start payroll.</p>' +
+        '<button type="button" class="btn btn-secondary" id="formt-goto-payroll">Open Payroll</button></div>';
 
       document.getElementById('formt-goto-payroll').addEventListener('click', function () {
 

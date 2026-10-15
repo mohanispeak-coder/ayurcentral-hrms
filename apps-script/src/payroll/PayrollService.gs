@@ -78,8 +78,84 @@ var PayrollService = (function () {
     return code;
   }
 
+  function verticalFromPayrollRunId_(runId) {
+    var parts = String(runId || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var vert = parts[3];
+    if (!vert || /^C\d+$/i.test(vert)) return '';
+    return normalizeVerticalCode_(vert);
+  }
+
   function runVertical_(run) {
-    return normalizeVerticalCode_(run && run.vertical_name);
+    var v = normalizeVerticalCode_(run && run.vertical_name);
+    if (v) return v;
+    return verticalFromPayrollRunId_(run && run.payroll_run_id);
+  }
+
+  /**
+   * Shared payroll run for a month + vertical (org-wide, not per user).
+   * @param {number} year
+   * @param {number} month
+   * @param {string=} vertical
+   * @param {string=} preferredRunId
+   */
+  function resolveRunForPeriod_(year, month, vertical, preferredRunId) {
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    if (preferredRunId) {
+      var byId = null;
+      runs.forEach(function (r) {
+        if (String(r.payroll_run_id) === String(preferredRunId)) byId = r;
+      });
+      if (byId) return byId;
+    }
+    var y = Number(year);
+    var m = Number(month);
+    var list = runs.filter(function (r) {
+      return Number(r.period_year) === y && Number(r.period_month) === m;
+    });
+    var want = normalizeVerticalCode_(vertical);
+    if (want) {
+      var matched = list.filter(function (r) { return runVertical_(r) === want; });
+      matched.sort(function (a, b) {
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
+      return matched.length ? matched[0] : null;
+    }
+    list.sort(function (a, b) {
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+    return list.length ? list[0] : null;
+  }
+
+  /** Latest run (optionally for one vertical) when UI period does not match any open month. */
+  function suggestPayrollPeriodFromRuns_(preferredVertical) {
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    if (!runs.length) return null;
+    var want = normalizeVerticalCode_(preferredVertical);
+    runs.sort(function (a, b) {
+      var ya = Number(b.period_year) - Number(a.period_year);
+      if (ya !== 0) return ya > 0 ? 1 : -1;
+      var ma = Number(b.period_month) - Number(a.period_month);
+      if (ma !== 0) return ma > 0 ? 1 : -1;
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+    var pick = null;
+    if (want) {
+      for (var i = 0; i < runs.length; i++) {
+        if (runVertical_(runs[i]) === want) {
+          pick = runs[i];
+          break;
+        }
+      }
+    }
+    if (!pick) pick = runs[0];
+    return {
+      period_year: Number(pick.period_year),
+      period_month: Number(pick.period_month),
+      payroll_run_id: pick.payroll_run_id,
+      vertical_name: runVertical_(pick),
+      status: String(pick.status || '')
+    };
   }
 
   function employeeVertical_(emp) {
@@ -1667,6 +1743,10 @@ var PayrollService = (function () {
 
   return {
     listRuns: listRuns,
+    resolveRunForPeriod: resolveRunForPeriod_,
+    suggestPayrollPeriodFromRuns: suggestPayrollPeriodFromRuns_,
+    verticalFromPayrollRunId: verticalFromPayrollRunId_,
+    runVertical: runVertical_,
     getRunDetail: getRunDetail,
     createRun: createRun,
     createRunsForAllVerticals: createRunsForAllVerticals,
