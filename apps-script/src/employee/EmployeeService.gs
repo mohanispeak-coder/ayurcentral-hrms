@@ -396,6 +396,7 @@ var EmployeeService = (function () {
             if (ad == null) ad = summaryCtx.approvedByEmployee[e.employee_id];
             if (ad != null && ad !== '') sumOpts.approvedLeaveDaysInMonth = ad;
           }
+          if (summaryCtx.monthBatch) sumOpts.monthBatch = summaryCtx.monthBatch;
         }
         row.leave_summary = compactLeaveSummaryForList_(e, sumOpts);
       }
@@ -471,7 +472,8 @@ var EmployeeService = (function () {
     general.forEach(function (b) {
       cfSum += Number(b.carried_forward_days) || 0;
     });
-    if (leaveYear && typeof LeavePolicyService !== 'undefined' && LeavePolicyService.computeLeaveYearEntitlement && emp) {
+    if (leaveYear && !options.light && typeof LeavePolicyService !== 'undefined' &&
+        LeavePolicyService.computeLeaveYearEntitlement && emp) {
       try {
         entitledSum = Number(LeavePolicyService.computeLeaveYearEntitlement(emp, leaveYear)) || 0;
       } catch (ignoreEnt) {}
@@ -514,7 +516,24 @@ var EmployeeService = (function () {
         if (options.approvedLeaveDaysInMonth !== undefined && options.approvedLeaveDaysInMonth !== null) {
           monthOpts.approvedLeaveDaysInMonth = options.approvedLeaveDaysInMonth;
         }
-        if (MonthlyLeaveService.fillMonthPoolSummary_) {
+        var normEmp = typeof LeaveEngine !== 'undefined'
+          ? LeaveEngine.normalizeEmployeeId(employeeId)
+          : normalizeEmployeeId_(employeeId);
+        if (options.light && options.monthBatch && MonthlyLeaveService.applyLedgerRowToSummary_) {
+          var lr = options.monthBatch.ledgerByEmp[normEmp];
+          if (lr) {
+            MonthlyLeaveService.applyLedgerRowToSummary_(out, lr);
+          } else if (MonthlyLeaveService.fillMonthPoolSummary_) {
+            if (options.monthBatch.countsByEmp[normEmp]) {
+              monthOpts.precomputedCounts = options.monthBatch.countsByEmp[normEmp];
+            }
+            if (options.monthBatch.adjByEmp.hasOwnProperty(normEmp)) {
+              monthOpts.adjustmentDays = options.monthBatch.adjByEmp[normEmp];
+            }
+            MonthlyLeaveService.fillMonthPoolSummary_(out, employeeId, y, m, emp,
+              monthOpts.precomputedCounts || null, monthOpts);
+          }
+        } else if (MonthlyLeaveService.fillMonthPoolSummary_) {
           MonthlyLeaveService.fillMonthPoolSummary_(out, employeeId, y, m, emp, null, monthOpts);
         } else if (MonthlyLeaveService.getSnapshot) {
           var snap = MonthlyLeaveService.getSnapshot(employeeId, y, m);
@@ -565,10 +584,15 @@ var EmployeeService = (function () {
           balanceRowsByEmployee[eid].push(balanceIndex[key]);
         });
         var calMonth = LeaveService.getCurrentCalendarMonth();
+        var monthBatch = null;
+        if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.buildMonthDirectoryBatchContext_) {
+          monthBatch = MonthlyLeaveService.buildMonthDirectoryBatchContext_(calMonth.year, calMonth.month);
+        }
         query.leave_summary_context = {
           balanceRowsByEmployee: balanceRowsByEmployee,
           reqTotalsByEmployee: LeaveService.summarizeLeaveYearRequestTotalsMap(leaveYear),
-          approvedByEmployee: LeaveService.approvedLeaveDaysMapForCalendarMonth(calMonth.year, calMonth.month)
+          approvedByEmployee: LeaveService.approvedLeaveDaysMapForCalendarMonth(calMonth.year, calMonth.month),
+          monthBatch: monthBatch
         };
       } catch (ignoreCtx) {}
     }

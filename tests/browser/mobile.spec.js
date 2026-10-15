@@ -113,17 +113,11 @@ test.describe('HRMS browser smoke', function () {
       await assertNoHorizontalOverflow(page);
     });
 
-    test('Ask HR button stays inside viewport', async function ({ page }, testInfo) {
+    test('Ask HR widget is not shown in the shell', async function ({ page }) {
       await gotoRoute(page, 'dashboard');
       await waitForModulePaint(page);
       const hrms = await getHrmsAppFrame(page);
-      const fab = hrms.locator('#ask-hr-fab:not(.hidden)');
-      try {
-        await fab.waitFor({ state: 'visible', timeout: 30_000 });
-      } catch (err) {
-        testInfo.skip(true, 'Ask HR FAB not visible for this role/session.');
-      }
-      await assertElementInViewport(page, '#ask-hr-fab:not(.hidden)');
+      await expect(hrms.locator('#ask-hr-fab')).toHaveCount(0);
     });
 
     test('main content does not extend beyond viewport', async function ({ page }) {

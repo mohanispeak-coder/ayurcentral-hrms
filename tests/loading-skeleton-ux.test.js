@@ -60,10 +60,7 @@ check('ntf-skeleton-initial', /sectionSkeleton[\s\S]*Loading notifications|varia
 check('ntf-keep-refresh', /keepRefresh[\s\S]*paintInbox/.test(ntf));
 check('bell-loading-skeleton', /ntf-skel/.test(bell) && !/ntf-empty">Loading…/.test(bell));
 
-check('ask-hr-uses-skeleton-status',
-  /ask-hr-skel-stack/.test(scripts) && /function startAskHrStatus/.test(scripts));
-check('ask-hr-no-plain-loading-text-as-primary',
-  !/ask-hr-status[\s\S]{0,200}textContent = ['"]Loading…['"]/.test(scripts));
+check('ask-hr-removed-from-client', !/initAskHr/.test(scripts) && !/apiAskHr/.test(scripts));
 
 check('emp-refresh-refills-selects', /isModuleRefresh[\s\S]*fillSelectOptions\('emp-filter-dept'/.test(emp));
 check('leave-spinner-uses-skeleton', /sectionSkeleton/.test(leave) || /hrms-loading-block/.test(leave));

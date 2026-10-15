@@ -33,7 +33,7 @@ check('sidebar-backdrop-mobile', /sidebar-backdrop\.open/.test(styles));
 check('table-wrap-contain-scroll', /table-wrap--contain/.test(styles) && /-webkit-overflow-scrolling: touch/.test(styles));
 check('stack-table-pattern', /data-table--stack-md/.test(styles) && /attr\(data-label\)/.test(styles));
 check('touch-min-height', /--touch-min: 44px/.test(styles));
-check('safe-area-ask-hr', /safe-area-inset-bottom/.test(styles));
+check('safe-area-mobile', /safe-area-inset-bottom/.test(styles));
 check('modal-mobile-sheet', /@media \(max-width: 768px\)[\s\S]*modal-backdrop[\s\S]*align-items: flex-end/.test(styles));
 check('kpi-mobile-columns', /@media \(max-width: 480px\)[\s\S]*kpi-row/.test(styles));
 check('leave-balance-cards', /leave-balance-card/.test(styles) && /leaveBalanceCardsHtml/.test(leave));

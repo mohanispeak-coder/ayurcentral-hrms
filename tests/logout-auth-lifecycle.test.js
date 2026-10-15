@@ -156,9 +156,7 @@ function loadShell(ctrl) {
     'auth-send-btn', 'auth-step-code', 'auth-email-display', 'auth-code', 'auth-code-error',
     'auth-verify-btn', 'auth-resend-btn', 'auth-change-email-btn', 'setup-state',
     'btn-run-setup', 'setup-result', 'page-content', 'main-content', 'module-ui-root',
-    'toast-container', 'ask-hr-fab', 'ask-hr-panel', 'ask-hr-clear', 'ask-hr-close',
-    'ask-hr-messages', 'ask-hr-intro', 'ask-hr-thread', 'ask-hr-form', 'ask-hr-input',
-    'ask-hr-send', 'ask-hr-compose-error'
+    'toast-container'
   ].forEach(function (id) {
     fakeEl(id.indexOf('btn') === 0 || id.indexOf('toggle') !== -1 ? 'button' : 'div', id);
   });

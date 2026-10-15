@@ -173,10 +173,17 @@ var MonthlyLeaveService = (function () {
     if (!emp && employeeId) {
       emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
     }
+    if (!counts && options.precomputedCounts) {
+      counts = options.precomputedCounts;
+    }
     counts = counts || emptyCountsFromPayrollInput_(employeeId, year, month);
-    var opening = readOpeningCarry_(employeeId, year, month);
+    var opening = (options.openingCarry !== undefined && options.openingCarry !== null)
+      ? num_(options.openingCarry, 0)
+      : readOpeningCarry_(employeeId, year, month);
     var grant = grantForEmployeeMonth_(emp || {}, year, month);
-    var adj = adjustmentForEmployeeMonth_(employeeId, year, month);
+    var adj = (options.adjustmentDays !== undefined && options.adjustmentDays !== null)
+      ? num_(options.adjustmentDays, 0)
+      : adjustmentForEmployeeMonth_(employeeId, year, month);
     var used = monthLeaveUsedDays_(employeeId, year, month, counts, options.approvedLeaveDaysInMonth);
     var pool = opening + grant + adj;
     var split = leavePaidLopSplit_(used, pool);
@@ -298,6 +305,74 @@ var MonthlyLeaveService = (function () {
     };
   }
 
+  /**
+   * One pass per directory page load: ledger, adjustments, attendance counts for a calendar month.
+   */
+  function buildMonthDirectoryBatchContext_(year, month) {
+    year = Number(year);
+    month = Number(month);
+    var ledgerByEmp = {};
+    var adjByEmp = {};
+    var countsByEmp = {};
+    if (!year || month < 1 || month > 12) {
+      return { ledgerByEmp: ledgerByEmp, adjByEmp: adjByEmp, countsByEmp: countsByEmp, year: year, month: month };
+    }
+    (DbService.getAllRecords(HRMS.SHEETS.LEAVE_MONTHLY_LEDGER) || []).forEach(function (r) {
+      if (Number(r.period_year) !== year || Number(r.period_month) !== month) return;
+      var norm = typeof LeaveEngine !== 'undefined'
+        ? LeaveEngine.normalizeEmployeeId(r.employee_id)
+        : trim_(r.employee_id).toUpperCase();
+      if (norm) ledgerByEmp[norm] = r;
+    });
+    (DbService.getAllRecords(HRMS.SHEETS.LEAVE_MONTHLY_ADJUSTMENTS) || []).forEach(function (r) {
+      if (Number(r.period_year) !== year || Number(r.period_month) !== month) return;
+      var norm = typeof LeaveEngine !== 'undefined'
+        ? LeaveEngine.normalizeEmployeeId(r.employee_id)
+        : trim_(r.employee_id).toUpperCase();
+      if (!norm) return;
+      adjByEmp[norm] = (adjByEmp[norm] || 0) + num_(r.adjustment_days, 0);
+    });
+    var runIds = {};
+    (DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || []).forEach(function (run) {
+      if (Number(run.period_year) === year && Number(run.period_month) === month && run.payroll_run_id) {
+        runIds[String(run.payroll_run_id)] = true;
+      }
+    });
+    if (typeof AttendanceRegisterService !== 'undefined' && AttendanceRegisterService.parseRegister_) {
+      var dim = AttendanceRegisterService.daysInMonth_(year, month);
+      (DbService.getAllRecords(HRMS.SHEETS.PAYROLL_INPUTS) || []).forEach(function (inp) {
+        if (!inp || !runIds[String(inp.payroll_run_id)]) return;
+        var norm = typeof LeaveEngine !== 'undefined'
+          ? LeaveEngine.normalizeEmployeeId(inp.employee_id)
+          : trim_(inp.employee_id).toUpperCase();
+        if (!norm || countsByEmp[norm] || !inp.daily_attendance_json) return;
+        var reg = AttendanceRegisterService.parseRegister_(inp.daily_attendance_json);
+        var counts = { P: 0, 'W/H': 0, A: 0, L: 0, WO: 0, ML: 0, H: 0, '1/2P': 0 };
+        for (var d = 1; d <= dim; d++) {
+          var code = AttendanceRegisterService.normalizeCode_(reg[pad2_(d)]);
+          if (!code) continue;
+          if (code === '1/2P') counts['1/2P']++;
+          else if (counts.hasOwnProperty(code)) counts[code]++;
+        }
+        countsByEmp[norm] = counts;
+      });
+    }
+    return { ledgerByEmp: ledgerByEmp, adjByEmp: adjByEmp, countsByEmp: countsByEmp, year: year, month: month };
+  }
+
+  function applyLedgerRowToSummary_(out, lr) {
+    if (!out || !lr) return out;
+    out.month_opening_carry = num_(lr.opening_cf_days, 0);
+    out.month_grant = num_(lr.grant_days, 0);
+    out.month_adjustment = num_(lr.adjustment_days, 0);
+    out.month_pool = num_(lr.pool_days, 0);
+    out.month_used = num_(lr.used_days, 0);
+    out.month_paid = num_(lr.paid_leave_days, 0);
+    out.month_lop = num_(lr.lop_days, 0);
+    out.month_available = num_(lr.available_days, Math.max(0, out.month_pool - out.month_used));
+    return out;
+  }
+
   function emptyCountsFromPayrollInput_(employeeId, year, month) {
     var counts = { P: 0, 'W/H': 0, A: 0, L: 0, WO: 0, ML: 0, H: 0, '1/2P': 0 };
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { period_year: year, period_month: month });
@@ -359,6 +434,8 @@ var MonthlyLeaveService = (function () {
     monthlyEntitlementPool_: monthlyEntitlementPool_,
     lopFromExcessLeave_: lopFromExcessLeave_,
     fillMonthPoolSummary_: fillMonthPoolSummary_,
+    buildMonthDirectoryBatchContext_: buildMonthDirectoryBatchContext_,
+    applyLedgerRowToSummary_: applyLedgerRowToSummary_,
     leavePaidLopSplit_: leavePaidLopSplit_,
     readOpeningCarry_: readOpeningCarry_,
     emptyCountsFromPayrollInput_: emptyCountsFromPayrollInput_,

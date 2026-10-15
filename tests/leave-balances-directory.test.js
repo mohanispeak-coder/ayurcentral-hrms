@@ -56,8 +56,10 @@ check('calendar-month-timezone', /getCurrentCalendarMonth_/.test(leaveSvc) &&
 check('leave-balances-batch-context', /leave_summary_context/.test(emp) &&
   /summarizeLeaveYearRequestTotalsMap/.test(leaveSvc) && /buildLeaveBalanceIndex/.test(leaveSvc));
 check('leave-balances-ui-cache', /leave-balances/.test(leaveUi) && /leaveBalCacheKey_/.test(leaveUi));
-check('no-all-years-fallback', !/if \(!general\.length\) general = balances/.test(emp));
 var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
+check('leave-balances-month-batch', /buildMonthDirectoryBatchContext_/.test(monthly) &&
+  /monthBatch/.test(emp));
+check('no-all-years-fallback', !/if \(!general\.length\) general = balances/.test(emp));
 check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));
 check('leave-balances-lop-column', /Paid leaves used/.test(leaveUi) && /Total leaves/.test(leaveUi) &&
   /Carry forwarded/.test(leaveUi) && /Used leaves/.test(leaveUi));
