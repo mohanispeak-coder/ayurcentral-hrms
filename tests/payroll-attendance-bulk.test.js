@@ -112,7 +112,9 @@ var staleInp = {
 };
 var empHalf = { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' };
 var refreshedInp = Reg.applyDerivedDaysToInput_(staleInp, 2026, 9, 'SAPL', empHalf);
-check('payroll-refresh-half-day-paid', refreshedInp.paid_days === 2.5 && refreshedInp.paid_days !== staleInp.paid_days);
+check('payroll-refresh-half-day-paid', refreshedInp.paid_days === 3 &&
+  refreshedInp.paid_days !== staleInp.paid_days,
+  'paid=' + refreshedInp.paid_days + ' (2.5 present + 0.5 paid leave from ½P)');
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');

@@ -943,6 +943,9 @@ var PayrollService = (function () {
       if (st !== HRMS.PAYROLL_STATUS.APPROVED) {
         throw conflictError_('Lock is only allowed from APPROVED.');
       }
+      var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
+      refreshAttendanceDerivedDays_(run, inputs, employees);
+      records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
       var blocks = evaluateLockBlocks_(run, records, true);
       if (blocks.length) {
         throw conflictError_('Cannot lock: ' + blocks.join('; '));

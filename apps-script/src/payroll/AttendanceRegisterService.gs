@@ -168,6 +168,17 @@ var AttendanceRegisterService = (function () {
     };
   }
 
+  function paidDaysFromSummary_(summary, split) {
+    summary = summary || {};
+    split = split || {};
+    return (Number(summary.present) || 0) +
+      (Number(summary.week_off_holiday) || 0) +
+      (Number(summary.week_off) || 0) +
+      (Number(summary.holiday) || 0) +
+      (Number(summary.medical_leave) || 0) +
+      (Number(split.paid_leave_days) || 0);
+  }
+
   function derivePayrollDays_(summary) {
     summary = summary || {};
     var present = Number(summary.present) || 0;
@@ -181,33 +192,14 @@ var AttendanceRegisterService = (function () {
       split.lop_from_excess_leave = Number(summary.lop_from_excess_leave) || 0;
     }
     var lopFromLeave = split.lop_from_excess_leave;
-    var daysTotal = Number(summary.days_total);
-    if (isFinite(daysTotal) && daysTotal >= 0) {
-      var paidFromTotal = Math.max(0, daysTotal - lopFromLeave);
-      var lopTotal = absent + lopFromLeave;
-      return {
-        working_days: paidFromTotal + lopTotal,
-        paid_days: paidFromTotal,
-        lop_days: lopTotal,
-        days_present: present,
-        days_absent: absent,
-        leave_days: leaveDays,
-        paid_leave_days: split.paid_leave_days,
-        lop_from_excess_leave: lopFromLeave
-      };
-    }
-    var dim = Number(summary.days_in_month) || 0;
-    var wh = Number(summary.week_off_holiday) || 0;
-    var holiday = Number(summary.holiday) || 0;
-    var working = present + absent + leaveDays;
-    if (working <= 0 && dim > 0) {
-      working = dim - wh - holiday;
-    }
-    if (working <= 0) working = dim || 0;
-    var paid = present + split.paid_leave_days;
+    var paid = paidDaysFromSummary_(summary, split);
     var lop = absent + lopFromLeave;
-    if (paid + lop > working) {
-      working = paid + lop;
+    var working = paid + lop;
+    var dim = Number(summary.days_in_month) || 0;
+    if (working <= 0 && dim > 0) {
+      var wh = Number(summary.week_off_holiday) || 0;
+      var holiday = Number(summary.holiday) || 0;
+      working = Math.max(working, dim - wh - holiday);
     }
     return {
       working_days: working,
@@ -217,7 +209,8 @@ var AttendanceRegisterService = (function () {
       days_absent: absent,
       leave_days: leaveDays,
       paid_leave_days: split.paid_leave_days,
-      lop_from_excess_leave: lopFromLeave
+      lop_from_excess_leave: lopFromLeave,
+      days_total: Number(summary.days_total) || 0
     };
   }
 
