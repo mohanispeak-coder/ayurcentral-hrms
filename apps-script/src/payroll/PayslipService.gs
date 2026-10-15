@@ -767,11 +767,12 @@ var PayslipService = (function () {
     var uan = emp.uan_no || meta.uan_no || emp.uan || meta.uan || '';
     var esiNo = emp.esi_no || meta.esi_no || '';
 
-    var workingDays = rec.working_days != null && rec.working_days !== '' ? rec.working_days : 0;
-    var paidDays = rec.paid_days != null && rec.paid_days !== '' ? rec.paid_days : 0;
-    var lopDays = rec.lop_days != null && rec.lop_days !== '' ? rec.lop_days : 0;
+    var workingDays = rec.working_days != null && rec.working_days !== '' ? Number(rec.working_days) : 0;
+    var paidDays = rec.paid_days != null && rec.paid_days !== '' ? Number(rec.paid_days) : 0;
+    var lopDays = rec.lop_days != null && rec.lop_days !== '' ? Number(rec.lop_days) : 0;
     var dim = daysInMonth_(run.period_year, run.period_month);
-    var effectiveDays = workingDays != null && workingDays !== '' ? workingDays : paidDays;
+    var effectiveDays = round2_(paidDays + lopDays);
+    if (effectiveDays <= 0 && workingDays > 0) effectiveDays = workingDays;
 
     var earnRows = '';
     EARNING_ROWS_.forEach(function (row, idx) {

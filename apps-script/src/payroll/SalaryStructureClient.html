@@ -59,7 +59,7 @@
   var SECTION_EARNED_ = 'EARNED_PAY';
   var SECTION_DED_ = 'DEDUCTION';
   var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
-  var SST_UI_BUILD_ = '2026.10.15.1';
+  var SST_UI_BUILD_ = '2026.10.15.2';
   var EARNED_CALC_METHOD_ = 'PRORATE_ROUND_LINE';
   var EARNED_CALC_LABEL_ = 'Daily rate × paid days (round each line)';
 
@@ -164,7 +164,7 @@
       ['CTC', 'Monthly CTC (employee profile)'],
       ['RATE_GROSS', 'Section 1 - Total monthly gross (rate)'],
       ['EARNED_GROSS', 'Section 2 - Total earned gross'],
-      ['EARNED_BP_DA', 'Section 2 - Basic + DA (earned)']
+      ['EARNED_BP_DA', 'Section 2 - Basic + DA earned (for PF wage)']
     ];
     (rateCodes || []).forEach(function (code) {
       opts.push(['RATE_LINE:' + code, 'Section 1 - ' + code + ' (monthly rate)']);

@@ -363,7 +363,7 @@
 
     function renderVerticalSections_(list) {
       var groups = groupByVertical_(list);
-      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H'];
+      var codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P'];
       var verticals = Object.keys(groups).sort();
       if (!verticals.length) return '<p class="hint">No employees in this payroll run yet.</p>';
       return verticals.map(function (v, idx) {

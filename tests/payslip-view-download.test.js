@@ -46,6 +46,7 @@ check('payslip-logo-embedded', /HRMS_PAYSLIP_LOGO_B64_/.test(logoData) && /dataU
 check('payslip-logo-by-employee-id', /PayslipLogoService\.dataUriForEmployee/.test(payslip) && /split\('-'\)/.test(payslip));
 check('payslip-template-table-layout', /info-table/.test(payslip) && /class="split"/.test(payslip) && /coins-icon/.test(payslip));
 check('payslip-deduction-lines-helper', /payslipDeductionLines_/.test(payslip));
+check('payslip-effective-days-paid-plus-lop', /paidDays \+ lopDays/.test(payslip));
 check('payslip-htmlservice-pdf', /HtmlService\.createHtmlOutput/.test(payslip));
 check('payslip-address-by-vertical', /PAYSLIP_ADDRESS_BY_VERTICAL/.test(read('foundation/Constants.gs')));
 

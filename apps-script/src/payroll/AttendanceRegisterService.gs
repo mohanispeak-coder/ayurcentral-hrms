@@ -47,7 +47,8 @@ var AttendanceRegisterService = (function () {
     if (!s) return '';
     if (s === 'W/H' || s === 'WH' || s === 'W') return 'W/H';
     if (s === 'S') return 'ML';
-    if (s === '1/2P' || s === 'HALFP' || s === 'HP') return '1/2P';
+    var compact = s.replace(/\s+/g, '');
+    if (compact === '1/2P' || compact === 'HALFP' || compact === 'HP' || s === '1/2 P') return '1/2P';
     if (VALID_CODES_[s]) return VALID_CODES_[s];
     return '';
   }
@@ -176,10 +177,12 @@ var AttendanceRegisterService = (function () {
     var lopFromLeave = split.lop_from_excess_leave;
     var daysTotal = Number(summary.days_total);
     if (isFinite(daysTotal) && daysTotal >= 0) {
+      var paidFromTotal = Math.max(0, daysTotal - lopFromLeave);
+      var lopTotal = absent + lopFromLeave;
       return {
-        working_days: daysTotal + absent + lopFromLeave,
-        paid_days: Math.max(0, daysTotal - lopFromLeave),
-        lop_days: absent + lopFromLeave,
+        working_days: paidFromTotal + lopTotal,
+        paid_days: paidFromTotal,
+        lop_days: lopTotal,
         days_present: present,
         days_absent: absent,
         leave_days: leaveDays,
@@ -261,7 +264,7 @@ var AttendanceRegisterService = (function () {
   function leaveBalanceFormula_(range, poolCell) {
     var l = 'COUNTIF(' + range + ',"L")';
     var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
-    var half = 'COUNTIF(' + range + ',"1/2P")*0.5';
+    var half = 'COUNTIF(' + range + ',"1/2P")*0.5+COUNTIF(' + range + ',"1/2 P")*0.5';
     var absent = 'COUNTIF(' + range + ',"A")';
     return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + half + '+' + absent + '))';
   }
@@ -274,6 +277,7 @@ var AttendanceRegisterService = (function () {
     var end = colToLetter_(lastDayCol) + sheetRow;
     var range = start + ':' + end;
     var poolCell = colToLetter_(TEMPLATE_POOL_COL_) + sheetRow;
+    var halfDayPart = 'COUNTIF(' + range + ',"1/2P")*0.5+COUNTIF(' + range + ',"1/2 P")*0.5';
     var dayParts = [];
     ['P', 'W/H', 'L', 'WO', 'ML', 'H'].forEach(function (code) {
       if (code === 'W/H') {
@@ -292,9 +296,10 @@ var AttendanceRegisterService = (function () {
       WO: '=COUNTIF(' + range + ',"WO")',
       ML: '=COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")',
       H: '=COUNTIF(' + range + ',"H")',
+      '1/2P': '=COUNTIF(' + range + ',"1/2P")+COUNTIF(' + range + ',"1/2 P")',
       'Leave Balance': leaveBalanceFormula_(range, poolCell),
       'Leave Balan': leaveBalanceFormula_(range, poolCell),
-      DAYS: '=' + dayParts.join('+')
+      DAYS: '=' + dayParts.join('+') + '+' + halfDayPart
     };
     return formulas;
   }

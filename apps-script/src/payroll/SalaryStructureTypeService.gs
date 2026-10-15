@@ -37,7 +37,7 @@ var SalaryStructureTypeService = (function () {
 
   function defaultTemplateComponents_() {
     return [
-      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'BP', component_name: 'Basic + DA',
+      { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'BP', component_name: 'Basic',
         component_kind: HRMS.COMPONENT_KIND.EARNING, calc_method: HRMS.CALC_METHOD.PERCENT,
         percent_base: HRMS.PERCENT_BASE_CTC, percent: 60, sort_order: 1 },
       { structure_section: HRMS.STRUCTURE_SECTION.RATE_OF_PAY, component_code: 'HRA', component_name: 'HRA',
