@@ -38,8 +38,9 @@ check('bulk-preview-leave-fields', /monthly_grant/.test(bulkSrc) && /leave_balan
 check('template-leave-pool-column', /leave_pool/.test(regSrc) && /monthlyPoolForTemplateRow_/.test(regSrc));
 check('template-leave-balance-no-absent-in-pool', /leave_pool/.test(regSrc) &&
   /function leaveBalanceFormula_/.test(regSrc) && !/leaveBalanceFormula_[\s\S]{0,400}COUNTIF\(.+,"A"\)/.test(regSrc));
-check('template-version-9', /TEMPLATE_VERSION_ = '9'/.test(bulkSrc));
-check('template-l-includes-half-leave', /L: '=COUNTIF\([\s\S]*halfDayCountExpr_\(range, true\)/.test(regSrc));
+check('template-version-10', /TEMPLATE_VERSION_ = '10'/.test(bulkSrc));
+check('template-l-pool-capped', /poolLeave\.paidL/.test(regSrc));
+check('template-a-includes-excess-leave', /A: '=COUNTIF\([\s\S]*poolLeave\.excess/.test(regSrc));
 check('template-p-includes-half', /P: '=COUNTIF/.test(regSrc) && /halfDayCountExpr_\(range, true\)/.test(regSrc));
 check('template-no-half-column', !/'1\/2P': '=/.test(regSrc));
 check('validate-returns-period', /period_year: run\.period_year/.test(bulkSrc));
@@ -65,7 +66,8 @@ function loadRegister() {
 
 var Reg = loadRegister();
 var sum = Reg.summarize_({ '01': '1/2P', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
-check('half-day-leave-math', sum.leave_days === 1.5 && sum.present === 0.5);
+check('half-day-leave-math', sum.leave_days === 1.5 && sum.present === 0.5 &&
+  sum.leave_days_l_column === 1.5 && sum.absent_a_column === 0);
 var derivedHalfLeave = Reg.derivePayrollDays_(sum);
 check('half-day-leave-paid-within-pool', (derivedHalfLeave.paid_leave_days || 0) >= 1.5);
 var sumAbsent = Reg.summarize_({ '01': 'A', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });

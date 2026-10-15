@@ -1347,6 +1347,8 @@
           if (c === 'P' && row.days_present != null) val = row.days_present;
           else if (c === 'L' && row.leave_days_l_column != null) val = row.leave_days_l_column;
           else if (c === 'L' && row.days_leave != null) val = row.days_leave - (Number(cc.ML) || 0);
+          else if (c === 'A' && row.absent_a_column != null) val = row.absent_a_column;
+          else if (c === 'ML' && row.medical_leave_l_column != null) val = row.medical_leave_l_column;
           else val = cc[c] != null ? cc[c] : 0;
           line += '<td class="num">' + escapeHtml(val) + '</td>';
         });

@@ -49,7 +49,7 @@ check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
   /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
 check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '9'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '10'/.test(bulkSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
@@ -71,6 +71,8 @@ check('attendance-register-p-merged', !attClient.match(/codes = \['P', 'W\/H', '
   /days_present/.test(attClient));
 check('normalize-half-day-space', Reg.normalizeCode_('1/2 P') === '1/2P' && Reg.normalizeCode_('1/2p') === '1/2P');
 check('excel-half-summary-formula', /halfDayCountExpr_/.test(regSrc) && /CHAR\(47\)/.test(regSrc));
+check('template-pool-aware-l-a', /poolAwareLeaveExprs_/.test(regSrc) &&
+  /A: '=COUNTIF\([\s\S]*poolLeave\.excess/.test(regSrc));
 check('template-formulas-grid-range', /setFormulas\(formulaGrid\)/.test(bulkSrc));
 check('upload-uses-display-values', /getDisplayValues\(\)/.test(bulkSrc));
 check('payroll-bulk-no-attendance-columns', /'employee_id', 'display_name', 'work_email'/.test(payrollBulkSrc) &&
@@ -115,6 +117,20 @@ var refreshedInp = Reg.applyDerivedDaysToInput_(staleInp, 2026, 9, 'SAPL', empHa
 check('payroll-refresh-half-day-paid', refreshedInp.paid_days === 3 &&
   refreshedInp.paid_days !== staleInp.paid_days,
   'paid=' + refreshedInp.paid_days + ' (2.5 present + 0.5 paid leave from ½P)');
+
+var rockyReg = {
+  '01': '1/2P', '02': '1/2P', '03': 'L', '04': 'A', '05': 'A', '06': 'A'
+};
+var rockySum = Reg.summarize_(rockyReg, 2026, 9, 'SAPL',
+  { employee_id: 'SAPL-0077', vertical_name: 'SAPL', joining_date: '2020-01-01' });
+check('half-leave-in-l-when-pool-ok', rockySum.leave_days_l_column === 2 && rockySum.absent_a_column === 3,
+  'L=' + rockySum.leave_days_l_column + ' A=' + rockySum.absent_a_column);
+
+var poolFullReg = { '01': 'L', '02': 'L', '03': '1/2P', '04': 'A' };
+var poolFullSum = Reg.summarize_(poolFullReg, 2026, 9, 'SAPL',
+  { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' });
+check('half-over-pool-goes-to-a', poolFullSum.leave_days_l_column === 2 && poolFullSum.absent_a_column === 1.5,
+  'L=' + poolFullSum.leave_days_l_column + ' A=' + poolFullSum.absent_a_column);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');

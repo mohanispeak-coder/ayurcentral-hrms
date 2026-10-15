@@ -138,6 +138,7 @@ var AttendanceRegisterService = (function () {
       entitlementPool = MonthlyLeaveService.monthlyEntitlementPool_(emp, emp.employee_id, year, month);
     }
     var leaveSplit = leavePaidAndLopSplit_(leaveDays, entitlementPool);
+    var colSplit = leaveSummaryColumnSplit_(counts, entitlementPool);
     return {
       present: counts.P + halfPresent,
       week_off_holiday: counts['W/H'],
@@ -147,7 +148,9 @@ var AttendanceRegisterService = (function () {
       medical_leave: counts.ML,
       holiday: counts.H,
       leave_days: leaveDays,
-      leave_days_l_column: counts.L + halfPresent,
+      leave_days_l_column: colSplit.leave_days_l_column,
+      absent_a_column: colSplit.absent_a_column,
+      medical_leave_l_column: colSplit.medical_leave_l_column,
       days_total: daysTotal,
       leave_balance: computeLeaveBalance_(counts, vertical, emp, year, month),
       monthly_grant: monthlyGrant,
@@ -166,6 +169,29 @@ var AttendanceRegisterService = (function () {
     return {
       paid_leave_days: paidLeave,
       lop_from_excess_leave: Math.max(0, leaveDays - paidLeave)
+    };
+  }
+
+  /**
+   * Summary L / A / ML columns after monthly pool: ½P leave counts toward L while pool has room; excess → A (LOP).
+   * ML consumes pool first, then L + half-day leave portions.
+   */
+  function leaveSummaryColumnSplit_(counts, entitlementPool) {
+    counts = counts || {};
+    var rawL = (Number(counts.L) || 0) + halfDayPresent_(counts);
+    var rawML = Number(counts.ML) || 0;
+    var rawA = Number(counts.A) || 0;
+    var used = rawL + rawML;
+    var pool = Math.max(0, Number(entitlementPool) || 0);
+    var paid = Math.min(used, pool);
+    var excess = Math.max(0, used - pool);
+    var paidML = Math.min(rawML, paid);
+    var paidL = Math.min(rawL, Math.max(0, paid - paidML));
+    return {
+      leave_days_l_column: paidL,
+      medical_leave_l_column: paidML,
+      absent_a_column: rawA + excess,
+      lop_from_excess_leave: excess
     };
   }
 
@@ -276,6 +302,19 @@ var AttendanceRegisterService = (function () {
     return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + halfLeave + '))';
   }
 
+  function poolAwareLeaveExprs_(range, poolCell) {
+    var lRaw = 'COUNTIF(' + range + ',"L")';
+    var halfLeave = halfDayCountExpr_(range, true);
+    var rawL = '(' + lRaw + '+' + halfLeave + ')';
+    var rawML = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
+    var used = '(' + rawL + '+' + rawML + ')';
+    var paid = 'MIN(' + poolCell + ',' + used + ')';
+    var excess = 'MAX(0,' + used + '-' + poolCell + ')';
+    var paidML = 'MIN(' + rawML + ',' + paid + ')';
+    var paidL = 'MIN(' + rawL + ',MAX(0,' + paid + '-' + paidML + '))';
+    return { rawL: rawL, rawML: rawML, paidL: paidL, paidML: paidML, excess: excess };
+  }
+
   function summaryFormulasForRow_(sheetRow, year, month) {
     var dim = daysInMonth_(year, month);
     var firstCol = TEMPLATE_POOL_COL_ + 1;
@@ -284,6 +323,7 @@ var AttendanceRegisterService = (function () {
     var end = colToLetter_(lastDayCol) + sheetRow;
     var range = start + ':' + end;
     var poolCell = colToLetter_(TEMPLATE_POOL_COL_) + sheetRow;
+    var poolLeave = poolAwareLeaveExprs_(range, poolCell);
     var halfDayPart = halfDayCountExpr_(range, true);
     var dayParts = [];
     ['P', 'W/H', 'L', 'WO', 'ML', 'H'].forEach(function (code) {
@@ -298,10 +338,10 @@ var AttendanceRegisterService = (function () {
     var formulas = {
       P: '=COUNTIF(' + range + ',"P")+' + halfDayCountExpr_(range, true),
       'W/H': '=COUNTIF(' + range + ',"W"&CHAR(47)&"H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")',
-      A: '=COUNTIF(' + range + ',"A")',
-      L: '=COUNTIF(' + range + ',"L")+' + halfDayCountExpr_(range, true),
+      A: '=COUNTIF(' + range + ',"A")+' + poolLeave.excess,
+      L: '=' + poolLeave.paidL,
       WO: '=COUNTIF(' + range + ',"WO")',
-      ML: '=COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")',
+      ML: '=' + poolLeave.paidML,
       H: '=COUNTIF(' + range + ',"H")',
       'Leave Balance': leaveBalanceFormula_(range, poolCell),
       'Leave Balan': leaveBalanceFormula_(range, poolCell),
@@ -498,6 +538,8 @@ var AttendanceRegisterService = (function () {
     leaveBalanceMaxForVertical_: leaveBalanceMaxForVertical_,
     computeLeaveBalance_: computeLeaveBalance_,
     leavePaidAndLopSplit_: leavePaidAndLopSplit_,
+    leaveSummaryColumnSplit_: leaveSummaryColumnSplit_,
+    poolAwareLeaveExprs_: poolAwareLeaveExprs_,
     derivePayrollDays_: derivePayrollDays_,
     halfDayCountExpr_: halfDayCountExpr_,
     isRegisterComplete_: isRegisterComplete_,

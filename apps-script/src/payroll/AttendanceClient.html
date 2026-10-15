@@ -378,6 +378,12 @@
             } else if (c === 'L') {
               val = r.summary && r.summary.leave_days_l_column != null ? r.summary.leave_days_l_column
                 : (r.days_leave != null ? r.days_leave - (Number(cc.ML) || 0) : (Number(cc.L) || 0));
+            } else if (c === 'A') {
+              val = r.summary && r.summary.absent_a_column != null ? r.summary.absent_a_column
+                : (cc.A != null ? cc.A : 0);
+            } else if (c === 'ML') {
+              val = r.summary && r.summary.medical_leave_l_column != null ? r.summary.medical_leave_l_column
+                : (cc.ML != null ? cc.ML : 0);
             } else {
               val = cc[c] != null ? cc[c] : 0;
             }
@@ -452,8 +458,8 @@
         '<button type="button" class="btn btn-secondary" id="att-goto-formt">Form T</button></div>' +
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
         '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · ' +
-        '<strong>L</strong> paid leave (full L + ½ from each 1/2P day; uses pool; excess → LOP) · <strong>A</strong> LOP only · ' +
-        '<strong>1/2P</strong> on a day = 0.5 in P + 0.5 in L column · <strong>WO</strong> weekly off · ' +
+        '<strong>L</strong> paid leave (L + ½ from 1/2P, capped by monthly pool) · <strong>A</strong> LOP (marked A + leave over pool) · ' +
+        '<strong>1/2P</strong> = 0.5 P + 0.5 toward L or A once pool is used · <strong>WO</strong> weekly off · ' +
         '<strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
         '<div id="att-holidays-banner" class="hint" style="margin:8px 0"></div>' +
         '<p class="hint">Payroll run, vertical, and template must all match (e.g. PR-2026-10-AOPL with AOPL). ' +
@@ -742,6 +748,8 @@
           if (c === 'P' && row.days_present != null) val = row.days_present;
           else if (c === 'L' && row.leave_days_l_column != null) val = row.leave_days_l_column;
           else if (c === 'L' && row.days_leave != null) val = row.days_leave - (Number(cc.ML) || 0);
+          else if (c === 'A' && row.absent_a_column != null) val = row.absent_a_column;
+          else if (c === 'ML' && row.medical_leave_l_column != null) val = row.medical_leave_l_column;
           else val = cc[c] != null ? cc[c] : 0;
           line += '<td class="num">' + esc_(val) + '</td>';
         });
