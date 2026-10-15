@@ -49,7 +49,7 @@ check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
   /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
 check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '6'/.test(bulkSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
@@ -67,7 +67,9 @@ check('attendance-client-validate-step', /att-validate-upload/.test(attClient) &
 check('attendance-list-columns', /<th class="num">DAYS<\/th>/.test(attClient) && /WO/.test(attClient) && /ML/.test(attClient));
 check('attendance-register-half-column', /'1\/2P'/.test(attClient) && attClient.indexOf("codes = ['P', 'W/H', 'A', 'L', 'WO', 'ML', 'H', '1/2P']") >= 0);
 check('normalize-half-day-space', Reg.normalizeCode_('1/2 P') === '1/2P' && Reg.normalizeCode_('1/2p') === '1/2P');
-check('excel-half-summary-formula', /'1\/2P': '=COUNTIF/.test(regSrc) && /halfDayPart/.test(regSrc));
+check('excel-half-summary-formula', /halfDayCountExpr_/.test(regSrc) && /CHAR\(47\)/.test(regSrc));
+check('template-formulas-grid-range', /setFormulas\(formulaGrid\)/.test(bulkSrc));
+check('upload-uses-display-values', /getDisplayValues\(\)/.test(bulkSrc));
 check('payroll-bulk-no-attendance-columns', /'employee_id', 'display_name', 'work_email'/.test(payrollBulkSrc) &&
   !/'working_days', 'days_present'/.test(payrollBulkSrc));
 

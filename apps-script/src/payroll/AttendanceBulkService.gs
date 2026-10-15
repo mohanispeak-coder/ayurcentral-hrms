@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '5';
+  var TEMPLATE_VERSION_ = '6';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -137,6 +137,15 @@ var AttendanceBulkService = (function () {
     for (var c = dayStartCol; c < dayStartCol + dim; c++) {
       sheet.setColumnWidth(c, 34);
     }
+    if (dim > 0) {
+      var lastDayCol = dayStartCol + dim - 1;
+      var textRows = Math.max(1, sheet.getMaxRows() - 2);
+      sheet.getRange(3, dayStartCol, textRows, dim).setNumberFormat('@');
+    }
+    if (summaryLen > 0) {
+      var summaryStartCol = dayStartCol + dim;
+      sheet.getRange(2, summaryStartCol, 1, summaryLen).setNumberFormat('@');
+    }
   }
 
   function applySummaryFormulas_(sheet, rowNum, year, month, dim, dayStartCol) {
@@ -210,7 +219,7 @@ var AttendanceBulkService = (function () {
         ['Rows 1–2 on the Attendance sheet are headers only. Employee data starts on row 3.'],
         ['Eligible ACTIVE employees for this payroll month are listed (roster is built live from HRMS each download).'],
         ['Vertical: ' + verticalCode + ' (employees filtered to this vertical).'],
-        ['Fill one code per day: P, W/H (Work from Home; or WH), A, L, WO, ML (Maternity Leave; legacy S = ML), H.'],
+        ['Fill one code per day: P, W/H (Work from Home; or WH), A, L, WO, ML (Maternity Leave; legacy S = ML), H, 1/2P (half day present; or 1/2 P, HP).'],
         ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
         ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
         ['Leave Balance = leave_pool minus L, ML, ½P, and A (absent) days entered in the register.'],
@@ -259,7 +268,7 @@ var AttendanceBulkService = (function () {
           formulaGrid.push(rowFormulas);
         }
         if (formulaGrid.length) {
-          sheet.getRange(dataStartRow, summaryStart, numEmpRows, summaryLen).setFormulas(formulaGrid);
+          sheet.getRange(dataStartRow, summaryStart, formulaGrid.length, summaryLen).setFormulas(formulaGrid);
         }
       }
 
@@ -387,7 +396,7 @@ var AttendanceBulkService = (function () {
     try {
       var ss = SpreadsheetApp.openById(sheetId);
       var sheet = ss.getSheetByName('Attendance') || ss.getSheets()[0];
-      var values = sheet.getDataRange().getValues();
+      var values = sheet.getDataRange().getDisplayValues();
       if (!values || values.length < 2) return { headers: [], rows: [] };
       var headerRowIndex = 1;
       var headerProbe = values[1].map(function (h) { return trim_(h).toLowerCase(); });

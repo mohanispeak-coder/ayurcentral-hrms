@@ -261,10 +261,18 @@ var AttendanceRegisterService = (function () {
     return s;
   }
 
+  /** COUNTIF for half-day codes — CHAR(47) so Excel does not treat 1/2 as a date in formulas. */
+  function halfDayCountExpr_(range, weighted) {
+    var slash = '"1"&CHAR(47)&"2';
+    var count = 'COUNTIF(' + range + ',' + slash + 'P")+COUNTIF(' + range + ',' + slash + ' P")' +
+      '+COUNTIF(' + range + ',"HP")+COUNTIF(' + range + ',"HALFP")';
+    return weighted ? '(' + count + ')*0.5' : count;
+  }
+
   function leaveBalanceFormula_(range, poolCell) {
     var l = 'COUNTIF(' + range + ',"L")';
     var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
-    var half = 'COUNTIF(' + range + ',"1/2P")*0.5+COUNTIF(' + range + ',"1/2 P")*0.5';
+    var half = halfDayCountExpr_(range, true);
     var absent = 'COUNTIF(' + range + ',"A")';
     return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + half + '+' + absent + '))';
   }
@@ -277,7 +285,7 @@ var AttendanceRegisterService = (function () {
     var end = colToLetter_(lastDayCol) + sheetRow;
     var range = start + ':' + end;
     var poolCell = colToLetter_(TEMPLATE_POOL_COL_) + sheetRow;
-    var halfDayPart = 'COUNTIF(' + range + ',"1/2P")*0.5+COUNTIF(' + range + ',"1/2 P")*0.5';
+    var halfDayPart = halfDayCountExpr_(range, true);
     var dayParts = [];
     ['P', 'W/H', 'L', 'WO', 'ML', 'H'].forEach(function (code) {
       if (code === 'W/H') {
@@ -296,7 +304,7 @@ var AttendanceRegisterService = (function () {
       WO: '=COUNTIF(' + range + ',"WO")',
       ML: '=COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")',
       H: '=COUNTIF(' + range + ',"H")',
-      '1/2P': '=COUNTIF(' + range + ',"1/2P")+COUNTIF(' + range + ',"1/2 P")',
+      '1/2P': '=' + halfDayCountExpr_(range, false),
       'Leave Balance': leaveBalanceFormula_(range, poolCell),
       'Leave Balan': leaveBalanceFormula_(range, poolCell),
       DAYS: '=' + dayParts.join('+') + '+' + halfDayPart
@@ -474,6 +482,7 @@ var AttendanceRegisterService = (function () {
     computeLeaveBalance_: computeLeaveBalance_,
     leavePaidAndLopSplit_: leavePaidAndLopSplit_,
     derivePayrollDays_: derivePayrollDays_,
+    halfDayCountExpr_: halfDayCountExpr_,
     isRegisterComplete_: isRegisterComplete_,
     buildTemplateHeaders_: buildTemplateHeaders_,
     monthlyPoolForTemplateRow_: monthlyPoolForTemplateRow_,
