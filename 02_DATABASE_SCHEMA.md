@@ -251,7 +251,7 @@ Payroll for a month uses the structure **in force on the period end date** (see 
 | percent | Number | N | PERCENT_OF_BASIC |
 | sort_order | Number | Y | |
 
-TDS is **not** a structure formula; it is `PayrollInputs.tds_amount`.
+TDS, Advance, LCD, LWF, and Arrears are **not** salary structure lines; they are `PayrollInputs` fields filled via the **attendance register** (upload or save).
 
 ---
 
