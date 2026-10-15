@@ -8,11 +8,12 @@ var SalaryStatementService = (function () {
   var TEMPLATE_VERSION_ = '2';
 
   var RATE_EARN_KEYS_ = [
-    { label: 'Basic+Da', codes: ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'] },
+    { label: 'Basic+DA', codes: ['BASIC', 'BP', 'DA', 'BASIC_DA', 'BASIC+DA'] },
     { label: 'HRA', codes: ['HRA'] },
     { label: 'Conveyance Allowance', codes: ['CONV', 'CONVEYANCE', 'CA', 'CONVEYANCE_ALLOWANCE'] },
     { label: 'Medical All', codes: ['MEDICAL', 'MED', 'MA', 'MEDICAL_ALL'] },
-    { label: 'Special Allowance', codes: ['SA', 'SPECIAL', 'SPECIAL_ALLOWANCE'] }
+    { label: 'Special Allowance', codes: ['SA', 'SPECIAL', 'SPECIAL_ALLOWANCE'] },
+    { label: 'Arrears', codes: ['ARREARS', 'ARR'], exclude_from_gross_sum: true }
   ];
 
   var DED_KEYS_ = [
@@ -22,8 +23,7 @@ var SalaryStatementService = (function () {
     { label: 'ADVANCE', codes: ['ADVANCE', 'ADV'] },
     { label: 'TDS', codes: ['TDS'] },
     { label: 'LCD', codes: ['LCD'] },
-    { label: 'LWF', codes: ['LWF'] },
-    { label: 'Arrers', codes: ['ARREARS', 'ARR'] }
+    { label: 'LWF', codes: ['LWF'] }
   ];
 
   function trim_(v) {
@@ -136,15 +136,24 @@ var SalaryStatementService = (function () {
     return null;
   }
 
-  function findPayrollRun_(year, month) {
+  function findPayrollRun_(year, month, verticalName) {
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
-    var match = runs.filter(function (r) {
-      return Number(r.period_year) === Number(year) && Number(r.period_month) === Number(month);
+    var y = Number(year);
+    var m = Number(month);
+    var vertical = trim_(verticalName).toUpperCase();
+    var pool = runs.filter(function (r) {
+      return Number(r.period_year) === y && Number(r.period_month) === m;
     });
-    match.sort(function (a, b) {
+    if (vertical) {
+      pool = pool.filter(function (r) {
+        return String(r.vertical_name || '').toUpperCase() === vertical;
+      });
+      if (!pool.length) return null;
+    }
+    pool.sort(function (a, b) {
       return String(b.created_at || '').localeCompare(String(a.created_at || ''));
     });
-    return match.length ? match[0] : null;
+    return pool.length ? pool[0] : null;
   }
 
   function payrollEmpKey_(employeeId) {
@@ -182,22 +191,26 @@ var SalaryStatementService = (function () {
     return hit ? total : null;
   }
 
-  function mapBuckets_(lines, field) {
-    var rate = {};
-    var earned = {};
+  function mapEarnBuckets_(lines, field) {
+    var earn = {};
     RATE_EARN_KEYS_.forEach(function (col) {
-      rate[col.label] = pickFromLines_(lines, col.codes, field);
+      earn[col.label] = pickFromLines_(lines, col.codes, field);
     });
+    return earn;
+  }
+
+  function mapDedBuckets_(lines) {
     var ded = {};
     DED_KEYS_.forEach(function (col) {
-      ded[col.label] = pickFromLines_(lines, col.codes, field);
+      ded[col.label] = pickFromLines_(lines, col.codes, 'amount');
     });
-    return { rate: rate, ded: ded };
+    return ded;
   }
 
   function sumRateGross_(rateMap) {
     var t = 0;
     RATE_EARN_KEYS_.forEach(function (col) {
+      if (col.exclude_from_gross_sum) return;
       var v = rateMap[col.label];
       if (v != null) t = round2_(t + v);
     });
@@ -215,26 +228,71 @@ var SalaryStatementService = (function () {
     return trim_((emp.first_name || '') + ' ' + (emp.last_name || '')) || trim_(emp.employee_id);
   }
 
-  function linesFromResult_(result) {
-    if (!result || result.skipped || !result.component_breakdown) return [];
+  function parseBreakdownObj_(source) {
+    if (!source) return null;
     try {
-      var obj = JSON.parse(result.component_breakdown);
-      return obj.lines || [];
-    } catch (ignore) {
-      return [];
-    }
+      if (typeof source === 'string') return JSON.parse(source);
+      if (source.component_breakdown) {
+        return typeof source.component_breakdown === 'string'
+          ? JSON.parse(source.component_breakdown)
+          : source.component_breakdown;
+      }
+      if (source.sections || source.lines) return source;
+    } catch (ignore) {}
+    return null;
   }
 
-  function parseBreakdown_(record) {
-    if (!record || !record.component_breakdown) return null;
-    try {
-      var obj = typeof record.component_breakdown === 'string'
-        ? JSON.parse(record.component_breakdown)
-        : record.component_breakdown;
-      return obj && obj.lines ? obj.lines : null;
-    } catch (ignore) {
-      return null;
+  function sectionLines_(breakdown, section) {
+    breakdown = breakdown || {};
+    section = trim_(section).toLowerCase();
+    if (breakdown.sections) {
+      if (section === 'rate' && breakdown.sections.rate_of_pay) {
+        return breakdown.sections.rate_of_pay.lines || [];
+      }
+      if (section === 'earned' && breakdown.sections.earned_pay) {
+        return breakdown.sections.earned_pay.lines || [];
+      }
+      if (section === 'deduction') {
+        var out = [];
+        if (breakdown.sections.deduction_formulas) {
+          out = out.concat(breakdown.sections.deduction_formulas.lines || []);
+        }
+        if (breakdown.sections.manual_deductions) {
+          out = out.concat(breakdown.sections.manual_deductions.lines || []);
+        }
+        return out;
+      }
     }
+    var lines = breakdown.lines || [];
+    return lines.filter(function (ln) {
+      var phase = String(ln.phase || '').toUpperCase();
+      var sec = String(ln.structure_section || '').toUpperCase();
+      if (section === 'rate') return phase === 'RATE' || sec === 'RATE_OF_PAY';
+      if (section === 'earned') return phase === 'EARNED' || sec === 'EARNED_PAY';
+      if (section === 'deduction') return phase === 'DEDUCTION' || sec === 'DEDUCTION' ||
+        sec === 'MANUAL_DEDUCTION';
+      return false;
+    });
+  }
+
+  function linesFromResult_(result, section) {
+    if (!result || result.skipped) return [];
+    var obj = parseBreakdownObj_(result.component_breakdown ? result : result);
+    if (!obj && result.component_breakdown) {
+      obj = parseBreakdownObj_(result.component_breakdown);
+    }
+    if (!obj) return [];
+    return sectionLines_(obj, section || 'earned');
+  }
+
+  function mergeInputExtras_(target, input) {
+    if (!input) return target;
+    target = target || {};
+    if (typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.readFromInput) {
+      var extras = AttendancePayrollExtras.readFromInput(input);
+      Object.keys(extras).forEach(function (k) { target[k] = extras[k]; });
+    }
+    return target;
   }
 
   function pad2_(n) {
@@ -242,11 +300,49 @@ var SalaryStatementService = (function () {
     return n.length < 2 ? '0' + n : n;
   }
 
+  function applyExtrasToDeductions_(dedMap, inputs) {
+    dedMap = dedMap || {};
+    inputs = inputs || {};
+    if (dedMap['TDS'] == null && num_(inputs.tds_amount) > 0) {
+      dedMap['TDS'] = round2_(inputs.tds_amount);
+    }
+    if (dedMap['ADVANCE'] == null && num_(inputs.deduction_advance) > 0) {
+      dedMap['ADVANCE'] = round2_(inputs.deduction_advance);
+    }
+    if (dedMap['LCD'] == null && num_(inputs.deduction_lcd) > 0) {
+      dedMap['LCD'] = round2_(inputs.deduction_lcd);
+    }
+    if (dedMap['LWF'] == null && num_(inputs.deduction_lwf) > 0) {
+      dedMap['LWF'] = round2_(inputs.deduction_lwf);
+    }
+    if (dedMap['ADVANCE'] == null && num_(inputs.other_deductions) > 0) {
+      dedMap['ADVANCE'] = round2_(inputs.other_deductions);
+    }
+    return dedMap;
+  }
+
+  function num_(v) {
+    var n = Number(v);
+    return isFinite(n) ? n : 0;
+  }
+
+  function sumDeductions_(dedMap) {
+    var totalDed = 0;
+    DED_KEYS_.forEach(function (col) {
+      var v = dedMap[col.label];
+      if (v != null) totalDed = round2_(totalDed + v);
+    });
+    return totalDed;
+  }
+
   function buildEmployeeRow_(emp, ctx) {
     var warnings = [];
     var bundle = resolveStructureBundle_(emp, ctx.periodEnd);
     if (!bundle) {
       warnings.push('No salary structure for this month');
+    }
+    if (!ctx.run) {
+      warnings.push('No payroll run for this vertical and month — only rate of pay is shown.');
     }
 
     var fixedDays = ctx.fixedDays;
@@ -260,9 +356,12 @@ var SalaryStatementService = (function () {
       fixedDays = Number(ctx.run.working_days_default);
     }
 
-    var paidDays = fixedDays;
-    if (input && input.paid_days !== '' && input.paid_days != null) {
-      paidDays = Number(input.paid_days);
+    var paidDays = 0;
+    if (ctx.run) {
+      paidDays = fixedDays;
+      if (input && input.paid_days !== '' && input.paid_days != null) {
+        paidDays = Number(input.paid_days);
+      }
     }
 
     var settings = { payroll_round: ConfigService.getSetting('payroll_round', '') };
@@ -276,7 +375,7 @@ var SalaryStatementService = (function () {
       other_deductions: 0,
       tds_amount: 0
     };
-    var inputsEarned = {
+    var inputsEarned = mergeInputExtras_({
       working_days: fixedDays,
       paid_days: paidDays,
       lop_days: input ? Number(input.lop_days) || 0 : 0,
@@ -285,10 +384,15 @@ var SalaryStatementService = (function () {
       other_earnings: input ? Number(input.other_earnings) || 0 : 0,
       other_deductions: input ? Number(input.other_deductions) || 0 : 0,
       tds_amount: input ? Number(input.tds_amount) || 0 : 0
-    };
+    }, input);
 
     var rateResult = null;
     var earnedResult = null;
+    var breakdown = null;
+    if (record) {
+      breakdown = parseBreakdownObj_(record);
+    }
+
     if (bundle && typeof PayrollEngine !== 'undefined') {
       rateResult = PayrollEngine.calculateEmployee({
         structure: bundle.structure,
@@ -299,56 +403,71 @@ var SalaryStatementService = (function () {
         settings: settings,
         employee: emp
       });
-      earnedResult = PayrollEngine.calculateEmployee({
-        structure: bundle.structure,
-        components: bundle.components,
-        templateComponents: bundle.templateComponents,
-        payroll_rules: bundle.payroll_rules,
-        inputs: inputsEarned,
-        settings: settings,
-        employee: emp
-      });
+      if (ctx.run) {
+        earnedResult = PayrollEngine.calculateEmployee({
+          structure: bundle.structure,
+          components: bundle.components,
+          templateComponents: bundle.templateComponents,
+          payroll_rules: bundle.payroll_rules,
+          inputs: inputsEarned,
+          settings: settings,
+          employee: emp
+        });
+        if (!breakdown && earnedResult && earnedResult.component_breakdown) {
+          breakdown = parseBreakdownObj_(earnedResult);
+        }
+      }
     }
 
-    var rateLines = linesFromResult_(rateResult);
-    var earnLines = linesFromResult_(earnedResult);
+    var rateLines = breakdown ? sectionLines_(breakdown, 'rate') : linesFromResult_(rateResult, 'rate');
+    var earnLines = breakdown ? sectionLines_(breakdown, 'earned') : linesFromResult_(earnedResult, 'earned');
+    var dedLines = breakdown ? sectionLines_(breakdown, 'deduction') : linesFromResult_(earnedResult, 'deduction');
 
-    if (record) {
-      var snap = parseBreakdown_(record);
-      if (snap && snap.length) earnLines = snap;
-    }
+    var rateMap = mapEarnBuckets_(rateLines, 'contractual');
+    var earnedMap = mapEarnBuckets_(earnLines, 'amount');
+    var dedMap = mapDedBuckets_(dedLines);
+    dedMap = applyExtrasToDeductions_(dedMap, inputsEarned);
 
-    var rateBuckets = mapBuckets_(rateLines, 'contractual');
-    var earnedBuckets = mapBuckets_(earnLines, 'amount');
-
-    var rateGross = sumRateGross_(rateBuckets.rate);
-    var earnGross = earnedResult ? round2_(earnedResult.gross_earnings) : sumEarnGross_(earnedBuckets.rate);
-
-    var tds = inputsEarned.tds_amount;
-    if (earnedBuckets.ded['TDS'] == null && tds > 0) {
-      earnedBuckets.ded['TDS'] = tds;
-    }
-    if (inputsEarned.deduction_advance > 0 && earnedBuckets.ded['ADVANCE'] == null) {
-      earnedBuckets.ded['ADVANCE'] = round2_(inputsEarned.deduction_advance);
-    }
-    if (inputsEarned.deduction_lcd > 0 && earnedBuckets.ded['LCD'] == null) {
-      earnedBuckets.ded['LCD'] = round2_(inputsEarned.deduction_lcd);
-    }
-    if (inputsEarned.deduction_lwf > 0 && earnedBuckets.ded['LWF'] == null) {
-      earnedBuckets.ded['LWF'] = round2_(inputsEarned.deduction_lwf);
-    }
-    if (inputsEarned.other_deductions > 0 && earnedBuckets.ded['ADVANCE'] == null) {
-      earnedBuckets.ded['ADVANCE'] = round2_(inputsEarned.other_deductions);
+    var arrears = breakdown && breakdown.arrears != null
+      ? round2_(breakdown.arrears)
+      : (typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.arrearsFromInput
+        ? AttendancePayrollExtras.arrearsFromInput(inputsEarned)
+        : num_(inputsEarned.arrears_amount));
+    if (arrears > 0) {
+      earnedMap['Arrears'] = arrears;
     }
 
-    var totalDed = earnedResult ? round2_(earnedResult.total_deductions) : 0;
-    if (!totalDed) {
-      DED_KEYS_.forEach(function (col) {
-        var v = earnedBuckets.ded[col.label];
-        if (v != null) totalDed = round2_(totalDed + v);
-      });
+    var rateGross = breakdown && breakdown.rate_gross != null
+      ? round2_(breakdown.rate_gross)
+      : sumRateGross_(rateMap);
+    if (!rateGross && rateResult && rateResult.component_breakdown) {
+      var rateBd = parseBreakdownObj_(rateResult);
+      if (rateBd && rateBd.rate_gross != null) rateGross = round2_(rateBd.rate_gross);
+      else if (rateBd && rateBd.sections && rateBd.sections.rate_of_pay) {
+        rateGross = round2_(rateBd.sections.rate_of_pay.gross);
+      }
     }
-    var netPay = earnedResult ? round2_(earnedResult.net_pay) : round2_(earnGross - totalDed);
+
+    var earnGross = 0;
+    var totalDed = 0;
+    var netPay = 0;
+    var employerCtc = rateGross;
+
+    if (ctx.run) {
+      earnGross = record && record.gross_earnings != null && record.gross_earnings !== ''
+        ? round2_(record.gross_earnings)
+        : (earnedResult ? round2_(earnedResult.gross_earnings) : sumEarnGross_(earnedMap));
+      totalDed = record && record.total_deductions != null && record.total_deductions !== ''
+        ? round2_(record.total_deductions)
+        : (earnedResult ? round2_(earnedResult.total_deductions) : sumDeductions_(dedMap));
+      if (!totalDed) totalDed = sumDeductions_(dedMap);
+      netPay = record && record.net_pay != null && record.net_pay !== ''
+        ? round2_(record.net_pay)
+        : (earnedResult ? round2_(earnedResult.net_pay) : round2_(earnGross - totalDed + arrears));
+      employerCtc = earnedResult
+        ? round2_((earnGross || 0) + (earnedResult.employer_contributions || 0))
+        : earnGross;
+    }
 
     return {
       employee_id: emp.employee_id,
@@ -360,15 +479,14 @@ var SalaryStatementService = (function () {
       vertical_name: trim_(emp.vertical_name),
       fixed_days: fixedDays,
       worked_days: paidDays,
-      rate: rateBuckets.rate,
+      rate: rateMap,
       rate_gross: rateGross,
-      earned: earnedBuckets.rate,
+      earned: earnedMap,
       earned_gross: earnGross,
-      deductions: earnedBuckets.ded,
+      deductions: dedMap,
       total_deductions: totalDed,
       net_pay: netPay,
-      employer_ctc: earnedResult ? round2_((earnedResult.gross_earnings || 0) +
-        (earnedResult.employer_contributions || 0)) : rateGross,
+      employer_ctc: employerCtc,
       warnings: warnings
     };
   }
@@ -380,7 +498,7 @@ var SalaryStatementService = (function () {
     var year = Number(options.period_year || options.year) || now.getFullYear();
     var month = Number(options.period_month || options.month) || (now.getMonth() + 1);
     var vertical = trim_(options.vertical_name || options.vertical);
-    var run = findPayrollRun_(year, month);
+    var run = vertical ? findPayrollRun_(year, month, vertical) : null;
     var maps = loadPayrollMaps_(run ? run.payroll_run_id : '');
     var fixedDays = daysInMonth_(year, month);
     if (run && Number(run.working_days_default) > 0) fixedDays = Number(run.working_days_default);
@@ -425,6 +543,15 @@ var SalaryStatementService = (function () {
       }
     });
 
+    var previewMode = !run;
+    var statusMessage = '';
+    if (!vertical) {
+      statusMessage = 'Select a vertical — salary statement is tied to that vertical’s payroll run for the month.';
+    } else if (previewMode) {
+      statusMessage = 'No payroll run for ' + vertical + ' in ' + monthLabel_(year, month) +
+        '. Start payroll and lock the run to populate earned pay, deductions, and net.';
+    }
+
     return {
       template_version: TEMPLATE_VERSION_,
       period_year: year,
@@ -433,6 +560,8 @@ var SalaryStatementService = (function () {
       payroll_run_id: run ? run.payroll_run_id : '',
       payroll_status: run ? String(run.status || '') : '',
       vertical_filter: vertical,
+      preview_mode: previewMode,
+      status_message: statusMessage,
       rows: rows,
       employee_count: rows.length,
       generated_at: new Date().toISOString()

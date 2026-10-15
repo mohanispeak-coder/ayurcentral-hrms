@@ -7,6 +7,7 @@
 (function () {
   'use strict';
   var initialized_ = false;
+  var catalog_ = [];
   var filter_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, vertical: '' };
 
   function whenAppReady(fn) {
@@ -48,6 +49,17 @@
       return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function initFilterFromContext_() {
+      if (App.readPayrollPeriodContext) {
+        var ctx = App.readPayrollPeriodContext();
+        if (ctx) {
+          if (ctx.year) filter_.year = Number(ctx.year);
+          if (ctx.month) filter_.month = Number(ctx.month);
+          if (ctx.vertical) filter_.vertical = String(ctx.vertical).trim().toUpperCase();
+        }
+      }
+    }
+
     function filterPayload_() {
       return {
         period_year: filter_.year,
@@ -56,72 +68,90 @@
       };
     }
 
+    function verticalSelectHtml_(selected) {
+      selected = String(selected || '').trim().toUpperCase();
+      if (!catalog_.length) {
+        return '<select class="form-input" id="sal-stmt-vertical"><option value="">No verticals configured</option></select>';
+      }
+      var opts = '<option value="">Select vertical…</option>' +
+        catalog_.map(function (v) {
+          var code = String(v.vertical_name || '').trim().toUpperCase();
+          return '<option value="' + esc_(code) + '">' + esc_(code) + ' — ' + esc_(v.legal_name || '') + '</option>';
+        }).join('');
+      var html = '<select class="form-input" id="sal-stmt-vertical">' + opts + '</select>';
+      return html;
+    }
+
     function render_(params) {
       params = params || {};
       if (params.year) filter_.year = Number(params.year);
       if (params.month) filter_.month = Number(params.month);
+      initFilterFromContext_();
       var page = pageEl_();
       if (!page) return;
       page.innerHTML =
         '<div class="sal-stmt-page"><div class="page-header"><h2>Salary Statement</h2>' +
-        '<p class="page-lede">SAPL-style monthly statement: rate of pay, worked days, earned pay, deductions, and net. ' +
-        'Uses salary structures and payroll inputs when a run exists for the selected month. Download matches the Excel layout.</p></div>' +
+        '<p class="page-lede">SAPL-style monthly statement tied to a vertical payroll run: rate of pay, worked days, earned pay, deductions, and net. ' +
+        'Without a run for the selected vertical and month, only contractual rate of pay is shown.</p></div>' +
         '<div id="sal-stmt-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
-      load_();
+      callServer('apiGetVerticalCatalog').then(function (cat) {
+        catalog_ = cat || [];
+        if (!filter_.vertical && catalog_.length) {
+          filter_.vertical = String(catalog_[0].vertical_name || '').trim().toUpperCase();
+        }
+        load_();
+      }).catch(function () {
+        catalog_ = [];
+        load_();
+      });
     }
 
     function load_() {
+      if (!filter_.vertical) {
+        paintShell_(null, { status_message: 'Select a vertical to load the salary statement.', rows: [], preview_mode: true });
+        return;
+      }
       callServer('apiListSalaryStatement', filterPayload_()).then(function (data) {
-        paint_(data || {});
+        paintShell_(data || {}, data || {});
       }).catch(function (err) {
         var m = document.getElementById('sal-stmt-mount');
         if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load salary statement.') + '</div>';
       });
     }
 
-    function paint_(data) {
+    function paintShell_(data, tableData) {
       var m = document.getElementById('sal-stmt-mount');
       if (!m) return;
-      var rows = data.rows || [];
-      var runHint = data.payroll_run_id
-        ? 'Payroll run ' + esc_(data.payroll_run_id) + ' (' + esc_(data.payroll_status) + ')'
-        : 'No payroll run for this month - earned pay uses full fixed days unless you start payroll.';
-
-      var body = rows.map(function (r) {
-        return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td><td>' +
-          esc_(r.designation) + '</td><td>' + esc_(r.department) + '</td><td class="num">' + esc_(r.fixed_days) +
-          '</td><td class="num">' + esc_(r.worked_days) + '</td><td class="num">' + fmtNum_(r.rate_gross) +
-          '</td><td class="num">' + fmtNum_(r.earned_gross) + '</td><td class="num">' + fmtNum_(r.total_deductions) +
-          '</td><td class="num">' + fmtNum_(r.net_pay) + '</td><td class="num">' + fmtNum_(r.employer_ctc) +
-          '</td></tr>';
-      }).join('');
-
+      data = data || {};
+      tableData = tableData || data;
       m.innerHTML =
         '<div class="card"><div class="sal-stmt-head">' +
         '<div class="form-group"><label class="form-label">Year</label><input class="form-input" type="number" id="sal-stmt-year" value="' + esc_(filter_.year) + '"></div>' +
         '<div class="form-group"><label class="form-label">Month</label><input class="form-input" type="number" min="1" max="12" id="sal-stmt-month" value="' + esc_(filter_.month) + '"></div>' +
-        '<div class="form-group"><label class="form-label">Vertical (optional)</label><input class="form-input" id="sal-stmt-vertical" placeholder="SAPL" value="' + esc_(filter_.vertical) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Vertical</label>' + verticalSelectHtml_(filter_.vertical) + '</div>' +
         '<button type="button" class="btn btn-secondary" id="sal-stmt-apply">Apply</button>' +
         '<button type="button" class="btn btn-primary" id="sal-stmt-dl">Download Excel</button>' +
         '</div>' +
-        '<p class="hint">' + esc_(data.period_label || '') + ' · ' + esc_(rows.length) + ' employee(s) · ' + runHint + '</p>' +
-        (rows.length
-          ? '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-            '<th>EMP ID</th><th>Name</th><th>Designation</th><th>Department</th>' +
-            '<th class="num">Fixed days</th><th class="num">Worked</th><th class="num">Rate gross</th>' +
-            '<th class="num">Earned gross</th><th class="num">Total ded</th><th class="num">Net pay</th><th class="num">Cost (earn+ER)</th>' +
-            '</tr></thead><tbody>' + body + '</tbody></table></div>'
-          : '<p class="hint">No active employees for this filter.</p>') +
-        '</div>';
+        '<div id="sal-stmt-body"></div></div>';
+
+      var sel = document.getElementById('sal-stmt-vertical');
+      if (sel && filter_.vertical) sel.value = filter_.vertical;
 
       document.getElementById('sal-stmt-apply').addEventListener('click', function () {
         filter_.year = Number(document.getElementById('sal-stmt-year').value);
         filter_.month = Number(document.getElementById('sal-stmt-month').value);
-        filter_.vertical = document.getElementById('sal-stmt-vertical').value.trim();
+        filter_.vertical = String(document.getElementById('sal-stmt-vertical').value || '').trim().toUpperCase();
+        if (App.persistPayrollPeriodContext) {
+          App.persistPayrollPeriodContext({ year: filter_.year, month: filter_.month, vertical: filter_.vertical });
+        }
         load_();
       });
 
       document.getElementById('sal-stmt-dl').addEventListener('click', function () {
+        if (!filter_.vertical) {
+          showToast('Select a vertical first.', 'error');
+          return;
+        }
         var btn = this;
         callServer('apiDownloadSalaryStatement', filterPayload_(), { button: btn, loadingText: 'Downloading…' })
           .then(function (res) {
@@ -143,6 +173,40 @@
           })
           .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
       });
+
+      paintTable_(tableData);
+    }
+
+    function paintTable_(data) {
+      var body = document.getElementById('sal-stmt-body');
+      if (!body) return;
+      var rows = data.rows || [];
+      var runHint = data.payroll_run_id
+        ? 'Payroll run ' + esc_(data.payroll_run_id) + ' (' + esc_(data.payroll_status) + ')'
+        : (data.preview_mode ? 'Preview — no payroll run' : 'No payroll run');
+      var statusLine = data.status_message ? esc_(data.status_message) : '';
+      var alertClass = data.preview_mode && filter_.vertical ? 'alert alert-warning' : 'hint';
+
+      var tableBody = rows.map(function (r) {
+        return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td><td>' +
+          esc_(r.designation) + '</td><td>' + esc_(r.department) + '</td><td class="num">' + esc_(r.fixed_days) +
+          '</td><td class="num">' + esc_(r.worked_days) + '</td><td class="num">' + fmtNum_(r.rate_gross) +
+          '</td><td class="num">' + fmtNum_(r.earned_gross) +
+          '</td><td class="num">' + fmtNum_(r.total_deductions) +
+          '</td><td class="num">' + fmtNum_(r.net_pay) + '</td><td class="num">' + fmtNum_(r.employer_ctc) +
+          '</td></tr>';
+      }).join('');
+
+      body.innerHTML =
+        (statusLine ? '<p class="' + alertClass + '">' + statusLine + '</p>' : '') +
+        '<p class="hint">' + esc_(data.period_label || '') + ' · ' + esc_(rows.length) + ' employee(s) · ' + runHint + '</p>' +
+        (rows.length
+          ? '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+            '<th>EMP ID</th><th>Name</th><th>Designation</th><th>Department</th>' +
+            '<th class="num">Fixed days</th><th class="num">Worked</th><th class="num">Rate gross</th>' +
+            '<th class="num">Earned gross</th><th class="num">Total ded</th><th class="num">Net pay</th><th class="num">Cost (earn+ER)</th>' +
+            '</tr></thead><tbody>' + tableBody + '</tbody></table></div>'
+          : '<p class="hint">No active employees for this filter.</p>');
 
       if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-statement');
     }
