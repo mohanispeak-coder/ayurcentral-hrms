@@ -46,7 +46,8 @@ check('global-button-busy', /isGlobalActionBusy/.test(scripts) && /globalLoading
 var timeOffBlock = scripts.match(/id:\s*'time-off'[\s\S]*?collapsible:\s*true/);
 var payrollBlock = scripts.match(/id:\s*'payroll',\s*label:\s*'Payroll'[\s\S]*?collapsible:\s*true/);
 
-check('nav-attendance-section', /id:\s*'attendance'[\s\S]*routes:\s*\['attendance-bulk-upload',\s*'attendance-form-t'\]/.test(scripts));
+check('nav-attendance-section', /id:\s*'attendance'[\s\S]*routes:\s*\['attendance-bulk-upload',\s*'attendance-form-t',\s*'holiday-calendar'\]/.test(scripts));
+check('attendance-nav-single-active', !/itemRoute === 'holiday-calendar'\)[\s\S]*return true/.test(scripts));
 check('nav-payroll-section', /id:\s*'payroll'[\s\S]*routes:\s*\['salary-structure',\s*'salary-statement',\s*'payroll'\]/.test(scripts));
 check('salary-structure-in-payroll-group', /id:\s*'payroll'[\s\S]*salary-structure/.test(scripts));
 check('salary-statement-in-payroll-group', /id:\s*'payroll'[\s\S]*salary-statement/.test(scripts));

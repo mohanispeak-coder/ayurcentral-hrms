@@ -1232,7 +1232,8 @@
                     result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
                     result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline') ||
                     (result.hasOwnProperty('groups') && result.hasOwnProperty('fields')) ||
-                    (result.hasOwnProperty('base64') && result.hasOwnProperty('fileName'))) {
+                    (result.hasOwnProperty('base64') && result.hasOwnProperty('fileName')) ||
+                    (Array.isArray(result.holidays) && result.hasOwnProperty('calendar_year'))) {
                   resolve(result);
                   return;
                 }
@@ -1414,10 +1415,6 @@
     if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'payroll-employee-salary')) return true;
     if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
-    if ((itemRoute === 'attendance-bulk-upload' || itemRoute === 'attendance-form-t' || itemRoute === 'holiday-calendar') &&
-        (current === 'attendance-bulk-upload' || current === 'attendance-form-t' || current === 'holiday-calendar')) {
-      return true;
-    }
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
     if (itemRoute === 'ats' && (current.indexOf('ats-') === 0)) return false;

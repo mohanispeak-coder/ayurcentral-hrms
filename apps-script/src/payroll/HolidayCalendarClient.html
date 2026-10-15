@@ -28,6 +28,8 @@
     var pageHeaderHtml = App.pageHeaderHtml;
 
     var state = { year: new Date().getFullYear(), scope: 'ALL', preview: null };
+    var listLoadGen_ = 0;
+    var MODULE_KEY_ = 'holiday-calendar';
 
     function holBannerEl_() {
       return $('hol-status-banner');
@@ -72,10 +74,17 @@
       render: function () { renderPage(); }
     });
 
-    function stillOn(seq) {
-      if (App.routeStill) return App.routeStill(seq, 'holiday-calendar');
+    function onHolidayRoute_() {
       var s = App.getState();
-      return seq === s.navSeq && s.currentRoute === 'holiday-calendar';
+      return s && s.currentRoute === MODULE_KEY_;
+    }
+
+    function stillOn(seq, loadGen) {
+      if (!onHolidayRoute_()) return false;
+      if (loadGen != null && loadGen !== listLoadGen_) return false;
+      if (App.routeStill) return App.routeStill(seq, MODULE_KEY_);
+      var s = App.getState();
+      return seq === s.navSeq;
     }
 
     function renderPage() {
@@ -95,16 +104,28 @@
 
     function loadAndPaint(seq, opts) {
       opts = opts || {};
+      var loadGen = ++listLoadGen_;
       if (!opts.quietSuccess) holNotify_('Refreshing holiday list…', 'busy', false);
       var refreshBtn = $('hol-refresh');
       var query = { calendar_year: state.year, scope: state.scope };
       var p = refreshBtn
         ? callServer('apiHolidayList', query, { button: refreshBtn, loadingText: 'Refreshing…' })
         : callServer('apiHolidayList', query);
+      var slowTimer = setTimeout(function () {
+        if (loadGen !== listLoadGen_ || !onHolidayRoute_()) return;
+        holNotify_('Still loading holidays… large calendars can take up to a minute.', 'busy', false);
+      }, 20000);
       p.then(function (data) {
-        if (!stillOn(seq)) return;
-        paint(data);
-        var n = (data.holidays || []).length;
+        if (!stillOn(seq, loadGen)) return;
+        try {
+          paint(data || {});
+        } catch (paintErr) {
+          holNotify_(paintErr.message || 'Failed to display holidays', 'error', true);
+          if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+          return;
+        }
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+        var n = (data && data.holidays ? data.holidays : []).length;
         if (opts.successMessage) {
           holNotify_(opts.successMessage, 'success', true);
         } else if (!opts.quietSuccess) {
@@ -113,13 +134,17 @@
           holNotify_('Showing ' + n + ' holiday(s) for calendar year ' + state.year + '. Actions below update this list.', 'info', false);
         }
       }).catch(function (err) {
-        if (!stillOn(seq)) return;
+        if (!stillOn(seq, loadGen)) return;
         var msg = err.message || 'Failed to load holidays';
         holNotify_(msg, 'error', true);
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
         var body = $('holiday-cal-body');
         if (body) {
-          body.innerHTML = '<p class="hint">If you are signed in as <strong>HR</strong> or <strong>Admin</strong> and still see this, refresh the page after IT deploys the latest HRMS build, or use the header <strong>Refresh</strong> button.</p>';
+          body.innerHTML = '<div class="alert alert-danger">' + escapeHtml(msg) + '</div>' +
+            '<p class="hint">Use the header <strong>Refresh</strong> button to try again. HR and Admin roles can manage this page once the session is valid.</p>';
         }
+      }).finally(function () {
+        clearTimeout(slowTimer);
       });
       return p;
     }
