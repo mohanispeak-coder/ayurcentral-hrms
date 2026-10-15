@@ -54,7 +54,7 @@ var SalaryStructureTypeService = (function () {
         round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 6 },
       { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'PF', component_name: 'PF',
         component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_CAPPED,
-        percent_base: 'RATE_LINE:BP', percent: 12, cap_amount: 25000, round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 10 },
+        percent_base: HRMS.FORMULA_REF.EARNED_BP_DA, percent: 12, cap_amount: 25000, round_mode: HRMS.FORMULA_ROUND.ROUND, sort_order: 10 },
       { structure_section: HRMS.STRUCTURE_SECTION.DEDUCTION, component_code: 'ESIC', component_name: 'ESIC',
         component_kind: HRMS.COMPONENT_KIND.DEDUCTION, calc_method: HRMS.CALC_METHOD.PERCENT_IF,
         cond_ref: HRMS.FORMULA_REF.RATE_GROSS, cond_op: 'LT', cond_value: 21001,
@@ -139,6 +139,7 @@ var SalaryStructureTypeService = (function () {
     if (!ref) return false;
     if (ref === HRMS.PERCENT_BASE_CTC || ref === 'CTC') return true;
     if (ref === HRMS.FORMULA_REF.RATE_GROSS || ref === HRMS.FORMULA_REF.EARNED_GROSS) return true;
+    if (ref === HRMS.FORMULA_REF.EARNED_BP_DA) return true;
     if (ref.indexOf('RATE_LINE:') === 0 || ref.indexOf('EARNED_LINE:') === 0) {
       return !!codesSoFar[lineRefInner_(ref)];
     }

@@ -59,7 +59,7 @@
   var SECTION_EARNED_ = 'EARNED_PAY';
   var SECTION_DED_ = 'DEDUCTION';
   var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
-  var SST_UI_BUILD_ = '2026.10.14.18';
+  var SST_UI_BUILD_ = '2026.10.15.1';
   var EARNED_CALC_METHOD_ = 'PRORATE_ROUND_LINE';
   var EARNED_CALC_LABEL_ = 'Daily rate × paid days (round each line)';
 
@@ -76,7 +76,7 @@
     ['FIXED', 'Same fixed ₹ every month (not typed in payroll)']
   ];
   var DED_PRESETS_ = {
-    PF: { component_code: 'PF', component_name: 'PF', calc_method: 'PERCENT_CAPPED', percent_base: 'RATE_LINE:BP', percent: 12, cap_amount: 25000, round_mode: 'ROUND' },
+    PF: { component_code: 'PF', component_name: 'PF', calc_method: 'PERCENT_CAPPED', percent_base: 'EARNED_BP_DA', percent: 12, cap_amount: 25000, round_mode: 'ROUND' },
     ESIC: { component_code: 'ESIC', component_name: 'ESIC', calc_method: 'PERCENT_IF', cond_ref: 'RATE_GROSS', cond_op: 'LT', cond_value: 21001, percent_base: 'EARNED_GROSS', percent: 0.75, round_mode: 'ROUNDUP' },
     PT: { component_code: 'PT', component_name: 'Professional tax', calc_method: 'THRESHOLD_FEE', cond_ref: 'EARNED_GROSS', cond_op: 'LTE', cond_value: 25000, amount: 200, round_mode: 'ROUND' }
   };
@@ -163,7 +163,8 @@
     var opts = [
       ['CTC', 'Monthly CTC (employee profile)'],
       ['RATE_GROSS', 'Section 1 - Total monthly gross (rate)'],
-      ['EARNED_GROSS', 'Section 2 - Total earned gross']
+      ['EARNED_GROSS', 'Section 2 - Total earned gross'],
+      ['EARNED_BP_DA', 'Section 2 - Basic + DA (earned)']
     ];
     (rateCodes || []).forEach(function (code) {
       opts.push(['RATE_LINE:' + code, 'Section 1 - ' + code + ' (monthly rate)']);

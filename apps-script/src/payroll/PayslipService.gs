@@ -541,6 +541,7 @@ var PayslipService = (function () {
 
   var EARNING_ROWS_ = [
     { label: 'Basic', codes: ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'] },
+    { label: 'Dearness Allowance', codes: ['DA'] },
     { label: 'HRA', codes: ['HRA'] },
     { label: 'Conveyance', codes: ['CONV', 'CONVEYANCE', 'CA', 'CONVEYANCE_ALLOWANCE'] },
     { label: 'Medical Allowance', codes: ['MEDICAL', 'MED', 'MA', 'MEDICAL_ALL', 'MEDICAL_ALLOWANCE'] },
@@ -582,6 +583,37 @@ var PayslipService = (function () {
   function sumFromLines_(lines, codes, field) {
     var v = pickFromLines_(lines, codes, field);
     return v == null ? 0 : v;
+  }
+
+  /** Section 2 earned lines only — avoids double-counting Section 1 rate lines in breakdown.lines. */
+  function payslipEarningLines_(breakdown) {
+    breakdown = breakdown || {};
+    if (breakdown.sections && breakdown.sections.earned_pay && breakdown.sections.earned_pay.lines) {
+      return breakdown.sections.earned_pay.lines;
+    }
+    return (breakdown.lines || []).filter(function (ln) {
+      var phase = String(ln.phase || '').toUpperCase();
+      var sec = String(ln.structure_section || '').toUpperCase();
+      return phase === 'EARNED' || sec === 'EARNED_PAY';
+    });
+  }
+
+  /** Formula + manual deduction lines (employee deductions on payslip). */
+  function payslipDeductionLines_(breakdown) {
+    breakdown = breakdown || {};
+    var out = [];
+    if (breakdown.sections) {
+      if (breakdown.sections.deduction_formulas && breakdown.sections.deduction_formulas.lines) {
+        out = out.concat(breakdown.sections.deduction_formulas.lines);
+      }
+      if (breakdown.sections.manual_deductions && breakdown.sections.manual_deductions.lines) {
+        out = out.concat(breakdown.sections.manual_deductions.lines);
+      }
+      if (out.length) return out;
+    }
+    return (breakdown.lines || []).filter(function (ln) {
+      return String(ln.phase || '').toUpperCase() === 'DEDUCTION';
+    });
   }
 
   function resolveEmployerBlock_(emp, employeeId) {
@@ -720,7 +752,8 @@ var PayslipService = (function () {
       breakdown = {};
     }
     var meta = breakdown.meta || {};
-    var lines = breakdown.lines || [];
+    var earnLines = payslipEarningLines_(breakdown);
+    var dedLines = payslipDeductionLines_(breakdown);
     var name = meta.display_name || emp.display_name || rec.employee_id;
     var dept = meta.department || emp.department || '';
     var desig = meta.designation || emp.designation || '';
@@ -742,21 +775,22 @@ var PayslipService = (function () {
 
     var earnRows = '';
     EARNING_ROWS_.forEach(function (row, idx) {
-      var actual = sumFromLines_(lines, row.codes, 'amount');
+      var actual = sumFromLines_(earnLines, row.codes, 'amount');
       if (row.label === 'Other Allowance') {
         actual = round2_(actual + (Number(rec.bonus) || 0) + (Number(rec.incentive) || 0) +
           (Number(rec.other_earnings) || 0));
       }
       var stripe = idx % 2 === 1 ? ' class="stripe"' : '';
-      earnRows += '<tr' + stripe + '><td>' + esc_(row.label) + '</td><td class="num">-</td><td class="num">' +
+      earnRows += '<tr' + stripe + '><td>' + esc_(row.label) + '</td><td class="num">' +
         moneyPayslip_(actual) + '</td></tr>';
     });
 
     var dedRows = '';
     DEDUCTION_ROWS_.forEach(function (row, idx) {
-      var actual = sumFromLines_(lines, row.codes, 'amount');
-      if (row.label === 'TDS' && !actual) actual = Number(rec.tds_amount) || 0;
-      if (row.label === 'Advance') actual = round2_(actual + (Number(rec.other_deductions) || 0));
+      var actual = sumFromLines_(dedLines, row.codes, 'amount');
+      if (row.label === 'TDS' && pickFromLines_(dedLines, row.codes, 'amount') == null) {
+        actual = Number(rec.tds_amount) || 0;
+      }
       var stripe = idx % 2 === 1 ? ' class="stripe"' : '';
       dedRows += '<tr' + stripe + '><td class="ded-lbl">' + esc_(row.label) + '</td><td class="num">' +
         moneyPayslip_(actual) + '</td></tr>';
@@ -847,9 +881,9 @@ var PayslipService = (function () {
       '</div>' +
       '<table class="split" cellspacing="0" cellpadding="0"><tr>' +
       '<td width="57%"><table class="data-table earn-table" cellspacing="0" cellpadding="0"><thead><tr>' +
-      '<th>EARNINGS</th><th class="num">RATE (Rs.)</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +
+      '<th>EARNINGS</th><th class="num">AMOUNT (Rs.)</th></tr></thead><tbody>' +
       earnRows +
-      '<tr class="total"><td>TOTAL EARNINGS (A)</td><td class="num">-</td><td class="num">' + moneyPayslip_(grossA) +
+      '<tr class="total"><td>TOTAL EARNINGS (A)</td><td class="num">' + moneyPayslip_(grossA) +
       '</td></tr></tbody></table></td>' +
       '<td width="43%"><table class="data-table ded-table" cellspacing="0" cellpadding="0"><thead><tr>' +
       '<th>DEDUCTIONS</th><th class="num">ACTUAL (Rs.)</th></tr></thead><tbody>' +

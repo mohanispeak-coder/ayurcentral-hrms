@@ -45,7 +45,7 @@ var template = [
   { structure_section: 'EARNED_PAY', component_code: '*', component_name: 'All', component_kind: 'EARNING',
     calc_method: 'PRORATE_ROUND_LINE', round_mode: 'ROUND', sort_order: 6 },
   { structure_section: 'DEDUCTION', component_code: 'PF', component_name: 'PF', component_kind: 'DEDUCTION',
-    calc_method: 'PERCENT_CAPPED', percent_base: 'BP', percent: 12, cap_amount: 25000, round_mode: 'ROUND', sort_order: 10 },
+    calc_method: 'PERCENT_CAPPED', percent_base: 'EARNED_BP_DA', percent: 12, cap_amount: 25000, round_mode: 'ROUND', sort_order: 10 },
   { structure_section: 'DEDUCTION', component_code: 'ESIC', component_name: 'ESIC', component_kind: 'DEDUCTION',
     calc_method: 'PERCENT_IF', cond_ref: 'RATE_GROSS', cond_op: 'LT', cond_value: 21001,
     percent_base: 'EARNED_GROSS', percent: 0.75, round_mode: 'ROUNDUP', sort_order: 11 },
@@ -79,6 +79,20 @@ var payHalf = Engine.calculateEmployee({
   employee: { employee_id: 'E1' }
 });
 check('half month earned gross below full', payHalf.gross_earnings < ctc, 'gross=' + payHalf.gross_earnings);
+
+var bdHalf = JSON.parse(payHalf.component_breakdown || '{}');
+var pfHalf = (bdHalf.sections && bdHalf.sections.deduction_formulas
+  ? bdHalf.sections.deduction_formulas.lines : []).filter(function (l) {
+  return String(l.component_code).toUpperCase() === 'PF';
+})[0];
+var earnedBpAmt = 0;
+(bdHalf.sections && bdHalf.sections.earned_pay ? bdHalf.sections.earned_pay.lines || [] : []).forEach(function (l) {
+  var c = String(l.component_code).toUpperCase();
+  if (c === 'BP' || c === 'BASIC') earnedBpAmt = Number(l.amount) || 0;
+});
+var expectedPf = Math.round(Math.min(earnedBpAmt, 25000) * 0.12 * 100) / 100;
+check('pf on earned basic capped', pfHalf && earnedBpAmt > 0 && Math.abs(pfHalf.amount - expectedPf) < 0.02,
+  'pf=' + (pfHalf ? pfHalf.amount : '') + ' earnedBp=' + earnedBpAmt + ' expected=' + expectedPf);
 
 var templateFactor = JSON.parse(JSON.stringify(template));
 templateFactor[5].calc_method = 'PRORATE_FACTOR';

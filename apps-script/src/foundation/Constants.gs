@@ -232,7 +232,9 @@ HRMS.SALARY_EXECUTION_SECTIONS = [
 /** Payroll-time formula references (not component codes). */
 HRMS.FORMULA_REF = {
   RATE_GROSS: 'RATE_GROSS',
-  EARNED_GROSS: 'EARNED_GROSS'
+  EARNED_GROSS: 'EARNED_GROSS',
+  /** Sum of earned Basic (BP/BASIC) + earned DA — for PF wage base. */
+  EARNED_BP_DA: 'EARNED_BP_DA'
 };
 
 HRMS.FORMULA_ROUND = {
@@ -310,7 +312,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.14.18';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.15.1';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

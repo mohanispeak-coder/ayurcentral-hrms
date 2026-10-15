@@ -34,7 +34,8 @@ check('client-view-arg', /apiGetPayslipDownload', \[btn\.getAttribute\('data-id'
 check('client-download-arg', /apiGetPayslipDownload', \[btn\.getAttribute\('data-id'\), 'download'\]/.test(payrollClient));
 check('profile-view-arg', /apiDownloadEmployeeDocument', id, 'view'/.test(empClient));
 check('sapl-pay-slip-title', /PAY SLIP/.test(payslip) && /pay-slip-badge/.test(payslip));
-check('sapl-earnings-rate-actual', /RATE \(Rs\.\)/.test(payslip) && /TOTAL EARNINGS \(A\)/.test(payslip));
+check('sapl-earnings-amount-column', /AMOUNT \(Rs\.\)/.test(payslip) && /TOTAL EARNINGS \(A\)/.test(payslip));
+check('sapl-earnings-from-earned-section', /payslipEarningLines_/.test(payslip) && !/RATE \(Rs\.\)/.test(payslip));
 check('sapl-deductions-total-b', /TOTAL DEDUCTIONS \(B\)/.test(payslip));
 check('sapl-logo-fallback-setting', /payslip_logo_url/.test(payslip));
 check('sapl-vertical-employer', /resolveEmployerBlock_/.test(payslip) && /listVerticalCatalog/.test(payslip));
@@ -44,7 +45,7 @@ check('payslip-logo-service-verticals', /SAPL/.test(logoSvc) && /AYURVEDAONE/.te
 check('payslip-logo-embedded', /HRMS_PAYSLIP_LOGO_B64_/.test(logoData) && /dataUriForEmployee_/.test(logoSvc));
 check('payslip-logo-by-employee-id', /PayslipLogoService\.dataUriForEmployee/.test(payslip) && /split\('-'\)/.test(payslip));
 check('payslip-template-table-layout', /info-table/.test(payslip) && /class="split"/.test(payslip) && /coins-icon/.test(payslip));
-check('payslip-rate-dash-column', /class="num">-<\/td><td class="num">/.test(payslip));
+check('payslip-deduction-lines-helper', /payslipDeductionLines_/.test(payslip));
 check('payslip-htmlservice-pdf', /HtmlService\.createHtmlOutput/.test(payslip));
 check('payslip-address-by-vertical', /PAYSLIP_ADDRESS_BY_VERTICAL/.test(read('foundation/Constants.gs')));
 

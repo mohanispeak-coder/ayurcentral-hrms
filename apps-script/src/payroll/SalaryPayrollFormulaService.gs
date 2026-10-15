@@ -46,10 +46,21 @@ var SalaryPayrollFormulaService = (function () {
     return false;
   }
 
+  function earnedBpDa_(ctx) {
+    ctx = ctx || {};
+    var map = ctx.earnedByCode || {};
+    var bp = 0;
+    if (map.BP != null) bp = num_(map.BP);
+    else if (map.BASIC != null) bp = num_(map.BASIC);
+    var da = map.DA != null ? num_(map.DA) : 0;
+    return PayrollEngine.round2(bp + da);
+  }
+
   function refAmount_(ref, ctx) {
     ref = trim_(ref).toUpperCase();
     if (ref === HRMS.FORMULA_REF.RATE_GROSS) return ctx.rateGross;
     if (ref === HRMS.FORMULA_REF.EARNED_GROSS) return ctx.earnedGross;
+    if (ref === HRMS.FORMULA_REF.EARNED_BP_DA) return earnedBpDa_(ctx);
     if (ref === HRMS.PERCENT_BASE_CTC || ref === 'CTC') return ctx.ctcMonthly;
     if (ref.indexOf('RATE_LINE:') === 0) {
       var rateCode = ref.substring(10);
@@ -220,11 +231,24 @@ var SalaryPayrollFormulaService = (function () {
     };
   }
 
+  function pfPercentBase_(raw, ctx) {
+    var code = trim_(raw.component_code).toUpperCase();
+    var baseRef = trim_(raw.percent_base).toUpperCase();
+    if (code === 'PF' && baseRef === HRMS.FORMULA_REF.EARNED_BP_DA) {
+      return earnedBpDa_(ctx);
+    }
+    if (code === 'PF' && (baseRef === 'RATE_LINE:BP' || baseRef === 'BP' || baseRef === 'RATE_LINE:BASIC' ||
+        baseRef === 'BASIC' || baseRef === 'EARNED_LINE:BP' || baseRef === 'EARNED_LINE:BASIC')) {
+      return earnedBpDa_(ctx);
+    }
+    return refAmount_(raw.percent_base, ctx);
+  }
+
   function computeFormulaDeduction_(raw, ctx) {
     var m = method_(raw);
     var amt = 0;
     if (m === HRMS.CALC_METHOD.PERCENT_CAPPED) {
-      var base = refAmount_(raw.percent_base, ctx);
+      var base = pfPercentBase_(raw, ctx);
       var cap = num_(raw.cap_amount);
       if (cap > 0) base = Math.min(base, cap);
       amt = roundMode_(raw.round_mode, base * num_(raw.percent) / 100);
