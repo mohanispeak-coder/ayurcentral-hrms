@@ -38,7 +38,8 @@ check('bulk-preview-leave-fields', /monthly_grant/.test(bulkSrc) && /leave_balan
 check('template-leave-pool-column', /leave_pool/.test(regSrc) && /monthlyPoolForTemplateRow_/.test(regSrc));
 check('template-leave-balance-no-absent-in-pool', /leave_pool/.test(regSrc) &&
   /function leaveBalanceFormula_/.test(regSrc) && !/leaveBalanceFormula_[\s\S]{0,400}COUNTIF\(.+,"A"\)/.test(regSrc));
-check('template-version-8', /TEMPLATE_VERSION_ = '8'/.test(bulkSrc));
+check('template-version-9', /TEMPLATE_VERSION_ = '9'/.test(bulkSrc));
+check('template-l-includes-half-leave', /L: '=COUNTIF\([\s\S]*halfDayCountExpr_\(range, true\)/.test(regSrc));
 check('template-p-includes-half', /P: '=COUNTIF/.test(regSrc) && /halfDayCountExpr_\(range, true\)/.test(regSrc));
 check('template-no-half-column', !/'1\/2P': '=/.test(regSrc));
 check('validate-returns-period', /period_year: run\.period_year/.test(bulkSrc));

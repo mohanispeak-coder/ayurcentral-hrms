@@ -1343,7 +1343,11 @@
           line += '<td>' + escapeHtml(reg[k] || '') + '</td>';
         }
         codes.forEach(function (c) {
-          var val = c === 'P' && row.days_present != null ? row.days_present : (cc[c] != null ? cc[c] : 0);
+          var val;
+          if (c === 'P' && row.days_present != null) val = row.days_present;
+          else if (c === 'L' && row.leave_days_l_column != null) val = row.leave_days_l_column;
+          else if (c === 'L' && row.days_leave != null) val = row.days_leave - (Number(cc.ML) || 0);
+          else val = cc[c] != null ? cc[c] : 0;
           line += '<td class="num">' + escapeHtml(val) + '</td>';
         });
         line += '<td class="num">' + escapeHtml(row.days_total != null ? row.days_total : '') + '</td></tr>';

@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '8';
+  var TEMPLATE_VERSION_ = '9';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -219,7 +219,7 @@ var AttendanceBulkService = (function () {
         ['Rows 1–2 on the Attendance sheet are headers only. Employee data starts on row 3.'],
         ['Eligible ACTIVE employees for this payroll month are listed (roster is built live from HRMS each download).'],
         ['Vertical: ' + verticalCode + ' (employees filtered to this vertical).'],
-        ['Fill one code per day: P, W/H, A, L, WO, ML (legacy S = ML), H. Half day: 1/2P (or 1/2 P, HP) = 0.5 in P column; other 0.5 uses leave pool (L+ML+½P in Leave Balance).'],
+        ['Fill one code per day: P, W/H, A, L, WO, ML (legacy S = ML), H. Half day: 1/2P = 0.5 in P + 0.5 in L summary (uses leave pool; Leave Balance matches).'],
         ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
         ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
         ['Leave Balance = leave_pool minus L, ML, and ½P (paid leave usage). Code A (LOP) does not reduce this balance.'],
@@ -482,6 +482,7 @@ var AttendanceBulkService = (function () {
             vertical_name: trim_(empRecord.vertical_name),
             days_present: sum.present,
             days_leave: sum.leave_days,
+            leave_days_l_column: sum.leave_days_l_column,
             leave_used: sum.leave_days,
             monthly_grant: sum.monthly_grant,
             leave_balance: sum.leave_balance,
