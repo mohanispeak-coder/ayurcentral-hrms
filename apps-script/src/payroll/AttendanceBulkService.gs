@@ -636,7 +636,7 @@ var AttendanceBulkService = (function () {
         inp, reg, run.period_year, run.period_month, emp ? emp.vertical_name : '', extras);
       DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', inp.payroll_input_id, updates);
       syncMonthlyLedgerForAttendance_(employeeId, run.period_year, run.period_month);
-      return AttendanceRegisterService.listSummariesForRun_(runId).filter(function (r) {
+      return AttendanceRegisterService.listSummariesForRun_(runId, { includeRegister: true }).filter(function (r) {
         return r.employee_id === employeeId;
       })[0];
     });

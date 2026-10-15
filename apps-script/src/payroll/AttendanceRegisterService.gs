@@ -479,8 +479,48 @@ var AttendanceRegisterService = (function () {
     PermissionService.requireAttendanceAccess();
   }
 
-  function listSummariesForRun_(runId) {
+  function runVerticalFromRun_(run) {
+    var v = normalizeVerticalCode_(run && run.vertical_name);
+    if (v) return v;
+    var parts = String(run && run.payroll_run_id || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var token = trim_(parts[3]);
+    if (!token || /^C\d+$/i.test(token)) return '';
+    return normalizeVerticalCode_(token);
+  }
+
+  function summaryRowForEmployee_(emp, inp, year, month, options) {
+    options = options || {};
+    var reg = inp ? parseRegister_(inp.daily_attendance_json) : {};
+    var sum = summarize_(reg, year, month, emp.vertical_name, emp);
+    var row = {
+      employee_id: emp.employee_id,
+      display_name: employeeDisplayName_(emp),
+      vertical_name: trim_(emp.vertical_name),
+      payroll_input_id: inp ? inp.payroll_input_id : '',
+      in_payroll_run: !!inp,
+      days_present: sum.present,
+      days_leave: sum.leave_days,
+      leave_balance: sum.leave_balance,
+      monthly_grant: sum.monthly_grant,
+      days_total: sum.days_total,
+      register_complete: inp ? isRegisterComplete_(reg, year, month) : false,
+      code_counts: sum.code_counts,
+      summary: sum,
+      payroll_extras: inp && typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.readFromInput
+        ? AttendancePayrollExtras.readFromInput(inp) : null
+    };
+    if (options.includeRegister) row.register = reg;
+    return row;
+  }
+
+  /**
+   * @param {string} runId
+   * @param {Object=} options { includeRegister: boolean } — omit daily register map on list loads (smaller payload).
+   */
+  function listSummariesForRun_(runId, options) {
     requireAttendanceAccess_();
+    options = options || {};
     var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
     if (!run) throw notFoundError_('Payroll run not found.');
     var year = Number(run.period_year);
@@ -490,29 +530,13 @@ var AttendanceRegisterService = (function () {
       var key = trim_(inp.employee_id).toUpperCase();
       if (key) inputByEmp[key] = inp;
     });
-    return listEmployeesForPayrollPeriod_(year, month).map(function (emp) {
+    var employees = listEmployeesForPayrollPeriod_(year, month);
+    var runVertical = runVerticalFromRun_(run);
+    if (runVertical) employees = filterEmployeesByVertical_(employees, runVertical);
+    return employees.map(function (emp) {
       var empKey = trim_(emp.employee_id).toUpperCase();
       var inp = inputByEmp[empKey] || inputByEmp[trim_(emp.employee_id)] || null;
-      var reg = inp ? parseRegister_(inp.daily_attendance_json) : {};
-      var sum = summarize_(reg, year, month, emp.vertical_name, emp);
-      return {
-        employee_id: emp.employee_id,
-        display_name: employeeDisplayName_(emp),
-        vertical_name: trim_(emp.vertical_name),
-        payroll_input_id: inp ? inp.payroll_input_id : '',
-        in_payroll_run: !!inp,
-        days_present: sum.present,
-        days_leave: sum.leave_days,
-        leave_balance: sum.leave_balance,
-        monthly_grant: sum.monthly_grant,
-        days_total: sum.days_total,
-        register_complete: inp ? isRegisterComplete_(reg, year, month) : false,
-        register: reg,
-        code_counts: sum.code_counts,
-        summary: sum,
-        payroll_extras: inp && typeof AttendancePayrollExtras !== 'undefined' && AttendancePayrollExtras.readFromInput
-          ? AttendancePayrollExtras.readFromInput(inp) : null
-      };
+      return summaryRowForEmployee_(emp, inp, year, month, options);
     });
   }
 

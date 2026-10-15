@@ -55,7 +55,12 @@ check('attendance-payroll-extra-columns', /TDS, Advance, LCD, LWF/.test(bulkSrc)
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
-check('api-attendance-auto-sync', /apiListAttendanceRegister[\s\S]*syncEligibleEmployees/.test(api));
+check('api-attendance-auto-sync', /apiListAttendanceRegister[\s\S]*syncEligibleEmployees/.test(api) &&
+  /includeRegister:\s*false/.test(api));
+check('register-list-run-vertical', /runVerticalFromRun_/.test(regSrc) &&
+  /filterEmployeesByVertical_\(employees, runVertical\)/.test(regSrc));
+check('attendance-register-no-full-payroll-on-open',
+  /apiListAttendanceRegister/.test(attClient) && !/apiGetPayrollRun/.test(attClient));
 var payrollSvc = fs.readFileSync(path.join(payrollDir, 'PayrollService.gs'), 'utf8');
 check('payroll-sync-on-employee', /syncOpenPayrollRunsForEmployee/.test(payrollSvc));
 check('payroll-refresh-days-on-calculate', /refreshAttendanceDerivedDays_/.test(payrollSvc) &&

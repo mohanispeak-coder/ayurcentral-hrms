@@ -160,12 +160,16 @@ function apiListAttendanceRegister(runId, sessionToken) {
     var id = String(runId || '').trim();
     if (id) {
       try {
-        PayrollService.syncEligibleEmployees(id);
+        var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: id });
+        var st = run ? String(run.status || '').toUpperCase() : '';
+        if (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED) {
+          PayrollService.syncEligibleEmployees(id);
+        }
       } catch (syncErr) {
         Logger.log('apiListAttendanceRegister sync: ' + (syncErr.message || syncErr));
       }
     }
-    return AttendanceRegisterService.listSummariesForRun_(id);
+    return AttendanceRegisterService.listSummariesForRun_(id, { includeRegister: false });
   }, sessionToken);
 }
 

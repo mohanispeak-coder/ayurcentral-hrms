@@ -36,6 +36,9 @@ check('form-t-export-reuse', /AttendanceBulkService\.exportSpreadsheetXlsx_/.tes
 check('api-form-t-status', /apiGetFormTStatus/.test(api));
 check('api-form-t-download', /apiDownloadFormT/.test(api));
 check('form-t-client-route', /registerRoute\('attendance-form-t'/.test(formTClient));
+check('form-t-payroll-period-context', /readPayrollPeriodContext/.test(formTClient) &&
+  /resolveRunForFormT_/.test(formTClient) && /findLatestPayrollRun_/.test(formTClient));
+check('form-t-resolve-run-vertical', /resolveRunIdForVertical_/.test(formTSrc));
 check('form-t-module-ui', /payroll\/FormTClient/.test(apiFoundation));
 check('form-t-template-asset', fs.existsSync(templatePath));
 
