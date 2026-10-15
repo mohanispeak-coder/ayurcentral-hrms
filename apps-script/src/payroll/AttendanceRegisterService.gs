@@ -107,7 +107,7 @@ var AttendanceRegisterService = (function () {
     }
     var max = leaveBalanceMaxForVertical_(verticalCode);
     var half = (Number(counts['1/2P']) || 0) * 0.5;
-    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + half + (Number(counts.A) || 0);
+    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + half;
     return Math.max(0, max - used);
   }
 
@@ -273,8 +273,7 @@ var AttendanceRegisterService = (function () {
     var l = 'COUNTIF(' + range + ',"L")';
     var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
     var half = halfDayCountExpr_(range, true);
-    var absent = 'COUNTIF(' + range + ',"A")';
-    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + half + '+' + absent + '))';
+    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + half + '))';
   }
 
   function summaryFormulasForRow_(sheetRow, year, month) {

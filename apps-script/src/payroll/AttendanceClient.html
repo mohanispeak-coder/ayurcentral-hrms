@@ -442,8 +442,10 @@
         '<button type="button" class="btn btn-secondary" id="att-goto-payroll">Continue to Payroll</button>' +
         '<button type="button" class="btn btn-secondary" id="att-goto-formt">Form T</button></div>' +
         (canEdit ? '<p id="att-file-name" class="form-hint">' + esc_(bulkState_.fileName || 'No file selected.') + '</p>' : '') +
-        '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · <strong>A</strong> absent · ' +
-        '<strong>L</strong> leave · <strong>WO</strong> weekly off · <strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
+        '<p class="att-codes-hint">Codes: <strong>P</strong> present · <strong>W/H</strong> Work from Home · ' +
+        '<strong>L</strong> paid leave (uses monthly pool; excess → LOP) · <strong>A</strong> LOP (unpaid absence) · ' +
+        '<strong>1/2P</strong> half day (½ present, ½ paid leave pool) · <strong>WO</strong> weekly off · ' +
+        '<strong>ML</strong> Maternity Leave (legacy S on import) · <strong>H</strong> holiday</p>' +
         '<div id="att-holidays-banner" class="hint" style="margin:8px 0"></div>' +
         '<p class="hint">Payroll run, vertical, and template must all match (e.g. PR-2026-10-AOPL with AOPL). ' +
         '<button type="button" class="btn btn-link" id="att-goto-holidays">Manage holiday calendar</button></p>' +

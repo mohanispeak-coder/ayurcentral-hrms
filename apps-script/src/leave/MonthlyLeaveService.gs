@@ -90,10 +90,10 @@ var MonthlyLeaveService = (function () {
     return num_(counts.L, 0) + num_(counts.ML, 0) + (half * 0.5);
   }
 
-  /** Days on the attendance register that reduce the monthly leave pool (L, ML, ½P, and absent). */
+  /** Days on the attendance register that reduce the monthly paid-leave pool (L, ML, ½P only — not A). */
   function registerPoolConsumingDays_(counts) {
     counts = counts || {};
-    return leaveUsedFromCounts_(counts) + num_(counts.A, 0);
+    return leaveUsedFromCounts_(counts);
   }
 
   function adjustmentForEmployeeMonth_(employeeId, year, month) {

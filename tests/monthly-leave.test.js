@@ -36,8 +36,9 @@ check('payroll-preview-grid', /paintAttendanceValidGrid_/.test(payrollClient) &&
   /Validation result/.test(payrollClient));
 check('bulk-preview-leave-fields', /monthly_grant/.test(bulkSrc) && /leave_balance/.test(bulkSrc));
 check('template-leave-pool-column', /leave_pool/.test(regSrc) && /monthlyPoolForTemplateRow_/.test(regSrc));
-check('template-leave-balance-absent', /COUNTIF\(.+,"A"\)/.test(regSrc) && /leave_pool/.test(regSrc));
-check('template-version-5', /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
+check('template-leave-balance-no-absent-in-pool', /leave_pool/.test(regSrc) &&
+  /function leaveBalanceFormula_/.test(regSrc) && !/leaveBalanceFormula_[\s\S]{0,400}COUNTIF\(.+,"A"\)/.test(regSrc));
+check('template-version-6', /TEMPLATE_VERSION_ = '6'/.test(bulkSrc));
 check('validate-returns-period', /period_year: run\.period_year/.test(bulkSrc));
 
 function loadRegister() {
@@ -47,7 +48,7 @@ function loadRegister() {
     ConfigService: { getSetting: function (k, d) { return d; } },
     MonthlyLeaveService: {
       availableAfterCounts_: function (emp, y, m, counts) {
-        var used = (counts.L || 0) + (counts.ML || 0) + ((counts['1/2P'] || 0) * 0.5) + (counts.A || 0);
+        var used = (counts.L || 0) + (counts.ML || 0) + ((counts['1/2P'] || 0) * 0.5);
         return Math.max(0, 2 - used);
       },
       grantForEmployeeMonth_: function () { return 2; }
@@ -63,7 +64,13 @@ var Reg = loadRegister();
 var sum = Reg.summarize_({ '01': '1/2P', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
 check('half-day-leave-math', sum.leave_days === 1.5 && sum.present === 0.5);
 var sumAbsent = Reg.summarize_({ '01': 'A', '02': 'L' }, 2026, 3, 'SAPL', { employee_id: 'SAPL-001', vertical_name: 'SAPL' });
-check('leave-balance-reduces-absent', sumAbsent.code_counts.A === 1 && sumAbsent.leave_balance === 0);
+check('lop-absent-does-not-eat-leave-pool', sumAbsent.code_counts.A === 1 && sumAbsent.leave_balance === 1);
+var derivedAbsent = Reg.derivePayrollDays_(sumAbsent);
+check('absent-code-is-lop', derivedAbsent.lop_days === 1 && derivedAbsent.days_absent === 1);
+var sumLeaveOnly = Reg.summarize_({ '01': 'L', '02': 'L', '03': 'L' }, 2026, 3, 'SAPL',
+  { employee_id: 'SAPL-001', vertical_name: 'SAPL', joining_date: '2020-01-01' });
+var derivedLeave = Reg.derivePayrollDays_(sumLeaveOnly);
+check('excess-l-is-lop-not-a', (derivedLeave.lop_from_excess_leave || 0) >= 1 && derivedLeave.days_absent === 0);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');

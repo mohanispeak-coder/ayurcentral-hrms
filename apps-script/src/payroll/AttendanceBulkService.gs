@@ -222,7 +222,7 @@ var AttendanceBulkService = (function () {
         ['Fill one code per day: P, W/H (Work from Home; or WH), A, L, WO, ML (Maternity Leave; legacy S = ML), H, 1/2P (half day present; or 1/2 P, HP).'],
         ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
         ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
-        ['Leave Balance = leave_pool minus L, ML, ½P, and A (absent) days entered in the register.'],
+        ['Leave Balance = leave_pool minus L, ML, and ½P (paid leave usage). Code A (LOP) does not reduce this balance.'],
         ['Summary columns (P, W/H, A, L, WO, ML, H, 1/2P, Leave Balance, DAYS) calculate in Excel.'],
         ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']

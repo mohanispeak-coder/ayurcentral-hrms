@@ -95,6 +95,11 @@ var derivedHalf = Reg.derivePayrollDays_(sumHalf);
 check('working-equals-paid-plus-lop', Math.abs(derivedHalf.working_days - (derivedHalf.paid_days + derivedHalf.lop_days)) < 0.001,
   'working=' + derivedHalf.working_days + ' paid=' + derivedHalf.paid_days + ' lop=' + derivedHalf.lop_days);
 
+var sumAL = Reg.summarize_({ '01': 'A', '02': 'L' }, 2026, 9, 'SAPL',
+  { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' });
+var derivedAL = Reg.derivePayrollDays_(sumAL);
+check('a-counts-as-lop-only', derivedAL.lop_days >= 1 && derivedAL.days_absent === 1);
+
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');
   failures.forEach(function (f) { console.log(' - ' + f); });
