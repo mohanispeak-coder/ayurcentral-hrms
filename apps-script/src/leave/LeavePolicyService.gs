@@ -209,7 +209,7 @@ var LeavePolicyService = (function () {
       leave_join_grant_after_day: joinGrantAfterDay_(),
       monthly_limit_semantics: 'ENTITLEMENT_ACCRUAL',
       monthly_limit_note: 'Monthly value is entitlement accrued per eligible calendar month (not a separate cap on applications). ' +
-        'Attendance register shows month grant minus L/ML usage; half-day (1/2P) counts in P at payroll; leave applications use the leave-year balance.'
+        'Attendance register Leave Balance = pool minus L, ML, and ½ day per 1/2P; excess leave (incl. half-days) becomes LOP at payroll.'
     };
   }
 

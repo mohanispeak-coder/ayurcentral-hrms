@@ -86,10 +86,11 @@ var MonthlyLeaveService = (function () {
 
   function leaveUsedFromCounts_(counts) {
     counts = counts || {};
-    return num_(counts.L, 0) + num_(counts.ML, 0);
+    var half = num_(counts['1/2P'], 0) * 0.5;
+    return num_(counts.L, 0) + num_(counts.ML, 0) + half;
   }
 
-  /** Days on the attendance register that reduce the monthly paid-leave pool (L and ML only — not A or 1/2P). */
+  /** Days on the attendance register that reduce the monthly paid-leave pool (L, ML, and ½ from each 1/2P — not A). */
   function registerPoolConsumingDays_(counts) {
     counts = counts || {};
     return leaveUsedFromCounts_(counts);

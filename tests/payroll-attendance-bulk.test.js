@@ -49,7 +49,7 @@ check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
   /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
 check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '7'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '8'/.test(bulkSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
 check('list-active-via-service', /EmployeeService\.listActiveEmployees/.test(regSrc));
 check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc));
@@ -90,8 +90,8 @@ check('excess-leave-lop', (derivedExcess.lop_from_excess_leave || 0) >= 1 &&
 var sumHalf = Reg.summarize_({
   '01': '1/2P', '02': 'P', '03': 'A', '04': 'A', '05': 'A'
 }, 2026, 9, 'SAPL', { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' });
-check('half-day-present-split', sumHalf.present === 1.5 && sumHalf.leave_days === 0 &&
-  sumHalf.half_day_lop === 0.5 && sumHalf.code_counts['1/2P'] === 1);
+check('half-day-present-split', sumHalf.present === 1.5 && sumHalf.leave_days === 0.5 &&
+  sumHalf.code_counts['1/2P'] === 1);
 var derivedHalf = Reg.derivePayrollDays_(sumHalf);
 check('working-equals-paid-plus-lop', Math.abs(derivedHalf.working_days - (derivedHalf.paid_days + derivedHalf.lop_days)) < 0.001,
   'working=' + derivedHalf.working_days + ' paid=' + derivedHalf.paid_days + ' lop=' + derivedHalf.lop_days);

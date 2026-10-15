@@ -113,7 +113,7 @@ var AttendanceRegisterService = (function () {
       return MonthlyLeaveService.availableAfterCounts_(emp || { vertical_name: verticalCode }, year, month, counts);
     }
     var max = leaveBalanceMaxForVertical_(verticalCode);
-    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0);
+    var used = (Number(counts.L) || 0) + (Number(counts.ML) || 0) + halfDayPresent_(counts);
     return Math.max(0, max - used);
   }
 
@@ -125,10 +125,8 @@ var AttendanceRegisterService = (function () {
       var code = normalizeCode_(reg[pad2_(d)]);
       if (code && counts.hasOwnProperty(code)) counts[code]++;
     }
-    var halfCount = halfDayCount_(counts);
     var halfPresent = halfDayPresent_(counts);
-    var halfLop = halfPresent;
-    var leaveDays = counts.L + counts.ML;
+    var leaveDays = counts.L + counts.ML + halfPresent;
     var daysTotal = computeDaysTotal_(counts);
     var vertical = trim_(verticalCode).toUpperCase();
     var monthlyGrant = (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.grantForEmployeeMonth_)
@@ -142,7 +140,6 @@ var AttendanceRegisterService = (function () {
     var leaveSplit = leavePaidAndLopSplit_(leaveDays, entitlementPool);
     return {
       present: counts.P + halfPresent,
-      half_day_lop: halfLop,
       week_off_holiday: counts['W/H'],
       absent: counts.A,
       leave: counts.L,
@@ -175,7 +172,6 @@ var AttendanceRegisterService = (function () {
     summary = summary || {};
     var present = Number(summary.present) || 0;
     var absent = Number(summary.absent) || 0;
-    var halfLop = Number(summary.half_day_lop) || 0;
     var leaveDays = Number(summary.leave_days) || 0;
     var pool = Number(summary.monthly_entitlement_pool);
     if (!isFinite(pool)) pool = Number(summary.monthly_grant) || 0;
@@ -188,7 +184,7 @@ var AttendanceRegisterService = (function () {
     var daysTotal = Number(summary.days_total);
     if (isFinite(daysTotal) && daysTotal >= 0) {
       var paidFromTotal = Math.max(0, daysTotal - lopFromLeave);
-      var lopTotal = absent + lopFromLeave + halfLop;
+      var lopTotal = absent + lopFromLeave;
       return {
         working_days: paidFromTotal + lopTotal,
         paid_days: paidFromTotal,
@@ -209,7 +205,7 @@ var AttendanceRegisterService = (function () {
     }
     if (working <= 0) working = dim || 0;
     var paid = present + split.paid_leave_days;
-    var lop = absent + lopFromLeave + halfLop;
+    var lop = absent + lopFromLeave;
     if (paid + lop > working) {
       working = paid + lop;
     }
@@ -282,7 +278,8 @@ var AttendanceRegisterService = (function () {
   function leaveBalanceFormula_(range, poolCell) {
     var l = 'COUNTIF(' + range + ',"L")';
     var ml = 'COUNTIF(' + range + ',"ML")+COUNTIF(' + range + ',"S")';
-    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '))';
+    var halfLeave = halfDayCountExpr_(range, true);
+    return '=MAX(0,' + poolCell + '-(' + l + '+' + ml + '+' + halfLeave + '))';
   }
 
   function summaryFormulasForRow_(sheetRow, year, month) {
