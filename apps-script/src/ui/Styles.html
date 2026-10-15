@@ -1089,6 +1089,14 @@ tr.skeleton-row td { padding-top: 14px; padding-bottom: 14px; vertical-align: mi
   }
 }
 
+/* Legacy Ask HR removed from product — hide if old deployment HTML is cached */
+.ask-hr-fab,
+.ask-hr-panel {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Public careers pages: allow normal document scroll */
 body:has(> .careers-shell) {
   height: auto;

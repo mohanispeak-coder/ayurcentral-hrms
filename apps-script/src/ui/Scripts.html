@@ -2,6 +2,23 @@
 (function () {
   'use strict';
 
+  /** Remove legacy Ask HR widget if an old cached shell HTML is still served. */
+  function removeLegacyAskHrUi_() {
+    try {
+      ['ask-hr-fab', 'ask-hr-panel', 'ask-hr-expand'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      });
+      document.querySelectorAll('.ask-hr-fab, .ask-hr-panel').forEach(function (el) {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      });
+    } catch (ignoreLegacyAskHr) {}
+  }
+  removeLegacyAskHrUi_();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', removeLegacyAskHrUi_);
+  }
+
   var SESSION_STORAGE_KEY = 'hrms_session_token';
 
   var state = {

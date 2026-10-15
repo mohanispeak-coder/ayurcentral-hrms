@@ -22,7 +22,8 @@ check('no-ask-hr-fab-in-index', !/ask-hr-fab/.test(index));
 check('no-ask-hr-panel-in-index', !/ask-hr-panel/.test(index));
 check('no-init-ask-hr', !/initAskHr/.test(scripts));
 check('no-api-ask-hr-client', !/apiAskHr/.test(scripts));
-check('no-ask-hr-css', !/\.ask-hr-fab/.test(styles));
+check('ask-hr-css-disabled', /\.ask-hr-fab[\s\S]*display:\s*none\s*!important/.test(styles));
+check('ask-hr-legacy-dom-strip', /removeLegacyAskHrUi_/.test(scripts));
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed');
