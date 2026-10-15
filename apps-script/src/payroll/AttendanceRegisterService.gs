@@ -471,6 +471,25 @@ var AttendanceRegisterService = (function () {
     };
   }
 
+  /** Recompute working / paid / LOP from daily_attendance_json (includes ½P in paid_days). */
+  function applyDerivedDaysToInput_(inp, year, month, verticalCode, emp) {
+    inp = inp || {};
+    if (!trim_(inp.daily_attendance_json)) return inp;
+    var reg = parseRegister_(inp.daily_attendance_json);
+    if (!reg || !Object.keys(reg).length) return inp;
+    if (!emp && inp.employee_id && typeof DbService !== 'undefined') {
+      emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: inp.employee_id });
+    }
+    var summary = summarize_(reg, year, month, verticalCode || (emp && emp.vertical_name), emp);
+    var derived = derivePayrollDays_(summary);
+    var out = {};
+    Object.keys(inp).forEach(function (k) { out[k] = inp[k]; });
+    out.working_days = derived.working_days;
+    out.paid_days = derived.paid_days;
+    out.lop_days = derived.lop_days;
+    return out;
+  }
+
   return {
     pad2_: pad2_,
     VALID_CODES: VALID_CODES_,
@@ -499,6 +518,7 @@ var AttendanceRegisterService = (function () {
     listActiveEmployees_: listActiveEmployees_,
     listEmployeesForPayrollPeriod_: listEmployeesForPayrollPeriod_,
     listSummariesForRun_: listSummariesForRun_,
-    saveRegisterForInput_: saveRegisterForInput_
+    saveRegisterForInput_: saveRegisterForInput_,
+    applyDerivedDaysToInput_: applyDerivedDaysToInput_
   };
 })();

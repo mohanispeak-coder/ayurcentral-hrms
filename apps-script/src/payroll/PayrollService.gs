@@ -116,6 +116,38 @@ var PayrollService = (function () {
     return isFinite(n) ? n : 0;
   }
 
+  function refreshAttendanceDerivedDays_(run, inputs, employees) {
+    inputs = inputs || [];
+    if (typeof AttendanceRegisterService === 'undefined' ||
+        !AttendanceRegisterService.applyDerivedDaysToInput_) {
+      return inputs;
+    }
+    var year = Number(run.period_year);
+    var month = Number(run.period_month);
+    var updates = [];
+    var refreshed = inputs.map(function (inp) {
+      var emp = resolveEmployee_(employees, inp.employee_id) || { employee_id: inp.employee_id };
+      var next = AttendanceRegisterService.applyDerivedDaysToInput_(inp, year, month, emp.vertical_name, emp);
+      if (Math.abs(num_(next.working_days) - num_(inp.working_days)) > 0.001 ||
+          Math.abs(num_(next.paid_days) - num_(inp.paid_days)) > 0.001 ||
+          Math.abs(num_(next.lop_days) - num_(inp.lop_days)) > 0.001) {
+        updates.push({
+          pk: inp.payroll_input_id,
+          updates: {
+            working_days: next.working_days,
+            paid_days: next.paid_days,
+            lop_days: next.lop_days
+          }
+        });
+      }
+      return next;
+    });
+    if (updates.length) {
+      DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', updates);
+    }
+    return refreshed;
+  }
+
   function hasCompleteAttendance_(inp, periodYear, periodMonth) {
     if (!inp) return false;
     if (inp.daily_attendance_json && typeof AttendanceRegisterService !== 'undefined') {
@@ -476,8 +508,12 @@ var PayrollService = (function () {
       syncMeta.total = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).length;
     }
     var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-    var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
     var employees = indexEmployees_();
+    if (!options.skipSync &&
+        (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED)) {
+      inputs = refreshAttendanceDerivedDays_(run, inputs, employees);
+    }
+    var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
     var rows = mergeRows_(inputs, records, employees).map(function (row) {
       var rec = serializeRecordForClient_(row.record);
       return {
@@ -745,8 +781,9 @@ var PayrollService = (function () {
         throw conflictError_('Calculate is only allowed from DRAFT or CALCULATED.');
       }
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-      assertAttendanceComplete_(inputs, run.period_year, run.period_month);
       var employees = indexEmployees_();
+      inputs = refreshAttendanceDerivedDays_(run, inputs, employees);
+      assertAttendanceComplete_(inputs, run.period_year, run.period_month);
       var settings = {
         payroll_round: ConfigService.getSetting('payroll_round', 'NEAREST_RUPEE')
       };

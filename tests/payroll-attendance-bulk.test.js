@@ -56,6 +56,8 @@ check('list-eligible-for-period', /listEmployeesForPayrollPeriod_/.test(regSrc))
 check('api-attendance-auto-sync', /apiListAttendanceRegister[\s\S]*syncEligibleEmployees/.test(api));
 var payrollSvc = fs.readFileSync(path.join(payrollDir, 'PayrollService.gs'), 'utf8');
 check('payroll-sync-on-employee', /syncOpenPayrollRunsForEmployee/.test(payrollSvc));
+check('payroll-refresh-days-on-calculate', /refreshAttendanceDerivedDays_/.test(payrollSvc) &&
+  /applyDerivedDaysToInput_/.test(regSrc));
 check('template-headers', /buildTemplateHeaders_/.test(regSrc) && /SUMMARY_HEADERS_/.test(regSrc));
 check('api-attendance-template', /apiDownloadAttendanceRegisterTemplate\(runId, verticalName, sessionToken\)/.test(api));
 check('api-attendance-validate', /apiValidateAttendanceRegisterUpload\(runId, verticalName, meta, sessionToken\)/.test(api));
@@ -100,6 +102,17 @@ var sumAL = Reg.summarize_({ '01': 'A', '02': 'L' }, 2026, 9, 'SAPL',
   { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' });
 var derivedAL = Reg.derivePayrollDays_(sumAL);
 check('a-counts-as-lop-only', derivedAL.lop_days >= 1 && derivedAL.days_absent === 1);
+
+var staleInp = {
+  employee_id: 'SAPL-1',
+  daily_attendance_json: JSON.stringify({ '01': '1/2P', '02': 'P', '03': 'P' }),
+  working_days: 30,
+  paid_days: 30,
+  lop_days: 0
+};
+var empHalf = { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' };
+var refreshedInp = Reg.applyDerivedDaysToInput_(staleInp, 2026, 9, 'SAPL', empHalf);
+check('payroll-refresh-half-day-paid', refreshedInp.paid_days === 2.5 && refreshedInp.paid_days !== staleInp.paid_days);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');
