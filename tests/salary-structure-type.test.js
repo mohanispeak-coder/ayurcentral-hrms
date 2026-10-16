@@ -219,6 +219,8 @@ check('client-three-section-labels', /2\. Earned pay/.test(clientHtml) && /3\. D
 check('client-manual-amount-inputs', /sst-c-manual-amt/.test(clientHtml));
 check('client-payroll-rules', /execution_sections/.test(clientHtml) && /payroll_rules_json/.test(clientHtml));
 check('client-manual-structure-id', /sst-structure-id/.test(clientHtml));
+check('client-ded-formula-preview', /sst-formula-preview/.test(clientHtml) && /updateDedFormulaPreview_/.test(clientHtml));
+check('client-pf-excel-hint', /MIN\(Earned_Basic\+Earned_DA,25000\)/.test(clientHtml));
 
 if (failures.length) {
   console.error('\n' + failures.length + ' failed');
