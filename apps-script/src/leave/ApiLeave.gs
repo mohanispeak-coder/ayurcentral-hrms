@@ -2,10 +2,18 @@
  * Client-callable Leave APIs. AuthZ on every entry.
  */
 
-function apiLeaveGetMyLeave(employeeId, sessionToken) {
+function apiLeaveGetMyLeave(employeeIdOrQuery, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return LeaveService.getMyLeave(session, employeeId || '');
+    var employeeId = '';
+    var leaveYear = '';
+    if (employeeIdOrQuery && typeof employeeIdOrQuery === 'object') {
+      employeeId = employeeIdOrQuery.employee_id || '';
+      leaveYear = employeeIdOrQuery.leave_year || '';
+    } else {
+      employeeId = employeeIdOrQuery || '';
+    }
+    return LeaveService.getMyLeave(session, employeeId, leaveYear);
   }, sessionToken);
 }
 
@@ -43,6 +51,13 @@ function apiLeaveCancel(leaveRequestId, sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveRevokeRejection(leaveRequestId, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.revokeRejection(session, leaveRequestId, comment || '');
+  }, sessionToken);
+}
+
 function apiLeaveGetApprovals(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
@@ -64,10 +79,32 @@ function apiLeaveReject(leaveRequestId, comment, sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveApproveMany(leaveRequestIds, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.approveMany(session, leaveRequestIds || [], comment || '');
+  }, sessionToken);
+}
+
+function apiLeaveRejectMany(leaveRequestIds, comment, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.rejectMany(session, leaveRequestIds || [], comment || '');
+  }, sessionToken);
+}
+
 function apiLeaveGetAdminList(filters, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return LeaveService.getAdminList(session, filters || {});
+  }, sessionToken);
+}
+
+/** Single execution: admin requests + types + employee filter list. */
+function apiLeaveGetAdminBundle(filters, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.getAdminBundle(session, filters || {});
   }, sessionToken);
 }
 
@@ -94,7 +131,7 @@ function apiLeaveGrantBalances(employeeId, leaveYear, sessionToken) {
     if (!PermissionService.isHrOrAdmin(session)) {
       throw authorizationError_('Only HR or Admin can grant leave balances.');
     }
-    return LeaveService.grantBalancesForEmployee(employeeId, leaveYear);
+    return LeaveService.grantBalancesForEmployee(employeeId, leaveYear, { includeInactive: true });
   }, sessionToken);
 }
 
@@ -112,10 +149,40 @@ function apiLeaveListEmployees(sessionToken) {
   }, sessionToken);
 }
 
+function apiLeaveGetApplyBundle(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeaveService.getApplyBootstrap(session);
+  }, sessionToken);
+}
+
 /**
  * Payroll-facing reader (also callable from the client for diagnostics).
  * Returns { employee_id, period_year, period_month, lop_from_leave }.
  */
+function apiLeaveGetMonthlySnapshot(employeeId, periodYear, periodMonth, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    var y = periodYear ? Number(periodYear) : new Date().getFullYear();
+    var m = periodMonth ? Number(periodMonth) : (new Date().getMonth() + 1);
+    return EmployeeService.getMonthlyLeaveSnapshot(session, employeeId, y, m);
+  }, sessionToken);
+}
+
+function apiLeaveGetPolicySettings(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeavePolicyService.getPolicyBundle(session);
+  }, sessionToken);
+}
+
+function apiLeaveSavePolicySettings(payload, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return LeavePolicyService.savePolicyBundle(session, payload || {});
+  }, sessionToken);
+}
+
 function apiLeaveComputeLopFromLeave(employeeId, periodYear, periodMonth, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();

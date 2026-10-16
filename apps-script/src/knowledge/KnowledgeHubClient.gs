@@ -176,7 +176,7 @@ var KnowledgeHubClient = (function () {
   }
 
   /**
-   * Parse https URLs without relying solely on the URL constructor — Apps Script
+   * Parse https URLs without relying solely on the URL constructor - Apps Script
    * runtimes may not expose URL or may reject otherwise valid exec URLs.
    * @param {string} url
    * @return {{protocol: string, hostname: string, pathname: string, href: string, username: string, password: string}|null}
@@ -241,7 +241,7 @@ var KnowledgeHubClient = (function () {
   }
 
   /**
-   * Knowledge reference URLs — Drive/Docs only.
+   * Knowledge reference URLs - Drive/Docs only.
    * @param {string} url
    * @return {boolean}
    */
@@ -371,7 +371,7 @@ var KnowledgeHubClient = (function () {
 
   /**
    * Outbound JSON: version, iss, requestId, timestamp, nonce, actorId, question, signature.
-   * Knowledge-only — never sends mode, context, or live HRMS records.
+   * Knowledge-only - never sends mode, context, or live HRMS records.
    * @param {Object} params
    * @return {{request: Object, canonical: string}}
    */

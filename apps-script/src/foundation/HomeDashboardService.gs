@@ -48,15 +48,15 @@ var HomeDashboardService = (function () {
     if (PermissionService.can(HRMS.ACTIONS.LEAVE_APPROVE, {}, session)) {
       var leave = try_('leave', function () {
         var t = Date.now();
-        var value = LeaveService.getApprovals(session);
+        var value = LeaveService.getApprovalQueueSummary(session, 5);
         if (typeof HrmsPerf !== 'undefined' && HrmsPerf.addStage) {
           HrmsPerf.addStage('dash.leave', Date.now() - t);
         }
         return value;
       });
-      if (leave.ok) {
-        out.leave_approvals_count = leave.value.length;
-        out.leave_approvals = leave.value.slice(0, 5).map(fmtLeave);
+      if (leave.ok && leave.value) {
+        out.leave_approvals_count = leave.value.count;
+        out.leave_approvals = (leave.value.preview || []).map(fmtLeave);
       }
     }
     return out;

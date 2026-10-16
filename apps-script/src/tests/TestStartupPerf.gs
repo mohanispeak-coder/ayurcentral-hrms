@@ -1,5 +1,5 @@
 /**
- * Startup / performance smoke tests — run from Apps Script editor.
+ * Startup / performance smoke tests - run from Apps Script editor.
  * Does not deploy. Enable timings with Script Property HRMS_PERF_TIMING=1.
  */
 
@@ -57,13 +57,13 @@ function testStartupPerf_Smoke() {
     record('bootstrapOkShape', false, e.message);
   }
 
-  // Module UI endpoint — authorized users only; unknown module rejected.
+  // Module UI endpoint - authorized users only; unknown module rejected.
   try {
     var deny = apiGetModuleUi('not-a-module', '');
     if (deny && deny.ok === false) {
       record('moduleUiUnknownRejected', true, deny.error && deny.error.code);
     } else {
-      // May fail auth first when not logged in — still acceptable.
+      // May fail auth first when not logged in - still acceptable.
       record('moduleUiUnknownRejected', true, 'auth or validation gated', true);
     }
   } catch (e) {

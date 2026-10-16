@@ -2,6 +2,23 @@
 (function () {
   'use strict';
 
+  /** Remove legacy Ask HR widget if an old cached shell HTML is still served. */
+  function removeLegacyAskHrUi_() {
+    try {
+      ['ask-hr-fab', 'ask-hr-panel', 'ask-hr-expand'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      });
+      document.querySelectorAll('.ask-hr-fab, .ask-hr-panel').forEach(function (el) {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      });
+    } catch (ignoreLegacyAskHr) {}
+  }
+  removeLegacyAskHrUi_();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', removeLegacyAskHrUi_);
+  }
+
   var SESSION_STORAGE_KEY = 'hrms_session_token';
 
   var state = {
@@ -16,7 +33,6 @@
 
   var ROUTES = {
     dashboard: { title: 'Dashboard', render: renderDashboard },
-    settings: { title: 'Settings', render: renderPlaceholder },
     users: { title: 'Users', render: renderPlaceholder }
   };
 
@@ -27,14 +43,24 @@
     'my-profile': 'employee',
     'employee-create': 'employee',
     'employee-profile': 'employee',
+    'employee-bulk-upload': 'employee',
+    'employee-field-defs': 'employee',
+    'employee-mandatory-fields': 'employee',
     'my-leave': 'leave',
     'leave-apply': 'leave',
     'leave-approvals': 'leave',
     'leave-admin': 'leave',
+    'leave-balances': 'leave',
     'leave-calendar': 'leave',
     payroll: 'payroll',
     'payroll-run': 'payroll',
-    compensation: 'payroll',
+    'salary-structure': 'payroll-structure',
+    'attendance-bulk-upload': 'payroll-attendance',
+    'attendance-form-t': 'payroll-attendance',
+    'holiday-calendar': 'payroll-attendance',
+    'salary-statement': 'payroll-statement',
+    'payroll-employee-salary': 'payroll',
+    compensation: 'payroll-structure',
     'my-payslips': 'payroll',
     ats: 'ats',
     'ats-jobs': 'ats',
@@ -43,7 +69,8 @@
     'ats-job-edit': 'ats',
     'ats-candidates': 'ats',
     'ats-candidate': 'ats',
-    notifications: 'notifications'
+    notifications: 'notifications',
+    settings: 'admin'
   };
 
   var ROUTE_TITLES = {
@@ -52,14 +79,24 @@
     'my-profile': 'My Profile',
     'employee-create': 'Add employee',
     'employee-profile': 'Employee',
+    'employee-bulk-upload': 'Bulk upload',
+    'employee-field-defs': 'Employee custom fields',
+    'employee-mandatory-fields': 'Mandatory fields',
     'my-leave': 'My Leave',
     'leave-apply': 'Apply Leave',
     'leave-approvals': 'Leave Approvals',
     'leave-admin': 'Leave',
+    'leave-balances': 'Leave balances',
     'leave-calendar': 'Leave Calendar',
     payroll: 'Payroll',
     'payroll-run': 'Payroll run',
-    compensation: 'Compensation',
+    'salary-structure': 'Salary structures',
+    'attendance-bulk-upload': 'Register',
+    'attendance-form-t': 'Form T',
+    'holiday-calendar': 'Holidays',
+    'salary-statement': 'Salary Statement',
+    'payroll-employee-salary': 'Employee salary',
+    compensation: 'Salary structures',
     'my-payslips': 'My Payslips',
     ats: 'Recruitment',
     'ats-jobs': 'Jobs',
@@ -68,7 +105,8 @@
     'ats-job-edit': 'Edit job',
     'ats-candidates': 'Candidates',
     'ats-candidate': 'Candidate',
-    notifications: 'Notifications'
+    notifications: 'Notifications',
+    settings: 'Settings'
   };
 
   var ROUTE_LEDES = {
@@ -78,14 +116,24 @@
     'my-profile': 'Your employee record and the details you are allowed to see.',
     'employee-create': 'Employee ID is assigned on save. Payroll identifiers are optional.',
     'employee-profile': 'Employee master record.',
+    'employee-bulk-upload': 'Import many employees from Excel or CSV.',
+    'employee-field-defs': 'Define optional extra columns for profiles and bulk upload.',
+    'employee-mandatory-fields': 'Choose which employee fields are required on create and bulk upload.',
     'my-leave': 'Balances for the current leave year and your requests.',
     'leave-apply': 'Dates are counted on the server. Half-day is 0.5 when the type allows it.',
     'leave-approvals': 'Submitted requests waiting for a decision.',
     'leave-admin': 'Company leave requests and configurable leave types.',
+    'leave-balances': 'All employees leave balance at a glance (HR/Admin: company; Manager: direct reports).',
     'leave-calendar': 'Approved leave for the month, scoped to your role.',
-    payroll: 'Process one month: enter days, calculate on the server, review, then lock.',
+    payroll: 'Process one month: calculate on the server, review exceptions, then lock.',
     'payroll-run': 'One primary next step. Locked amounts never change.',
-    compensation: 'Save a first structure, then revise so history stays intact.',
+    'salary-structure': 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
+    'attendance-bulk-upload': 'Monthly attendance register (Form XVII style): daily codes, summaries, and payroll day counts.',
+    'attendance-form-t': 'Statutory Form T Excel export per vertical for the selected payroll month.',
+    'holiday-calendar': 'Public holidays by year. Attendance register templates pre-fill H on configured dates.',
+    'salary-statement': 'Monthly cost-to-company breakdown by employee from structure templates and CTC.',
+    'payroll-employee-salary': 'Bulk upload or edit per-employee salary for the payroll month (after templates exist under Salary structures).',
+    compensation: 'Create reusable salary structure templates (vertical + component percentages) and assign them to employees.',
     'my-payslips': 'Your locked payslips. Amounts come from the payroll snapshot.',
     ats: 'Open jobs, pipeline, and interviews in your scope.',
     'ats-jobs': 'Create, publish, and share requisitions.',
@@ -95,16 +143,17 @@
     'ats-candidates': 'Applicants for jobs you can access.',
     'ats-candidate': 'Profile, applications, interviews, and notes.',
     notifications: 'Your inbox and, for HR, the email delivery log.',
-    settings: 'Company configuration will be available in a later phase.',
+    settings: 'Organisation email toggles and role-based self-service defaults.',
     users: 'Role assignment will be available in a later phase.'
   };
 
   var NAV_GROUPS = [
     { id: 'main', label: 'Main', routes: ['dashboard'], collapsible: false },
     { id: 'my-work', label: 'My Work', routes: ['my-profile', 'my-leave', 'my-payslips'], collapsible: true },
-    { id: 'people', label: 'People', routes: ['employees', 'my-team'], collapsible: true },
-    { id: 'time-off', label: 'Time Off', routes: ['leave-admin', 'leave-approvals'], collapsible: true },
-    { id: 'payroll', label: 'Payroll', routes: ['payroll', 'compensation'], collapsible: true },
+    { id: 'people', label: 'People', routes: ['employees', 'employee-mandatory-fields', 'my-team'], collapsible: true },
+    { id: 'time-off', label: 'Time Off', routes: ['leave-balances', 'leave-admin', 'leave-approvals'], collapsible: true },
+    { id: 'attendance', label: 'Attendance', routes: ['attendance-bulk-upload', 'attendance-form-t', 'holiday-calendar'], collapsible: true },
+    { id: 'payroll', label: 'Payroll', routes: ['salary-structure', 'salary-statement', 'payroll'], collapsible: true },
     { id: 'recruitment', label: 'Recruitment', routes: ['ats', 'ats-jobs', 'ats-candidates'], collapsible: true },
     { id: 'admin', label: 'System', routes: ['notifications', 'settings', 'users'], collapsible: true }
   ];
@@ -112,14 +161,387 @@
   /** Session-only sidebar section expand/collapse (never localStorage). */
   var navSectionExpanded_ = {};
 
+  var PAYROLL_PERIOD_CTX_KEY_ = 'hrms_payroll_period_v1';
+
+  function readPayrollPeriodContext_() {
+    try {
+      var raw = sessionStorage.getItem(PAYROLL_PERIOD_CTX_KEY_);
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      if (!o || typeof o !== 'object') return null;
+      return o;
+    } catch (ignore) {
+      return null;
+    }
+  }
+
+  function mergePayrollPeriodContext_(params) {
+    params = params || {};
+    var ctx = readPayrollPeriodContext_();
+    if (!ctx) return params;
+    if (ctx.year != null && params.year == null) params.year = ctx.year;
+    if (ctx.month != null && params.month == null) params.month = ctx.month;
+    if (ctx.runId && params.runId == null) params.runId = ctx.runId;
+    if (ctx.vertical && params.vertical == null) params.vertical = ctx.vertical;
+    return params;
+  }
+
+  /** Parse vertical code from payroll run id (PR-YYYY-MM-VERT or PR-YYYY-MM-VERT-Cn). */
+  function verticalFromPayrollRunId_(runId) {
+    var parts = String(runId || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var vert = parts[3];
+    if (!vert || /^C\d+$/i.test(vert)) return '';
+    return String(vert).toUpperCase();
+  }
+
+  function runVerticalFromRow_(run) {
+    var v = String(run && run.vertical_name || '').trim().toUpperCase();
+    if (v) return v;
+    return verticalFromPayrollRunId_(run && run.payroll_run_id);
+  }
+
+  function runsForPayrollMonth_(runs, year, month) {
+    return (runs || []).filter(function (r) {
+      return Number(r.period_year) === Number(year) && Number(r.period_month) === Number(month);
+    });
+  }
+
+  function findRunForVerticalMonth_(runs, year, month, vertical) {
+    var list = runsForPayrollMonth_(runs, year, month);
+    var want = String(vertical || '').trim().toUpperCase();
+    if (!want) return null;
+    var open = list.filter(function (r) {
+      return String(r.status || '').toUpperCase() !== 'LOCKED' && runVerticalFromRow_(r) === want;
+    });
+    if (open.length) return open[0];
+    var any = list.filter(function (r) { return runVerticalFromRow_(r) === want; });
+    return any.length ? any[0] : null;
+  }
+
+  /**
+   * When session has no payroll month, align UI to the latest org-wide run (same sheet for all HR/Admin).
+   * @param {Array} runs
+   * @param {string=} preferredVertical
+   */
+  var payrollRunsListCache_ = { promise: null, data: null, at: 0, version: '' };
+
+  function currentClientAssetsVersion_() {
+    return (state.app && state.app.clientAssetsVersion) ? String(state.app.clientAssetsVersion) : '';
+  }
+
+  /** User-facing vertical dropdown label (hyphen only, no em dash). */
+  function formatVerticalOptionLabel_(code, legalName) {
+    var c = String(code == null ? '' : code).trim();
+    var n = String(legalName == null ? '' : legalName).trim();
+    if (!c) return n;
+    if (!n) return c;
+    return c + ' - ' + n;
+  }
+
+  function mergePayrollRouteParams_(params) {
+    return mergePayrollPeriodContext_(params || {});
+  }
+
+  function invalidatePayrollRunsListCache_() {
+    payrollRunsListCache_ = { promise: null, data: null, at: 0, version: '' };
+  }
+
+  var verticalCatalogCache_ = { promise: null, data: null, at: 0, version: '' };
+
+  function invalidateVerticalCatalogCache_() {
+    verticalCatalogCache_ = { promise: null, data: null, at: 0, version: '' };
+  }
+
+  /**
+   * Deduped vertical catalog for payroll/attendance dropdowns (short TTL).
+   * @param {function(string): Promise} callServerFn
+   */
+  function fetchVerticalCatalog_(callServerFn) {
+    var ver = currentClientAssetsVersion_();
+    var now = Date.now();
+    if (verticalCatalogCache_.data && verticalCatalogCache_.version === ver &&
+        (now - verticalCatalogCache_.at) < 60000) {
+      return Promise.resolve(verticalCatalogCache_.data);
+    }
+    if (verticalCatalogCache_.promise && verticalCatalogCache_.version === ver) {
+      return verticalCatalogCache_.promise;
+    }
+    verticalCatalogCache_.version = ver;
+    verticalCatalogCache_.promise = (callServerFn || callServer)('apiGetVerticalCatalog').then(function (cat) {
+      verticalCatalogCache_.data = cat || [];
+      verticalCatalogCache_.at = Date.now();
+      verticalCatalogCache_.promise = null;
+      return verticalCatalogCache_.data;
+    }).catch(function (err) {
+      verticalCatalogCache_.promise = null;
+      throw err;
+    });
+    return verticalCatalogCache_.promise;
+  }
+
+  /**
+   * Deduped payroll runs list for the current session (short TTL). Same org data for all HR/Admin.
+   * @param {function(string): Promise} callServerFn
+   */
+  function fetchPayrollRunsList_(callServerFn) {
+    var ver = currentClientAssetsVersion_();
+    var now = Date.now();
+    if (payrollRunsListCache_.data && payrollRunsListCache_.version === ver &&
+        (now - payrollRunsListCache_.at) < 10000) {
+      return Promise.resolve(payrollRunsListCache_.data);
+    }
+    if (payrollRunsListCache_.promise && payrollRunsListCache_.version === ver) {
+      return payrollRunsListCache_.promise;
+    }
+    payrollRunsListCache_.version = ver;
+    payrollRunsListCache_.promise = (callServerFn || callServer)('apiListPayrollRuns').then(function (runs) {
+      payrollRunsListCache_.data = runs || [];
+      payrollRunsListCache_.at = Date.now();
+      payrollRunsListCache_.promise = null;
+      return payrollRunsListCache_.data;
+    }).catch(function (err) {
+      payrollRunsListCache_.promise = null;
+      throw err;
+    });
+    return payrollRunsListCache_.promise;
+  }
+
+  function suggestPayrollPeriodFromRuns_(runs, preferredVertical) {
+    runs = (runs || []).slice();
+    if (!runs.length) return null;
+    var want = String(preferredVertical || '').trim().toUpperCase();
+    runs.sort(function (a, b) {
+      var ya = Number(b.period_year) - Number(a.period_year);
+      if (ya !== 0) return ya > 0 ? 1 : -1;
+      var ma = Number(b.period_month) - Number(a.period_month);
+      if (ma !== 0) return ma > 0 ? 1 : -1;
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+    var pick = null;
+    if (want) {
+      for (var i = 0; i < runs.length; i++) {
+        if (runVerticalFromRow_(runs[i]) === want) {
+          pick = runs[i];
+          break;
+        }
+      }
+    }
+    if (!pick) pick = runs[0];
+    return {
+      year: Number(pick.period_year),
+      month: Number(pick.period_month),
+      runId: pick.payroll_run_id,
+      vertical: runVerticalFromRow_(pick)
+    };
+  }
+
+  /**
+   * Keep payroll run id and vertical consistent when both are present (session context drift).
+   * Prefers vertical when a matching run exists for that month; otherwise aligns vertical to the run.
+   */
+  function reconcilePayrollPeriodWithRuns_(params, runs) {
+    params = params || {};
+    var out = {
+      year: params.year != null ? Number(params.year) : null,
+      month: params.month != null ? Number(params.month) : null,
+      runId: params.runId ? String(params.runId).trim() : '',
+      vertical: params.vertical ? String(params.vertical).trim().toUpperCase() : ''
+    };
+    if (!runs || !runs.length) return out;
+
+    var byId = out.runId
+      ? (runs || []).filter(function (r) { return r.payroll_run_id === out.runId; })[0]
+      : null;
+    var runV = byId ? runVerticalFromRow_(byId) : '';
+
+    if (byId) {
+      if (!out.year) out.year = Number(byId.period_year);
+      if (!out.month) out.month = Number(byId.period_month);
+    }
+
+    if (byId && out.vertical && runV && runV !== out.vertical) {
+      var alt = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
+      if (alt) {
+        out.runId = alt.payroll_run_id;
+        out.year = Number(alt.period_year);
+        out.month = Number(alt.period_month);
+      } else {
+        out.vertical = runV;
+      }
+    } else if (byId && !out.vertical && runV) {
+      out.vertical = runV;
+    } else if (!byId && out.vertical && out.year && out.month) {
+      var match = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
+      if (match) {
+        out.runId = match.payroll_run_id;
+        out.year = Number(match.period_year);
+        out.month = Number(match.period_month);
+      }
+    } else if (byId && !out.vertical && runV) {
+      out.vertical = runV;
+    }
+    return out;
+  }
+
+  function persistPayrollPeriodContext_(params) {
+    params = params || {};
+    if (params.year == null && params.month == null && !params.runId && !params.vertical) return;
+    var prev = readPayrollPeriodContext_() || {};
+    var next = {
+      year: params.year != null ? Number(params.year) : prev.year,
+      month: params.month != null ? Number(params.month) : prev.month,
+      runId: params.runId ? String(params.runId) : (prev.runId || ''),
+      vertical: params.vertical ? String(params.vertical).trim().toUpperCase() : (prev.vertical || ''),
+      updatedAt: Date.now()
+    };
+    try {
+      sessionStorage.setItem(PAYROLL_PERIOD_CTX_KEY_, JSON.stringify(next));
+    } catch (ignore) {}
+  }
+
   var ROUTE_ALIASES = {
     'ats-applications': 'ats-candidates',
-    'ats-interviews': 'ats-candidates'
+    'ats-interviews': 'ats-candidates',
+    'payroll-run': 'payroll',
+    compensation: 'salary-structure'
   };
+
+  /** When true, navigate() must not push/replace browser history (popstate / hash restore). */
+  var suppressHistoryPush_ = false;
+
+  function isKnownRoute_(route) {
+    if (!route) return false;
+    if (route === 'dashboard') return true;
+    if (ROUTES[route]) return true;
+    if (ROUTE_MODULE[route]) return true;
+    return false;
+  }
+
+  function routeToHash_(route, params) {
+    var base = '#/' + encodeURIComponent(route || 'dashboard');
+    params = params || {};
+    var keys = Object.keys(params).filter(function (k) {
+      return params[k] !== undefined && params[k] !== null && String(params[k]) !== '';
+    });
+    if (!keys.length) return base;
+    var q = keys.map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(String(params[k]));
+    }).join('&');
+    return base + '?' + q;
+  }
+
+  function parseRouteHash_(hash) {
+    var raw = String(hash || window.location.hash || '').replace(/^#/, '').replace(/^\//, '');
+    if (!raw) return { route: '', params: {} };
+    var qIdx = raw.indexOf('?');
+    var routePart = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
+    var route = '';
+    try {
+      route = decodeURIComponent(routePart.split('/')[0] || '');
+    } catch (ignore) {
+      route = routePart.split('/')[0] || '';
+    }
+    var params = {};
+    if (qIdx >= 0) {
+      raw.slice(qIdx + 1).split('&').forEach(function (pair) {
+        if (!pair) return;
+        var eq = pair.indexOf('=');
+        if (eq < 1) return;
+        try {
+          params[decodeURIComponent(pair.slice(0, eq))] = decodeURIComponent(pair.slice(eq + 1));
+        } catch (ignore2) {}
+      });
+    }
+    return { route: route, params: params };
+  }
+
+  function routeParamsEqual_(a, b) {
+    a = a || {};
+    b = b || {};
+    var keysA = Object.keys(a);
+    var keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (var i = 0; i < keysA.length; i++) {
+      var k = keysA[i];
+      if (String(a[k]) !== String(b[k])) return false;
+    }
+    return true;
+  }
+
+  function syncBrowserRoute_(route, params, replace) {
+    if (typeof history === 'undefined' || !history.pushState) return;
+    var hash = routeToHash_(route, params);
+    var base = window.location.pathname + (window.location.search || '');
+    var url = base + hash;
+    var st = { hrmsRoute: route, params: params || {} };
+    suppressHistoryPush_ = true;
+    try {
+      if (replace) history.replaceState(st, '', url);
+      else if (window.location.pathname + window.location.search + window.location.hash !== url) {
+        history.pushState(st, '', url);
+      }
+    } catch (e) {
+      if (window.location.hash !== hash) window.location.hash = hash;
+    } finally {
+      suppressHistoryPush_ = false;
+    }
+  }
+
+  function clearBrowserRoute_() {
+    if (typeof history === 'undefined' || !history.replaceState) {
+      if (window.location.hash) window.location.hash = '';
+      return;
+    }
+    try {
+      history.replaceState(null, '', window.location.pathname + (window.location.search || ''));
+    } catch (ignore) {
+      window.location.hash = '';
+    }
+  }
+
+  function onPopState_(ev) {
+    if (!state.session || !state.session.authorized) return;
+    var parsed;
+    if (ev && ev.state && ev.state.hrmsRoute) {
+      parsed = { route: ev.state.hrmsRoute, params: ev.state.params || {} };
+    } else {
+      parsed = parseRouteHash_(window.location.hash);
+    }
+    if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+    if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
+      return;
+    }
+    if (ROUTE_MODULE[parsed.route] || parsed.route === 'dashboard') {
+      parsed.params = mergePayrollPeriodContext_(parsed.params || {});
+    }
+    suppressHistoryPush_ = true;
+    try {
+      navigate(parsed.route, parsed.params, { fromHistory: true, replaceHistory: true });
+    } finally {
+      suppressHistoryPush_ = false;
+    }
+  }
+
+  function bindBrowserHistory_() {
+    if (window.__hrmsHistoryBound) return;
+    window.__hrmsHistoryBound = true;
+    window.addEventListener('popstate', onPopState_);
+    window.addEventListener('hashchange', function () {
+      if (suppressHistoryPush_) return;
+      var parsed = parseRouteHash_(window.location.hash);
+      if (!parsed.route || !isKnownRoute_(parsed.route)) return;
+      if (parsed.route === state.currentRoute && routeParamsEqual_(parsed.params, state.routeParams)) {
+        return;
+      }
+      onPopState_({ state: history.state });
+    });
+  }
 
   var moduleLoaded_ = {};
   var moduleLoading_ = {};
   var userRpcBusy_ = 0;
+  var globalLoadingButton_ = null;
   var preloadPaused_ = false;
   var preloadQueue_ = [];
   var preloadScheduled_ = false;
@@ -135,7 +557,7 @@
   var refreshForceKey_ = '';
   var refreshBusy_ = false;
   var refreshWatchdog_ = null;
-  var dashViewCache_ = { payload: null, actions: '', complete: false };
+  var dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
 
   function sessionCacheKey_() {
     var s = state.session || {};
@@ -195,13 +617,13 @@
       stamp = '<span class="module-updated" id="module-updated-stamp">' +
         escapeHtml(formatModuleUpdatedAt_(rec.lastLoadedAt)) + '</span>';
     }
-    return stamp +
+    return '<div class="page-header-meta">' + stamp +
       '<button type="button" class="btn btn-secondary btn-sm js-module-refresh" id="btn-module-refresh"' +
       (loading ? ' disabled aria-busy="true"' : '') + '>' +
       (loading
         ? '<span class="spinner-sm" aria-hidden="true"></span> Refreshing…'
         : '<span class="module-refresh-icon" aria-hidden="true">↻</span> Refresh') +
-      '</button>';
+      '</button></div>';
   }
 
   function ensureModuleRefreshControls() {
@@ -215,16 +637,18 @@
       actions.className = 'page-header-actions';
       header.appendChild(actions);
     }
-    var existing = actions.querySelector('.js-module-refresh');
-    var stamp = actions.querySelector('#module-updated-stamp');
-    if (existing) {
-      if (stamp) stamp.remove();
-      existing.remove();
+    var existingMeta = actions.querySelector('.page-header-meta');
+    if (existingMeta) {
+      var existing = existingMeta.querySelector('.js-module-refresh');
+      if (existing && globalLoadingButton_ === existing) {
+        try { restoreButton(existing); } catch (ignoreRestore) {}
+      }
+      existingMeta.remove();
     }
     var hold = document.createElement('div');
     hold.innerHTML = moduleRefreshControlsHtml();
     while (hold.lastChild) {
-      actions.insertBefore(hold.lastChild, actions.firstChild);
+      actions.appendChild(hold.lastChild);
     }
   }
 
@@ -236,6 +660,8 @@
     var sk = sessionCacheKey_();
     if (!sk || !rec.sessionKey || rec.sessionKey !== sk) return false;
     if (rec.consumedNavSeq === state.navSeq) return false;
+    var assetsVer = currentClientAssetsVersion_();
+    if (assetsVer && rec.clientAssetsVersion && rec.clientAssetsVersion !== assetsVer) return false;
     return true;
   }
 
@@ -250,11 +676,13 @@
   function markModuleViewLoaded(key, meta) {
     key = key || moduleViewKey(state.currentRoute, state.routeParams);
     if (!key) return;
+    var endingRefresh = refreshBusy_;
     moduleViewCache_[key] = {
       loaded: true,
       lastLoadedAt: Date.now(),
       consumedNavSeq: state.navSeq,
       sessionKey: sessionCacheKey_(),
+      clientAssetsVersion: currentClientAssetsVersion_(),
       route: (meta && meta.route) || state.currentRoute,
       params: (meta && meta.params) || state.routeParams || {},
       moduleId: (meta && meta.moduleId) || moduleIdForRoute_(state.currentRoute)
@@ -262,7 +690,11 @@
     if (refreshForceKey_ === key || refreshForceKey_ === '*') refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
-    scheduleRefreshControls_();
+    if (endingRefresh) {
+      finishModuleRefresh(false);
+    } else {
+      scheduleRefreshControls_();
+    }
     logClientPerf_({ kind: 'module-view-loaded', key: key, route: state.currentRoute });
   }
 
@@ -271,17 +703,34 @@
     return refreshForceKey_ === key || refreshForceKey_ === '*';
   }
 
+  function clearOrphanGlobalBusy_() {
+    if (!globalLoadingButton_) return;
+    try {
+      if (!document.body.contains(globalLoadingButton_)) {
+        globalLoadingButton_ = null;
+        setGlobalActionBusy_(false);
+        return;
+      }
+      restoreButton(globalLoadingButton_);
+    } catch (ignore) {
+      globalLoadingButton_ = null;
+      setGlobalActionBusy_(false);
+    }
+  }
+
   function finishModuleRefresh(failed) {
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
     var pageBusy = $('page-content');
     if (pageBusy) pageBusy.removeAttribute('aria-busy');
+    clearOrphanGlobalBusy_();
     var btn = $('btn-module-refresh');
     if (btn) {
       try { restoreButton(btn); } catch (ignore) {}
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
+      if (btn.classList) btn.classList.remove('btn-loading');
     }
     scheduleRefreshControls_();
     if (failed) {
@@ -352,10 +801,11 @@
 
   function clearModuleViewCache() {
     moduleViewCache_ = {};
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     refreshForceKey_ = '';
     refreshBusy_ = false;
     clearRefreshWatchdog_();
+    invalidatePayrollRunsListCache_();
   }
 
   function invalidateModuleViewCache(keys) {
@@ -379,10 +829,29 @@
     if (keys.length) logClientPerf_({ kind: 'module-view-invalidate-prefix', prefix: prefix, keys: keys });
   }
 
-  function invalidateDashboardView() {
+  function invalidateDashboardView(opts) {
+    opts = opts || {};
+    if (opts.secondaryOnly) {
+      dashViewCache_.secondaryStale = true;
+      dashViewCache_.complete = false;
+      delete moduleViewCache_.dashboard;
+      if (dashViewCache_.payload) {
+        delete dashViewCache_.payload.payroll;
+        delete dashViewCache_.payload.pms;
+        delete dashViewCache_.payload.pms_actions;
+        delete dashViewCache_.payload.ats;
+        delete dashViewCache_.payload.ats_actions;
+      }
+      logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard-secondary'] });
+      return;
+    }
     delete moduleViewCache_.dashboard;
-    dashViewCache_ = { payload: null, actions: '', complete: false };
+    dashViewCache_ = { payload: null, actions: '', complete: false, secondaryStale: false };
     logClientPerf_({ kind: 'module-view-invalidate', keys: ['dashboard'] });
+  }
+
+  function getDashboardViewCache() {
+    return dashViewCache_;
   }
 
   function registerModuleRoutes(extra) {
@@ -396,7 +865,14 @@
 
   function getSessionToken() {
     try {
-      return sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+      var token = localStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) return token;
+      token = sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+      return token;
     } catch (e) {
       return '';
     }
@@ -404,8 +880,13 @@
 
   function setSessionToken(token) {
     try {
-      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
-      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      } else {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
     } catch (ignore) {}
   }
 
@@ -443,25 +924,116 @@
     var fb = obj.feedback || obj.feedbackEl;
     if (fb && fb.nodeType === 1) return true;
     if (obj.background === true) return true;
+    // ATS/payroll rpc() always appends { loadingText } even with no button.
+    // That must not be sent as a google.script.run argument or it steals sessionToken.
+    if (typeof obj.loadingText === 'string' && !obj.button && !obj.loadingButton) return true;
     return false;
   }
 
   function extractActionOpts_(args) {
-    if (!args.length) return null;
-    var last = args[args.length - 1];
-    if (!isActionOpts_(last)) return null;
-    args.pop();
-    return last;
+    var action = null;
+    while (args.length) {
+      var last = args[args.length - 1];
+      if (!isActionOpts_(last)) break;
+      action = last;
+      args.pop();
+    }
+    return action;
+  }
+
+  /** Plain objects that only carry callServer UI metadata (must never be google.script.run args). */
+  function isClientRpcMeta_(obj) {
+    if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
+    if (Object.prototype.toString.call(obj) === '[object Array]') return false;
+    if (isActionOpts_(obj)) return true;
+    var btn = obj.button || obj.loadingButton;
+    if (btn && btn.nodeType !== 1) return false;
+    var keys = Object.keys(obj);
+    if (!keys.length) return false;
+    var clientOnly = {
+      button: 1, loadingButton: 1, feedback: 1, feedbackEl: 1,
+      loadingText: 1, background: 1, successMessage: 1, silent: 1
+    };
+    for (var i = 0; i < keys.length; i++) {
+      if (!clientOnly.hasOwnProperty(keys[i])) return false;
+    }
+    if (obj.background === true) return true;
+    if (typeof obj.loadingText === 'string') return true;
+    if (typeof obj.successMessage === 'string') return true;
+    if (obj.silent === true) return true;
+    if (btn && btn.nodeType === 1) return true;
+    var fb = obj.feedback || obj.feedbackEl;
+    if (fb && fb.nodeType === 1) return true;
+    return false;
+  }
+
+  /** Optional callServer UI args are often passed as null; never send them to google.script.run. */
+  function stripTrailingNullishRpcArgs_(args) {
+    while (args.length && args[args.length - 1] == null) {
+      args.pop();
+    }
+  }
+
+  /**
+   * google.script.run maps arguments by position. sessionToken must be appended last.
+   * Strip leaked UI objects only - never treat business strings (module ids, EMP001, run ids)
+   * as the OTP token or every lazy-loaded module fails for non-deployers.
+   */
+  function prepareGoogleScriptArgs_(args) {
+    while (args.length && isClientRpcMeta_(args[args.length - 1])) {
+      args.pop();
+    }
+    var token = getSessionToken();
+    if (args.length && args[args.length - 1] === token) return;
+    args.push(token);
+  }
+
+  function moduleRpc(fnName, args, btn, loadingText, feedback) {
+    var callArgs = [fnName].concat(args || []);
+    if (btn || feedback) {
+      var opts = { loadingText: loadingText || 'Working…' };
+      if (btn) opts.button = btn;
+      if (feedback) opts.feedback = feedback;
+      callArgs.push(opts);
+    }
+    return callServer.apply(null, callArgs);
   }
 
   function isButtonLoading(button) {
     return !!(button && button.getAttribute && button.getAttribute('data-hrms-loading') === '1');
   }
 
+  function isGlobalActionBusy() {
+    return !!globalLoadingButton_;
+  }
+
+  function setGlobalActionBusy_(busy, activeButton) {
+    var root = document.getElementById('app-root') || document.body;
+    if (!root || !root.querySelectorAll) return;
+    if (busy) {
+      root.classList.add('hrms-global-busy');
+      root.querySelectorAll('button').forEach(function (btn) {
+        if (btn === activeButton || btn.getAttribute('data-hrms-loading') === '1') return;
+        if (btn.disabled) return;
+        btn.setAttribute('data-hrms-busy-disabled', '1');
+        btn.disabled = true;
+      });
+    } else {
+      root.classList.remove('hrms-global-busy');
+      root.querySelectorAll('button[data-hrms-busy-disabled="1"]').forEach(function (btn) {
+        btn.removeAttribute('data-hrms-busy-disabled');
+        btn.disabled = false;
+      });
+    }
+  }
+
   function setButtonLoading(button, loadingText) {
     if (!button || button.nodeType !== 1) return false;
     if (isButtonLoading(button)) return false;
+    if (globalLoadingButton_ && globalLoadingButton_ !== button) return false;
     try {
+      globalLoadingButton_ = button;
+      setGlobalActionBusy_(true, button);
       button.setAttribute('data-hrms-loading', '1');
       button._hrmsBtnSnap = {
         html: button.innerHTML,
@@ -504,12 +1076,20 @@
       }
       button._hrmsBtnSnap = null;
       button._hrmsInflight = null;
+      if (globalLoadingButton_ === button) {
+        globalLoadingButton_ = null;
+        setGlobalActionBusy_(false);
+      }
     } catch (e) {
       try {
         button.disabled = false;
         button.removeAttribute('data-hrms-loading');
         button.removeAttribute('aria-busy');
         if (button.classList) button.classList.remove('btn-loading');
+        if (globalLoadingButton_ === button) {
+          globalLoadingButton_ = null;
+          setGlobalActionBusy_(false);
+        }
       } catch (e2) {}
     }
   }
@@ -540,13 +1120,14 @@
     var text = message ? String(message) : '';
     target.textContent = text;
     if (target.classList) {
-      target.classList.remove('is-success', 'is-error', 'is-info');
+      target.classList.remove('is-success', 'is-error', 'is-info', 'is-animate-in');
       if (!text) {
         target.classList.add('hidden');
         return;
       }
       target.classList.remove('hidden');
       target.classList.add(type === 'error' ? 'is-error' : (type === 'info' ? 'is-info' : 'is-success'));
+      target.classList.add('is-animate-in');
     }
     if (target.setAttribute) {
       target.setAttribute('role', type === 'error' ? 'alert' : 'status');
@@ -610,6 +1191,7 @@
   }
 
   function invokeRpc_(fnName, args, onPerf) {
+    prepareGoogleScriptArgs_(args);
     return new Promise(function (resolve, reject) {
       try {
         google.script.run
@@ -624,12 +1206,34 @@
                 return;
               }
               if (result && result.error) {
-                reject(result.error);
+                var errDetails = result.error.details || null;
+                reject({
+                  message: result.error.message || 'Request failed',
+                  code: result.error.code || '',
+                  details: errDetails,
+                  fields: errDetails && errDetails.fields ? errDetails.fields : null
+                });
+                return;
+              }
+              // Legacy / unenveloped success payloads (must not become "Request failed").
+              if (Array.isArray(result)) {
+                resolve(result);
+                return;
+              }
+              if (result && typeof result === 'object' && result.employee_id &&
+                  (result.hasOwnProperty('current') || result.hasOwnProperty('history'))) {
+                resolve(result);
                 return;
               }
               if (result && typeof result === 'object') {
                 if (Array.isArray(result.items) || result.hasOwnProperty('unread_count') ||
-                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences')) {
+                    result.hasOwnProperty('created') || result.hasOwnProperty('preferences') ||
+                    result.hasOwnProperty('components') || result.hasOwnProperty('structure') ||
+                    result.hasOwnProperty('document_id') || result.hasOwnProperty('schema_ready') ||
+                    result.hasOwnProperty('can_manage') || result.hasOwnProperty('pipeline') ||
+                    (result.hasOwnProperty('groups') && result.hasOwnProperty('fields')) ||
+                    (result.hasOwnProperty('base64') && result.hasOwnProperty('fileName')) ||
+                    (Array.isArray(result.holidays) && result.hasOwnProperty('calendar_year'))) {
                   resolve(result);
                   return;
                 }
@@ -665,7 +1269,13 @@
     }
     if (!ok) {
       if (feedback && !(value && value.silent) && !(value && value.code === 'IN_PROGRESS')) {
-        setActionFeedback(feedback, (value && value.message) || 'Request failed', 'error');
+        var fbMsg = (value && value.message) || 'Request failed';
+        if (value && value.fields && typeof value.fields === 'object') {
+          var fieldBits = [];
+          Object.keys(value.fields).forEach(function (k) { fieldBits.push(value.fields[k]); });
+          if (fieldBits.length) fbMsg = fieldBits.join(' ');
+        }
+        setActionFeedback(feedback, fbMsg, 'error');
       }
       return Promise.reject(value);
     }
@@ -678,7 +1288,8 @@
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
     var action = extractActionOpts_(args);
-    args.push(getSessionToken());
+    stripTrailingNullishRpcArgs_(args);
+    prepareGoogleScriptArgs_(args);
 
     var button = action && (action.button || action.loadingButton);
     var feedback = action && (action.feedback || action.feedbackEl);
@@ -773,7 +1384,7 @@
         '<h2 class="page-heading" aria-hidden="true">' + escapeHtml(title || '') + '</h2>' +
         (lede ? '<p class="page-lede">' + escapeHtml(lede) + '</p>' : '') +
       '</div>' +
-      '<div class="page-header-actions">' + refresh + (actionsHtml || '') + '</div></div>';
+      '<div class="page-header-actions hrms-page-actions">' + (actionsHtml || '') + refresh + '</div></div>';
   }
 
   function navIconSvg(name) {
@@ -798,8 +1409,11 @@
 
   function isNavRouteActive(itemRoute, current) {
     if (itemRoute === current) return true;
-    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create')) return true;
-    if (itemRoute === 'payroll' && current === 'payroll-run') return true;
+    if (itemRoute === 'employees' && (current === 'employee-profile' || current === 'employee-create' ||
+        current === 'employee-bulk-upload' || current === 'employee-field-defs')) return true;
+    if (itemRoute === 'employee-mandatory-fields' && current === 'employee-mandatory-fields') return true;
+    if (itemRoute === 'payroll' && (current === 'payroll-run' || current === 'payroll-employee-salary')) return true;
+    if (itemRoute === 'salary-structure' && (current === 'compensation')) return true;
     if (itemRoute === 'my-leave' && (current === 'leave-apply' || current === 'leave-calendar')) return true;
     if (itemRoute === 'ats-jobs' && (current === 'ats-job' || current === 'ats-job-new' || current === 'ats-job-edit')) return true;
     if (itemRoute === 'ats-candidates' && current === 'ats-candidate') return true;
@@ -849,11 +1463,34 @@
     return groups;
   }
 
+  function isMobileSidebar_() {
+    try {
+      return window.matchMedia('(max-width: 768px)').matches;
+    } catch (ignore) {
+      return false;
+    }
+  }
+
   function setSidebarOpen(open) {
     var sidebar = $('sidebar');
     var backdrop = $('sidebar-backdrop');
+    var toggle = $('sidebar-toggle');
     if (sidebar) sidebar.classList.toggle('open', !!open);
     if (backdrop) backdrop.classList.toggle('open', !!open);
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (isMobileSidebar_()) {
+      document.documentElement.classList.toggle('hrms-nav-drawer-open', !!open);
+    } else {
+      document.documentElement.classList.remove('hrms-nav-drawer-open');
+    }
+  }
+
+  function closeSidebarIfMobile_() {
+    if (isMobileSidebar_()) setSidebarOpen(false);
+  }
+
+  function initSidebarState_() {
+    setSidebarOpen(!isMobileSidebar_());
   }
 
   function setAuthedChrome(authed) {
@@ -869,7 +1506,7 @@
     });
   }
 
-  /* —— Shared perceived-loading helpers —— */
+  /* -- Shared perceived-loading helpers -- */
 
   function skeletonLine(widthClass) {
     return '<div class="skeleton skeleton-line hrms-skeleton-line ' + (widthClass || 'w80') + '" aria-hidden="true"></div>';
@@ -900,8 +1537,8 @@
 
   /**
    * Preferred data-loading placeholder. Replaces plain "Loading…" text.
-   * opts.lines — number of text lines (default 3)
-   * opts.variant — 'block' | 'card' | 'detail' | 'list'
+   * opts.lines - number of text lines (default 3)
+   * opts.variant - 'block' | 'card' | 'detail' | 'list'
    */
   function sectionSkeleton(opts) {
     opts = opts || {};
@@ -941,7 +1578,7 @@
     return html;
   }
 
-  /** @deprecated Prefer sectionSkeleton — kept as alias for existing call sites. */
+  /** @deprecated Prefer sectionSkeleton - kept as alias for existing call sites. */
   function sectionSpinner(label) {
     return sectionSkeleton({ label: label || 'Loading', variant: 'block', lines: 3 });
   }
@@ -1015,6 +1652,8 @@
         '<div class="card"><h2 class="section-title">My requests</h2>' + tableShell(['ID', 'Type', 'Dates', 'Days', 'Status', 'Reason', ''], 'shell-req', 4) + '</div>';
     } else if (route === 'leave-approvals') {
       html = tableShell(['Employee ID', 'Name', 'Type', 'Dates', 'Days', 'Reason', ''], 'shell-appr', 5);
+    } else if (route === 'leave-balances') {
+      html = '<div class="card">' + tableShell(['Employee ID', 'Name', 'Dept', 'Vertical', 'Year avail.', 'Month avail.'], 'shell-leave-bal', 6) + '</div>';
     } else if (route === 'leave-admin') {
       html = '<div class="card">' +
         tableShell(['Employee ID', 'Type', 'Dates', 'Days', 'Status', ''], 'shell-admin', 5) + '</div>';
@@ -1029,8 +1668,16 @@
         '<div class="card">' + tableShell(['Period', 'Run', 'Status', 'Created', ''], 'shell-pr', 5) + '</div>';
     } else if (route === 'payroll-run') {
       html = sectionSkeleton({ variant: 'detail', label: 'Loading run' });
-    } else if (route === 'compensation') {
-      html = sectionSkeleton({ variant: 'card', label: 'Loading employees' }) + '<div id="comp-editor"></div>';
+    } else if (route === 'salary-structure' || route === 'compensation') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading salary structures' }) + '<div id="sst-mount"></div>';
+    } else if (route === 'payroll-employee-salary') {
+      html = sectionSkeleton({ variant: 'card', label: 'Loading employee salary' }) + '<div id="salary-structure-mount"></div>';
+    } else if (route === 'holiday-calendar') {
+      html = '<div class="card"><h2>Holiday calendar</h2>' + sectionSkeleton({ label: 'Loading holidays', lines: 4 }) + '</div>';
+    } else if (route === 'attendance-bulk-upload' || route === 'attendance-form-t') {
+      html = skeletonKpiRow(['Period', 'Status', 'Employees']) +
+        '<div class="card"><h2>' + escapeHtml(route === 'attendance-form-t' ? 'Form T' : 'Register') + '</h2>' +
+        sectionSkeleton({ lines: 3 }) + '</div>';
     } else if (route === 'my-payslips') {
       html = '<div class="card">' + tableShell(['Title', 'Run', 'Date', ''], 'shell-ps', 4) + '</div>';
     } else if (route === 'ats-jobs') {
@@ -1086,11 +1733,66 @@
     });
   }
 
+  function moduleRoutesRegistered_(moduleId, onlyRoute) {
+    if (!moduleId) return true;
+    var keys = Object.keys(ROUTE_MODULE).filter(function (r) { return ROUTE_MODULE[r] === moduleId; });
+    if (onlyRoute) keys = keys.filter(function (r) { return r === onlyRoute; });
+    if (!keys.length) return onlyRoute ? !!(ROUTES[onlyRoute] && ROUTES[onlyRoute].render && !ROUTES[onlyRoute]._lazy) : true;
+    return keys.every(function (r) {
+      return ROUTES[r] && ROUTES[r].render && !ROUTES[r]._lazy;
+    });
+  }
+
+  function leaveModuleHelpers_() {
+    return {
+      callServer: callServer,
+      escapeHtml: escapeHtml,
+      showToast: showToast,
+      setButtonLoading: setButtonLoading,
+      restoreButton: restoreButton,
+      setActionFeedback: setActionFeedback,
+      navigate: navigate,
+      $: $
+    };
+  }
+
+  /** Run route after lazy module load; falls back to HRMSLeaveUi when stub was not replaced (stale module cache). */
+  function invokeRegisteredRouteRender_(route, params) {
+    var def = ROUTES[route];
+    if (def && def.render && !def._lazy) {
+      def.render(params);
+      return true;
+    }
+    var moduleId = ROUTE_MODULE[route];
+    if (moduleId === 'leave' && window.HRMSLeaveUi && window.HRMSLeaveUi.render) {
+      window.HRMSLeaveUi.render(route, leaveModuleHelpers_(), params || {});
+      return true;
+    }
+    return false;
+  }
+
+  function waitForModuleRoutes_(moduleId, attempts, onlyRoute) {
+    attempts = attempts || 0;
+    if (moduleRoutesRegistered_(moduleId, onlyRoute)) return Promise.resolve();
+    if (attempts > 80) {
+      var detail = onlyRoute ? (moduleId + ', route ' + onlyRoute) : moduleId;
+      return Promise.reject({ message: 'Module UI did not initialize (' + detail + '). Refresh the page and try again.' });
+    }
+    return new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        waitForModuleRoutes_(moduleId, attempts + 1, onlyRoute).then(resolve, reject);
+      }, 10);
+    });
+  }
+
   function ensureModule(moduleId, opts) {
     opts = opts || {};
     if (opts.userInitiated) pauseBackgroundPreload();
     if (moduleLoaded_[moduleId]) {
-      return Promise.resolve();
+      if (moduleRoutesRegistered_(moduleId, opts.forRoute)) {
+        return Promise.resolve();
+      }
+      delete moduleLoaded_[moduleId];
     }
     if (moduleLoading_[moduleId]) {
       return moduleLoading_[moduleId];
@@ -1103,15 +1805,17 @@
       .then(function (data) {
         var tInject = Date.now();
         injectModuleHtml(data && data.html ? data.html : '');
-        logClientPerf_({
-          kind: 'module-ui',
-          moduleId: moduleId,
-          rpcAndInjectMs: Date.now() - tMod,
-          injectMs: Date.now() - tInject,
-          htmlChars: data && data.html ? data.html.length : 0
+        return waitForModuleRoutes_(moduleId, 0, opts.forRoute).then(function () {
+          logClientPerf_({
+            kind: 'module-ui',
+            moduleId: moduleId,
+            rpcAndInjectMs: Date.now() - tMod,
+            injectMs: Date.now() - tInject,
+            htmlChars: data && data.html ? data.html.length : 0
+          });
+          moduleLoaded_[moduleId] = true;
+          delete moduleLoading_[moduleId];
         });
-        moduleLoaded_[moduleId] = true;
-        delete moduleLoading_[moduleId];
       })
       .catch(function (err) {
         delete moduleLoading_[moduleId];
@@ -1149,9 +1853,9 @@
       });
     };
     if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(run, { timeout: 8000 });
+      window.requestIdleCallback(run, { timeout: 15000 });
     } else {
-      setTimeout(run, 1200);
+      setTimeout(run, 2000);
     }
   }
 
@@ -1182,19 +1886,17 @@
           var tNav = Date.now();
           var viewKey = moduleViewKey(route, params);
           if (moduleLoaded_[moduleId] && shouldRestoreModuleView(viewKey)) {
-            ensureModule(moduleId, { userInitiated: true })
+            ensureModule(moduleId, { userInitiated: true, forRoute: route })
               .then(function () {
                 if (seq !== state.navSeq || state.currentRoute !== route) return;
-                var def = ROUTES[route];
-                if (def && def.render && !def._lazy) def.render(params);
-                else renderPlaceholder();
+                if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
               });
             return;
           }
-          // Paint layout immediately — never wait for module RPC.
+          // Paint layout immediately - never wait for module RPC.
           paintPendingModuleShell(route);
           logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
-          ensureModule(moduleId, { userInitiated: true })
+          ensureModule(moduleId, { userInitiated: true, forRoute: route })
             .then(function () {
               logClientPerf_({
                 kind: 'nav-module-ready',
@@ -1204,12 +1906,7 @@
                 cached: !!moduleLoaded_[moduleId]
               });
               if (seq !== state.navSeq || state.currentRoute !== route) return;
-              var def = ROUTES[route];
-              if (def && def.render && !def._lazy) {
-                def.render(params);
-              } else {
-                renderPlaceholder();
-              }
+              if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
             })
             .catch(function (err) {
               if (seq !== state.navSeq || state.currentRoute !== route) return;
@@ -1289,8 +1986,35 @@
     });
   }
 
-  function navigate(route, params) {
+  function navigate(route, params, options) {
     if (!state.session || !state.session.authorized) return;
+    options = options || {};
+    params = params || {};
+    if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'attendance-form-t' ||
+        route === 'salary-structure' || route === 'salary-statement' || route === 'compensation' ||
+        route === 'payroll-employee-salary') {
+      params = mergePayrollPeriodContext_(params);
+      if (window.HrmsApp && window.HrmsApp.getPayrollPeriodParams) {
+        var pp = window.HrmsApp.getPayrollPeriodParams();
+        if (pp) {
+          if (pp.year != null && params.year == null) params.year = pp.year;
+          if (pp.month != null && params.month == null) params.month = pp.month;
+          if (pp.runId && params.runId == null) params.runId = pp.runId;
+          if (pp.vertical && params.vertical == null) params.vertical = pp.vertical;
+        }
+      }
+      persistPayrollPeriodContext_(params);
+      if ((route === 'attendance-bulk-upload' || route === 'attendance-form-t') && params.runId) {
+        var nextRun = String(params.runId);
+        ['attendance-bulk-upload', 'attendance-form-t'].forEach(function (attRoute) {
+          var rec = moduleViewCache_[attRoute];
+          var cachedRun = rec && rec.params && rec.params.runId ? String(rec.params.runId) : '';
+          if (cachedRun && cachedRun !== nextRun) {
+            invalidateModuleViewCache(attRoute);
+          }
+        });
+      }
+    }
     if (ROUTE_ALIASES[route]) route = ROUTE_ALIASES[route];
     state.navSeq = (state.navSeq || 0) + 1;
     pauseBackgroundPreload();
@@ -1304,13 +2028,16 @@
     }
     $('page-title').textContent = title;
     renderNav();
-    setSidebarOpen(false);
+    closeSidebarIfMobile_();
     if (def && def.render) {
       def.render(state.routeParams);
     } else {
       renderPlaceholder();
     }
     scheduleRefreshControls_();
+    if (!options.fromHistory && !suppressHistoryPush_) {
+      syncBrowserRoute_(route, state.routeParams, !!options.replaceHistory);
+    }
   }
 
   function renderPlaceholder() {
@@ -1330,7 +2057,7 @@
 
   function dashCard(label, value, hint) {
     return '<div class="card kpi-card"><div class="kpi-label">' + escapeHtml(label) + '</div>' +
-      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</div>' +
+      '<div class="kpi-value">' + escapeHtml(value == null || value === '' ? '-' : String(value)) + '</div>' +
       (hint ? '<div class="kpi-hint">' + escapeHtml(hint) + '</div>' : '') + '</div>';
   }
 
@@ -1392,25 +2119,36 @@
     }
 
     var primary = keepPainted ? (dashViewCache_.payload || null) : null;
+    var skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
     callServer('apiGetHomeDashboard')
       .then(function (data) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return null;
         primary = data || {};
         dashViewCache_.actions = actions;
-        dashViewCache_.payload = primary;
-        dashViewCache_.complete = false;
-        paintHomeDashboard(primary, actions, { secondaryPending: true });
+        if (keepPainted && dashViewCache_.payload) {
+          dashViewCache_.payload = mergeDashboardPayload_(primary, dashViewCache_.payload);
+        } else {
+          dashViewCache_.payload = primary;
+        }
+        skipSecondary = keepPainted && dashViewCache_.complete && !dashViewCache_.secondaryStale;
         if (window.HrmsNotificationBell && window.HrmsNotificationBell.applyUnreadCount) {
           window.HrmsNotificationBell.applyUnreadCount(primary.unread_count);
         }
-        return callServer('apiGetHomeDashboardMore');
+        if (skipSecondary) {
+          paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
+          markModuleViewLoaded(dashKey);
+          return null;
+        }
+        dashViewCache_.complete = false;
+        paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: true });
+        return callServer('apiGetHomeDashboardMore', { background: true });
       })
       .then(function (more) {
         if (seq !== state.navSeq || state.currentRoute !== 'dashboard') return;
-        if (more) {
-          dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
-          dashViewCache_.complete = true;
-        }
+        if (more == null) return;
+        dashViewCache_.payload = mergeDashboardPayload_(primary || {}, more);
+        dashViewCache_.complete = true;
+        dashViewCache_.secondaryStale = false;
         if (dashViewCache_.payload) {
           paintHomeDashboard(dashViewCache_.payload, actions, { secondaryPending: false });
         }
@@ -1453,7 +2191,7 @@
     if (!page) return;
     var s = state.session || {};
     var kpis = '';
-    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '—', 'In-app notifications');
+    kpis += dashCard('Unread', data.unread_count != null ? data.unread_count : '-', 'In-app notifications');
     if (data.leave_approvals_count != null) {
       kpis += dashCard('Leave approvals', data.leave_approvals_count, 'Waiting for a decision');
     }
@@ -1462,11 +2200,11 @@
       kpis += dashCard('Payroll', (run.period_month || '') + '/' + (run.period_year || ''), run.status || '');
     }
     if (data.ats) {
-      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '—');
-      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '—');
+      kpis += dashCard('Open jobs', data.ats.open_jobs != null ? data.ats.open_jobs : '-');
+      kpis += dashCard('Applications', data.ats.applications != null ? data.ats.applications : '-');
     }
     if (!kpis) {
-      kpis = dashCard('Employee ID', s.employee_id || '—') + dashCard('Role', s.role || '—');
+      kpis = dashCard('Employee ID', s.employee_id || '-') + dashCard('Role', s.role || '-');
     }
 
     var sections = '';
@@ -1488,7 +2226,7 @@
     if (!sections) {
       sections = '<div class="card dash-welcome">' +
         '<h2>Welcome to AyurCentral HRMS</h2>' +
-        '<p>Use the sidebar for people, time off, pay, and — if your role allows — recruitment.</p></div>';
+        '<p>Use the sidebar for people, time off, pay, and - if your role allows - recruitment.</p></div>';
     }
     if (state.app && !state.app.configured) {
       sections += '<div class="alert alert-info">Database setup is required before full operation.</div>';
@@ -1520,7 +2258,6 @@
     setAuthedChrome(false);
     $('unauthorized-state').classList.remove('hidden');
     $('unauthorized-message').textContent = message || 'You do not have access to this application.';
-    syncAskHrVisibility();
   }
 
   function showAuthError(el, message) {
@@ -1534,11 +2271,27 @@
     }
   }
 
+  function isTempDemoLoginEnabled_() {
+    return !!(state.app && state.app.tempDemoLoginEnabled);
+  }
+
+  function syncTempDemoAuthCard_() {
+    var demoCard = $('auth-step-demo');
+    if (!demoCard) return;
+    if (isTempDemoLoginEnabled_()) {
+      demoCard.classList.remove('hidden');
+    } else {
+      demoCard.classList.add('hidden');
+      showAuthError($('auth-demo-error'), '');
+    }
+  }
+
   function showAuthEmailStep() {
     $('auth-step-email').classList.remove('hidden');
     $('auth-step-code').classList.add('hidden');
     showAuthError($('auth-email-error'), '');
     showAuthError($('auth-code-error'), '');
+    syncTempDemoAuthCard_();
   }
 
   function showAuthCodeStep(email) {
@@ -1546,6 +2299,8 @@
     $('auth-email-display').textContent = email;
     $('auth-step-email').classList.add('hidden');
     $('auth-step-code').classList.remove('hidden');
+    var demoCard = $('auth-step-demo');
+    if (demoCard) demoCard.classList.add('hidden');
     $('auth-code').value = '';
     showAuthError($('auth-code-error'), '');
   }
@@ -1557,6 +2312,7 @@
    */
   function showAuthLogin(sessionHint) {
     clearUserSessionViewState_();
+    clearBrowserRoute_();
     state.navigation = [];
     state.currentRoute = '';
     state.routeParams = {};
@@ -1585,6 +2341,7 @@
     setAuthedChrome(false);
     $('auth-state').classList.remove('hidden');
     showAuthEmailStep();
+    syncTempDemoAuthCard_();
     if (state.authEmail) {
       $('auth-email').value = state.authEmail;
     }
@@ -1598,7 +2355,6 @@
         hint.classList.add('hidden');
       }
     }
-    syncAskHrVisibility();
   }
 
   var signOutBusy_ = false;
@@ -1630,7 +2386,59 @@
     return p;
   }
 
+  function bulkRequiredColumnsHtml(columnLabels) {
+    if (!columnLabels || !columnLabels.length) return '';
+    var items = columnLabels.map(function (label) {
+      return '<li><span class="form-label is-required bulk-required-label">' + escapeHtml(label) + '</span></li>';
+    }).join('');
+    return '<div class="bulk-required-block">' +
+      '<p class="form-label bulk-required-heading">Required columns in upload file</p>' +
+      '<ul class="bulk-required-list">' + items + '</ul></div>';
+  }
+
   function bindAuthUi() {
+    function onEnterSubmit(inputEl, btnId) {
+      if (!inputEl) return;
+      inputEl.addEventListener('keydown', function (evt) {
+        if (evt.key !== 'Enter') return;
+        evt.preventDefault();
+        var btn = $(btnId);
+        if (btn && !btn.disabled) btn.click();
+      });
+    }
+    onEnterSubmit($('auth-email'), 'auth-send-btn');
+    onEnterSubmit($('auth-code'), 'auth-verify-btn');
+    onEnterSubmit($('auth-demo-user-id'), 'auth-demo-btn');
+    onEnterSubmit($('auth-demo-password'), 'auth-demo-btn');
+
+    $('auth-demo-btn').addEventListener('click', function () {
+      if (!isTempDemoLoginEnabled_()) return;
+      var userId = ($('auth-demo-user-id').value || '').trim();
+      var password = $('auth-demo-password').value || '';
+      showAuthError($('auth-demo-error'), '');
+      if (!userId || userId.length < 2) {
+        showAuthError($('auth-demo-error'), 'Enter your user ID.');
+        return;
+      }
+      if (!password) {
+        showAuthError($('auth-demo-error'), 'Enter your password.');
+        return;
+      }
+      var btn = $('auth-demo-btn');
+      callServer('apiVerifyTempDemoLogin', userId, password, { button: btn, loadingText: 'Signing in…' })
+        .then(function (data) {
+          setSessionToken(data.sessionToken);
+          applyBootstrapSuccess({
+            session: data.session,
+            app: state.app,
+            navigation: data.navigation || []
+          });
+        })
+        .catch(function (err) {
+          showAuthError($('auth-demo-error'), err.message || 'Sign-in failed.');
+        });
+    });
+
     $('auth-send-btn').addEventListener('click', function () {
       var email = ($('auth-email').value || '').trim();
       showAuthError($('auth-email-error'), '');
@@ -1691,7 +2499,6 @@
     hideAllMainStates();
     setAuthedChrome(false);
     $('setup-state').classList.remove('hidden');
-    syncAskHrVisibility();
     $('btn-run-setup').addEventListener('click', function () {
       var btn = $('btn-run-setup');
       var resultEl = $('setup-result');
@@ -1721,9 +2528,21 @@
     var toggle = $('sidebar-toggle');
     if (toggle && !toggle.getAttribute('data-bound')) {
       toggle.setAttribute('data-bound', '1');
+      toggle.setAttribute('aria-expanded', 'true');
       toggle.addEventListener('click', function () {
         var sidebar = $('sidebar');
         setSidebarOpen(!(sidebar && sidebar.classList.contains('open')));
+      });
+    }
+    initSidebarState_();
+    if (!window.__hrmsSidebarResizeBound) {
+      window.__hrmsSidebarResizeBound = true;
+      window.addEventListener('resize', function () {
+        if (isMobileSidebar_()) {
+          setSidebarOpen(false);
+        } else {
+          setSidebarOpen(true);
+        }
       });
     }
     var backdrop = $('sidebar-backdrop');
@@ -1743,24 +2562,53 @@
     }
   }
 
+  function syncClientAssetsVersion_(app) {
+    var v = (app && app.clientAssetsVersion) || '';
+    if (!v) return;
+    try {
+      var key = 'hrms_client_assets_v';
+      var prev = sessionStorage.getItem(key);
+      if (prev && prev !== v) {
+        moduleLoaded_ = {};
+        moduleLoading_ = {};
+        clearModuleViewCache();
+        invalidatePayrollRunsListCache_();
+        moduleDataCacheClearHooks_.forEach(function (fn) {
+          try { fn(); } catch (ignore) {}
+        });
+      }
+      sessionStorage.setItem(key, v);
+    } catch (ignore) {}
+  }
+
   function applyBootstrapSuccess(data) {
+    syncClientAssetsVersion_(data.app);
     clearUserSessionViewState_();
     state.session = data.session;
     state.app = data.app;
     state.navigation = data.navigation || [];
-    askHrUi.sessionKnown = true;
     hideAllMainStates();
     setAuthedChrome(true);
     updateUserChip();
+    var initial = parseRouteHash_(window.location.hash);
+    var initialRoute = (initial.route && isKnownRoute_(initial.route)) ? initial.route : 'dashboard';
+    var initialModule = ROUTE_MODULE[initialRoute];
+    if (initialModule) {
+      ensureModule(initialModule, { userInitiated: true });
+    }
     initShell();
+    bindBrowserHistory_();
     bindModuleRefreshUi();
     renderNav();
-    navigate('dashboard');
-    syncAskHrVisibility();
+    if (initial.route && isKnownRoute_(initial.route)) {
+      navigate(initial.route, initial.params || {}, { replaceHistory: true, fromHistory: true });
+    } else {
+      navigate('dashboard', {}, { replaceHistory: true });
+    }
     if (window.HrmsNotificationBell && window.HrmsNotificationBell.mount) {
       window.HrmsNotificationBell.mount(null, { skipInitialFetch: true });
     }
-    // Idle, one-at-a-time preload — never compete with the first dashboard RPCs.
+    // Idle, one-at-a-time preload - never compete with the first dashboard RPCs.
     if (typeof window.requestIdleCallback === 'function') {
       window.requestIdleCallback(function () { preloadModulesFromNav(); }, { timeout: 12000 });
     } else {
@@ -1771,9 +2619,10 @@
   function bootstrap() {
     callServer('apiGetAppBootstrap')
       .then(function (data) {
+        syncClientAssetsVersion_(data.app);
         state.app = data.app;
         if (data.session) state.session = data.session;
-        askHrUi.sessionKnown = true;
+        syncTempDemoAuthCard_();
 
         if (!data.app.configured && !data.session.authorized) {
           $('loading-state').classList.add('hidden');
@@ -1801,702 +2650,15 @@
         el.classList.remove('hidden');
         el.textContent = err.message || 'Failed to load application.';
         showToast(err.message || 'Failed to load', 'error');
-        askHrUi.sessionKnown = true;
         setAuthedChrome(false);
-        syncAskHrVisibility();
       });
   }
 
-  var ASK_HR_MAX_CHARS = 1000;
-  var ASK_HR_STATUS_MS = 4000;
-  var ASK_HR_STATUS_STEPS = [
-    'Searching HR knowledge base…',
-    'Reading relevant documents…',
-    'Preparing your answer…'
-  ];
-  var ASK_HR_ERROR_COPY = {
-    UNAUTHORIZED: 'You need to be signed in to use Ask HR.',
-    AUTHORIZATION: 'You need to be signed in to use Ask HR.',
-    AUTHORIZATION_ERROR: 'You need to be signed in to use Ask HR.',
-    EXPIRED: 'Your session has expired. Please sign in again to use Ask HR.',
-    REPLAY: 'This request could not be completed. Please try again.',
-    VALIDATION: 'Your request was too long. Please keep it under 1000 characters.',
-    VALIDATION_ERROR: 'Your request was too long. Please keep it under 1000 characters.',
-    RATE_LIMITED: 'You\'re sending requests too quickly. Please wait a moment.',
-    NOT_CONFIGURED: 'Ask HR is not available yet. Please try again later.',
-    CONFIGURATION: 'Ask HR is not available yet. Please try again later.',
-    CONFIGURATION_ERROR: 'Ask HR is not available yet. Please try again later.',
-    NOT_FOUND: 'I couldn\'t find enough information in the HR knowledge base to answer this confidently.',
-    UPSTREAM: 'Unable to search the HR knowledge base right now. Please try again.',
-    RETRIEVAL_FAILED: 'Unable to search the HR knowledge base right now. Please try again.',
-    GENERATION_FAILED: 'I found the relevant HR information, but I\'m unable to generate the answer right now. Please try again.',
-    TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
-    LOCK_TIMEOUT: 'The HR knowledge base took too long to respond. Please try again.',
-    SYSTEM: 'Unable to search the HR knowledge base right now. Please try again.',
-    SYSTEM_ERROR: 'Unable to search the HR knowledge base right now. Please try again.'
-  };
-  var ASK_HR_NOT_FOUND_HINT =
-    'Try asking about a specific HR policy, leave rule, payroll process, employee procedure or benefit.';
-
-  var askHrUi = {
-    open: false,
-    busy: false,
-    expanded: false,
-    requestSeq: 0,
-    statusTimer: null,
-    statusIndex: 0,
-    messages: [],
-    sessionKnown: false
-  };
-
-  function isAskHrAllowed() {
-    if (state.session && state.session.authorized) return true;
-    if (state.session && state.session.authorized === false) return false;
-    if (askHrUi.sessionKnown) return false;
-    return !!getSessionToken();
-  }
-
-  function askHrFriendlyError(code) {
-    var key = String(code || 'UPSTREAM').toUpperCase();
-    return ASK_HR_ERROR_COPY[key] || ASK_HR_ERROR_COPY.UPSTREAM;
-  }
-
-  function mapAskHrTransportError(err) {
-    var raw = String((err && err.message) || err || '').toLowerCase();
-    if (raw.indexOf('not found') !== -1 || raw.indexOf('is not a function') !== -1) {
-      return { code: 'NOT_CONFIGURED' };
-    }
-    if (raw.indexOf('timed out') !== -1 || raw.indexOf('timeout') !== -1) {
-      return { code: 'TIMEOUT' };
-    }
-    return { code: 'UPSTREAM' };
-  }
-
-  /**
-   * Same sessionToken injection as other RPCs. Business errors arrive as
-   * { ok: false, error } inside the unwrapped callServer payload.
-   */
-  function callAskHr(question) {
-    return callServer('apiAskHr', question)
-      .then(function (payload) {
-        if (!payload || typeof payload !== 'object') {
-          return Promise.reject({ code: 'UPSTREAM' });
-        }
-        if (payload.ok === false || (payload.error && payload.ok !== true)) {
-          return Promise.reject(payload.error || { code: 'UPSTREAM' });
-        }
-        return payload;
-      })
-      .catch(function (err) {
-        if (err && err.code) {
-          return Promise.reject({ code: err.code });
-        }
-        return Promise.reject(mapAskHrTransportError(err));
-      });
-  }
-
-  function sanitizeAskHrFileUrl(raw) {
-    if (!raw || typeof raw !== 'string') return '';
-    var trimmed = raw.replace(/^\s+|\s+$/g, '');
-    if (!trimmed) return '';
-    var lower = trimmed.toLowerCase();
-    if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 ||
-        lower.indexOf('vbscript:') === 0 || lower.indexOf('file:') === 0) {
-      return '';
-    }
-    try {
-      var parsed = new URL(trimmed);
-      if (parsed.protocol !== 'https:') return '';
-      var host = String(parsed.hostname || '').toLowerCase().replace(/\.$/, '');
-      if (host === 'drive.google.com' || host === 'docs.google.com') {
-        return parsed.href;
-      }
-    } catch (ignore) {}
-    return '';
-  }
-
-  function appendMultilineText(el, text) {
-    var parts = String(text == null ? '' : text).split('\n');
-    var i;
-    for (i = 0; i < parts.length; i++) {
-      if (i) el.appendChild(document.createElement('br'));
-      el.appendChild(document.createTextNode(parts[i]));
-    }
-  }
-
-  function appendInlineMarkdown(el, text) {
-    var raw = String(text == null ? '' : text);
-    var re = /\*\*([^*]+)\*\*|\*([^*\n]+)\*/g;
-    var last = 0;
-    var match;
-    while ((match = re.exec(raw))) {
-      if (match.index > last) {
-        el.appendChild(document.createTextNode(raw.slice(last, match.index)));
-      }
-      var strong = document.createElement('strong');
-      strong.textContent = match[1] || match[2] || '';
-      el.appendChild(strong);
-      last = match.index + match[0].length;
-    }
-    if (last < raw.length) {
-      el.appendChild(document.createTextNode(raw.slice(last)));
-    }
-  }
-
-  function isAskHrTableSeparator_(line) {
-    return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
-  }
-
-  function splitAskHrTableRow_(line) {
-    var trimmed = String(line || '').trim();
-    if (trimmed.charAt(0) === '|') trimmed = trimmed.slice(1);
-    if (trimmed.charAt(trimmed.length - 1) === '|') trimmed = trimmed.slice(0, -1);
-    return trimmed.split('|').map(function (cell) {
-      return cell.replace(/^\s+|\s+$/g, '');
-    });
-  }
-
-  function askHrAnswerLooksStructured(text) {
-    return /(^|\n)\s*#{1,3}\s|(^|\n)\s*[-*•]\s|(^|\n)\s*\d+[.)]\s|(^|\n)\s*\|.+\|/.test(
-      String(text || '')
-    );
-  }
-
-  /**
-   * Safe markdown-lite renderer for Ask HR answers (text nodes / elements only).
-   * Supports headings, bold, bullets, numbered lists, and simple tables.
-   */
-  function renderAskHrMarkdown(container, text) {
-    var lines = String(text == null ? '' : text).replace(/\r\n/g, '\n').split('\n');
-    var i = 0;
-    var paraLines = [];
-
-    function flushPara() {
-      if (!paraLines.length) return;
-      var p = document.createElement('p');
-      p.className = 'ask-hr-p';
-      appendInlineMarkdown(p, paraLines.join(' '));
-      container.appendChild(p);
-      paraLines = [];
-    }
-
-    while (i < lines.length) {
-      var line = lines[i];
-      var trimmed = line.replace(/^\s+|\s+$/g, '');
-
-      if (!trimmed) {
-        flushPara();
-        i += 1;
-        continue;
-      }
-
-      if (/^#{1,3}\s+/.test(trimmed)) {
-        flushPara();
-        var level = trimmed.match(/^(#{1,3})\s+/)[1].length;
-        var heading = document.createElement(level === 1 ? 'h3' : 'h4');
-        heading.className = 'ask-hr-heading';
-        appendInlineMarkdown(heading, trimmed.replace(/^#{1,3}\s+/, ''));
-        container.appendChild(heading);
-        i += 1;
-        continue;
-      }
-
-      if (trimmed.indexOf('|') !== -1 && i + 1 < lines.length && isAskHrTableSeparator_(lines[i + 1])) {
-        flushPara();
-        var headers = splitAskHrTableRow_(trimmed);
-        var table = document.createElement('table');
-        table.className = 'ask-hr-table';
-        var thead = document.createElement('thead');
-        var headRow = document.createElement('tr');
-        var h;
-        for (h = 0; h < headers.length; h++) {
-          var th = document.createElement('th');
-          appendInlineMarkdown(th, headers[h]);
-          headRow.appendChild(th);
-        }
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-        var tbody = document.createElement('tbody');
-        i += 2;
-        while (i < lines.length && lines[i].indexOf('|') !== -1 && !isAskHrTableSeparator_(lines[i])) {
-          var cells = splitAskHrTableRow_(lines[i]);
-          var tr = document.createElement('tr');
-          var c;
-          for (c = 0; c < headers.length; c++) {
-            var td = document.createElement('td');
-            appendInlineMarkdown(td, cells[c] || '');
-            tr.appendChild(td);
-          }
-          tbody.appendChild(tr);
-          i += 1;
-        }
-        table.appendChild(tbody);
-        container.appendChild(table);
-        continue;
-      }
-
-      if (/^[-*•]\s+/.test(trimmed)) {
-        flushPara();
-        var ul = document.createElement('ul');
-        ul.className = 'ask-hr-list';
-        while (i < lines.length && /^[-*•]\s+/.test(lines[i].replace(/^\s+/, ''))) {
-          var li = document.createElement('li');
-          appendInlineMarkdown(li, lines[i].replace(/^\s+/, '').replace(/^[-*•]\s+/, ''));
-          ul.appendChild(li);
-          i += 1;
-        }
-        container.appendChild(ul);
-        continue;
-      }
-
-      if (/^\d+[.)]\s+/.test(trimmed)) {
-        flushPara();
-        var ol = document.createElement('ol');
-        ol.className = 'ask-hr-list ask-hr-list-numbered';
-        while (i < lines.length && /^\d+[.)]\s+/.test(lines[i].replace(/^\s+/, ''))) {
-          var oli = document.createElement('li');
-          appendInlineMarkdown(oli, lines[i].replace(/^\s+/, '').replace(/^\d+[.)]\s+/, ''));
-          ol.appendChild(oli);
-          i += 1;
-        }
-        container.appendChild(ol);
-        continue;
-      }
-
-      paraLines.push(trimmed);
-      i += 1;
-    }
-    flushPara();
-  }
-
-  function setAskHrComposeError(message) {
-    var el = $('ask-hr-compose-error');
-    if (!el) return;
-    if (message) {
-      el.textContent = message;
-      el.classList.remove('hidden');
-    } else {
-      el.textContent = '';
-      el.classList.add('hidden');
-    }
-  }
-
-  function setAskHrBusyUi(busy) {
-    askHrUi.busy = !!busy;
-    var send = $('ask-hr-send');
-    var input = $('ask-hr-input');
-    var panel = $('ask-hr-panel');
-    if (send) {
-      send.disabled = !!busy;
-      send.textContent = busy ? 'Sending…' : 'Send';
-    }
-    if (input) input.disabled = !!busy;
-    if (panel) {
-      if (busy) panel.setAttribute('aria-busy', 'true');
-      else panel.removeAttribute('aria-busy');
-    }
-  }
-
-  function scrollAskHrToBottom() {
-    var scroller = $('ask-hr-messages');
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  }
-
-  function stopAskHrStatus() {
-    if (askHrUi.statusTimer) {
-      clearInterval(askHrUi.statusTimer);
-      askHrUi.statusTimer = null;
-    }
-    askHrUi.statusIndex = 0;
-    var existing = $('ask-hr-status');
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-  }
-
-  function startAskHrStatus() {
-    stopAskHrStatus();
-    var thread = $('ask-hr-thread');
-    if (!thread) return;
-    var bubble = document.createElement('div');
-    bubble.id = 'ask-hr-status';
-    bubble.className = 'ask-hr-bubble ask-hr-bubble-status';
-    bubble.setAttribute('role', 'status');
-    bubble.setAttribute('aria-live', 'polite');
-
-    var skel = document.createElement('div');
-    skel.className = 'ask-hr-skel-stack hrms-skeleton-stack';
-    skel.setAttribute('aria-hidden', 'true');
-    var widths = ['w60', 'w100', 'w80', 'w40'];
-    var si;
-    for (si = 0; si < widths.length; si++) {
-      var line = document.createElement('div');
-      line.className = 'skeleton skeleton-line hrms-skeleton-line ' + widths[si];
-      skel.appendChild(line);
-    }
-    bubble.appendChild(skel);
-
-    var copy = document.createElement('div');
-    copy.className = 'ask-hr-status-copy';
-    var label = document.createElement('span');
-    label.id = 'ask-hr-status-text';
-    label.className = 'ask-hr-status-label';
-    label.textContent = ASK_HR_STATUS_STEPS[0];
-    var hint = document.createElement('span');
-    hint.className = 'ask-hr-status-hint';
-    hint.textContent = 'This can take up to a minute.';
-    copy.appendChild(label);
-    copy.appendChild(hint);
-    bubble.appendChild(copy);
-
-    thread.appendChild(bubble);
-    scrollAskHrToBottom();
-    askHrUi.statusTimer = setInterval(function () {
-      askHrUi.statusIndex = (askHrUi.statusIndex + 1) % ASK_HR_STATUS_STEPS.length;
-      var textEl = $('ask-hr-status-text');
-      if (textEl) textEl.textContent = ASK_HR_STATUS_STEPS[askHrUi.statusIndex];
-    }, ASK_HR_STATUS_MS);
-  }
-
-  function hideAskHrIntro() {
-    var intro = $('ask-hr-intro');
-    if (intro) intro.classList.add('hidden');
-  }
-
-  function restoreAskHrIntro() {
-    var intro = $('ask-hr-intro');
-    var thread = $('ask-hr-thread');
-    if (thread) thread.innerHTML = '';
-    if (intro) intro.classList.remove('hidden');
-  }
-
-  function appendAskHrUserBubble(text) {
-    var thread = $('ask-hr-thread');
-    if (!thread) return;
-    hideAskHrIntro();
-    var bubble = document.createElement('div');
-    bubble.className = 'ask-hr-bubble ask-hr-bubble-user';
-    appendMultilineText(bubble, text);
-    thread.appendChild(bubble);
-    scrollAskHrToBottom();
-  }
-
-  function appendAskHrErrorBubble(message) {
-    var thread = $('ask-hr-thread');
-    if (!thread) return;
-    hideAskHrIntro();
-    var bubble = document.createElement('div');
-    bubble.className = 'ask-hr-bubble ask-hr-bubble-error';
-    bubble.setAttribute('role', 'alert');
-    bubble.textContent = message;
-    thread.appendChild(bubble);
-    scrollAskHrToBottom();
-  }
-
-  function appendAskHrAnswerBubble(payload) {
-    var thread = $('ask-hr-thread');
-    if (!thread) return;
-    hideAskHrIntro();
-    var bubble = document.createElement('div');
-    bubble.className = 'ask-hr-bubble ask-hr-bubble-bot';
-
-    var notFound = !!(payload && payload.notFound);
-    var answerText = payload && typeof payload.answer === 'string' ? payload.answer : '';
-    if (notFound || !answerText) {
-      answerText = answerText || askHrFriendlyError('NOT_FOUND');
-      notFound = true;
-    }
-
-    var body = document.createElement('div');
-    body.className = 'ask-hr-answer';
-    if (notFound) {
-      var nf = document.createElement('p');
-      nf.className = 'ask-hr-p';
-      nf.textContent = askHrFriendlyError('NOT_FOUND');
-      body.appendChild(nf);
-      var hint = document.createElement('p');
-      hint.className = 'ask-hr-notfound-hint';
-      hint.textContent = ASK_HR_NOT_FOUND_HINT;
-      body.appendChild(hint);
-    } else {
-      renderAskHrMarkdown(body, answerText);
-    }
-    bubble.appendChild(body);
-
-    var keyPoints = payload && Array.isArray(payload.keyPoints) ? payload.keyPoints : [];
-    var safePoints = [];
-    var i;
-    for (i = 0; i < keyPoints.length; i++) {
-      if (keyPoints[i] != null && String(keyPoints[i]).replace(/^\s+|\s+$/g, '')) {
-        safePoints.push(String(keyPoints[i]));
-      }
-    }
-    // Structured answers already include lists/sections — avoid duplicating as Key points.
-    if (!notFound && safePoints.length && !askHrAnswerLooksStructured(answerText)) {
-      var keyLabel = document.createElement('div');
-      keyLabel.className = 'ask-hr-key-label';
-      keyLabel.textContent = 'Key points';
-      bubble.appendChild(keyLabel);
-      var list = document.createElement('ul');
-      list.className = 'ask-hr-keypoints';
-      for (i = 0; i < safePoints.length; i++) {
-        var li = document.createElement('li');
-        li.textContent = safePoints[i];
-        list.appendChild(li);
-      }
-      bubble.appendChild(list);
-    }
-
-    var refs = payload && Array.isArray(payload.references) ? payload.references : [];
-    var sourceItems = [];
-    if (!notFound) {
-      for (i = 0; i < refs.length; i++) {
-        var ref = refs[i] || {};
-        var fileName = String(ref.fileName || ref.name || 'Source document');
-        var href = sanitizeAskHrFileUrl(ref.fileUrl || ref.url || '');
-        sourceItems.push({ fileName: fileName, href: href });
-      }
-    }
-    if (sourceItems.length) {
-      var srcWrap = document.createElement('div');
-      srcWrap.className = 'ask-hr-sources-block';
-      var srcLabel = document.createElement('div');
-      srcLabel.className = 'ask-hr-src-label';
-      srcLabel.textContent = 'Sources';
-      srcWrap.appendChild(srcLabel);
-      var sources = document.createElement('ul');
-      sources.className = 'ask-hr-sources';
-      for (i = 0; i < sourceItems.length; i++) {
-        var sli = document.createElement('li');
-        var mark = document.createElement('span');
-        mark.className = 'ask-hr-src-mark';
-        mark.setAttribute('aria-hidden', 'true');
-        mark.textContent = '📄';
-        sli.appendChild(mark);
-        if (sourceItems[i].href) {
-          var link = document.createElement('a');
-          link.href = sourceItems[i].href;
-          link.target = '_blank';
-          link.rel = 'noopener noreferrer';
-          link.textContent = sourceItems[i].fileName;
-          sli.appendChild(link);
-        } else {
-          var nameSpan = document.createElement('span');
-          nameSpan.textContent = sourceItems[i].fileName;
-          sli.appendChild(nameSpan);
-        }
-        sources.appendChild(sli);
-      }
-      srcWrap.appendChild(sources);
-      bubble.appendChild(srcWrap);
-    }
-
-    thread.appendChild(bubble);
-    scrollAskHrToBottom();
-  }
-
-  function setAskHrExpanded(expanded) {
-    askHrUi.expanded = !!expanded;
-    var panel = $('ask-hr-panel');
-    var btn = $('ask-hr-expand');
-    if (panel) {
-      if (askHrUi.expanded) panel.classList.add('is-expanded');
-      else panel.classList.remove('is-expanded');
-    }
-    if (btn) {
-      btn.textContent = askHrUi.expanded ? 'Compact' : 'Expand';
-      btn.setAttribute('aria-pressed', askHrUi.expanded ? 'true' : 'false');
-      btn.title = askHrUi.expanded ? 'Compact view' : 'Expand for longer answers';
-    }
-  }
-
-  function toggleAskHrExpanded() {
-    setAskHrExpanded(!askHrUi.expanded);
-  }
-
-  function clearAskHrConversation() {
-    askHrUi.requestSeq += 1;
-    askHrUi.messages = [];
-    stopAskHrStatus();
-    setAskHrBusyUi(false);
-    setAskHrComposeError('');
-    restoreAskHrIntro();
-    var input = $('ask-hr-input');
-    if (input && !input.disabled) input.focus();
-  }
-
-  function closeAskHrPanel() {
-    var panel = $('ask-hr-panel');
-    var fab = $('ask-hr-fab');
-    if (panel) panel.classList.add('hidden');
-    askHrUi.open = false;
-    setAskHrExpanded(false);
-    if (fab) {
-      fab.setAttribute('aria-expanded', 'false');
-      if (isAskHrAllowed()) {
-        fab.classList.remove('hidden');
-        fab.focus();
-      }
-    }
-  }
-
-  function openAskHrPanel() {
-    if (!isAskHrAllowed()) return;
-    var panel = $('ask-hr-panel');
-    var fab = $('ask-hr-fab');
-    var input = $('ask-hr-input');
-    if (!panel) return;
-    panel.classList.remove('hidden');
-    askHrUi.open = true;
-    if (fab) {
-      fab.classList.add('hidden');
-      fab.setAttribute('aria-expanded', 'true');
-    }
-    if (input && !askHrUi.busy) {
-      setTimeout(function () { input.focus(); }, 0);
-    }
-  }
-
-  function syncAskHrVisibility() {
-    var fab = $('ask-hr-fab');
-    var panel = $('ask-hr-panel');
-    if (!fab || !panel) return;
-    if (!isAskHrAllowed()) {
-      askHrUi.open = false;
-      panel.classList.add('hidden');
-      fab.classList.add('hidden');
-      fab.setAttribute('aria-expanded', 'false');
-      return;
-    }
-    if (askHrUi.open) {
-      panel.classList.remove('hidden');
-      fab.classList.add('hidden');
-      fab.setAttribute('aria-expanded', 'true');
-    } else {
-      panel.classList.add('hidden');
-      fab.classList.remove('hidden');
-      fab.setAttribute('aria-expanded', 'false');
-    }
-  }
-
-  function sendAskHrQuestion(rawQuestion) {
-    setAskHrComposeError('');
-    if (askHrUi.busy) return;
-
-    if (!isAskHrAllowed()) {
-      appendAskHrErrorBubble(askHrFriendlyError('UNAUTHORIZED'));
-      return;
-    }
-
-    var question = String(rawQuestion || '').replace(/^\s+|\s+$/g, '');
-    if (!question) {
-      setAskHrComposeError('Please enter a question.');
-      return;
-    }
-    if (question.length < 3) {
-      setAskHrComposeError('Please enter a question.');
-      return;
-    }
-    if (question.length > ASK_HR_MAX_CHARS) {
-      setAskHrComposeError('Your request was too long. Please keep it under 1000 characters.');
-      return;
-    }
-
-    var input = $('ask-hr-input');
-    if (input) input.value = '';
-
-    askHrUi.messages.push({ role: 'user', text: question });
-    appendAskHrUserBubble(question);
-    setAskHrBusyUi(true);
-    startAskHrStatus();
-    var seq = ++askHrUi.requestSeq;
-
-    callAskHr(question)
-      .then(function (payload) {
-        if (seq !== askHrUi.requestSeq) return;
-        stopAskHrStatus();
-        setAskHrBusyUi(false);
-        askHrUi.messages.push({ role: 'assistant', payload: payload });
-        appendAskHrAnswerBubble(payload || {});
-      })
-      .catch(function (err) {
-        if (seq !== askHrUi.requestSeq) return;
-        stopAskHrStatus();
-        setAskHrBusyUi(false);
-        var code = err && err.code ? err.code : 'UPSTREAM';
-        var message = askHrFriendlyError(code);
-        askHrUi.messages.push({ role: 'error', text: message });
-        appendAskHrErrorBubble(message);
-      });
-  }
-
-  function initAskHr() {
-    var fab = $('ask-hr-fab');
-    var panel = $('ask-hr-panel');
-    var form = $('ask-hr-form');
-    var input = $('ask-hr-input');
-    var closeBtn = $('ask-hr-close');
-    var clearBtn = $('ask-hr-clear');
-    var expandBtn = $('ask-hr-expand');
-    var messages = $('ask-hr-messages');
-    if (!fab || !panel || !form) return;
-
-    fab.addEventListener('click', function () {
-      if (!isAskHrAllowed()) return;
-      openAskHrPanel();
-    });
-
-    closeBtn && closeBtn.addEventListener('click', function () {
-      closeAskHrPanel();
-    });
-
-    clearBtn && clearBtn.addEventListener('click', function () {
-      clearAskHrConversation();
-    });
-
-    expandBtn && expandBtn.addEventListener('click', function () {
-      toggleAskHrExpanded();
-    });
-
-    form.addEventListener('submit', function (evt) {
-      evt.preventDefault();
-      sendAskHrQuestion(input ? input.value : '');
-    });
-
-    if (input) {
-      input.addEventListener('keydown', function (evt) {
-        if (evt.key === 'Enter' && !evt.shiftKey) {
-          evt.preventDefault();
-          sendAskHrQuestion(input.value);
-        }
-      });
-    }
-
-    if (messages) {
-      messages.addEventListener('click', function (evt) {
-        var el = evt.target;
-        if (el && el.nodeType !== 1) el = el.parentElement;
-        var btn = el && el.closest ? el.closest('[data-ask-hr-q]') : null;
-        if (!btn || askHrUi.busy) return;
-        var q = btn.getAttribute('data-ask-hr-q') || '';
-        if (input) input.value = q;
-        sendAskHrQuestion(q);
-      });
-    }
-
-    document.addEventListener('keydown', function (evt) {
-      if (evt.key === 'Escape' && askHrUi.open) {
-        evt.preventDefault();
-        closeAskHrPanel();
-      }
-    });
-
-    syncAskHrVisibility();
-  }
 
   document.addEventListener('DOMContentLoaded', function () {
     registerLazyRouteStubs();
     bindAuthUi();
     bindModuleRefreshUi();
-    initAskHr();
     bootstrap();
   });
 
@@ -2506,6 +2668,7 @@
     registerModuleRoutes: registerModuleRoutes,
     navigate: navigate,
     callServer: callServer,
+    moduleRpc: moduleRpc,
     showToast: showToast,
     routeStill: routeStill,
     setHtml: setHtml,
@@ -2523,6 +2686,7 @@
     bindSectionRetry: bindSectionRetry,
     tableShell: tableShell,
     pageHeaderHtml: pageHeaderHtml,
+    bulkRequiredColumnsHtml: bulkRequiredColumnsHtml,
     moduleViewKey: moduleViewKey,
     shouldRestoreModuleView: shouldRestoreModuleView,
     consumeModuleViewRestore: consumeModuleViewRestore,
@@ -2540,9 +2704,11 @@
     invalidateModuleViewCache: invalidateModuleViewCache,
     invalidateModuleViewCachePrefix: invalidateModuleViewCachePrefix,
     invalidateDashboardView: invalidateDashboardView,
+    getDashboardViewCache: getDashboardViewCache,
     setButtonLoading: setButtonLoading,
     restoreButton: restoreButton,
     isButtonLoading: isButtonLoading,
+    isGlobalActionBusy: isGlobalActionBusy,
     setActionFeedback: setActionFeedback,
     clearActionFeedback: clearActionFeedback,
     setFlash: setFlash,
@@ -2558,6 +2724,19 @@
     },
     isUserRpcBusy: function () { return userRpcBusy_ > 0; },
     getPerfLog: function () { return perfLog_.slice(); },
+    readPayrollPeriodContext: readPayrollPeriodContext_,
+    persistPayrollPeriodContext: persistPayrollPeriodContext_,
+    reconcilePayrollPeriodWithRuns: reconcilePayrollPeriodWithRuns_,
+    verticalFromPayrollRunId: verticalFromPayrollRunId_,
+    runVerticalFromRow: runVerticalFromRow_,
+    findRunForVerticalMonth: findRunForVerticalMonth_,
+    suggestPayrollPeriodFromRuns: suggestPayrollPeriodFromRuns_,
+    mergePayrollRouteParams: mergePayrollRouteParams_,
+    formatVerticalOptionLabel: formatVerticalOptionLabel_,
+    fetchPayrollRunsList: fetchPayrollRunsList_,
+    invalidatePayrollRunsListCache: invalidatePayrollRunsListCache_,
+    fetchVerticalCatalog: fetchVerticalCatalog_,
+    invalidateVerticalCatalogCache: invalidateVerticalCatalogCache_,
     enablePerfTiming: function () {
       try { if (window.localStorage) localStorage.setItem('HRMS_PERF_TIMING', '1'); } catch (ignore) {}
       window.HRMS_PERF_TIMING = 1;

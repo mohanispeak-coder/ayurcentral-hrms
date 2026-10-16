@@ -1,11 +1,11 @@
 /**
- * Notification Center sheets — independent of SchemaService.
+ * Notification Center sheets - independent of SchemaService.
  * Existing `Notifications` sheet remains the email delivery log (02).
  *
  * Optional later registry (do not apply in this stream):
  *   HRMS.SHEETS.NOTIFICATION_INBOX = 'NotificationInbox';
  *   HRMS.SHEETS.NOTIFICATION_PREFERENCES = 'NotificationPreferences';
- *   SchemaService SHEET_HEADERS_ entries — see docs/NOTIFICATIONS_INTEGRATION_NOTES.md
+ *   SchemaService SHEET_HEADERS_ entries - see docs/NOTIFICATIONS_INTEGRATION_NOTES.md
  */
 var HRMS = HRMS || {};
 

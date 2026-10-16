@@ -236,12 +236,16 @@ function testPayroll_PermissionSuite_(record) {
 
 function testPayroll_LeaveBridgeSuite_(record) {
   record('LOP-bridge-exists', typeof PayrollLeaveBridge.getApprovedLopForPayroll === 'function');
+  record('LOP-map-exists', typeof PayrollLeaveBridge.getApprovedLopMapForPayroll === 'function');
   var zero = PayrollLeaveBridge.getApprovedLopForPayroll('', 2026, 4);
   record('LOP-empty-employee', zero === 0, String(zero));
 }
 
 function testPayroll_PayslipIdempotentSuite_(record) {
   record('PAY-regen-method', typeof PayrollService.regeneratePayslips === 'function');
+  record('PAY-finalize-method', typeof PayrollService.finalizePayroll === 'function');
+  record('PAY-humanize-exception', PayrollService.humanizeExceptionFlag('MISSING_STRUCTURE') ===
+    'Salary structure is not configured.');
   record('PAY-apply-lop-method', typeof PayrollService.applyLeaveLopToDays === 'function');
   record('PAY-payslip-helpers', typeof PayslipService.findReusableDocument === 'function' &&
     typeof PayslipService.dedupePayslipsByRun === 'function');

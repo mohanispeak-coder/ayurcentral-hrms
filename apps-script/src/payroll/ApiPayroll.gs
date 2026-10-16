@@ -15,9 +15,41 @@ function apiGetPayrollRun(runId, sessionToken) {
   }, sessionToken);
 }
 
-function apiCreatePayrollRun(periodYear, periodMonth, notes, sessionToken) {
+function apiSyncPayrollEmployees(runId, sessionToken) {
   return hrmsRun_(function () {
-    return PayrollService.createRun(periodYear, periodMonth, notes);
+    PayrollService.syncEligibleEmployees(runId);
+    return PayrollService.getRunDetail(runId, { skipSync: false });
+  }, sessionToken);
+}
+
+function apiCreatePayrollRun(periodYear, periodMonth, verticalOrNotes, notesOrToken, sessionToken) {
+  var vertical = '';
+  var notes = '';
+  var token = sessionToken;
+  var arg3 = verticalOrNotes == null ? '' : String(verticalOrNotes).trim();
+  if (/^(SAPL|AOPL|AOMS|OTHERS)$/i.test(arg3)) {
+    vertical = arg3.toUpperCase();
+    notes = notesOrToken == null ? '' : String(notesOrToken);
+    token = sessionToken;
+  } else {
+    notes = arg3;
+    token = notesOrToken;
+  }
+  return hrmsRun_(function () {
+    return PayrollService.createRun(periodYear, periodMonth, vertical, notes);
+  }, token);
+}
+
+function apiCreatePayrollRunsAllVerticals(periodYear, periodMonth, notes, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.createRunsForAllVerticals(periodYear, periodMonth, notes);
+  }, sessionToken);
+}
+
+function apiPayrollImportLegacyInputs(runId, sourceRunId, sessionToken) {
+  var source = sourceRunId == null ? '' : String(sourceRunId).trim();
+  return hrmsRun_(function () {
+    return PayrollService.importInputsFromLegacyRun(runId, source || undefined);
   }, sessionToken);
 }
 
@@ -75,6 +107,110 @@ function apiRegeneratePayslips(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiRegeneratePayslipForEmployee(runId, employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.regeneratePayslipForEmployee(runId, employeeId);
+  }, sessionToken);
+}
+
+function apiFinalizePayroll(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.finalizePayroll(runId);
+  }, sessionToken);
+}
+
+function apiDownloadPayrollTemplate(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.downloadTemplate(runId);
+  }, sessionToken);
+}
+
+function apiDownloadAttendanceRegisterTemplate(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.downloadTemplate(runId, verticalName);
+  }, sessionToken);
+}
+
+function apiListSalaryStatement(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStatementService.listStatement(filter || {});
+  }, sessionToken);
+}
+
+function apiDownloadSalaryStatement(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStatementService.downloadExcel(filter || {});
+  }, sessionToken);
+}
+
+function apiValidateAttendanceRegisterUpload(runId, verticalName, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.validateUpload(runId, verticalName, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitAttendanceRegisterUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
+function apiListAttendanceRegister(runId, syncEmployeesOrToken, sessionToken) {
+  var syncEmployees = false;
+  var token = sessionToken;
+  if (syncEmployeesOrToken === true || syncEmployeesOrToken === false) {
+    syncEmployees = syncEmployeesOrToken === true;
+    token = sessionToken;
+  } else {
+    token = syncEmployeesOrToken;
+  }
+  return hrmsRun_(function () {
+    var id = String(runId || '').trim();
+    if (id && syncEmployees) {
+      try {
+        var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: id });
+        var st = run ? String(run.status || '').toUpperCase() : '';
+        if (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED) {
+          PayrollService.syncEligibleEmployees(id);
+        }
+      } catch (syncErr) {
+        Logger.log('apiListAttendanceRegister sync: ' + (syncErr.message || syncErr));
+      }
+    }
+    return AttendanceRegisterService.listSummariesForRun_(id, { includeRegister: false });
+  }, token);
+}
+
+function apiSaveAttendanceRegister(runId, employeeId, register, sessionToken) {
+  return hrmsRun_(function () {
+    return AttendanceBulkService.saveEmployeeRegister(runId, employeeId, register || {});
+  }, sessionToken);
+}
+
+function apiGetFormTStatus(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return FormTService.getStatus(runId, verticalName);
+  }, sessionToken);
+}
+
+function apiDownloadFormT(runId, verticalName, sessionToken) {
+  return hrmsRun_(function () {
+    return FormTService.download(runId, verticalName);
+  }, sessionToken);
+}
+
+function apiValidatePayrollUpload(runId, meta, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.validateUpload(runId, meta || {});
+  }, sessionToken);
+}
+
+function apiCommitPayrollUpload(runId, uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollBulkService.commitUpload(runId, uploadId);
+  }, sessionToken);
+}
+
 function apiApplyPayrollLeaveLop(runId, sessionToken) {
   return hrmsRun_(function () {
     return PayrollService.applyLeaveLopToDays(runId);
@@ -96,6 +232,12 @@ function apiListSalaryStructures(employeeId, sessionToken) {
 function apiGetSalaryStructure(structureId, sessionToken) {
   return hrmsRun_(function () {
     return CompensationService.getStructure(structureId);
+  }, sessionToken);
+}
+
+function apiGetCompensationEditorBundle(employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationService.getEditorBundle(employeeId);
   }, sessionToken);
 }
 
@@ -129,8 +271,72 @@ function apiListOwnPayslips(sessionToken) {
   }, sessionToken);
 }
 
-function apiGetPayslipDownload(documentId, sessionToken) {
+function apiGetPayslipDownload(documentId, intent, sessionToken) {
   return hrmsRun_(function () {
-    return PayslipService.getPayslipForDownload(documentId);
+    var mode = 'download';
+    if (intent === 'view' || intent === 'download') mode = intent;
+    return PayslipService.getPayslipForDownload(documentId, mode);
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadTemplate();
+  }, sessionToken);
+}
+
+function apiDownloadCompensationBulkCsvTemplate(sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.downloadCsvTemplate();
+  }, sessionToken);
+}
+
+function apiValidateCompensationBulkUpload(meta, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.validateUpload(meta || {});
+  }, sessionToken);
+}
+
+function apiCommitCompensationBulkUpload(uploadId, sessionToken) {
+  return hrmsRun_(function () {
+    return CompensationBulkService.commitUpload(uploadId);
+  }, sessionToken);
+}
+
+/* -------- Salary structure types (shared templates) -------- */
+
+function apiListSalaryStructureTypes(includeInactive, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.listStructureTypes(!includeInactive);
+  }, sessionToken);
+}
+
+function apiGetSalaryStructureType(structureId, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.getStructureType(structureId);
+  }, sessionToken);
+}
+
+function apiGetSalaryStructureTypeDefaults(sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.getStructureTypeDefaults();
+  }, sessionToken);
+}
+
+function apiSaveSalaryStructureType(payload, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.saveStructureType(payload || {});
+  }, sessionToken);
+}
+
+function apiSetSalaryStructureTypeStatus(structureId, status, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.setStructureTypeStatus(structureId, status);
+  }, sessionToken);
+}
+
+function apiListSalaryStructureTypeOptions(filter, sessionToken) {
+  return hrmsRun_(function () {
+    return SalaryStructureTypeService.listStructureTypeOptions(filter || {});
   }, sessionToken);
 }

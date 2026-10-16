@@ -1,0 +1,81 @@
+/**
+ * Leave balances directory smoke tests.
+ * Run: node tests/leave-balances-directory.test.js
+ */
+var fs = require('fs');
+var path = require('path');
+
+var root = path.join(__dirname, '..', 'apps-script', 'src');
+var failures = [];
+var passed = 0;
+
+function check(name, cond) {
+  if (cond) { passed++; console.log('PASS ' + name); }
+  else { failures.push(name); console.log('FAIL ' + name); }
+}
+
+var emp = fs.readFileSync(path.join(root, 'employee', 'EmployeeService.gs'), 'utf8');
+var empClient = fs.readFileSync(path.join(root, 'employee', 'EmployeeClient.html'), 'utf8');
+var leaveSvc = fs.readFileSync(path.join(root, 'leave', 'LeaveService.gs'), 'utf8');
+var api = fs.readFileSync(path.join(root, 'employee', 'ApiEmployee.gs'), 'utf8');
+var perm = fs.readFileSync(path.join(root, 'foundation', 'PermissionService.gs'), 'utf8');
+var leaveUi = fs.readFileSync(path.join(root, 'leave', 'LeaveUi.html'), 'utf8');
+var monthly = fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8');
+var scripts = fs.readFileSync(path.join(root, 'ui', 'Scripts.html'), 'utf8');
+
+check('list-leave-balances-service', /listLeaveBalancesDirectory/.test(emp));
+check('api-leave-balances', /apiGetLeaveBalancesDirectory/.test(api));
+check('nav-leave-balances', /leave-balances/.test(perm) && /leave-balances/.test(scripts));
+check('leave-ui-balances-route', /renderLeaveBalances/.test(leaveUi) && /apiGetLeaveBalancesDirectory/.test(leaveUi));
+check('leave-ui-self-registers-routes', /registerLeaveRoutesFromUi_/.test(leaveUi));
+check('shell-leave-route-fallback', /invokeRegisteredRouteRender_/.test(scripts));
+check('module-routes-all-registered', /keys\.every/.test(scripts));
+check('leave-summary-month-lop', /month_lop/.test(emp) && /month_paid/.test(emp));
+check('leave-year-used-from-requests', /summarizeLeaveYearFromRequests/.test(leaveSvc) && /summarizeLeaveYearFromRequests/.test(emp));
+check('request-in-leave-year', /requestInLeaveYear_/.test(leaveSvc));
+check('apply-request-totals-balances', /applyRequestTotalsToYearBalances_/.test(leaveSvc) &&
+  /return balances \|\| \[\]/.test(leaveSvc));
+check('profile-leave-summary-policy-sync', /syncCurrentYearBalanceFromPolicy/.test(emp) &&
+  /yearsToMerge/.test(emp));
+check('join-date-recalc-entitlements', /recalculateEntitlementsAfterJoiningDateChange_/.test(leaveSvc) &&
+  /recalculateEntitlementsAfterJoiningDateChange/.test(emp));
+var policyGs = fs.readFileSync(path.join(root, 'leave', 'LeavePolicyService.gs'), 'utf8');
+check('policy-save-recalc-vertical', /runPolicySaveRecalc_/.test(policyGs) &&
+  /monthly_entitlement_changed/.test(policyGs) && /recalculateEntitlementsForActiveEmployees/.test(leaveSvc));
+check('policy-save-skips-unchanged-global', /recalcAllEntitlements/.test(policyGs));
+check('policy-save-no-per-vertical-inline-recalc', !/saveVerticalPolicy_[\s\S]*recalculateEntitlementsForActiveEmployees\(name\)/.test(policyGs));
+check('my-leave-matches-profile-payload', /buildLeaveSummaryPayload/.test(emp) &&
+  /year_balances/.test(leaveSvc) && /monthly_snapshot/.test(leaveSvc));
+check('my-leave-ui-profile-layout', /HrmsLeaveView/.test(fs.readFileSync(path.join(root, 'ui', 'LeaveViewShared.html'), 'utf8')) &&
+  /employeeLeaveLayoutHtml/.test(leaveUi));
+check('index-includes-leave-view-shared', /LeaveViewShared/.test(fs.readFileSync(path.join(root, 'ui', 'Index.html'), 'utf8')));
+check('month-used-includes-approved', /approvedLeaveDaysInCalendarMonth_/.test(leaveSvc) &&
+  /approvedLeaveDaysMapForCalendarMonth_/.test(leaveSvc) &&
+  /monthLeaveUsedDays_/.test(fs.readFileSync(path.join(root, 'leave', 'MonthlyLeaveService.gs'), 'utf8')));
+check('calendar-month-timezone', /getCurrentCalendarMonth/.test(leaveSvc) &&
+  /summarizeDirectoryLeaveRequestMaps/.test(emp));
+check('leave-balances-batch-context', /leave_summary_context/.test(emp) &&
+  /summarizeDirectoryLeaveRequestMaps/.test(leaveSvc) && /buildLeaveBalanceIndex/.test(leaveSvc));
+check('leave-balances-page-scoped-month-batch', /pageEmployeeIds/.test(emp) &&
+  /buildMonthDirectoryBatchContext_\([\s\S]*pageEmployeeIds/.test(emp));
+check('leave-requests-single-scan', /summarizeDirectoryLeaveRequestMaps_/.test(leaveSvc) &&
+  /approvedByEmployee/.test(leaveSvc));
+check('month-batch-only-employee-ids', /onlyEmployeeIds/.test(monthly) && /onlySet/.test(monthly));
+check('leave-balances-ui-cache', /leave-balances/.test(leaveUi) && /leaveBalCacheKey_/.test(leaveUi));
+check('leave-balances-session-cache', /readLeaveBalSessionCache_/.test(leaveUi) && /writeLeaveBalSessionCache_/.test(leaveUi));
+check('leave-balances-mark-loaded', /markModuleViewLoaded\('leave-balances'\)/.test(leaveUi));
+check('leave-balances-month-batch', /buildMonthDirectoryBatchContext_/.test(monthly) &&
+  /monthBatch/.test(emp));
+check('no-all-years-fallback', !/if \(!general\.length\) general = balances/.test(emp));
+check('monthly-lop-from-excess', /lopFromExcessLeave_/.test(monthly) && /lop_days/.test(monthly));
+check('leave-balances-lop-column', /Paid leaves used/.test(leaveUi) && /Total leaves/.test(leaveUi) &&
+  /Carry forwarded/.test(leaveUi) && /Used leaves/.test(leaveUi));
+check('my-team-leave-headers-sync', /syncTeamLeaveTableHead_/.test(empClient) &&
+  /closest\('table'\)/.test(empClient) && /Year avail\./.test(empClient) &&
+  /Paid leaves used/.test(empClient));
+
+if (failures.length) {
+  console.log('\n' + failures.length + ' failed');
+  process.exit(1);
+}
+console.log('\nAll leave-balances-directory checks passed (' + passed + ')');

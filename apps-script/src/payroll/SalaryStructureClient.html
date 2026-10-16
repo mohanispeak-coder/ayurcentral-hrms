@@ -1,0 +1,943 @@
+<style>
+.sst-page .sst-list-head { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.sst-page .data-table { width: 100%; table-layout: auto; }
+.sst-page td.col-actions { white-space: nowrap; text-align: right; vertical-align: top; }
+.sst-page .sst-status-active { color: var(--color-success); font-weight: 600; }
+.sst-page .sst-status-inactive { color: var(--color-text-muted); }
+.sst-page .sst-comp-value { max-width: 110px; }
+.sst-page .sst-c-base { min-width: 160px; max-width: 100%; }
+.sst-page .sst-c-cond { max-width: 90px; }
+.sst-page .sst-section { margin-top: 24px; }
+.sst-page .sst-section h3 { margin-bottom: 6px; }
+.sst-page .sst-section .page-lede { margin-bottom: 10px; max-width: 72rem; line-height: 1.45; }
+.sst-page .empty-state { color: var(--color-text-muted); padding: 12px 0; }
+.sst-page .sst-rules-card { margin-top: 12px; padding: 12px; background: var(--color-surface-muted, #f6f7f9); border-radius: 6px; }
+.sst-page .sst-callout { padding: 12px 14px; margin: 8px 0 12px; background: var(--color-info-bg); border: 1px solid var(--color-info-border); border-radius: 8px; font-size: var(--text-sm); line-height: 1.5; max-width: 72rem; }
+.sst-page .sst-formula-ref-card { padding: 12px 14px; margin: 0 0 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: var(--text-sm); line-height: 1.5; max-width: 72rem; }
+.sst-page .sst-formula-ref-card code { font-size: 0.92em; word-break: break-word; }
+.sst-page .sst-ded-fields-cell { min-width: min(100%, 520px); vertical-align: top; }
+.sst-page .sst-ded-fields label { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); display: block; margin: 0 0 4px; letter-spacing: 0.02em; text-transform: uppercase; }
+.sst-page .sst-preset-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.sst-page .sst-ded-block { display: none; }
+.sst-page .sst-ded-block.active {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px 16px;
+  padding: 12px 14px;
+  background: var(--color-surface-muted, #f6f7f9);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+}
+.sst-page .sst-ded-block.active .form-select,
+.sst-page .sst-ded-block.active .form-input { width: 100%; max-width: none; margin: 0; }
+.sst-page .sst-ded-block.active .hint { grid-column: 1 / -1; margin: 0; font-size: var(--text-xs); }
+.sst-page .sst-formula-preview {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: 6px;
+  border-left: 3px solid var(--color-primary, #2563eb);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text, #1e293b);
+}
+.sst-page .sst-formula-preview strong { font-weight: 600; }
+.sst-page .sst-formula-preview .sst-excel { display: block; margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #475569; }
+.sst-page .data-table thead th { white-space: nowrap; vertical-align: bottom; }
+.sst-page #sst-ded-body .sst-c-method { min-width: 200px; max-width: 240px; }
+.sst-page .sst-ded-threshold .sst-threshold-hint { grid-column: 1 / -1; font-size: var(--text-xs); color: var(--color-text-muted); margin: 0; }
+</style>
+<script>
+(function () {
+  'use strict';
+
+  var initialized_ = false;
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    function wait() {
+      if (run()) return;
+      var tries = 0;
+      var timer = setInterval(function () {
+        if (run() || ++tries > 200) clearInterval(timer);
+      }, 25);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wait);
+    } else {
+      wait();
+    }
+  }
+
+  whenAppReady(function initSalaryStructureUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
+
+  var SECTION_RATE_ = 'RATE_OF_PAY';
+  var SECTION_EARNED_ = 'EARNED_PAY';
+  var SECTION_DED_ = 'DEDUCTION';
+  var SECTION_MANUAL_ = 'MANUAL_DEDUCTION';
+  var SST_UI_BUILD_ = '2026.10.16.1';
+  var EARNED_CALC_METHOD_ = 'PRORATE_ROUND_LINE';
+  var EARNED_CALC_LABEL_ = 'Daily rate × paid days (round each line)';
+
+  var RATE_METHODS_ = [
+    ['PERCENT', '% of base'],
+    ['FIXED', 'Fixed amount'],
+    ['BALANCE_OF_CTC', 'Remainder of CTC']
+  ];
+  var DED_METHODS_ = [
+    ['PERCENT_CAPPED', 'Capped percentage (PF-style)'],
+    ['PERCENT_IF', 'Conditional percentage (ESIC-style)'],
+    ['THRESHOLD_FEE', 'Salary threshold fee (PT-style)'],
+    ['PERCENT', 'Simple percentage'],
+    ['FIXED', 'Fixed ₹ every month']
+  ];
+  var DED_PRESETS_ = {
+    PF: { component_code: 'PF', component_name: 'PF', calc_method: 'PERCENT_CAPPED', percent_base: 'EARNED_BP_DA', percent: 12, cap_amount: 25000, round_mode: 'ROUND' },
+    ESIC: { component_code: 'ESIC', component_name: 'ESIC', calc_method: 'PERCENT_IF', cond_ref: 'RATE_GROSS', cond_op: 'LT', cond_value: 21001, percent_base: 'EARNED_GROSS', percent: 0.75, round_mode: 'ROUNDUP' },
+    PT: { component_code: 'PT', component_name: 'Professional tax', calc_method: 'THRESHOLD_FEE', cond_ref: 'EARNED_GROSS', cond_op: 'LTE', cond_value: 25000, amount: 200, round_mode: 'ROUND' }
+  };
+  var COND_OPS_ = [['LT', '<'], ['LTE', '≤'], ['GT', '>'], ['GTE', '≥']];
+  var ROUND_MODES_ = [['ROUND', 'Round'], ['ROUNDUP', 'Round up'], ['NONE', 'None']];
+
+  function uiFromStoredRow_(c, section) {
+    c = c || {};
+    section = section || inferSection_(c);
+    var m = String(c.calc_method || '').toUpperCase();
+    if (section === SECTION_MANUAL_) return { method: 'MANUAL', base: '' };
+    if (section === SECTION_EARNED_) {
+      return { method: EARNED_CALC_METHOD_, base: '' };
+    }
+    if (section === SECTION_DED_) {
+      if (DED_METHODS_.some(function (x) { return x[0] === m; })) return { method: m, base: String(c.percent_base || c.cond_ref || '').toUpperCase() };
+      return { method: 'PERCENT_CAPPED', base: 'BP' };
+    }
+    var base = String(c.percent_base || '').toUpperCase();
+    if (m === 'PERCENT_OF_CTC') return { method: 'PERCENT', base: 'CTC' };
+    if (m === 'PERCENT_OF_BASIC') return { method: 'PERCENT', base: base || 'BP' };
+    if (m === 'PERCENT') return { method: 'PERCENT', base: base || 'CTC' };
+    if (m === 'BALANCE_OF_CTC') return { method: 'BALANCE_OF_CTC', base: '' };
+    return { method: 'FIXED', base: '' };
+  }
+
+  function inferSection_(c) {
+    var sec = String(c.structure_section || '').toUpperCase();
+    if (sec) return sec;
+    var m = String(c.calc_method || '').toUpperCase();
+    if (m === 'MANUAL') return SECTION_MANUAL_;
+    if (m === 'PRORATE_ROUND_LINE' || m === 'PRORATE_FACTOR') return SECTION_EARNED_;
+    var kind = String(c.component_kind || '').toUpperCase();
+    if (kind === 'DEDUCTION' || kind === 'EMPLOYER') return SECTION_DED_;
+    return SECTION_RATE_;
+  }
+
+  function splitComponents_(comps) {
+    var rate = [];
+    var earned = [];
+    var ded = [];
+    var manual = [];
+    (comps || []).forEach(function (c) {
+      var sec = inferSection_(c);
+      if (sec === SECTION_MANUAL_) manual.push(c);
+      else if (sec === SECTION_DED_) ded.push(c);
+      else if (sec === SECTION_EARNED_) earned.push(c);
+      else rate.push(c);
+    });
+    return { rate: rate, earned: earned, ded: ded, manual: manual };
+  }
+
+  function priorRateCodes_(allRate, index) {
+    var prior = [];
+    for (var j = 0; j < index; j++) {
+      var cd = String((allRate[j] && allRate[j].component_code) || '').trim().toUpperCase();
+      if (cd) prior.push(cd);
+    }
+    return prior;
+  }
+
+  /** Section 1 rate line bases (for % of CTC / % of another line). */
+  function rateBaseOptionsHtml_(selected, priorCodes) {
+    var sel = String(selected || 'CTC').toUpperCase();
+    var html = '<option value="CTC"' + (sel === 'CTC' ? ' selected' : '') + '>Monthly CTC (employee)</option>';
+    (priorCodes || []).forEach(function (code) {
+      html += '<option value="' + esc_(code) + '"' + (sel === code ? ' selected' : '') + '>Section 1 line - ' + esc_(code) + '</option>';
+    });
+    return html;
+  }
+
+  function normalizeAmountSourceRef_(selected, rateCodes) {
+    var sel = String(selected || 'EARNED_GROSS').toUpperCase();
+    if (sel === 'CTC' || sel === 'RATE_GROSS' || sel === 'EARNED_GROSS') return sel;
+    if (sel.indexOf('RATE_LINE:') === 0 || sel.indexOf('EARNED_LINE:') === 0) return sel;
+    if ((rateCodes || []).indexOf(sel) >= 0) return 'RATE_LINE:' + sel;
+    return sel;
+  }
+
+  /** Where a deduction formula takes its amount from (sections 1, 2, or CTC). */
+  function amountSourceOptionsHtml_(selected, rateCodes, earnedCodes) {
+    var sel = normalizeAmountSourceRef_(selected, rateCodes);
+    earnedCodes = earnedCodes || rateCodes || [];
+    var opts = [
+      ['CTC', 'Monthly CTC (employee profile)'],
+      ['RATE_GROSS', 'Section 1 - Total monthly gross (rate)'],
+      ['EARNED_GROSS', 'Section 2 - Total earned gross'],
+      ['EARNED_BP_DA', 'Section 2 - Basic + DA earned (for PF wage)']
+    ];
+    (rateCodes || []).forEach(function (code) {
+      opts.push(['RATE_LINE:' + code, 'Section 1 - ' + code + ' (monthly rate)']);
+    });
+    (earnedCodes || []).forEach(function (code) {
+      opts.push(['EARNED_LINE:' + code, 'Section 2 - ' + code + ' (earned amount)']);
+    });
+    return opts.map(function (o) {
+      return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + esc_(o[1]) + '</option>';
+    }).join('');
+  }
+
+  function dedMethodHint_(m) {
+    if (m === 'PERCENT_CAPPED') {
+      return 'Cap applies to the wage base before the percentage. Payroll calculates the rupee amount — you never type PF here.';
+    }
+    if (m === 'PERCENT_IF') {
+      return 'Step 1: test the first amount. Step 2: if true, deduct % of the second amount. Used for ESIC.';
+    }
+    if (m === 'THRESHOLD_FEE') {
+      return 'If salary is within the limit → ₹0. Above the limit → fixed fee (professional tax).';
+    }
+    if (m === 'PERCENT') {
+      return 'Deduct a % of the amount you select. Calculated at payroll.';
+    }
+    return 'Same ₹ every month for everyone on this structure (rare).';
+  }
+
+  function selectedSourceLabel_(selectEl) {
+    if (!selectEl || !selectEl.options || selectEl.selectedIndex < 0) return 'selected amount';
+    var t = selectEl.options[selectEl.selectedIndex].text || '';
+    return t.replace(/^Section \d+ - /, '').trim() || 'selected amount';
+  }
+
+  function updateDedFormulaPreview_(tr) {
+    if (!tr) return;
+    var el = tr.querySelector('.sst-formula-preview');
+    if (!el) return;
+    var m = tr.querySelector('.sst-c-method') ? tr.querySelector('.sst-c-method').value : '';
+    var code = tr.querySelector('.sst-c-code') ? String(tr.querySelector('.sst-c-code').value || '').trim().toUpperCase() : '';
+    var plain = '';
+    var excel = '';
+    if (m === 'PERCENT_CAPPED') {
+      var pct = tr.querySelector('.sst-c-value-pct') ? tr.querySelector('.sst-c-value-pct').value : '';
+      var cap = tr.querySelector('.sst-c-cap') ? tr.querySelector('.sst-c-cap').value : '';
+      var baseRef = tr.querySelector('.sst-c-base') ? tr.querySelector('.sst-c-base').value : '';
+      var baseLabel = selectedSourceLabel_(tr.querySelector('.sst-c-base'));
+      var capNum = cap === '' ? '' : String(cap).replace(/,/g, '');
+      if (baseRef === 'EARNED_BP_DA' || code === 'PF') {
+        plain = '<strong>Payroll:</strong> ' + (code || 'Deduction') + ' = round( MIN( earned Basic + earned DA' +
+          (capNum ? ', ₹' + capNum : '') + ' ) × ' + (pct || '0') + '% )';
+        excel = '=ROUND(MIN(Earned_Basic+Earned_DA' + (capNum ? ',' + capNum : '') + ')*' + (pct || '0') + '%,0)';
+      } else {
+        plain = '<strong>Payroll:</strong> ' + (code || 'Deduction') + ' = round( MIN( ' + baseLabel +
+          (capNum ? ', cap ₹' + capNum : '') + ' ) × ' + (pct || '0') + '% )';
+        excel = '=ROUND(MIN(' + baseLabel.replace(/\s+/g, '_') + (capNum ? ',' + capNum : '') + ')*' + (pct || '0') + '%,0)';
+      }
+    } else if (m === 'PERCENT_IF') {
+      var ref1 = selectedSourceLabel_(tr.querySelector('.sst-c-base-if'));
+      var op = tr.querySelector('.sst-c-cond-op') ? tr.querySelector('.sst-c-cond-op').value : 'LT';
+      var val = tr.querySelector('.sst-c-cond-val') ? tr.querySelector('.sst-c-cond-val').value : '';
+      var ref2 = selectedSourceLabel_(tr.querySelector('.sst-c-pct-base'));
+      var pct2 = tr.querySelector('.sst-c-value-pct') ? tr.querySelector('.sst-c-value-pct').value : '';
+      plain = '<strong>Payroll:</strong> IF ' + ref1 + ' ' + op + ' ' + val + ' THEN round( ' + ref2 + ' × ' + pct2 + '% ) ELSE 0';
+      excel = '=IF(' + ref1.replace(/\s+/g, '_') + op + val + ',ROUND(' + ref2.replace(/\s+/g, '_') + '*' + pct2 + '%,0),0)';
+    } else if (m === 'THRESHOLD_FEE') {
+      var g = selectedSourceLabel_(tr.querySelector('.sst-c-base-th'));
+      var lim = tr.querySelector('.sst-c-cond-val') ? tr.querySelector('.sst-c-cond-val').value : '';
+      var fee = tr.querySelector('.sst-c-value-amt') ? tr.querySelector('.sst-c-value-amt').value : '';
+      plain = '<strong>Payroll:</strong> IF ' + g + ' ≤ ' + lim + ' THEN 0 ELSE ₹' + (fee || '0');
+      excel = '=IF(' + g.replace(/\s+/g, '_') + '<=' + lim + ',0,' + (fee || '0') + ')';
+    } else if (m === 'PERCENT') {
+      var b = selectedSourceLabel_(tr.querySelector('.sst-c-base-simple'));
+      var p = tr.querySelector('.sst-c-value-pct') ? tr.querySelector('.sst-c-value-pct').value : '';
+      plain = '<strong>Payroll:</strong> round( ' + b + ' × ' + p + '% )';
+      excel = '=ROUND(' + b.replace(/\s+/g, '_') + '*' + p + '%,0)';
+    } else if (m === 'FIXED') {
+      var amt = tr.querySelector('.sst-c-value-amt') ? tr.querySelector('.sst-c-value-amt').value : '';
+      plain = '<strong>Every month:</strong> ₹' + (amt || '0');
+      excel = '=' + (amt || '0');
+    }
+    el.innerHTML = plain + (excel ? '<span class="sst-excel">Excel-style: ' + esc_(excel) + '</span>' : '');
+  }
+
+  function pageEl_() {
+    var p = document.getElementById('page-content');
+    if (p) p.classList.remove('hidden');
+    return p;
+  }
+
+  function esc_(v) {
+    return escapeHtml(v == null ? '' : String(v));
+  }
+
+  function spin_(label) {
+    return App.sectionSkeleton
+      ? App.sectionSkeleton({ label: label || 'Loading' })
+      : '<div class="hrms-loading-block" aria-busy="true">' + esc_(label || 'Loading') + '…</div>';
+  }
+
+  function render_(params) {
+    var page = pageEl_();
+    if (!page) return;
+    page.innerHTML =
+      '<div class="sst-page"><div class="page-header"><h2>Salary structures</h2>' +
+      '<p class="page-lede">Reusable payroll templates: monthly <strong>rate of pay</strong> from CTC, ' +
+      '<strong>earned pay</strong> proration rules, statutory <strong>deduction formulas</strong>, and manual deduction lines.</p></div>' +
+      '<div id="sst-mount">' + spin_('Loading salary structures\u2026') + '</div></div>';
+    loadList_();
+  }
+
+  function loadList_() {
+    var m = document.getElementById('sst-mount');
+    var timedOut = false;
+    var timer = setTimeout(function () {
+      timedOut = true;
+      if (!m) return;
+      m.innerHTML =
+        '<div class="alert alert-warning">Still loading salary structures. ' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-retry">Retry</button></div>';
+      var retry = document.getElementById('sst-retry');
+      if (retry) retry.addEventListener('click', function () {
+        if (m) m.innerHTML = spin_('Loading salary structures\u2026');
+        loadList_();
+      });
+    }, 20000);
+    try {
+      callServer('apiListSalaryStructureTypes', true).then(function (list) {
+        clearTimeout(timer);
+        if (timedOut) return;
+        paintList_(list || []);
+      }).catch(function (err) {
+        clearTimeout(timer);
+        if (timedOut) return;
+        if (m) {
+          m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') +
+            ' <button type="button" class="btn btn-secondary btn-sm" id="sst-retry-err">Retry</button></div>';
+          var rb = document.getElementById('sst-retry-err');
+          if (rb) rb.addEventListener('click', function () { loadList_(); });
+        }
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load salary structures.') + '</div>';
+    }
+  }
+
+  function paintList_(list) {
+    var m = document.getElementById('sst-mount');
+    if (!m) return;
+    var rows = list.map(function (s) {
+      var active = String(s.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+      var statusHtml = active
+        ? '<span class="sst-status-active">Active</span>'
+        : '<span class="sst-status-inactive">Inactive</span>';
+      return '<tr>' +
+        '<td class="mono">' + esc_(s.salary_structure_id) + '</td>' +
+        '<td>' + esc_(s.structure_name) + '</td>' +
+        '<td>' + esc_(s.vertical_name) + '</td>' +
+        '<td class="num">' + ((s.components || []).length) + '</td>' +
+        '<td>' + statusHtml + '</td>' +
+        '<td class="col-actions">' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-sst-edit="' + esc_(s.salary_structure_id) + '">Edit</button> ' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-sst-toggle="' + esc_(s.salary_structure_id) + '" data-next="' + (active ? 'INACTIVE' : 'ACTIVE') + '">' +
+            (active ? 'Deactivate' : 'Activate') + '</button>' +
+        '</td></tr>';
+    }).join('');
+    m.innerHTML =
+      '<div class="card" style="margin-bottom:12px"><p class="hint">Create templates here first. To bulk-upload monthly CTC per employee for payroll, use ' +
+      '<strong>Payroll → Employee salary</strong> (step 1 in the payroll flow).</p></div>' +
+      '<div class="card"><div class="sst-list-head"><button type="button" class="btn btn-primary" id="sst-new">New salary structure</button></div>' +
+      (rows
+        ? '<table class="data-table"><thead><tr><th>ID</th><th>Name</th><th>Vertical</th><th class="num">Lines</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<p class="empty-state">No salary structures yet. Click \u201cNew salary structure\u201d to create one.</p>') +
+      '</div>';
+    var nw = document.getElementById('sst-new');
+    if (nw) nw.addEventListener('click', function () { openForm_(null); });
+    m.querySelectorAll('[data-sst-edit]').forEach(function (b) {
+      b.addEventListener('click', function () { openForm_(b.getAttribute('data-sst-edit')); });
+    });
+    m.querySelectorAll('[data-sst-toggle]').forEach(function (b) {
+      b.addEventListener('click', function () { toggle_(b.getAttribute('data-sst-toggle'), b.getAttribute('data-next'), b); });
+    });
+    if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-structure');
+  }
+
+  function toggle_(id, next, btn) {
+    callServer('apiSetSalaryStructureTypeStatus', id, next, { button: btn, loadingText: 'Saving\u2026' }).then(function () {
+      showToast('Salary structure ' + (next === 'ACTIVE' ? 'activated' : 'deactivated') + '.', 'success');
+      loadList_();
+    }).catch(function (err) {
+      showToast((err && err.message) || 'Update failed.', 'error');
+    });
+  }
+
+  function loadVerticals_() {
+    return callServer('apiGetEmployeeVerticals').then(function (list) {
+      return (list && list.length) ? list : ['AOPL', 'SAPL', 'AOMS', 'OTHERS'];
+    }).catch(function () {
+      return ['AOPL', 'SAPL', 'AOMS', 'OTHERS'];
+    });
+  }
+
+  function normalizeEarnedComponent_(c) {
+    c = c || {};
+    c.calc_method = EARNED_CALC_METHOD_;
+    if (!c.structure_section) c.structure_section = SECTION_EARNED_;
+    return c;
+  }
+
+  function rateRowHtml_(c, index, allRate) {
+    c = c || {};
+    var ui = uiFromStoredRow_(c, SECTION_RATE_);
+    var methodOpts = RATE_METHODS_.map(function (k) {
+      return '<option value="' + k[0] + '"' + (ui.method === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
+    }).join('');
+    var prior = priorRateCodes_(allRate, index);
+    var isPercent = ui.method === 'PERCENT';
+    var isBalance = ui.method === 'BALANCE_OF_CTC';
+    var value = isBalance ? 'Auto'
+      : ((c.percent != null && c.percent !== '' && isPercent) ? c.percent
+        : ((c.amount != null && c.amount !== '' && ui.method === 'FIXED') ? c.amount : ''));
+    return '<tr class="sst-comp-row" data-section="' + SECTION_RATE_ + '">' +
+      '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="BP"></td>' +
+      '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Basic"></td>' +
+      '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
+      '<td><select class="form-select sst-c-base"' + (isPercent ? '' : ' disabled') + '>' +
+        rateBaseOptionsHtml_(ui.base || 'CTC', prior) + '</select></td>' +
+      '<td><input class="form-input sst-comp-value sst-c-value" type="text" inputmode="decimal"' +
+        (isBalance || !isPercent && ui.method !== 'FIXED' ? ' disabled' : '') +
+        ' value="' + esc_(value) + '"></td>' +
+      '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
+      '</tr>';
+  }
+
+  function dedRowHtml_(c, index, allRate) {
+    c = c || {};
+    var ui = uiFromStoredRow_(c, SECTION_DED_);
+    var methodOpts = DED_METHODS_.map(function (k) {
+      return '<option value="' + k[0] + '"' + (ui.method === k[0] ? ' selected' : '') + '>' + k[1] + '</option>';
+    }).join('');
+    var rateCodes = priorRateCodes_(allRate, allRate.length);
+    var m = ui.method;
+    var baseSel = (m === 'PERCENT_IF' || m === 'THRESHOLD_FEE') ? (c.cond_ref || 'RATE_GROSS') : (c.percent_base || 'RATE_LINE:BP');
+    var roundSel = String(c.round_mode || 'ROUND').toUpperCase();
+    var roundOpts = ROUND_MODES_.map(function (r) {
+      return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
+    }).join('');
+    var condOp = String(c.cond_op || (m === 'THRESHOLD_FEE' ? 'LTE' : 'LT')).toUpperCase();
+    var condOpts = COND_OPS_.map(function (o) {
+      return '<option value="' + o[0] + '"' + (condOp === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    var pctBaseSel = String(c.percent_base || 'EARNED_GROSS').toUpperCase();
+    var valPct = (c.percent != null && c.percent !== '') ? c.percent : '';
+    var valAmt = (c.amount != null && c.amount !== '') ? c.amount : (m === 'THRESHOLD_FEE' ? '200' : '');
+    return '<tr class="sst-comp-row" data-section="' + SECTION_DED_ + '">' +
+      '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="PF"></td>' +
+      '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="PF"></td>' +
+      '<td><select class="form-select sst-c-method">' + methodOpts + '</select></td>' +
+      '<td colspan="4" class="sst-ded-fields-cell">' +
+        '<div class="sst-ded-fields">' +
+          '<div class="sst-ded-block sst-ded-pct-cap">' +
+            '<label>Take amount from</label>' +
+            '<select class="form-select sst-c-base">' + amountSourceOptionsHtml_(baseSel, rateCodes) + '</select>' +
+            '<label>Percentage (%)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '" placeholder="12">' +
+            '<label>Maximum base for % (optional cap)</label>' +
+            '<input class="form-input sst-c-cap" type="text" inputmode="decimal" value="' + esc_(c.cap_amount != null ? c.cap_amount : '25000') + '">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-pct-if">' +
+            '<label>If this amount</label>' +
+            '<select class="form-select sst-c-base-if">' + amountSourceOptionsHtml_(c.cond_ref || 'RATE_GROSS', rateCodes) + '</select>' +
+            '<label>is</label><select class="form-select sst-c-cond-op">' + condOpts + '</select>' +
+            '<label>this value</label>' +
+            '<input class="form-input sst-c-cond-val" type="text" inputmode="decimal" value="' + esc_(c.cond_value != null ? c.cond_value : '21001') + '">' +
+            '<label>then deduct % of</label>' +
+            '<select class="form-select sst-c-pct-base">' + amountSourceOptionsHtml_(pctBaseSel, rateCodes) + '</select>' +
+            '<label>Percentage (%)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '" placeholder="0.75">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-threshold">' +
+            '<label>If this amount</label>' +
+            '<select class="form-select sst-c-base-th">' + amountSourceOptionsHtml_(c.cond_ref || 'EARNED_GROSS', rateCodes) + '</select>' +
+            '<label>is at most</label>' +
+            '<input class="form-input sst-c-cond-val" type="text" inputmode="decimal" value="' + esc_(c.cond_value != null ? c.cond_value : '25000') + '">' +
+            '<p class="sst-threshold-hint">If earned gross is at most the limit → ₹0 deduction; otherwise charge the fee below.</p>' +
+            '<label>Fee amount (₹)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-amt" type="text" inputmode="decimal" value="' + esc_(valAmt) + '" placeholder="200">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-pct-simple">' +
+            '<label>Take amount from</label>' +
+            '<select class="form-select sst-c-base-simple">' + amountSourceOptionsHtml_(c.percent_base || 'RATE_LINE:BP', rateCodes) + '</select>' +
+            '<label>Percentage (%)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-pct" type="text" inputmode="decimal" value="' + esc_(valPct) + '">' +
+          '</div>' +
+          '<div class="sst-ded-block sst-ded-fixed">' +
+            '<label>Fixed monthly deduction (₹)</label>' +
+            '<input class="form-input sst-c-value sst-c-value-amt" type="text" inputmode="decimal" value="' + esc_(valAmt) + '">' +
+          '</div>' +
+          '<p class="hint sst-ded-hint">' + esc_(dedMethodHint_(m)) + '</p>' +
+          '<div class="sst-formula-preview" aria-live="polite"></div>' +
+        '</div>' +
+      '</td>' +
+      '<td><select class="form-select sst-c-round">' + roundOpts + '</select></td>' +
+      '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
+      '</tr>';
+  }
+
+  function earnedRowHtml_(c, rateComps) {
+    c = normalizeEarnedComponent_(c || {});
+    var roundSel = String(c.round_mode || 'ROUND').toUpperCase();
+    var roundOpts = ROUND_MODES_.map(function (r) {
+      return '<option value="' + r[0] + '"' + (roundSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
+    }).join('');
+    var code = String(c.component_code || '*');
+    var codeOpts = '<option value="*"' + (code === '*' ? ' selected' : '') + '>All lines from Section 1</option>';
+    (rateComps || []).forEach(function (r) {
+      var cd = String(r.component_code || '').trim().toUpperCase();
+      if (!cd) return;
+      codeOpts += '<option value="' + esc_(cd) + '"' + (code.toUpperCase() === cd ? ' selected' : '') + '>' + esc_(cd) + '</option>';
+    });
+    return '<tr class="sst-comp-row" data-section="' + SECTION_EARNED_ + '">' +
+      '<td><select class="form-select sst-c-earned-code">' + codeOpts + '</select></td>' +
+      '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || 'Earned pay') + '"></td>' +
+      '<td class="hint">' + esc_(EARNED_CALC_LABEL_) +
+        '<input type="hidden" class="sst-c-method" value="' + EARNED_CALC_METHOD_ + '"></td>' +
+      '<td><select class="form-select sst-c-round">' + roundOpts + '</select></td>' +
+      '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
+      '</tr>';
+  }
+
+  function manualRowHtml_(c) {
+    c = c || {};
+    var amt = c.amount != null && c.amount !== '' ? c.amount : '';
+    return '<tr class="sst-comp-row" data-section="' + SECTION_MANUAL_ + '">' +
+      '<td><input class="form-input sst-c-code" value="' + esc_(c.component_code || '') + '" placeholder="ADVANCE"></td>' +
+      '<td><input class="form-input sst-c-name" value="' + esc_(c.component_name || '') + '" placeholder="Advance"></td>' +
+      '<td><input class="form-input sst-c-manual-amt mono" type="text" inputmode="decimal" value="' + esc_(amt) + '" placeholder="0"></td>' +
+      '<td class="col-actions"><button type="button" class="btn btn-secondary btn-sm sst-c-remove" title="Remove">\u2715</button></td>' +
+      '</tr>';
+  }
+
+  function openForm_(id) {
+    var page = pageEl_();
+    if (!page) return;
+    page.innerHTML =
+      '<div class="sst-page"><div class="page-header"><h2>' + (id ? 'Edit' : 'New') + ' salary structure</h2></div>' +
+      '<div id="sst-form-mount">' + spin_('Loading\u2026') + '</div></div>';
+    Promise.all([
+      loadVerticals_(),
+      id ? callServer('apiGetSalaryStructureType', id) : callServer('apiGetSalaryStructureTypeDefaults')
+    ]).then(function (res) {
+      var existing = res[1];
+      if (!id && existing && existing.components) {
+        existing = { components: existing.components, payroll_rules_json: existing.payroll_rules_json, status: 'ACTIVE' };
+      }
+      paintForm_(res[0], existing);
+    }).catch(function (err) {
+      var m = document.getElementById('sst-form-mount');
+      if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_((err && err.message) || 'Failed to load.') + '</div>';
+    });
+  }
+
+  function paintForm_(verticals, existing) {
+    var m = document.getElementById('sst-form-mount');
+    if (!m) return;
+    existing = existing || {};
+    var parts = splitComponents_(existing.components || []);
+    parts.earned = parts.earned.map(normalizeEarnedComponent_);
+    if (!parts.earned.length) {
+      parts.earned.push(normalizeEarnedComponent_({
+        component_code: '*',
+        component_name: 'All rate lines',
+        round_mode: 'ROUND'
+      }));
+    }
+    var currentVertical = String(existing.vertical_name || '').toUpperCase();
+    var vertOpts = '<option value="">Select vertical</option>' + (verticals || []).map(function (v) {
+      return '<option value="' + esc_(v) + '"' + (currentVertical === String(v).toUpperCase() ? ' selected' : '') + '>' + esc_(v) + '</option>';
+    }).join('');
+    var active = String(existing.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
+    var isEdit = !!String(existing.salary_structure_id || '').trim();
+    var idField = isEdit
+      ? '<div class="form-group"><label class="form-label" for="sst-structure-id">Structure ID</label>' +
+        '<input class="form-input mono" id="sst-structure-id" value="' + esc_(existing.salary_structure_id) + '" readonly></div>'
+      : '<div class="form-group"><label class="form-label" for="sst-structure-id">Structure ID</label>' +
+        '<input class="form-input mono" id="sst-structure-id" value="" placeholder="e.g. SAPL-EXEC-2026" autocomplete="off">' +
+        '<p class="hint">Choose a unique ID. Employees and payroll reference this value.</p></div>';
+    m.innerHTML =
+      '<div class="card">' +
+      '<div class="form-row">' + idField +
+        '<div class="form-group"><label class="form-label" for="sst-name">Structure name</label>' +
+          '<input class="form-input" id="sst-name" value="' + esc_(existing.structure_name || '') + '" placeholder="e.g. SAPL Standard"></div>' +
+        '<div class="form-group"><label class="form-label" for="sst-vertical">Vertical</label>' +
+          '<select class="form-select" id="sst-vertical">' + vertOpts + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+          '<label class="form-check"><input type="checkbox" id="sst-active"' + (active ? ' checked' : '') + '> Active</label></div>' +
+      '</div>' +
+      '<p class="hint">Payroll runs in order: <strong>1 Rate</strong> \u2192 <strong>2 Earned</strong> \u2192 <strong>3 Deduction formulas</strong>. ' +
+        'TDS, Advance, LCD, LWF, and Arrears are entered on the <strong>attendance register</strong>, not here. ' +
+        '<span class="mono">Editor ' + esc_(SST_UI_BUILD_) + '</span></p>' +
+      '<div class="sst-section">' +
+        '<h3>1. Rate of pay (monthly)</h3>' +
+        '<p class="page-lede">Defines contractual monthly amounts from employee CTC. Use <strong>Remainder of CTC</strong> once for special allowance (balance after other earnings).</p>' +
+        '<table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Method</th><th>Base</th><th>Value</th><th></th></tr></thead>' +
+        '<tbody id="sst-rate-body">' + parts.rate.map(function (c, i) { return rateRowHtml_(c, i, parts.rate); }).join('') + '</tbody></table>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-rate">+ Add earning line</button>' +
+      '</div>' +
+      '<div class="sst-section">' +
+        '<h3>2. Earned pay (attendance)</h3>' +
+        '<div class="sst-callout"><strong>No rupee amounts here.</strong> This section only says how Section 1 monthly amounts become ' +
+        '<em>earned</em> pay when payroll applies <strong>working days</strong> and <strong>paid days</strong> (from attendance / payroll input).</div>' +
+        '<table class="data-table"><thead><tr><th>Which Section 1 line</th><th>Label</th><th>Earned formula</th><th>Round</th><th></th></tr></thead>' +
+        '<tbody id="sst-earned-body">' + parts.earned.map(function (c) { return earnedRowHtml_(c, parts.rate); }).join('') + '</tbody></table>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-earned">+ Add earned rule</button>' +
+      '</div>' +
+      '<div class="sst-section">' +
+        '<h3>3. Deduction formulas (automatic)</h3>' +
+        '<div class="sst-callout"><strong>You set rules here — payroll calculates rupees.</strong> Choose where each amount comes from (Section 1 rate, Section 2 earned, or CTC), then % or fee. ' +
+        'Nothing is typed per employee on this screen.</div>' +
+        '<div class="sst-formula-ref-card"><strong>PF preset (matches statutory wage ceiling)</strong><br>' +
+        'Wage base = <em>earned Basic + earned DA</em> (Section 2). Cap that base at ₹25,000, then apply 12%. ' +
+        'Excel equivalent: <code>=ROUND(MIN(Earned_Basic+Earned_DA,25000)*12%,0)</code> — the minimum is on the <em>wage</em>, not on the final PF amount.</div>' +
+        '<div class="sst-preset-btns">' +
+          '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="PF">+ PF preset</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="ESIC">+ ESIC preset</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm sst-ded-preset" data-preset="PT">+ PT preset</button>' +
+        '</div>' +
+        '<table class="data-table sst-ded-table"><thead><tr><th>Code</th><th>Name</th><th>Formula type</th><th style="min-width:280px">How it calculates (live preview below each row)</th><th>Round</th><th></th></tr></thead>' +
+        '<tbody id="sst-ded-body">' + parts.ded.map(function (c, i) { return dedRowHtml_(c, i, parts.rate); }).join('') + '</tbody></table>' +
+        '<button type="button" class="btn btn-secondary btn-sm" id="sst-add-ded">+ Add custom formula</button>' +
+      '</div>' +
+      '<div class="form-actions" style="margin-top:16px;">' +
+        '<button type="button" class="btn btn-primary" id="sst-save">Save structure</button> ' +
+        '<button type="button" class="btn btn-secondary" id="sst-cancel">Cancel</button>' +
+      '</div></div>';
+    document.getElementById('sst-cancel').addEventListener('click', function () { render_({}); });
+    document.getElementById('sst-add-rate').addEventListener('click', function () { addRow_(SECTION_RATE_); });
+    document.getElementById('sst-add-earned').addEventListener('click', function () { addRow_(SECTION_EARNED_); });
+    document.getElementById('sst-add-ded').addEventListener('click', function () { addRow_(SECTION_DED_); });
+    document.getElementById('sst-save').addEventListener('click', function () { save_(this); });
+    document.querySelectorAll('.sst-ded-preset').forEach(function (btn) {
+      btn.addEventListener('click', function () { addDedPreset_(btn.getAttribute('data-preset')); });
+    });
+    bindAllRows_();
+  }
+
+  function addDedPreset_(key) {
+    var preset = DED_PRESETS_[key];
+    if (!preset) return;
+    var body = document.getElementById('sst-ded-body');
+    var rateComps = [];
+    document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(function (tr) {
+      rateComps.push({
+        component_code: tr.querySelector('.sst-c-code').value.trim()
+      });
+    });
+    var tmp = document.createElement('tbody');
+    tmp.innerHTML = dedRowHtml_(preset, body.querySelectorAll('.sst-comp-row').length, rateComps);
+    body.appendChild(tmp.firstChild);
+    bindAllRows_();
+  }
+
+  function allRateRows_() {
+    return Array.prototype.slice.call(document.querySelectorAll('#sst-rate-body .sst-comp-row'));
+  }
+
+  function addRow_(section) {
+    var rateList = collectRateOnly_();
+    var bodyId = section === SECTION_RATE_ ? 'sst-rate-body'
+      : (section === SECTION_EARNED_ ? 'sst-earned-body'
+        : (section === SECTION_DED_ ? 'sst-ded-body' : 'sst-manual-body'));
+    var body = document.getElementById(bodyId);
+    var tmp = document.createElement('tbody');
+    var idx = body.querySelectorAll('.sst-comp-row').length;
+    if (section === SECTION_RATE_) tmp.innerHTML = rateRowHtml_({}, idx, rateList);
+    else if (section === SECTION_EARNED_) tmp.innerHTML = earnedRowHtml_({}, rateList);
+    else if (section === SECTION_DED_) tmp.innerHTML = dedRowHtml_({}, idx, rateList);
+    else tmp.innerHTML = manualRowHtml_({});
+    body.appendChild(tmp.firstChild);
+    bindAllRows_();
+  }
+
+  function refreshEarnedCodeSelects_() {
+    var rateList = collectRateOnly_();
+    document.querySelectorAll('#sst-earned-body .sst-comp-row').forEach(function (tr) {
+      var sel = tr.querySelector('.sst-c-earned-code');
+      if (!sel) return;
+      var cur = sel.value || '*';
+      var html = '<option value="*"' + (cur === '*' ? ' selected' : '') + '>All lines from Section 1</option>';
+      rateList.forEach(function (r) {
+        var cd = String(r.component_code || '').trim().toUpperCase();
+        if (!cd) return;
+        html += '<option value="' + esc_(cd) + '"' + (cur === cd ? ' selected' : '') + '>' + esc_(cd) + '</option>';
+      });
+      sel.innerHTML = html;
+    });
+  }
+
+  function collectEarnedLineCodes_() {
+    var codes = [];
+    var seen = {};
+    function addCode(cd) {
+      cd = String(cd || '').trim().toUpperCase();
+      if (!cd || cd === '*' || cd === 'ALL') return;
+      if (!seen[cd]) { seen[cd] = true; codes.push(cd); }
+    }
+    document.querySelectorAll('#sst-earned-body .sst-c-earned-code').forEach(function (sel) {
+      var v = String(sel.value || '').trim().toUpperCase();
+      if (v === '*' || v === 'ALL') {
+        collectRateOnly_().forEach(function (r) { addCode(r.component_code); });
+      } else {
+        addCode(v);
+      }
+    });
+    if (!codes.length) {
+      collectRateOnly_().forEach(function (r) { addCode(r.component_code); });
+    }
+    return codes;
+  }
+
+  function refreshRateBaseSelects_() {
+    var rows = allRateRows_();
+    var codes = [];
+    var earnedCodes = collectEarnedLineCodes_();
+    rows.forEach(function (tr) {
+      var baseSel = tr.querySelector('.sst-c-base');
+      var methodSel = tr.querySelector('.sst-c-method');
+      var prior = codes.slice();
+      if (baseSel && methodSel && methodSel.value === 'PERCENT') {
+        baseSel.innerHTML = rateBaseOptionsHtml_(baseSel.value, prior);
+        baseSel.disabled = false;
+      }
+      var cd = tr.querySelector('.sst-c-code') ? String(tr.querySelector('.sst-c-code').value || '').trim().toUpperCase() : '';
+      if (cd) codes.push(cd);
+    });
+    document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) {
+      tr.querySelectorAll('.sst-c-base, .sst-c-base-if, .sst-c-base-th, .sst-c-base-simple, .sst-c-pct-base').forEach(function (sel) {
+        sel.innerHTML = amountSourceOptionsHtml_(sel.value, codes, earnedCodes);
+      });
+    });
+  }
+
+  function syncDedRowUi_(tr) {
+    if (!tr || tr.getAttribute('data-section') !== SECTION_DED_) return;
+    var m = tr.querySelector('.sst-c-method').value;
+    var map = {
+      PERCENT_CAPPED: 'sst-ded-pct-cap',
+      PERCENT_IF: 'sst-ded-pct-if',
+      THRESHOLD_FEE: 'sst-ded-threshold',
+      PERCENT: 'sst-ded-pct-simple',
+      FIXED: 'sst-ded-fixed'
+    };
+    tr.querySelectorAll('.sst-ded-block').forEach(function (b) { b.classList.remove('active'); });
+    var active = tr.querySelector('.' + (map[m] || 'sst-ded-pct-cap'));
+    if (active) active.classList.add('active');
+    var hint = tr.querySelector('.sst-ded-hint');
+    if (hint) hint.textContent = dedMethodHint_(m);
+    if (m === 'THRESHOLD_FEE') {
+      var op = tr.querySelector('.sst-c-cond-op');
+      if (op) op.value = 'LTE';
+    }
+    updateDedFormulaPreview_(tr);
+  }
+
+  function syncRateRowUi_(tr) {
+    if (!tr || tr.getAttribute('data-section') !== SECTION_RATE_) return;
+    var sel = tr.querySelector('.sst-c-method');
+    var val = tr.querySelector('.sst-c-value');
+    var base = tr.querySelector('.sst-c-base');
+    var m = sel.value;
+    if (m === 'BALANCE_OF_CTC') {
+      if (val) { val.value = 'Auto'; val.disabled = true; }
+      if (base) base.disabled = true;
+    } else if (m === 'PERCENT') {
+      if (val) { val.disabled = false; if (val.value === 'Auto') val.value = ''; }
+      if (base) base.disabled = false;
+      refreshRateBaseSelects_();
+    } else {
+      if (val) { val.disabled = false; if (val.value === 'Auto') val.value = ''; }
+      if (base) base.disabled = true;
+    }
+  }
+
+  function bindAllRows_() {
+    document.querySelectorAll('.sst-c-remove').forEach(function (b) {
+      b.onclick = function () {
+        var tr = b.closest('tr');
+        if (tr) tr.remove();
+        refreshRateBaseSelects_();
+      };
+    });
+    document.querySelectorAll('#sst-rate-body .sst-c-code').forEach(function (inp) {
+      inp.oninput = function () {
+        refreshRateBaseSelects_();
+        refreshEarnedCodeSelects_();
+      };
+    });
+    refreshEarnedCodeSelects_();
+    document.querySelectorAll('#sst-earned-body .sst-c-earned-code').forEach(function (sel) {
+      sel.onchange = function () { refreshRateBaseSelects_(); };
+    });
+    document.querySelectorAll('#sst-rate-body .sst-c-method').forEach(function (sel) {
+      sel.onchange = function () { syncRateRowUi_(sel.closest('tr')); };
+    });
+    document.querySelectorAll('#sst-ded-body .sst-c-method').forEach(function (sel) {
+      sel.onchange = function () { syncDedRowUi_(sel.closest('tr')); };
+    });
+    document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) {
+      tr.querySelectorAll('input, select').forEach(function (inp) {
+        inp.addEventListener('input', function () { updateDedFormulaPreview_(tr); });
+        inp.addEventListener('change', function () { updateDedFormulaPreview_(tr); });
+      });
+    });
+    document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(syncRateRowUi_);
+    document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(syncDedRowUi_);
+    refreshRateBaseSelects_();
+  }
+
+  function collectRateOnly_() {
+    var out = [];
+    document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(function (tr, i) {
+      var code = tr.querySelector('.sst-c-code').value.trim();
+      if (!code) return;
+      out.push({ component_code: code, sort_order: i + 1 });
+    });
+    return out;
+  }
+
+  function collectComponents_() {
+    var out = [];
+    var order = 0;
+    function pushRow(tr, section) {
+      var codeEl = tr.querySelector('.sst-c-code') || tr.querySelector('.sst-c-earned-code');
+      var code = codeEl ? String(codeEl.value || '').trim() : '';
+      var nameEl = tr.querySelector('.sst-c-name');
+      var name = nameEl ? String(nameEl.value || '').trim() : '';
+      if (!code && !name) return;
+      order += 1;
+      var c = {
+        component_code: code,
+        component_name: name,
+        structure_section: section,
+        sort_order: order
+      };
+      if (section === SECTION_MANUAL_) {
+        c.component_kind = 'DEDUCTION';
+        c.calc_method = 'MANUAL';
+        var amtEl = tr.querySelector('.sst-c-manual-amt');
+        var amtRaw = amtEl ? String(amtEl.value || '').trim() : '';
+        c.amount = amtRaw === '' ? 0 : amtRaw;
+        out.push(c);
+        return;
+      }
+      if (section === SECTION_EARNED_) {
+        c.component_kind = 'EARNING';
+        c.component_code = tr.querySelector('.sst-c-earned-code').value;
+        c.calc_method = EARNED_CALC_METHOD_;
+        c.round_mode = tr.querySelector('.sst-c-round').value;
+        out.push(c);
+        return;
+      }
+      if (section === SECTION_DED_) {
+        c.component_kind = 'DEDUCTION';
+        var method = tr.querySelector('.sst-c-method').value;
+        c.calc_method = method;
+        c.round_mode = tr.querySelector('.sst-c-round').value;
+        if (method === 'PERCENT_CAPPED') {
+          var blk = tr.querySelector('.sst-ded-pct-cap');
+          c.percent_base = blk.querySelector('.sst-c-base').value;
+          c.percent = blk.querySelector('.sst-c-value-pct').value;
+          c.cap_amount = blk.querySelector('.sst-c-cap').value;
+        } else if (method === 'PERCENT_IF') {
+          var bif = tr.querySelector('.sst-ded-pct-if');
+          c.cond_ref = bif.querySelector('.sst-c-base-if').value;
+          c.cond_op = bif.querySelector('.sst-c-cond-op').value;
+          c.cond_value = bif.querySelector('.sst-c-cond-val').value;
+          c.percent_base = bif.querySelector('.sst-c-pct-base').value;
+          c.percent = bif.querySelector('.sst-c-value-pct').value;
+        } else if (method === 'THRESHOLD_FEE') {
+          var bth = tr.querySelector('.sst-ded-threshold');
+          c.cond_ref = bth.querySelector('.sst-c-base-th').value;
+          c.cond_op = 'LTE';
+          c.cond_value = bth.querySelector('.sst-c-cond-val').value;
+          c.amount = bth.querySelector('.sst-c-value-amt').value;
+        } else if (method === 'PERCENT') {
+          var bs = tr.querySelector('.sst-ded-pct-simple');
+          c.percent_base = bs.querySelector('.sst-c-base-simple').value;
+          c.percent = bs.querySelector('.sst-c-value-pct').value;
+        } else if (method === 'FIXED') {
+          c.amount = tr.querySelector('.sst-ded-fixed .sst-c-value-amt').value;
+        }
+        out.push(c);
+        return;
+      }
+      c.component_kind = 'EARNING';
+      var method = tr.querySelector('.sst-c-method').value;
+      c.calc_method = method;
+      var base = tr.querySelector('.sst-c-base') ? tr.querySelector('.sst-c-base').value : 'CTC';
+      var value = tr.querySelector('.sst-c-value').value;
+      if (method === 'BALANCE_OF_CTC') {
+        /* balance */
+      } else if (method === 'FIXED') {
+        c.amount = value;
+      } else if (method === 'PERCENT') {
+        c.percent = value;
+        c.percent_base = base || 'CTC';
+      }
+      out.push(c);
+    }
+    document.querySelectorAll('#sst-rate-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_RATE_); });
+    document.querySelectorAll('#sst-earned-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_EARNED_); });
+    document.querySelectorAll('#sst-ded-body .sst-comp-row').forEach(function (tr) { pushRow(tr, SECTION_DED_); });
+    return out;
+  }
+
+  function save_(btn) {
+    var idEl = document.getElementById('sst-structure-id');
+    var structureId = idEl ? String(idEl.value || '').trim() : '';
+    if (!structureId) {
+      showToast('Structure ID is required.', 'error');
+      return;
+    }
+    var payload = {
+      salary_structure_id: structureId,
+      structure_name: document.getElementById('sst-name').value.trim(),
+      vertical_name: document.getElementById('sst-vertical').value,
+      status: document.getElementById('sst-active').checked ? 'ACTIVE' : 'INACTIVE',
+      payroll_rules_json: JSON.stringify({
+        execution_sections: [SECTION_RATE_, SECTION_EARNED_, SECTION_DED_]
+      }),
+      components: collectComponents_()
+    };
+    callServer('apiSaveSalaryStructureType', payload, { button: btn, loadingText: 'Saving\u2026' }).then(function (res) {
+      if (res && res.warning) showToast(res.warning, 'warning');
+      showToast('Salary structure saved.', 'success');
+      render_({});
+    }).catch(function (err) {
+      showToast((err && err.message) || 'Save failed.', 'error');
+    });
+  }
+
+  App.registerRoute('salary-structure', { title: 'Salary structures', render: render_ });
+  App.registerRoute('compensation', { title: 'Salary structures', render: render_ });
+  });
+})();
+</script>

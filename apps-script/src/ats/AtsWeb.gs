@@ -1,7 +1,7 @@
 /**
  * ATS web-app routing adapter.
  * Main.gs doGet should call AtsWeb.tryServe(e) and return the result when non-null.
- * See docs/ATS_INTEGRATION_NOTES.md — this file is the module-specific adapter.
+ * See docs/ATS_INTEGRATION_NOTES.md - this file is the module-specific adapter.
  */
 var ATS = ATS || {};
 

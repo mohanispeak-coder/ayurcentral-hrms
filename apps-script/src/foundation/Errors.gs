@@ -1,5 +1,5 @@
 /**
- * Centralized error types for Apps Script — safe client responses.
+ * Centralized error types for Apps Script - safe client responses.
  */
 var HRMS = HRMS || {};
 
@@ -50,7 +50,20 @@ function systemError_(message) {
 }
 
 /**
- * Wrap server functions for google.script.run — returns { ok, data } or { ok, error }.
+ * OTP session tokens are 64 hex chars. Module ids ("ats"), employee ids, and UI objects
+ * must never be bound as the request session or non-deployer RPCs look unauthenticated.
+ * @param {*} value
+ * @return {string}
+ */
+function hrmsCoerceSessionToken_(value) {
+  if (typeof value !== 'string') return '';
+  var t = String(value).trim();
+  if (t.length < 32) return '';
+  return t;
+}
+
+/**
+ * Wrap server functions for google.script.run - returns { ok, data } or { ok, error }.
  * Clears request-scoped sheet caches at entry so warm containers cannot reuse stale rows.
  * @param {Function} fn
  * @param {string=} sessionToken Optional application session from OTP login.
@@ -71,7 +84,10 @@ function hrmsRun_(fn, sessionToken) {
     if (typeof AuthService !== 'undefined' && AuthService.clearRequestSessionCache) {
       AuthService.clearRequestSessionCache();
     }
-    HRMS_REQUEST_SESSION_TOKEN_ = sessionToken || '';
+    HRMS_REQUEST_SESSION_TOKEN_ = hrmsCoerceSessionToken_(sessionToken);
+    if (typeof AuthService !== 'undefined' && AuthService.resolveSession) {
+      AuthService.resolveSession({ sessionToken: HRMS_REQUEST_SESSION_TOKEN_ });
+    }
     var data = fn();
     var envelope = { ok: true, data: data };
     if (perfOn) {
@@ -111,5 +127,8 @@ function hrmsRun_(fn, sessionToken) {
     return errBody;
   } finally {
     HRMS_REQUEST_SESSION_TOKEN_ = previousToken;
+    if (typeof AuthService !== 'undefined' && AuthService.clearRequestSessionCache) {
+      AuthService.clearRequestSessionCache();
+    }
   }
 }

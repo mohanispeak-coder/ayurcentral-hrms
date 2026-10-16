@@ -15,7 +15,7 @@ function testAskHrConfiguration() {
   function pushCheck(id, name, pass, detail, warn) {
     var status = pass ? 'PASS' : (warn ? 'WARN' : 'FAIL');
     checks.push({ id: id, name: name, status: status, detail: detail || '' });
-    Logger.log(status + '  ' + name + (detail ? ' — ' + detail : ''));
+    Logger.log(status + '  ' + name + (detail ? ' - ' + detail : ''));
     return pass;
   }
 
@@ -101,7 +101,7 @@ function testAskHrConfiguration() {
     'min=' + HRMS.ASK_HR.MIN_QUESTION_LEN + ' max=' + HRMS.ASK_HR.MAX_QUESTION_LEN
   );
 
-  // 11. HMAC signing (golden self-test — values never logged)
+  // 11. HMAC signing (golden self-test - values never logged)
   var goldenCanonical = KnowledgeHubClient.canonicalize({
     requestId: '11111111-2222-4333-8444-555555555555',
     timestamp: 1700000000,
@@ -174,14 +174,14 @@ function runAskHrDiagnosticLivePost_(cfg, scriptId, secret, hubUrl) {
   function push(name, pass, detail, warn) {
     var status = pass ? 'PASS' : (warn ? 'WARN' : 'FAIL');
     checks.push({ name: name, status: status, detail: detail || '' });
-    Logger.log(status + '  ' + name + (detail ? ' — ' + detail : ''));
+    Logger.log(status + '  ' + name + (detail ? ' - ' + detail : ''));
     return pass;
   }
 
   if (!cfg.ok || !scriptId || !secret || !hubUrl) {
     e2e.failureCategory = 'CONFIG_MISSING';
-    push('Hub URL reachable', false, 'Skipped — configuration incomplete');
-    push('Live signed POST', false, 'Skipped — configuration incomplete');
+    push('Hub URL reachable', false, 'Skipped - configuration incomplete');
+    push('Live signed POST', false, 'Skipped - configuration incomplete');
     push('Hub JSON response', false, 'Skipped');
     push('Response contract', false, 'Skipped');
     push('Response sanitization', false, 'Skipped');
@@ -398,7 +398,7 @@ function repeatCharDiag_(ch, n) {
 function printAskHrDiagnosticSummary_(checks, e2e, elapsedMs) {
   function row(label, pass, reason) {
     var status = pass ? 'PASS' : 'FAIL';
-    Logger.log(padAskHrDiagLabel_(label, 20) + status + (reason && !pass ? ' — ' + reason : ''));
+    Logger.log(padAskHrDiagLabel_(label, 20) + status + (reason && !pass ? ' - ' + reason : ''));
   }
 
   var cfgPass = !findCheckFail_(checks, ['kh_url_exists', 'kh_secret_exists', 'hub_config_ready', 'ask_hr_constants']);
@@ -435,7 +435,7 @@ function printAskHrDiagnosticSummary_(checks, e2e, elapsedMs) {
   Logger.log('"' + ASK_HR_DIAG_QUESTION_ + '"');
   Logger.log('');
   Logger.log('Answer received:');
-  Logger.log(e2e.answerPreview ? e2e.answerPreview : (e2e.failureCategory ? '[none — ' + e2e.failureCategory + ']' : '[none]'));
+  Logger.log(e2e.answerPreview ? e2e.answerPreview : (e2e.failureCategory ? '[none - ' + e2e.failureCategory + ']' : '[none]'));
   Logger.log('');
   Logger.log('References:');
   Logger.log(String(e2e.referenceCount != null ? e2e.referenceCount : 0));

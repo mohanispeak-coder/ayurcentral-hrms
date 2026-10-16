@@ -1,0 +1,268 @@
+<style>
+.sal-stmt-page .sal-stmt-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.sal-stmt-page .data-table { width: 100%; font-size: 13px; }
+.sal-stmt-page th.num, .sal-stmt-page td.num { text-align: right; white-space: nowrap; }
+</style>
+<script>
+(function () {
+  'use strict';
+  var initialized_ = false;
+  var catalog_ = [];
+  var filter_ = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, vertical: '', runId: '' };
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      if (run() || ++tries > 200) clearInterval(timer);
+    }, 25);
+  }
+
+  whenAppReady(function initSalaryStatementUi(App) {
+    if (initialized_) return;
+    initialized_ = true;
+
+    var callServer = App.callServer;
+    var escapeHtml = App.escapeHtml;
+    var showToast = App.showToast;
+
+    function esc_(v) {
+      return escapeHtml(v == null ? '' : String(v));
+    }
+
+    function pageEl_() {
+      var p = document.getElementById('page-content');
+      if (p) p.classList.remove('hidden');
+      return p;
+    }
+
+    function fmtNum_(v) {
+      if (v === '' || v == null || v === '-') return '-';
+      var n = Number(v);
+      if (!isFinite(n)) return esc_(v);
+      return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function initFilterFromContext_() {
+      if (App.readPayrollPeriodContext) {
+        var ctx = App.readPayrollPeriodContext();
+        if (ctx) {
+          if (ctx.year) filter_.year = Number(ctx.year);
+          if (ctx.month) filter_.month = Number(ctx.month);
+          if (ctx.vertical) filter_.vertical = String(ctx.vertical).trim().toUpperCase();
+        }
+      }
+    }
+
+    function filterPayload_() {
+      return {
+        period_year: filter_.year,
+        period_month: filter_.month,
+        vertical_name: filter_.vertical || '',
+        payroll_run_id: filter_.runId || ''
+      };
+    }
+
+    function reconcileFilterWithRuns_(runs) {
+      if (!runs || !runs.length) return;
+      if (App.reconcilePayrollPeriodWithRuns) {
+        var rec = App.reconcilePayrollPeriodWithRuns({
+          year: filter_.year,
+          month: filter_.month,
+          runId: filter_.runId,
+          vertical: filter_.vertical
+        }, runs);
+        if (rec.year) filter_.year = rec.year;
+        if (rec.month) filter_.month = rec.month;
+        if (rec.runId) filter_.runId = rec.runId;
+        if (rec.vertical) filter_.vertical = rec.vertical;
+        return;
+      }
+      if (!App.suggestPayrollPeriodFromRuns) return;
+      var hasRun = runs.some(function (r) {
+        return Number(r.period_year) === filter_.year &&
+          Number(r.period_month) === filter_.month &&
+          (!filter_.vertical || (App.runVerticalFromRow && App.runVerticalFromRow(r) === filter_.vertical));
+      });
+      if (hasRun) return;
+      var sug = App.suggestPayrollPeriodFromRuns(runs, filter_.vertical);
+      if (!sug) return;
+      filter_.year = sug.year;
+      filter_.month = sug.month;
+      filter_.runId = sug.runId || '';
+      if (sug.vertical) filter_.vertical = sug.vertical;
+    }
+
+    function verticalSelectHtml_(selected) {
+      selected = String(selected || '').trim().toUpperCase();
+      if (!catalog_.length) {
+        return '<select class="form-input" id="sal-stmt-vertical"><option value="">No verticals configured</option></select>';
+      }
+      var opts = '<option value="">Select vertical…</option>' +
+        catalog_.map(function (v) {
+          var code = String(v.vertical_name || '').trim().toUpperCase();
+          var label = App.formatVerticalOptionLabel
+            ? App.formatVerticalOptionLabel(code, v.legal_name)
+            : (code + ' - ' + (v.legal_name || ''));
+          return '<option value="' + esc_(code) + '">' + esc_(label) + '</option>';
+        }).join('');
+      var html = '<select class="form-input" id="sal-stmt-vertical">' + opts + '</select>';
+      return html;
+    }
+
+    function render_(params) {
+      params = App.mergePayrollRouteParams ? App.mergePayrollRouteParams(params || {}) : (params || {});
+      initFilterFromContext_();
+      if (params.year) filter_.year = Number(params.year);
+      if (params.month) filter_.month = Number(params.month);
+      if (params.vertical) filter_.vertical = String(params.vertical).trim().toUpperCase();
+      if (params.runId) filter_.runId = String(params.runId).trim();
+      var page = pageEl_();
+      if (!page) return;
+      page.innerHTML =
+        '<div class="sal-stmt-page"><div class="page-header"><h2>Salary Statement</h2>' +
+        '<p class="page-lede">SAPL-style monthly statement tied to a vertical payroll run: rate of pay, worked days, earned pay, deductions, and net. ' +
+        'Payroll runs are shared for all HR/Admin on the same HRMS. Without a run for the selected vertical and month, only contractual rate of pay is shown.</p></div>' +
+        '<div id="sal-stmt-mount"><div class="hrms-loading-block" aria-busy="true">Loading…</div></div></div>';
+      var runsRpc = App.fetchPayrollRunsList
+        ? App.fetchPayrollRunsList(callServer)
+        : callServer('apiListPayrollRuns');
+      Promise.all([
+        (App.fetchVerticalCatalog ? App.fetchVerticalCatalog(callServer) : callServer('apiGetVerticalCatalog')),
+        runsRpc
+      ]).then(function (res) {
+        catalog_ = res[0] || [];
+        if (!filter_.vertical && catalog_.length) {
+          filter_.vertical = String(catalog_[0].vertical_name || '').trim().toUpperCase();
+        }
+        reconcileFilterWithRuns_(res[1] || []);
+        if (App.persistPayrollPeriodContext) {
+          App.persistPayrollPeriodContext({
+            year: filter_.year,
+            month: filter_.month,
+            vertical: filter_.vertical,
+            runId: filter_.runId
+          });
+        }
+        load_();
+      }).catch(function () {
+        catalog_ = [];
+        load_();
+      });
+    }
+
+    function load_() {
+      if (!filter_.vertical) {
+        paintShell_(null, { status_message: 'Select a vertical to load the salary statement.', rows: [], preview_mode: true });
+        return;
+      }
+      callServer('apiListSalaryStatement', filterPayload_()).then(function (data) {
+        paintShell_(data || {}, data || {});
+      }).catch(function (err) {
+        var m = document.getElementById('sal-stmt-mount');
+        if (m) m.innerHTML = '<div class="alert alert-danger">' + esc_(err.message || 'Failed to load salary statement.') + '</div>';
+      });
+    }
+
+    function paintShell_(data, tableData) {
+      var m = document.getElementById('sal-stmt-mount');
+      if (!m) return;
+      data = data || {};
+      tableData = tableData || data;
+      m.innerHTML =
+        '<div class="card"><div class="sal-stmt-head">' +
+        '<div class="form-group"><label class="form-label">Year</label><input class="form-input" type="number" id="sal-stmt-year" value="' + esc_(filter_.year) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Month</label><input class="form-input" type="number" min="1" max="12" id="sal-stmt-month" value="' + esc_(filter_.month) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Vertical</label>' + verticalSelectHtml_(filter_.vertical) + '</div>' +
+        '<button type="button" class="btn btn-secondary" id="sal-stmt-apply">Apply</button>' +
+        '<button type="button" class="btn btn-primary" id="sal-stmt-dl">Download Excel</button>' +
+        '</div>' +
+        '<div id="sal-stmt-body"></div></div>';
+
+      var sel = document.getElementById('sal-stmt-vertical');
+      if (sel && filter_.vertical) sel.value = filter_.vertical;
+
+      document.getElementById('sal-stmt-apply').addEventListener('click', function () {
+        filter_.year = Number(document.getElementById('sal-stmt-year').value);
+        filter_.month = Number(document.getElementById('sal-stmt-month').value);
+        filter_.vertical = String(document.getElementById('sal-stmt-vertical').value || '').trim().toUpperCase();
+        if (App.persistPayrollPeriodContext) {
+          App.persistPayrollPeriodContext({ year: filter_.year, month: filter_.month, vertical: filter_.vertical });
+        }
+        load_();
+      });
+
+      document.getElementById('sal-stmt-dl').addEventListener('click', function () {
+        if (!filter_.vertical) {
+          showToast('Select a vertical first.', 'error');
+          return;
+        }
+        var btn = this;
+        callServer('apiDownloadSalaryStatement', filterPayload_(), { button: btn, loadingText: 'Downloading…' })
+          .then(function (res) {
+            if (!res || !res.base64) {
+              showToast('Download returned no file.', 'error');
+              return;
+            }
+            var binary = atob(res.base64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            var blob = new Blob([bytes], { type: res.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = res.fileName || 'Salary_Statement.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Salary statement downloaded (' + (res.periodLabel || '') + ').', 'success');
+          })
+          .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
+      });
+
+      paintTable_(tableData);
+    }
+
+    function paintTable_(data) {
+      var body = document.getElementById('sal-stmt-body');
+      if (!body) return;
+      var rows = data.rows || [];
+      var runHint = data.payroll_run_id
+        ? 'Payroll run ' + esc_(data.payroll_run_id) + ' (' + esc_(data.payroll_status) + ')'
+        : (data.preview_mode ? 'Preview - no payroll run' : 'No payroll run');
+      var statusLine = data.status_message ? esc_(data.status_message) : '';
+      var alertClass = data.preview_mode && filter_.vertical ? 'alert alert-warning' : 'hint';
+
+      var tableBody = rows.map(function (r) {
+        return '<tr><td class="mono">' + esc_(r.employee_id) + '</td><td>' + esc_(r.display_name) + '</td><td>' +
+          esc_(r.designation) + '</td><td>' + esc_(r.department) + '</td><td class="num">' + esc_(r.fixed_days) +
+          '</td><td class="num">' + esc_(r.worked_days) + '</td><td class="num">' + fmtNum_(r.rate_gross) +
+          '</td><td class="num">' + fmtNum_(r.earned_gross) +
+          '</td><td class="num">' + fmtNum_(r.total_deductions) +
+          '</td><td class="num">' + fmtNum_(r.net_pay) + '</td><td class="num">' + fmtNum_(r.employer_ctc) +
+          '</td></tr>';
+      }).join('');
+
+      body.innerHTML =
+        (statusLine ? '<p class="' + alertClass + '">' + statusLine + '</p>' : '') +
+        '<p class="hint">' + esc_(data.period_label || '') + ' · ' + esc_(rows.length) + ' employee(s) · ' + runHint + '</p>' +
+        (rows.length
+          ? '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+            '<th>EMP ID</th><th>Name</th><th>Designation</th><th>Department</th>' +
+            '<th class="num">Fixed days</th><th class="num">Worked</th><th class="num">Rate gross</th>' +
+            '<th class="num">Earned gross</th><th class="num">Total ded</th><th class="num">Net pay</th><th class="num">Cost (earn+ER)</th>' +
+            '</tr></thead><tbody>' + tableBody + '</tbody></table></div>'
+          : '<p class="hint">No active employees for this filter.</p>');
+
+      if (App.markModuleViewLoaded) App.markModuleViewLoaded('salary-statement');
+    }
+
+    App.registerRoute('salary-statement', { title: 'Salary Statement', render: render_ });
+  });
+})();
+</script>

@@ -107,12 +107,26 @@
 
   function $(id) { return document.getElementById(id); }
   function getSessionToken() {
-    try { return sessionStorage.getItem(SESSION_STORAGE_KEY) || ''; } catch (e) { return ''; }
+    try {
+      var token = localStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) return token;
+      token = sessionStorage.getItem(SESSION_STORAGE_KEY) || '';
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+      return token;
+    } catch (e) { return ''; }
   }
   function setSessionToken(token) {
     try {
-      if (token) sessionStorage.setItem(SESSION_STORAGE_KEY, token);
-      else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      if (token) {
+        localStorage.setItem(SESSION_STORAGE_KEY, token);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+      } else {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
     } catch (ignore) {}
   }
   function escapeHtml(str) {
@@ -218,11 +232,27 @@
   function isActionOpts_(obj) {
     if (!obj || typeof obj !== 'object' || obj.nodeType) return false;
     if (Object.prototype.toString.call(obj) === '[object Array]') return false;
-    return !!(obj.button || obj.loadingButton || obj.feedback || obj.feedbackEl);
+    var btn = obj.button || obj.loadingButton;
+    if (btn && btn.nodeType === 1) return true;
+    var fb = obj.feedback || obj.feedbackEl;
+    if (fb && fb.nodeType === 1) return true;
+    if (obj.background === true) return true;
+    if (typeof obj.loadingText === 'string' && !obj.button && !obj.loadingButton) return true;
+    return false;
+  }
+  function extractActionOpts_(args) {
+    var action = null;
+    while (args.length) {
+      var last = args[args.length - 1];
+      if (!isActionOpts_(last)) break;
+      action = last;
+      args.pop();
+    }
+    return action;
   }
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
-    var action = args.length && isActionOpts_(args[args.length - 1]) ? args.pop() : null;
+    var action = extractActionOpts_(args);
     args.push(getSessionToken());
     var button = action && (action.button || action.loadingButton);
     var feedback = action && (action.feedback || action.feedbackEl);

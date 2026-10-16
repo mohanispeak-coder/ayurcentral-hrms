@@ -44,11 +44,11 @@ var SHELL_IDS = [
   'btn-sign-out', 'loading-state', 'error-state', 'unauthorized-state', 'unauthorized-message',
   'auth-state', 'auth-step-email', 'auth-google-hint', 'auth-email', 'auth-email-error',
   'auth-send-btn', 'auth-step-code', 'auth-email-display', 'auth-code', 'auth-code-error',
-  'auth-verify-btn', 'auth-resend-btn', 'auth-change-email-btn', 'setup-state',
+  'auth-verify-btn', 'auth-resend-btn', 'auth-change-email-btn',
+  'auth-step-demo', 'auth-demo-user-id', 'auth-demo-password', 'auth-demo-error', 'auth-demo-btn',
+  'setup-state',
   'btn-run-setup', 'setup-result', 'page-content', 'main-content', 'module-ui-root',
-  'toast-container', 'ask-hr-fab', 'ask-hr-panel', 'ask-hr-clear', 'ask-hr-close',
-  'ask-hr-messages', 'ask-hr-intro', 'ask-hr-thread', 'ask-hr-form', 'ask-hr-input',
-  'ask-hr-send', 'ask-hr-compose-error'
+  'toast-container'
 ];
 
 function loadShell() {
@@ -175,8 +175,6 @@ function loadShell() {
   });
   byId['auth-email'] = fakeEl('input', 'auth-email');
   byId['auth-code'] = fakeEl('input', 'auth-code');
-  byId['ask-hr-input'] = fakeEl('textarea', 'ask-hr-input');
-
   var body = fakeEl('body');
   var document = {
     readyState: 'loading',

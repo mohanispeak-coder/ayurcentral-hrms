@@ -21,9 +21,11 @@ var PayrollService = (function () {
     if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
       return new Date(v.getFullYear(), v.getMonth(), v.getDate());
     }
-    var s = String(v).substring(0, 10);
-    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    var s = String(v).trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+    if (dmy) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
     var d = new Date(v);
     if (isNaN(d.getTime())) return null;
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -39,9 +41,216 @@ var PayrollService = (function () {
     return m;
   }
 
+  function ensurePayrollRunSchema_() {
+    if (typeof SchemaService !== 'undefined' && SchemaService.ensureSheetHeaders) {
+      try {
+        SchemaService.ensureSheetHeaders(HRMS.SHEETS.PAYROLL_RUNS);
+      } catch (ignore) {}
+    }
+  }
+
+  function normalizeVerticalCode_(value) {
+    return String(value == null ? '' : value).trim().toUpperCase();
+  }
+
+  function listConfiguredVerticals_() {
+    var rows = [];
+    try {
+      if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.listVerticalCatalog) {
+        rows = EmployeeRepository.listVerticalCatalog() || [];
+      }
+    } catch (ignore) {}
+    if (!rows.length) return ['SAPL', 'AOPL', 'AOMS'];
+    return rows.map(function (r) {
+      return normalizeVerticalCode_(r.vertical_name);
+    }).filter(Boolean);
+  }
+
+  function assertPayrollVertical_(verticalName) {
+    var code = normalizeVerticalCode_(verticalName);
+    if (!code) {
+      throw validationError_('Select a vertical for this payroll run.', { fields: { vertical_name: 'Required.' } });
+    }
+    var allowed = listConfiguredVerticals_();
+    if (allowed.indexOf(code) < 0) {
+      throw validationError_('Unknown vertical: ' + code);
+    }
+    return code;
+  }
+
+  function verticalFromPayrollRunId_(runId) {
+    var parts = String(runId || '').trim().split('-');
+    if (parts[0] !== 'PR' || parts.length < 4) return '';
+    var vert = parts[3];
+    if (!vert || /^C\d+$/i.test(vert)) return '';
+    return normalizeVerticalCode_(vert);
+  }
+
+  function runVertical_(run) {
+    var v = normalizeVerticalCode_(run && run.vertical_name);
+    if (v) return v;
+    return verticalFromPayrollRunId_(run && run.payroll_run_id);
+  }
+
+  /**
+   * Shared payroll run for a month + vertical (org-wide, not per user).
+   * @param {number} year
+   * @param {number} month
+   * @param {string=} vertical
+   * @param {string=} preferredRunId
+   */
+  function resolveRunForPeriod_(year, month, vertical, preferredRunId) {
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    if (preferredRunId) {
+      var byId = null;
+      runs.forEach(function (r) {
+        if (String(r.payroll_run_id) === String(preferredRunId)) byId = r;
+      });
+      if (byId) return byId;
+    }
+    var y = Number(year);
+    var m = Number(month);
+    var list = runs.filter(function (r) {
+      return Number(r.period_year) === y && Number(r.period_month) === m;
+    });
+    var want = normalizeVerticalCode_(vertical);
+    if (want) {
+      var matched = list.filter(function (r) { return runVertical_(r) === want; });
+      matched.sort(function (a, b) {
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
+      return matched.length ? matched[0] : null;
+    }
+    list.sort(function (a, b) {
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+    return list.length ? list[0] : null;
+  }
+
+  /** Latest run (optionally for one vertical) when UI period does not match any open month. */
+  function suggestPayrollPeriodFromRuns_(preferredVertical) {
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    if (!runs.length) return null;
+    var want = normalizeVerticalCode_(preferredVertical);
+    runs.sort(function (a, b) {
+      var ya = Number(b.period_year) - Number(a.period_year);
+      if (ya !== 0) return ya > 0 ? 1 : -1;
+      var ma = Number(b.period_month) - Number(a.period_month);
+      if (ma !== 0) return ma > 0 ? 1 : -1;
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+    var pick = null;
+    if (want) {
+      for (var i = 0; i < runs.length; i++) {
+        if (runVertical_(runs[i]) === want) {
+          pick = runs[i];
+          break;
+        }
+      }
+    }
+    if (!pick) pick = runs[0];
+    return {
+      period_year: Number(pick.period_year),
+      period_month: Number(pick.period_month),
+      payroll_run_id: pick.payroll_run_id,
+      vertical_name: runVertical_(pick),
+      status: String(pick.status || '')
+    };
+  }
+
+  function employeeVertical_(emp) {
+    if (!emp) return '';
+    var v = normalizeVerticalCode_(emp.vertical_name);
+    if (!v && emp.employee_id) {
+      v = normalizeVerticalCode_(String(emp.employee_id).split('-')[0]);
+    }
+    return v;
+  }
+
+  function primaryRunIdFor_(year, month, vertical) {
+    var base = 'PR-' + year + '-' + padMonth_(month);
+    if (vertical) return base + '-' + vertical;
+    return base;
+  }
+
+  function nextCorrectionIdFromSource_(source) {
+    var sourceId = String(source.payroll_run_id || '');
+    var base = sourceId.replace(/-C\d+$/i, '');
+    var prefix = base + '-C';
+    var max = 0;
+    DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).forEach(function (r) {
+      var id = String(r.payroll_run_id || '');
+      if (id.indexOf(prefix) !== 0) return;
+      var n = Number(id.substring(prefix.length));
+      if (n > max) max = n;
+    });
+    return prefix + (max + 1);
+  }
+
   function num_(v) {
     var n = Number(v);
     return isFinite(n) ? n : 0;
+  }
+
+  function refreshAttendanceDerivedDays_(run, inputs, employees) {
+    inputs = inputs || [];
+    if (typeof AttendanceRegisterService === 'undefined' ||
+        !AttendanceRegisterService.applyDerivedDaysToInput_) {
+      return inputs;
+    }
+    var year = Number(run.period_year);
+    var month = Number(run.period_month);
+    var updates = [];
+    var refreshed = inputs.map(function (inp) {
+      var emp = resolveEmployee_(employees, inp.employee_id) || { employee_id: inp.employee_id };
+      var next = AttendanceRegisterService.applyDerivedDaysToInput_(inp, year, month, emp.vertical_name, emp);
+      if (Math.abs(num_(next.working_days) - num_(inp.working_days)) > 0.001 ||
+          Math.abs(num_(next.paid_days) - num_(inp.paid_days)) > 0.001 ||
+          Math.abs(num_(next.lop_days) - num_(inp.lop_days)) > 0.001) {
+        updates.push({
+          pk: inp.payroll_input_id,
+          updates: {
+            working_days: next.working_days,
+            paid_days: next.paid_days,
+            lop_days: next.lop_days
+          }
+        });
+      }
+      return next;
+    });
+    if (updates.length) {
+      DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', updates);
+    }
+    return refreshed;
+  }
+
+  function hasCompleteAttendance_(inp, periodYear, periodMonth) {
+    if (!inp) return false;
+    if (inp.daily_attendance_json && typeof AttendanceRegisterService !== 'undefined') {
+      var reg = AttendanceRegisterService.parseRegister_(inp.daily_attendance_json);
+      if (periodYear && periodMonth) {
+        return AttendanceRegisterService.isRegisterComplete_(reg, periodYear, periodMonth);
+      }
+      return Object.keys(reg).length > 0;
+    }
+    var w = num_(inp.working_days);
+    var p = num_(inp.paid_days);
+    var l = num_(inp.lop_days);
+    return w > 0 && p >= 0 && l >= 0 && Math.abs(p + l - w) < 0.001;
+  }
+
+  function assertAttendanceComplete_(inputs, periodYear, periodMonth) {
+    inputs = inputs || [];
+    if (!inputs.length) {
+      throw validationError_('No employees in this payroll run. Sync eligible employees first.');
+    }
+    var incomplete = inputs.filter(function (inp) {
+      return !hasCompleteAttendance_(inp, periodYear, periodMonth);
+    });
+    if (incomplete.length) {
+      throw validationError_('Attendance is incomplete for ' + incomplete.length +
+        ' of ' + inputs.length + ' employees. Complete the daily register (all days in the month) before calculating.');
+    }
   }
 
   function parseRequiredNumber_(value, field, employeeId) {
@@ -85,10 +294,244 @@ var PayrollService = (function () {
     return serializeSheetRow_(run, PAYROLL_RUN_DATE_FIELDS_);
   }
 
-  function getRun_(runId) {
-    var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
-    if (!run) throw notFoundError_('Payroll run not found.');
-    return run;
+  /** Client payroll table uses amounts/flags/payslip id - not the full breakdown JSON. */
+  function serializeRecordForClient_(rec) {
+    if (!rec) return null;
+    var out = serializeSheetRow_(rec, PAYROLL_RECORD_DATE_FIELDS_);
+    delete out.component_breakdown;
+    return out;
+  }
+
+  var DETAIL_AFTER_MUTATION_ = { skipSync: true, alreadyLocked: true };
+
+  function humanizeExceptionFlag_(flag) {
+    var key = String(flag || '').toUpperCase();
+    var map = {
+      MISSING_STRUCTURE: 'Salary structure is not configured.',
+      MISSING_BANK: 'Bank account is missing.',
+      MISSING_PAN: 'PAN number is missing.',
+      NEGATIVE_NET: 'Net pay is negative.',
+      WORKING_DAYS_ZERO: 'Working days must be greater than zero.'
+    };
+    return map[key] || String(flag || '');
+  }
+
+  function humanizeLockBlock_(block) {
+    var text = String(block || '');
+    var codeMatch = text.match(/^(MISSING_STRUCTURE|MISSING_BANK|MISSING_PAN|NEGATIVE_NET|WORKING_DAYS_ZERO)/);
+    if (codeMatch) {
+      var base = humanizeExceptionFlag_(codeMatch[1]);
+      var countMatch = text.match(/\((\d+)\)/);
+      return countMatch ? base + ' (' + countMatch[1] + ' employee' + (Number(countMatch[1]) === 1 ? '' : 's') + ')' : base;
+    }
+    if (text === 'No calculated records') return 'Payroll has not been calculated yet.';
+    return text;
+  }
+
+  function uiPhaseForStatus_(status) {
+    var st = String(status || '').toUpperCase();
+    if (st === HRMS.PAYROLL_STATUS.LOCKED) return 'FINALIZED';
+    if (st === HRMS.PAYROLL_STATUS.APPROVED) return 'REVIEW';
+    if (st === HRMS.PAYROLL_STATUS.UNDER_REVIEW) return 'REVIEW';
+    if (st === HRMS.PAYROLL_STATUS.CALCULATED) return 'REVIEW';
+    return 'PREPARE';
+  }
+
+  function uiPhaseLabel_(phase) {
+    if (phase === 'FINALIZED') return 'Finalized';
+    if (phase === 'REVIEW') return 'Review';
+    if (phase === 'CALCULATE') return 'Calculate';
+    return 'Prepare';
+  }
+
+  function enrichExceptionMessage_(flag, employeeId, employees, periodEnd) {
+    var emp = resolveEmployee_(employees, employeeId) || {};
+    var base = humanizeExceptionFlag_(flag);
+    if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE && typeof CompensationService !== 'undefined' &&
+        CompensationService.explainStructureGap) {
+      var hint = CompensationService.explainStructureGap(employeeId, periodEnd);
+      return hint ? base + ' ' + hint : base;
+    }
+    if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_BANK) {
+      var acc = String(emp.bank_account_number || '').trim();
+      var ifsc = String(emp.bank_ifsc || '').trim();
+      if (!acc && !ifsc) return base + ' Add bank account number and IFSC on the employee profile.';
+      if (!acc) return base + ' Bank account number is missing.';
+      if (!ifsc) return base + ' IFSC is missing.';
+    }
+    if (flag === HRMS.PAYROLL_EXCEPTION.MISSING_PAN) {
+      return base + ' Add PAN on the employee profile (Personal or Payroll tab).';
+    }
+    return base;
+  }
+
+  function normalizeEmployeeId_(employeeId) {
+    return String(employeeId || '').trim().toUpperCase();
+  }
+
+  function resolveEmployee_(employees, employeeId) {
+    if (!employees || !employeeId) return null;
+    var raw = String(employeeId);
+    if (employees[raw]) return employees[raw];
+    var norm = normalizeEmployeeId_(raw);
+    if (employees[norm]) return employees[norm];
+    var found = null;
+    Object.keys(employees).forEach(function (key) {
+      if (normalizeEmployeeId_(key) === norm) found = employees[key];
+    });
+    return found;
+  }
+
+  function indexPayrollRecords_(records) {
+    var map = {};
+    (records || []).forEach(function (r) {
+      if (!r || !r.employee_id) return;
+      map[String(r.employee_id)] = r;
+      var norm = normalizeEmployeeId_(r.employee_id);
+      if (norm) map[norm] = r;
+    });
+    return map;
+  }
+
+  function resolvePayrollRecord_(recMap, employeeId) {
+    if (!recMap || !employeeId) return null;
+    return recMap[String(employeeId)] || recMap[normalizeEmployeeId_(employeeId)] || null;
+  }
+
+  function structureReadyForPayroll_(bundle) {
+    if (!bundle || !bundle.components || !bundle.components.length) return false;
+    if (typeof CompensationService !== 'undefined' && CompensationService.isPayrollStructureReady) {
+      return CompensationService.isPayrollStructureReady(bundle);
+    }
+    return true;
+  }
+
+  function liveExceptionFlags_(inp, employees, periodEnd, record) {
+    var empId = inp.employee_id;
+    var emp = resolveEmployee_(employees, empId);
+    if (!emp || !String(emp.pan || '').trim() || !String(emp.bank_account_number || '').trim()) {
+      try {
+        if (typeof EmployeeRepository !== 'undefined' && EmployeeRepository.findById) {
+          var full = EmployeeRepository.findById(empId);
+          if (full) emp = full;
+        }
+      } catch (ignoreEmp) {}
+    }
+    if (!emp) emp = { employee_id: empId };
+    var flags = [];
+    var bundle = null;
+    try {
+      if (typeof CompensationService !== 'undefined' && CompensationService.getStructureInForce) {
+        bundle = CompensationService.getStructureInForce(empId, periodEnd);
+      }
+    } catch (ignoreBundle) {}
+    if (!structureReadyForPayroll_(bundle)) {
+      flags.push(HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE);
+    }
+    if (typeof PayrollEngine !== 'undefined' && PayrollEngine.hasBank && !PayrollEngine.hasBank(emp)) {
+      flags.push(HRMS.PAYROLL_EXCEPTION.MISSING_BANK);
+    }
+    if (!String(emp.pan || '').trim()) {
+      flags.push(HRMS.PAYROLL_EXCEPTION.MISSING_PAN);
+    }
+    if (record && record.exception_flags) {
+      String(record.exception_flags).split(';').filter(Boolean).forEach(function (flag) {
+        if (flag === HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET ||
+            flag === HRMS.PAYROLL_EXCEPTION.WORKING_DAYS_ZERO) {
+          if (flags.indexOf(flag) < 0) flags.push(flag);
+        }
+      });
+    }
+    return flags;
+  }
+
+  function collectExceptionsHuman_(records, employees, periodEnd, inputs) {
+    var list = [];
+    var recMap = indexPayrollRecords_(records);
+    var rows = inputs && inputs.length ? inputs : (records || []);
+    rows.forEach(function (inp) {
+      var empId = inp.employee_id;
+      if (!empId) return;
+      var rec = resolvePayrollRecord_(recMap, empId);
+      var flags = periodEnd
+        ? liveExceptionFlags_(inp, employees, periodEnd, rec)
+        : (rec && rec.exception_flags ? String(rec.exception_flags).split(';').filter(Boolean) : []);
+      if (!flags.length) return;
+      var emp = resolveEmployee_(employees, empId) || {};
+      list.push({
+        employee_id: empId,
+        display_name: emp.display_name || empId,
+        flags: flags,
+        messages: flags.map(function (flag) {
+          return enrichExceptionMessage_(flag, empId, employees, periodEnd);
+        })
+      });
+    });
+    return list;
+  }
+
+  function buildFinalizeBlockers_(records, employees, periodEnd, inputs) {
+    var groups = {};
+    var recMap = indexPayrollRecords_(records);
+    var rows = inputs && inputs.length ? inputs : (records || []);
+    rows.forEach(function (inp) {
+      var r = resolvePayrollRecord_(recMap, inp.employee_id);
+      var flags = periodEnd
+        ? liveExceptionFlags_(inp, employees, periodEnd, r)
+        : (r && r.exception_flags ? String(r.exception_flags).split(';').filter(Boolean) : []);
+      if (!flags.length) return;
+      var emp = resolveEmployee_(employees, inp.employee_id) || {};
+      var item = {
+        employee_id: inp.employee_id,
+        display_name: emp.display_name || inp.employee_id
+      };
+      flags.forEach(function (flag) {
+        var key = String(flag || '').toUpperCase();
+        if (key !== HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE &&
+            key !== HRMS.PAYROLL_EXCEPTION.MISSING_BANK &&
+            key !== HRMS.PAYROLL_EXCEPTION.MISSING_PAN &&
+            key !== HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET &&
+            key !== HRMS.PAYROLL_EXCEPTION.WORKING_DAYS_ZERO) {
+          return;
+        }
+        if (!groups[key]) groups[key] = [];
+        if (!groups[key].some(function (x) { return x.employee_id === item.employee_id; })) {
+          groups[key].push(item);
+        }
+      });
+    });
+    var blockStructure = ConfigService.getSetting('block_lock_missing_structure', true);
+    var blockBank = ConfigService.getSetting('block_lock_missing_bank', true);
+    var allowNeg = ConfigService.getSetting('allow_lock_negative_net', false);
+    var out = [];
+    function push(code, employeesList, blocked) {
+      if (!blocked || !employeesList.length) return;
+      out.push({
+        code: code,
+        message: humanizeExceptionFlag_(code),
+        employees: employeesList
+      });
+    }
+    push(HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE, groups[HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE] || [], blockStructure);
+    push(HRMS.PAYROLL_EXCEPTION.MISSING_BANK, groups[HRMS.PAYROLL_EXCEPTION.MISSING_BANK] || [], blockBank);
+    push(HRMS.PAYROLL_EXCEPTION.MISSING_PAN, groups[HRMS.PAYROLL_EXCEPTION.MISSING_PAN] || [], true);
+    push(HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET, groups[HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET] || [], !allowNeg);
+    push(HRMS.PAYROLL_EXCEPTION.WORKING_DAYS_ZERO, groups[HRMS.PAYROLL_EXCEPTION.WORKING_DAYS_ZERO] || [], true);
+    return out;
+  }
+
+  function buildExceptionSummary_(records, employees) {
+    var exceptions = collectExceptionsHuman_(records, employees);
+    var ready = 0;
+    (records || []).forEach(function (r) {
+      if (r && !r.exception_flags) ready++;
+    });
+    return {
+      total_employees: (records || []).length,
+      ready_count: ready,
+      attention_count: exceptions.length,
+      exceptions: exceptions
+    };
   }
 
   function assertMutableInputs_(run) {
@@ -111,81 +554,162 @@ var PayrollService = (function () {
       if (ma !== 0) return ma > 0 ? -1 : 1;
       return serializeDateTime_(b.created_at).localeCompare(serializeDateTime_(a.created_at));
     });
-    return runs.map(serializeRun_);
+    return runs.map(function (r) {
+      var ser = serializeRun_(r);
+      ser.attendance_input_count = countAttendanceInputs_(r.payroll_run_id);
+      return ser;
+    });
   }
 
-  function getRunDetail(runId) {
+  /**
+   * @param {string} runId
+   * @param {Object=} options { skipSync: true, alreadyLocked: true }
+   */
+  function getRunDetail(runId, options) {
     requireHr_();
+    options = options || {};
     var run = getRun_(runId);
+    var st = String(run.status).toUpperCase();
+    var syncMeta = { added: 0, total: 0, error: '' };
+    if (!options.skipSync &&
+        (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED)) {
+      try {
+        syncMeta = syncEligibleEmployees(runId, { alreadyLocked: !!options.alreadyLocked }) || syncMeta;
+      } catch (syncErr) {
+        syncMeta.error = String(syncErr && syncErr.message ? syncErr.message : syncErr);
+        Logger.log('Payroll syncEligibleEmployees: ' + syncMeta.error);
+      }
+      run = getRun_(runId);
+    } else {
+      syncMeta.total = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).length;
+    }
     var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-    var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
     var employees = indexEmployees_();
+    if (!options.skipSync &&
+        (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED)) {
+      inputs = refreshAttendanceDerivedDays_(run, inputs, employees);
+    }
+    var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
     var rows = mergeRows_(inputs, records, employees).map(function (row) {
-      var rec = row.record ? serializeSheetRow_(row.record, PAYROLL_RECORD_DATE_FIELDS_) : null;
+      var rec = serializeRecordForClient_(row.record);
       return {
         input: row.input,
         record: rec,
         employee: row.employee,
-        amounts: rowAmounts_(rec),
-        warnings: rowWarnings_(row.input, rec)
+        amounts: rowAmounts_(row.record),
+        warnings: rowWarnings_(row.input, row.record)
       };
     });
+    var uiPhase = uiPhaseForStatus_(run.status);
     return {
       run: serializeRun_(run),
       rows: rows,
       summary: buildSummary_(rows),
-      exceptions: collectExceptions_(records),
+      exceptions: collectExceptionsHuman_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
+      exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
-      lockBlocks: evaluateLockBlocks_(run, records, true),
-      payslipStatus: payslipStatus_(records)
+      lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
+      finalizeBlockers: buildFinalizeBlockers_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
+      payslipStatus: payslipStatus_(records),
+      uiPhase: uiPhase,
+      uiPhaseLabel: uiPhaseLabel_(uiPhase),
+      syncMeta: syncMeta,
+      eligibleCount: eligibleEmployees_(run.period_year, run.period_month, runVertical_(run)).length,
+      legacyImportHint: buildLegacyImportHint_(run)
     };
   }
 
-  function createRun(periodYear, periodMonth, notes) {
+  function getRun_(runId) {
+    var run = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId });
+    if (!run) throw notFoundError_('Payroll run not found.');
+    return run;
+  }
+
+  function createRunInsideLock_(session, year, month, vertical, notes) {
+    var open = findOpenRun_(year, month, vertical);
+    if (open) {
+      var scope = vertical ? ('vertical ' + vertical) : 'this month';
+      throw conflictError_('A non-LOCKED run already exists for ' + scope + ': ' + open.payroll_run_id);
+    }
+    var runId = primaryRunIdFor_(year, month, vertical);
+    if (DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId })) {
+      throw conflictError_('Run ID ' + runId + ' already exists. Use a correction run after lock.');
+    }
+    var workingDefault = Number(ConfigService.getSetting('default_working_days', 26)) || 26;
+    var now = new Date();
+    var run = {
+      payroll_run_id: runId,
+      period_year: year,
+      period_month: month,
+      vertical_name: vertical,
+      status: HRMS.PAYROLL_STATUS.DRAFT,
+      working_days_default: workingDefault,
+      currency: 'INR',
+      calculated_at: '',
+      approved_at: '',
+      approved_by_email: '',
+      locked_at: '',
+      locked_by_email: '',
+      correction_of_run_id: '',
+      notes: notes || '',
+      created_at: now,
+      created_by_email: session.email
+    };
+    DbService.insertRecord(HRMS.SHEETS.PAYROLL_RUNS, run);
+    seedInputs_(run);
+    tryAutoImportFromLegacy_(run);
+    AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', runId,
+      'Created payroll run ' + runId, session.employee_id);
+    return run;
+  }
+
+  function createRun(periodYear, periodMonth, verticalName, notes) {
     var session = requireHr_();
+    ensurePayrollRunSchema_();
+    var year = Number(periodYear);
+    var month = Number(periodMonth);
+    if (!year || month < 1 || month > 12) {
+      throw validationError_('Valid period_year and period_month (1–12) are required.');
+    }
+    var vertical = normalizeVerticalCode_(verticalName);
+    if (vertical) vertical = assertPayrollVertical_(vertical);
+    return withScriptLock_(function () {
+      var run = createRunInsideLock_(session, year, month, vertical, notes);
+      return getRunDetail(run.payroll_run_id, DETAIL_AFTER_MUTATION_);
+    });
+  }
+
+  function createRunsForAllVerticals(periodYear, periodMonth, notes) {
+    var session = requireHr_();
+    ensurePayrollRunSchema_();
     var year = Number(periodYear);
     var month = Number(periodMonth);
     if (!year || month < 1 || month > 12) {
       throw validationError_('Valid period_year and period_month (1–12) are required.');
     }
     return withScriptLock_(function () {
-      var open = findOpenRun_(year, month);
-      if (open) {
-        throw conflictError_('A non-LOCKED run already exists for this month: ' + open.payroll_run_id);
-      }
-      var runId = 'PR-' + year + '-' + padMonth_(month);
-      if (DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: runId })) {
-        throw conflictError_('Run ID ' + runId + ' already exists. Use a correction run after lock.');
-      }
-      var workingDefault = Number(ConfigService.getSetting('default_working_days', 26)) || 26;
-      var now = new Date();
-      var run = {
-        payroll_run_id: runId,
-        period_year: year,
-        period_month: month,
-        status: HRMS.PAYROLL_STATUS.DRAFT,
-        working_days_default: workingDefault,
-        currency: 'INR',
-        calculated_at: '',
-        approved_at: '',
-        approved_by_email: '',
-        locked_at: '',
-        locked_by_email: '',
-        correction_of_run_id: '',
-        notes: notes || '',
-        created_at: now,
-        created_by_email: session.email
-      };
-      DbService.insertRecord(HRMS.SHEETS.PAYROLL_RUNS, run);
-      seedInputs_(run);
-      AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', runId,
-        'Created payroll run ' + runId, session.employee_id);
-      return getRunDetail(runId);
+      var verticals = listConfiguredVerticals_();
+      var created = [];
+      var skipped = [];
+      verticals.forEach(function (v) {
+        try {
+          var run = createRunInsideLock_(session, year, month, assertPayrollVertical_(v), notes);
+          created.push(serializeRun_(run));
+        } catch (e) {
+          if (e && e.hrmsCode === HRMS.ERROR_CODES.CONFLICT) {
+            skipped.push({ vertical: v, reason: e.message });
+          } else {
+            throw e;
+          }
+        }
+      });
+      return { created: created, skipped: skipped, verticals: verticals };
     });
   }
 
   function createCorrectionRun(sourceRunId, notes) {
     var session = requireHr_();
+    ensurePayrollRunSchema_();
     return withScriptLock_(function () {
       var source = getRun_(sourceRunId);
       if (String(source.status).toUpperCase() !== HRMS.PAYROLL_STATUS.LOCKED) {
@@ -193,16 +717,19 @@ var PayrollService = (function () {
       }
       var year = Number(source.period_year);
       var month = Number(source.period_month);
-      var open = findOpenRun_(year, month);
+      var vertical = runVertical_(source);
+      var open = findOpenRun_(year, month, vertical);
       if (open) {
-        throw conflictError_('A non-LOCKED run already exists for this month: ' + open.payroll_run_id);
+        var scope = vertical ? ('vertical ' + vertical) : 'this month';
+        throw conflictError_('A non-LOCKED run already exists for ' + scope + ': ' + open.payroll_run_id);
       }
-      var runId = nextCorrectionId_(year, month);
+      var runId = nextCorrectionIdFromSource_(source);
       var now = new Date();
       var run = {
         payroll_run_id: runId,
         period_year: year,
         period_month: month,
+        vertical_name: vertical,
         status: HRMS.PAYROLL_STATUS.DRAFT,
         working_days_default: source.working_days_default,
         currency: 'INR',
@@ -220,7 +747,7 @@ var PayrollService = (function () {
       seedInputsFromSource_(run, source);
       AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CORRECT, 'PayrollRuns', runId,
         'Correction run of ' + source.payroll_run_id, session.employee_id);
-      return getRunDetail(runId);
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
   }
 
@@ -229,8 +756,13 @@ var PayrollService = (function () {
     return withScriptLock_(function () {
       var run = getRun_(runId);
       assertMutableInputs_(run);
+      var existingById = {};
+      DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+        existingById[String(inp.payroll_input_id)] = inp;
+      });
+      var items = [];
       (inputRows || []).forEach(function (row) {
-        var existing = DbService.findOne(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_input_id: row.payroll_input_id });
+        var existing = existingById[String(row.payroll_input_id)];
         if (!existing || existing.payroll_run_id !== runId) {
           throw validationError_('Invalid payroll_input_id for this run.');
         }
@@ -239,19 +771,25 @@ var PayrollService = (function () {
         var lop = parseRequiredNumber_(row.lop_days, 'lop_days', existing.employee_id);
         if (working <= 0) throw validationError_('working_days must be greater than 0 for ' + existing.employee_id);
         if (paid < 0 || lop < 0) throw validationError_('paid_days and lop_days cannot be negative.');
-        DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', row.payroll_input_id, {
-          working_days: working,
-          paid_days: paid,
-          lop_days: lop,
-          bonus: Math.max(0, parseOptionalAmount_(row.bonus, 'bonus', existing.employee_id)),
-          incentive: Math.max(0, parseOptionalAmount_(row.incentive, 'incentive', existing.employee_id)),
-          other_earnings: Math.max(0, parseOptionalAmount_(row.other_earnings, 'other_earnings', existing.employee_id)),
-          other_deductions: Math.max(0, parseOptionalAmount_(row.other_deductions, 'other_deductions', existing.employee_id)),
-          tds_amount: Math.max(0, parseOptionalAmount_(row.tds_amount, 'tds_amount', existing.employee_id)),
-          remarks: row.remarks != null ? String(row.remarks) : existing.remarks
+        items.push({
+          pk: existing.payroll_input_id,
+          updates: {
+            working_days: working,
+            paid_days: paid,
+            lop_days: lop,
+            bonus: Math.max(0, parseOptionalAmount_(row.bonus, 'bonus', existing.employee_id)),
+            incentive: Math.max(0, parseOptionalAmount_(row.incentive, 'incentive', existing.employee_id)),
+            other_earnings: Math.max(0, parseOptionalAmount_(row.other_earnings, 'other_earnings', existing.employee_id)),
+            other_deductions: Math.max(0, parseOptionalAmount_(row.other_deductions, 'other_deductions', existing.employee_id)),
+            tds_amount: Math.max(0, parseOptionalAmount_(row.tds_amount, 'tds_amount', existing.employee_id)),
+            remarks: row.remarks != null ? String(row.remarks) : existing.remarks
+          }
         });
       });
-      return getRunDetail(runId);
+      if (items.length) {
+        DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', items);
+      }
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
   }
 
@@ -261,14 +799,17 @@ var PayrollService = (function () {
       var run = getRun_(runId);
       assertMutableInputs_(run);
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-      inputs.forEach(function (inp) {
-        var lopLeave = PayrollLeaveBridge.getApprovedLopForPayroll(
-          inp.employee_id, run.period_year, run.period_month);
-        DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', inp.payroll_input_id, {
-          lop_from_leave: lopLeave
-        });
+      var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(run.period_year, run.period_month);
+      var items = inputs.map(function (inp) {
+        return {
+          pk: inp.payroll_input_id,
+          updates: { lop_from_leave: lopFromMap_(lopMap, inp.employee_id) }
+        };
       });
-      return getRunDetail(runId);
+      if (items.length) {
+        DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', items);
+      }
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
   }
 
@@ -282,19 +823,25 @@ var PayrollService = (function () {
       var run = getRun_(runId);
       assertMutableInputs_(run);
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
-      inputs.forEach(function (inp) {
-        var lopLeave = PayrollLeaveBridge.getApprovedLopForPayroll(
-          inp.employee_id, run.period_year, run.period_month);
+      var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(run.period_year, run.period_month);
+      var items = inputs.map(function (inp) {
+        var lopLeave = lopFromMap_(lopMap, inp.employee_id);
         var working = num_(inp.working_days);
         var lopDays = lopLeave;
         var paid = Math.max(0, working - lopDays);
-        DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', inp.payroll_input_id, {
-          lop_from_leave: lopLeave,
-          lop_days: lopDays,
-          paid_days: paid
-        });
+        return {
+          pk: inp.payroll_input_id,
+          updates: {
+            lop_from_leave: lopLeave,
+            lop_days: lopDays,
+            paid_days: paid
+          }
+        };
       });
-      return getRunDetail(runId);
+      if (items.length) {
+        DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', items);
+      }
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
   }
 
@@ -311,6 +858,8 @@ var PayrollService = (function () {
       }
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
       var employees = indexEmployees_();
+      inputs = refreshAttendanceDerivedDays_(run, inputs, employees);
+      assertAttendanceComplete_(inputs, run.period_year, run.period_month);
       var settings = {
         payroll_round: ConfigService.getSetting('payroll_round', 'NEAREST_RUPEE')
       };
@@ -319,11 +868,13 @@ var PayrollService = (function () {
       var newRecords = [];
 
       inputs.forEach(function (inp) {
-        var emp = employees[inp.employee_id] || { employee_id: inp.employee_id };
+        var emp = resolveEmployee_(employees, inp.employee_id) || { employee_id: inp.employee_id };
         var bundle = CompensationService.getStructureInForce(inp.employee_id, periodEnd);
         var result = PayrollEngine.calculateEmployee({
           structure: bundle ? bundle.structure : null,
           components: bundle ? bundle.components : [],
+          templateComponents: bundle ? bundle.templateComponents : null,
+          payroll_rules: bundle ? bundle.payroll_rules : null,
           inputs: inp,
           settings: settings,
           employee: emp
@@ -355,15 +906,14 @@ var PayrollService = (function () {
         });
       });
 
-      DbService.deleteRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
-      DbService.insertRecords(HRMS.SHEETS.PAYROLL_RECORDS, newRecords);
+      DbService.replaceRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId }, newRecords);
       DbService.updateRecord(HRMS.SHEETS.PAYROLL_RUNS, 'payroll_run_id', runId, {
         status: HRMS.PAYROLL_STATUS.CALCULATED,
         calculated_at: now
       });
       AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CALCULATE, 'PayrollRuns', runId,
         'Calculated ' + newRecords.length + ' records', session.employee_id);
-      return getRunDetail(runId);
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
   }
 
@@ -379,7 +929,7 @@ var PayrollService = (function () {
       });
       AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_REVIEW, 'PayrollRuns', runId,
         'Moved to UNDER_REVIEW', session.employee_id);
-      return getRunDetail(runId);
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
     firePayrollNotify_(function () {
       NotificationPayrollAdapter.notifyReadyForReview(detail.run);
@@ -409,7 +959,7 @@ var PayrollService = (function () {
       });
       AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_RETURN_DRAFT, 'PayrollRuns', runId,
         'Returned to DRAFT from ' + st, session.employee_id);
-      return getRunDetail(runId);
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
   }
 
@@ -433,7 +983,7 @@ var PayrollService = (function () {
       });
       AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_APPROVE, 'PayrollRuns', runId,
         'Approved payroll run', session.employee_id);
-      return getRunDetail(runId);
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
     });
     firePayrollNotify_(function () {
       NotificationPayrollAdapter.notifyApproved(detail.run);
@@ -441,11 +991,13 @@ var PayrollService = (function () {
     return detail;
   }
 
-  function lock(runId, ignoredClientPayload) {
+  function lock(runId, clientPayload) {
     var session = requireHr_();
-    if (ignoredClientPayload && ignoredClientPayload.net_pay != null) {
+    clientPayload = clientPayload || {};
+    if (clientPayload.net_pay != null) {
       Logger.log('PAYROLL_LOCK ignored client net_pay for run ' + runId);
     }
+    var generatePayslips = clientPayload.generatePayslips !== false;
     // Hold script lock only for validation + status flip. Drive payslip I/O runs after
     // release so concurrent leave/employee/payroll ops are not blocked for minutes.
     var snapshot = withScriptLock_(function () {
@@ -467,6 +1019,9 @@ var PayrollService = (function () {
       if (st !== HRMS.PAYROLL_STATUS.APPROVED) {
         throw conflictError_('Lock is only allowed from APPROVED.');
       }
+      var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
+      refreshAttendanceDerivedDays_(run, inputs, employees);
+      records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
       var blocks = evaluateLockBlocks_(run, records, true);
       if (blocks.length) {
         throw conflictError_('Cannot lock: ' + blocks.join('; '));
@@ -488,19 +1043,58 @@ var PayrollService = (function () {
     });
 
     try {
-      PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session);
+      if (generatePayslips) {
+        PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session, {
+          replaceExisting: false
+        });
+      }
     } catch (e) {
-      // Run is already LOCKED; payslip generation is idempotent on retry (trashes same file names).
+      // Run is already LOCKED; payslip generation skips employees who already have a file.
       Logger.log('PAYROLL_LOCK payslip generation failed for ' + runId + ': ' + (e.message || e));
-      throw systemError_('Payroll run was locked, but payslip generation failed. Use Regenerate payslips to retry. Amounts stay frozen.');
+      if (generatePayslips) {
+        throw systemError_('Payroll run was locked, but payslip generation failed. Use Generate payslips to retry. Amounts stay frozen.');
+      }
     }
     firePayrollNotify_(function () {
       if (!snapshot.alreadyLocked) {
         NotificationPayrollAdapter.notifyLocked(snapshot.run);
       }
-      NotificationPayrollAdapter.notifyPayslipsAvailable(snapshot.run, snapshot.records, snapshot.employees);
+      if (generatePayslips) {
+        NotificationPayrollAdapter.notifyPayslipsAvailable(snapshot.run, snapshot.records, snapshot.employees);
+      }
     });
-    return getRunDetail(runId);
+    return getRunDetail(runId, { skipSync: true });
+  }
+
+  /**
+   * HR-facing finalize: submit for review → approve → lock without generating payslips.
+   * Idempotent when already LOCKED.
+   */
+  function finalizePayroll(runId) {
+    requireHr_();
+    var detail = getRunDetail(runId);
+    var st = String(detail.run.status).toUpperCase();
+    if (st === HRMS.PAYROLL_STATUS.LOCKED) {
+      return detail;
+    }
+    if (st === HRMS.PAYROLL_STATUS.DRAFT) {
+      throw conflictError_('Calculate payroll before finalizing.');
+    }
+    if (detail.lockBlocks && detail.lockBlocks.length) {
+      throw conflictError_('Resolve these issues before finalizing: ' + detail.lockBlocks.join('; '));
+    }
+    if (st === HRMS.PAYROLL_STATUS.CALCULATED) {
+      detail = submitForReview(runId);
+      st = String(detail.run.status).toUpperCase();
+    }
+    if (st === HRMS.PAYROLL_STATUS.UNDER_REVIEW) {
+      detail = approve(runId);
+      st = String(detail.run.status).toUpperCase();
+    }
+    if (st === HRMS.PAYROLL_STATUS.APPROVED) {
+      detail = lock(runId, { generatePayslips: false });
+    }
+    return detail;
   }
 
   /**
@@ -521,61 +1115,383 @@ var PayrollService = (function () {
       };
     });
     try {
-      PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session);
+      PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session, {
+        replaceExisting: false
+      });
     } catch (e) {
       Logger.log('PAYROLL_REGENERATE payslip generation failed for ' + runId + ': ' + (e.message || e));
-      throw systemError_('Payslip generation failed. Amounts are unchanged. Retry regenerate payslips.');
+      var hint = e && e.message ? String(e.message) : 'Unknown error';
+      throw systemError_('Payslip generation failed. ' + hint + ' Amounts are unchanged. Retry generate payslips.');
     }
-    return getRunDetail(runId);
+    firePayrollNotify_(function () {
+      NotificationPayrollAdapter.notifyPayslipsAvailable(snapshot.run, snapshot.records, snapshot.employees);
+    });
+    return getRunDetail(runId, { skipSync: true });
   }
 
-  function findOpenRun_(year, month) {
+  /**
+   * Regenerate one employee payslip for a LOCKED run (archives the prior file).
+   */
+  function regeneratePayslipForEmployee(runId, employeeId) {
+    var session = requireHr_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    var snapshot = withScriptLock_(function () {
+      var run = getRun_(runId);
+      if (String(run.status).toUpperCase() !== HRMS.PAYROLL_STATUS.LOCKED) {
+        throw conflictError_('Payslips can only be generated after payroll is LOCKED.');
+      }
+      var rec = DbService.findOne(HRMS.SHEETS.PAYROLL_RECORDS, {
+        payroll_run_id: runId,
+        employee_id: employeeId
+      });
+      if (!rec) {
+        var norm = normalizeEmployeeId_(employeeId);
+        var allRecs = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
+        for (var ri = 0; ri < allRecs.length; ri++) {
+          if (normalizeEmployeeId_(allRecs[ri].employee_id) === norm) {
+            rec = allRecs[ri];
+            break;
+          }
+        }
+      }
+      if (!rec) throw notFoundError_('No payroll record for ' + employeeId + ' in this run.');
+      return {
+        run: run,
+        record: rec,
+        employees: indexEmployees_()
+      };
+    });
+    try {
+      var empRow = resolveEmployee_(snapshot.employees, snapshot.record.employee_id) || {};
+      PayslipService.generateForEmployee(
+        snapshot.run,
+        snapshot.record,
+        empRow,
+        session,
+        { replaceExisting: true }
+      );
+    } catch (e) {
+      Logger.log('PAYROLL_REGENERATE_ONE payslip failed for ' + runId + '/' + employeeId + ': ' + (e.message || e));
+      var oneHint = e && e.message ? String(e.message) : 'Unknown error';
+      throw systemError_('Payslip generation failed for ' + employeeId + '. ' + oneHint + ' Amounts are unchanged.');
+    }
+    firePayrollNotify_(function () {
+      NotificationPayrollAdapter.notifyPayslipsAvailable(
+        snapshot.run,
+        [snapshot.record],
+        snapshot.employees
+      );
+    });
+    return getRunDetail(runId, { skipSync: true });
+  }
+
+  function inputHasAttendance_(inp) {
+    if (!inp) return false;
+    if (num_(inp.working_days) > 0 || num_(inp.paid_days) > 0) return true;
+    return !!String(inp.daily_attendance_json || '').trim();
+  }
+
+  function countAttendanceInputs_(runId) {
+    var n = 0;
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      if (inputHasAttendance_(inp)) n++;
+    });
+    return n;
+  }
+
+  function findLegacyRunForPeriod_(year, month) {
+    var primaryId = primaryRunIdFor_(year, month, '');
+    var primary = DbService.findOne(HRMS.SHEETS.PAYROLL_RUNS, { payroll_run_id: primaryId });
+    if (primary && !runVertical_(primary)) return primary;
+    var matches = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).filter(function (r) {
+      return Number(r.period_year) === Number(year) &&
+        Number(r.period_month) === Number(month) &&
+        !runVertical_(r);
+    });
+    if (!matches.length) return null;
+    matches.sort(function (a, b) {
+      return serializeDateTime_(b.created_at).localeCompare(serializeDateTime_(a.created_at));
+    });
+    return matches[0];
+  }
+
+  function copyInputFieldsFromSource_(sourceInp) {
+    return {
+      working_days: sourceInp.working_days,
+      paid_days: sourceInp.paid_days,
+      lop_days: sourceInp.lop_days,
+      daily_attendance_json: sourceInp.daily_attendance_json || '',
+      bonus: sourceInp.bonus,
+      incentive: sourceInp.incentive,
+      other_earnings: sourceInp.other_earnings,
+      other_deductions: sourceInp.other_deductions,
+      tds_amount: sourceInp.tds_amount,
+      deduction_advance: sourceInp.deduction_advance || 0,
+      deduction_lcd: sourceInp.deduction_lcd || 0,
+      deduction_lwf: sourceInp.deduction_lwf || 0,
+      arrears_amount: sourceInp.arrears_amount || 0,
+      remarks: sourceInp.remarks || ''
+    };
+  }
+
+  function countCopyableLegacyInputs_(legacyRunId, vertical) {
+    var sourceInputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, {
+      payroll_run_id: legacyRunId
+    });
+    var employees = indexEmployees_();
+    var copyable = 0;
+    sourceInputs.forEach(function (inp) {
+      if (!inputHasAttendance_(inp)) return;
+      var emp = resolveEmployee_(employees, inp.employee_id);
+      if (employeeVertical_(emp) === vertical) copyable++;
+    });
+    return copyable;
+  }
+
+  function buildLegacyImportHint_(run) {
+    var vertical = runVertical_(run);
+    if (!vertical) return null;
+    var st = String(run.status).toUpperCase();
+    if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) return null;
+    var legacy = findLegacyRunForPeriod_(run.period_year, run.period_month);
+    if (!legacy || legacy.payroll_run_id === run.payroll_run_id) return null;
+    var copyable = countCopyableLegacyInputs_(legacy.payroll_run_id, vertical);
+    if (!copyable) return null;
+    var targetCount = countAttendanceInputs_(run.payroll_run_id);
+    if (targetCount >= copyable) return null;
+    return {
+      source_run_id: legacy.payroll_run_id,
+      copyable_count: copyable,
+      target_attendance_count: targetCount,
+      vertical: vertical,
+      message: 'Combined payroll ' + legacy.payroll_run_id + ' has attendance for ' + copyable + ' ' +
+        vertical + ' employee' + (copyable === 1 ? '' : 's') + '. This run has ' + targetCount +
+        ' with attendance. Import to copy working days, LOP, and daily register data, then calculate.'
+    };
+  }
+
+  /**
+   * Copy attendance and payroll input fields from a combined legacy run into a vertical run.
+   * @param {string} targetRunId
+   * @param {string=} sourceRunId
+   */
+  function importInputsFromLegacyRun(targetRunId, sourceRunId) {
+    var session = requireHr_();
+    return withScriptLock_(function () {
+      var result = importInputsFromLegacyRun_(targetRunId, sourceRunId);
+      AuditService.log(HRMS.AUDIT_ACTIONS.PAYROLL_CREATE, 'PayrollRuns', targetRunId,
+        'Imported ' + result.updated + ' inputs from legacy ' + result.source_run_id, session.employee_id);
+      return getRunDetail(targetRunId, DETAIL_AFTER_MUTATION_);
+    });
+  }
+
+  function importInputsFromLegacyRun_(targetRunId, sourceRunId) {
+    var target = getRun_(targetRunId);
+    assertMutableInputs_(target);
+    var vertical = runVertical_(target);
+    if (!vertical) {
+      throw validationError_('Import is only for vertical runs. Open the combined legacy payroll run to view older data.');
+    }
+    var source = sourceRunId ? getRun_(sourceRunId) : findLegacyRunForPeriod_(target.period_year, target.period_month);
+    if (!source) {
+      throw notFoundError_('No combined legacy payroll run found for this month.');
+    }
+    if (runVertical_(source)) {
+      throw validationError_('Source run must be a combined legacy payroll (no vertical).');
+    }
+    var sourceInputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, {
+      payroll_run_id: source.payroll_run_id
+    });
+    var employees = indexEmployees_();
+    var existing = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: targetRunId });
+    var byEmp = {};
+    existing.forEach(function (inp) { byEmp[inp.employee_id] = inp; });
+    var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(target.period_year, target.period_month);
+    var updates = [];
+    var inserts = [];
+    var imported = 0;
+    sourceInputs.forEach(function (src) {
+      if (!inputHasAttendance_(src)) return;
+      var emp = resolveEmployee_(employees, src.employee_id);
+      if (employeeVertical_(emp) !== vertical) return;
+      var fields = copyInputFieldsFromSource_(src);
+      fields.lop_from_leave = lopFromMap_(lopMap, src.employee_id);
+      var ex = byEmp[src.employee_id];
+      if (ex) {
+        updates.push({ pk: ex.payroll_input_id, updates: fields });
+        imported++;
+      } else if (isEmployeeEligibleForPeriod(src.employee_id, target.period_year, target.period_month, vertical)) {
+        inserts.push({
+          payroll_input_id: DbService.generateId('PI'),
+          payroll_run_id: targetRunId,
+          employee_id: src.employee_id,
+          working_days: fields.working_days,
+          paid_days: fields.paid_days,
+          lop_days: fields.lop_days,
+          daily_attendance_json: fields.daily_attendance_json,
+          bonus: fields.bonus,
+          incentive: fields.incentive,
+          other_earnings: fields.other_earnings,
+          other_deductions: fields.other_deductions,
+          tds_amount: fields.tds_amount,
+          deduction_advance: fields.deduction_advance,
+          deduction_lcd: fields.deduction_lcd,
+          deduction_lwf: fields.deduction_lwf,
+          arrears_amount: fields.arrears_amount,
+          lop_from_leave: fields.lop_from_leave,
+          remarks: fields.remarks
+        });
+        imported++;
+      }
+    });
+    if (updates.length) DbService.updateRecords(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', updates);
+    if (inserts.length) DbService.insertRecords(HRMS.SHEETS.PAYROLL_INPUTS, inserts);
+    if (!imported) {
+      throw validationError_('No attendance rows found to import for vertical ' + vertical + ' on ' + source.payroll_run_id + '.');
+    }
+    return {
+      source_run_id: source.payroll_run_id,
+      updated: imported
+    };
+  }
+
+  function tryAutoImportFromLegacy_(targetRun) {
+    if (!runVertical_(targetRun)) return { imported: 0 };
+    try {
+      return importInputsFromLegacyRun_(targetRun.payroll_run_id, null);
+    } catch (e) {
+      Logger.log('tryAutoImportFromLegacy_: ' + (e.message || e));
+      return { imported: 0 };
+    }
+  }
+
+  function findOpenRun_(year, month, verticalName) {
+    var vertical = normalizeVerticalCode_(verticalName);
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS);
     for (var i = 0; i < runs.length; i++) {
-      if (Number(runs[i].period_year) === Number(year) &&
-          Number(runs[i].period_month) === Number(month) &&
-          String(runs[i].status).toUpperCase() !== HRMS.PAYROLL_STATUS.LOCKED) {
-        return runs[i];
-      }
+      if (Number(runs[i].period_year) !== Number(year) ||
+          Number(runs[i].period_month) !== Number(month)) continue;
+      if (String(runs[i].status).toUpperCase() === HRMS.PAYROLL_STATUS.LOCKED) continue;
+      var rv = runVertical_(runs[i]);
+      if (vertical && rv !== vertical) continue;
+      if (!vertical && rv) continue;
+      return runs[i];
     }
     return null;
   }
 
-  function nextCorrectionId_(year, month) {
-    var prefix = 'PR-' + year + '-' + padMonth_(month) + '-C';
-    var max = 0;
-    DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS).forEach(function (r) {
-      if (String(r.payroll_run_id).indexOf(prefix) === 0) {
-        var n = Number(String(r.payroll_run_id).substring(prefix.length));
-        if (n > max) max = n;
+  function lopFromMap_(lopMap, employeeId) {
+    var v = Number((lopMap || {})[String(employeeId)]);
+    return isFinite(v) && v > 0 ? v : 0;
+  }
+
+  function buildInputRowForEmployee_(run, emp, lopMap) {
+    return {
+      payroll_input_id: DbService.generateId('PI'),
+      payroll_run_id: run.payroll_run_id,
+      employee_id: emp.employee_id,
+      working_days: 0,
+      paid_days: 0,
+      lop_days: 0,
+      bonus: 0,
+      incentive: 0,
+      other_earnings: 0,
+      other_deductions: 0,
+      tds_amount: 0,
+      deduction_advance: 0,
+      deduction_lcd: 0,
+      deduction_lwf: 0,
+      arrears_amount: 0,
+      daily_attendance_json: '',
+      lop_from_leave: lopFromMap_(lopMap, emp.employee_id),
+      remarks: ''
+    };
+  }
+
+  /**
+   * @param {string} runId
+   * @param {Object=} options { alreadyLocked: true }
+   */
+  function syncEligibleEmployees(runId, options) {
+    requireHr_();
+    options = options || {};
+    function body_() {
+      var run = getRun_(runId);
+      var st = String(run.status).toUpperCase();
+      if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) {
+        return { added: 0, total: DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).length };
+      }
+      var eligible = eligibleEmployees_(run.period_year, run.period_month, runVertical_(run));
+      var existing = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
+      var existingIds = {};
+      existing.forEach(function (inp) { existingIds[inp.employee_id] = true; });
+      var toAdd = eligible.filter(function (e) { return !existingIds[e.employee_id]; });
+      if (toAdd.length) {
+        var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(run.period_year, run.period_month);
+        DbService.insertRecords(HRMS.SHEETS.PAYROLL_INPUTS,
+          toAdd.map(function (emp) { return buildInputRowForEmployee_(run, emp, lopMap); }));
+      }
+      return { added: toAdd.length, total: existing.length + toAdd.length };
+    }
+    if (options.alreadyLocked) return body_();
+    return withScriptLock_(body_);
+  }
+
+  function listEligibleEmployeesForPeriod(periodYear, periodMonth) {
+    requireHr_();
+    return eligibleEmployees_(periodYear, periodMonth);
+  }
+
+  /**
+   * After a new or reactivated employee is saved, add them to open draft/calculated payroll runs
+   * when they qualify for that month (no redeploy or manual sync required).
+   */
+  function syncOpenPayrollRunsForEmployee(employeeId) {
+    requireHr_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) return { runsSynced: 0, inputsAdded: 0 };
+    var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS) || [];
+    var runsSynced = 0;
+    var inputsAdded = 0;
+    runs.forEach(function (run) {
+      var st = String(run.status || '').toUpperCase();
+      if (st !== HRMS.PAYROLL_STATUS.DRAFT && st !== HRMS.PAYROLL_STATUS.CALCULATED) return;
+      if (!isEmployeeEligibleForPeriod(employeeId, run.period_year, run.period_month, runVertical_(run))) return;
+      try {
+        var meta = syncEligibleEmployees(run.payroll_run_id);
+        runsSynced++;
+        inputsAdded += (meta && meta.added) ? meta.added : 0;
+      } catch (syncErr) {
+        Logger.log('syncOpenPayrollRunsForEmployee ' + employeeId + ' ' + run.payroll_run_id + ': ' +
+          (syncErr.message || syncErr));
       }
     });
-    return prefix + (max + 1);
+    return { runsSynced: runsSynced, inputsAdded: inputsAdded };
+  }
+
+  function isEmployeeEligibleForPeriod(employeeId, periodYear, periodMonth, verticalFilter) {
+    requireHr_();
+    var emp = null;
+    try {
+      if (typeof EmployeeService !== 'undefined' && EmployeeService.getMasterRecord) {
+        emp = EmployeeService.getMasterRecord(employeeId);
+      }
+    } catch (ignore) {}
+    if (!emp) {
+      emp = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: employeeId });
+    }
+    if (!emp) return false;
+    return eligibleEmployees_(periodYear, periodMonth, verticalFilter).some(function (e) {
+      return e.employee_id === employeeId;
+    });
   }
 
   function seedInputs_(run) {
-    var employees = eligibleEmployees_(run.period_year, run.period_month);
+    var employees = eligibleEmployees_(run.period_year, run.period_month, runVertical_(run));
+    var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(run.period_year, run.period_month);
     var rows = employees.map(function (emp) {
-      var lopLeave = PayrollLeaveBridge.getApprovedLopForPayroll(
-        emp.employee_id, run.period_year, run.period_month);
-      var working = num_(run.working_days_default);
-      var lopDays = lopLeave;
-      var paid = Math.max(0, working - lopDays);
-      return {
-        payroll_input_id: DbService.generateId('PI'),
-        payroll_run_id: run.payroll_run_id,
-        employee_id: emp.employee_id,
-        working_days: working,
-        paid_days: paid,
-        lop_days: lopDays,
-        bonus: 0,
-        incentive: 0,
-        other_earnings: 0,
-        other_deductions: 0,
-        tds_amount: 0,
-        lop_from_leave: lopLeave,
-        remarks: ''
-      };
+      return buildInputRowForEmployee_(run, emp, lopMap);
     });
     DbService.insertRecords(HRMS.SHEETS.PAYROLL_INPUTS, rows);
   }
@@ -584,9 +1500,9 @@ var PayrollService = (function () {
     var sourceInputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, {
       payroll_run_id: source.payroll_run_id
     });
+    var lopMap = PayrollLeaveBridge.getApprovedLopMapForPayroll(run.period_year, run.period_month);
     var rows = sourceInputs.map(function (inp) {
-      var lopLeave = PayrollLeaveBridge.getApprovedLopForPayroll(
-        inp.employee_id, run.period_year, run.period_month);
+      var lopLeave = lopFromMap_(lopMap, inp.employee_id);
       return {
         payroll_input_id: DbService.generateId('PI'),
         payroll_run_id: run.payroll_run_id,
@@ -594,11 +1510,16 @@ var PayrollService = (function () {
         working_days: inp.working_days,
         paid_days: inp.paid_days,
         lop_days: inp.lop_days,
+        daily_attendance_json: inp.daily_attendance_json || '',
         bonus: inp.bonus,
         incentive: inp.incentive,
         other_earnings: inp.other_earnings,
         other_deductions: inp.other_deductions,
         tds_amount: inp.tds_amount,
+        deduction_advance: inp.deduction_advance || 0,
+        deduction_lcd: inp.deduction_lcd || 0,
+        deduction_lwf: inp.deduction_lwf || 0,
+        arrears_amount: inp.arrears_amount || 0,
         lop_from_leave: lopLeave,
         remarks: inp.remarks || ''
       };
@@ -606,8 +1527,9 @@ var PayrollService = (function () {
     DbService.insertRecords(HRMS.SHEETS.PAYROLL_INPUTS, rows);
   }
 
-  function eligibleEmployees_(year, month) {
+  function eligibleEmployees_(year, month, verticalFilter) {
     var end = periodEnd_(year, month);
+    var vertical = normalizeVerticalCode_(verticalFilter);
     var all = null;
     try {
       if (typeof EmployeeService !== 'undefined' && EmployeeService &&
@@ -624,6 +1546,7 @@ var PayrollService = (function () {
       if (String(e.status || '').toUpperCase() !== 'ACTIVE') return false;
       var join = toDate_(e.joining_date);
       if (join && join > end) return false;
+      if (vertical && employeeVertical_(e) !== vertical) return false;
       return true;
     });
   }
@@ -631,24 +1554,36 @@ var PayrollService = (function () {
   function indexEmployees_() {
     var map = {};
     DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES).forEach(function (e) {
-      map[e.employee_id] = e;
       e.display_name = e.display_name || ((e.first_name || '') + ' ' + (e.last_name || '')).trim();
+      var key = String(e.employee_id || '');
+      map[key] = e;
+      var norm = normalizeEmployeeId_(key);
+      if (norm && !map[norm]) map[norm] = e;
     });
     return map;
   }
 
+  function employeeDisplayName_(emp) {
+    if (!emp) return '';
+    var dn = String(emp.display_name || '').trim();
+    if (dn) return dn;
+    return String((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+  }
+
   function mergeRows_(inputs, records, employees) {
-    var recMap = {};
-    (records || []).forEach(function (r) { recMap[r.employee_id] = r; });
+    var recMap = indexPayrollRecords_(records);
     return (inputs || []).map(function (inp) {
-      var emp = employees[inp.employee_id] || {};
-      var rec = recMap[inp.employee_id] || null;
+      var emp = resolveEmployee_(employees, inp.employee_id) || {};
+      var rec = resolvePayrollRecord_(recMap, inp.employee_id);
       return {
         input: inp,
         record: rec,
         employee: {
           employee_id: inp.employee_id,
-          display_name: emp.display_name || inp.employee_id,
+          display_name: employeeDisplayName_(emp) || inp.employee_id,
+          first_name: emp.first_name || '',
+          last_name: emp.last_name || '',
+          work_email: emp.work_email || '',
           department: emp.department || '',
           designation: emp.designation || ''
         }
@@ -699,16 +1634,19 @@ var PayrollService = (function () {
     var allowNeg = ConfigService.getSetting('allow_lock_negative_net', false);
     var missingS = 0;
     var missingB = 0;
+    var missingP = 0;
     var neg = 0;
     records.forEach(function (r) {
       var flags = String(r.exception_flags || '');
       if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.MISSING_STRUCTURE)) missingS++;
       if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.MISSING_BANK)) missingB++;
+      if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.MISSING_PAN)) missingP++;
       if (PayrollEngine.flagsInclude(flags, HRMS.PAYROLL_EXCEPTION.NEGATIVE_NET)) neg++;
     });
     if (forApproveOrLock) {
       if (blockStructure && missingS) blocks.push('MISSING_STRUCTURE (' + missingS + ')');
       if (blockBank && missingB) blocks.push('MISSING_BANK (' + missingB + ')');
+      if (missingP) blocks.push('MISSING_PAN (' + missingP + ')');
       if (!allowNeg && neg) blocks.push('NEGATIVE_NET (' + neg + ')');
     }
     return blocks;
@@ -805,10 +1743,22 @@ var PayrollService = (function () {
 
   return {
     listRuns: listRuns,
+    resolveRunForPeriod: resolveRunForPeriod_,
+    suggestPayrollPeriodFromRuns: suggestPayrollPeriodFromRuns_,
+    verticalFromPayrollRunId: verticalFromPayrollRunId_,
+    runVertical: runVertical_,
     getRunDetail: getRunDetail,
     createRun: createRun,
+    createRunsForAllVerticals: createRunsForAllVerticals,
+    importInputsFromLegacyRun: importInputsFromLegacyRun,
+    findLegacyRunForPeriod: findLegacyRunForPeriod_,
     createCorrectionRun: createCorrectionRun,
+    listConfiguredVerticals: listConfiguredVerticals_,
     saveInputs: saveInputs,
+    syncEligibleEmployees: syncEligibleEmployees,
+    syncOpenPayrollRunsForEmployee: syncOpenPayrollRunsForEmployee,
+    listEligibleEmployeesForPeriod: listEligibleEmployeesForPeriod,
+    isEmployeeEligibleForPeriod: isEmployeeEligibleForPeriod,
     refreshLopFromLeave: refreshLopFromLeave,
     applyLeaveLopToDays: applyLeaveLopToDays,
     calculate: calculate,
@@ -816,7 +1766,10 @@ var PayrollService = (function () {
     returnToDraft: returnToDraft,
     approve: approve,
     lock: lock,
+    finalizePayroll: finalizePayroll,
     regeneratePayslips: regeneratePayslips,
-    evaluateLockBlocks: evaluateLockBlocks_
+    regeneratePayslipForEmployee: regeneratePayslipForEmployee,
+    evaluateLockBlocks: evaluateLockBlocks_,
+    humanizeExceptionFlag: humanizeExceptionFlag_
   };
 })();

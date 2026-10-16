@@ -1,5 +1,5 @@
 /**
- * Pure payroll calculation — no spreadsheet I/O.
+ * Pure payroll calculation - no spreadsheet I/O.
  * Frontend net_pay is never read.
  */
 var PayrollEngine = (function () {
@@ -31,9 +31,12 @@ var PayrollEngine = (function () {
 
   function findBasic_(components) {
     components = components || [];
-    for (var i = 0; i < components.length; i++) {
-      if (String(components[i].component_code || '').toUpperCase() === 'BASIC') {
-        return components[i];
+    var codes = ['BASIC', 'BP', 'BASIC_DA', 'BASIC+DA'];
+    for (var c = 0; c < codes.length; c++) {
+      for (var i = 0; i < components.length; i++) {
+        if (String(components[i].component_code || '').toUpperCase() === codes[c]) {
+          return components[i];
+        }
       }
     }
     return null;
@@ -71,6 +74,11 @@ var PayrollEngine = (function () {
    */
   function calculateEmployee(args) {
     args = args || {};
+    if (args.templateComponents && args.templateComponents.length &&
+        typeof SalaryPayrollFormulaService !== 'undefined' &&
+        SalaryPayrollFormulaService.calculateEmployee) {
+      return SalaryPayrollFormulaService.calculateEmployee(args);
+    }
     var inputs = args.inputs || {};
     var employee = args.employee || {};
     var settings = args.settings || {};

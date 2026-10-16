@@ -1,5 +1,5 @@
 /**
- * Auth + DEMO mode tests — pure decision logic (no Session dependency).
+ * Auth + DEMO mode tests - pure decision logic (no Session dependency).
  */
 
 function testAuthDemo_All() {

@@ -6,7 +6,14 @@ var HRMS = HRMS || {};
 var EmployeeRepository = (function () {
   function findById(employeeId) {
     if (!employeeId) return null;
-    return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: String(employeeId) });
+    var raw = String(employeeId);
+    var row = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: raw });
+    if (row) return row;
+    var norm = raw.trim().toUpperCase();
+    if (norm && norm !== raw) {
+      return DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: norm });
+    }
+    return null;
   }
 
   function findByWorkEmail(email) {
@@ -25,6 +32,65 @@ var EmployeeRepository = (function () {
     return DbService.getAllRecords(HRMS.SHEETS.EMPLOYEES);
   }
 
+  function listVerticals() {
+    return listVerticalCatalog().map(function (row) { return row.vertical_name; });
+  }
+
+  function legalNameForVertical_(verticalName, rowLegal) {
+    var legal = String(rowLegal || '').trim();
+    if (legal) return legal;
+    var map = HRMS.VERTICAL_LEGAL_NAMES_DEFAULT || {};
+    var key = String(verticalName || '').trim().toUpperCase();
+    return String(map[key] || map.OTHERS || '').trim();
+  }
+
+  function addressDefaultsForVertical_(verticalName) {
+    var key = String(verticalName || '').trim().toUpperCase();
+    var map = HRMS.VERTICAL_FORM_T_ADDRESS_DEFAULT || {};
+    return map[key] || map.OTHERS || { address_line1: '', address_line2: '' };
+  }
+
+  function catalogRowFromSheet_(name, row) {
+    row = row || {};
+    var defaults = addressDefaultsForVertical_(name);
+    return {
+      vertical_name: name,
+      legal_name: legalNameForVertical_(name, row.legal_name),
+      address_line1: String(row.address_line1 || defaults.address_line1 || '').trim(),
+      address_line2: String(row.address_line2 || defaults.address_line2 || '').trim()
+    };
+  }
+
+  function listVerticalCatalog() {
+    var rows;
+    try {
+      rows = DbService.getAllRecords(HRMS.SHEETS.VERTICALS);
+    } catch (e) {
+      rows = [];
+    }
+    var seen = {};
+    var out = [];
+    rows.forEach(function (row) {
+      var name = String(row.vertical_name || row.name || row.value || '').trim().toUpperCase();
+      if (!name || seen[name]) return;
+      seen[name] = true;
+      out.push(catalogRowFromSheet_(name, row));
+    });
+    if (!out.length) {
+      var defaults = HRMS.VERTICAL_LEGAL_NAMES_DEFAULT || {};
+      (HRMS.VERTICALS || []).forEach(function (name) {
+        var vertical = String(name || '').trim().toUpperCase();
+        if (!vertical) return;
+        out.push(catalogRowFromSheet_(vertical, {
+          legal_name: defaults[vertical],
+          address_line1: '',
+          address_line2: ''
+        }));
+      });
+    }
+    return out;
+  }
+
   function insert(record) {
     return DbService.insertRecord(HRMS.SHEETS.EMPLOYEES, record);
   }
@@ -34,7 +100,15 @@ var EmployeeRepository = (function () {
   }
 
   function findUserByEmployeeId(employeeId) {
-    return DbService.findOne(HRMS.SHEETS.USERS, { employee_id: String(employeeId) });
+    if (!employeeId) return null;
+    var raw = String(employeeId);
+    var row = DbService.findOne(HRMS.SHEETS.USERS, { employee_id: raw });
+    if (row) return row;
+    var norm = raw.trim().toUpperCase();
+    if (norm && norm !== raw) {
+      return DbService.findOne(HRMS.SHEETS.USERS, { employee_id: norm });
+    }
+    return null;
   }
 
   function findUserByEmail(email) {
@@ -66,6 +140,7 @@ var EmployeeRepository = (function () {
   function listActiveLeaveTypes() {
     return DbService.getAllRecords(HRMS.SHEETS.LEAVE_TYPES).filter(function (row) {
       var v = row.is_active;
+      if (v === '' || v === null || v === undefined) return true;
       return v === true || v === 1 || String(v).toUpperCase() === 'TRUE';
     });
   }
@@ -75,7 +150,10 @@ var EmployeeRepository = (function () {
   }
 
   function listLeaveBalances(employeeId) {
-    return DbService.findRecords(HRMS.SHEETS.LEAVE_BALANCES, { employee_id: String(employeeId) });
+    var norm = String(employeeId || '').trim().toUpperCase();
+    return DbService.getAllRecords(HRMS.SHEETS.LEAVE_BALANCES).filter(function (b) {
+      return String(b.employee_id || '').trim().toUpperCase() === norm;
+    });
   }
 
   function findCurrentSalaryStructure(employeeId) {
@@ -94,6 +172,8 @@ var EmployeeRepository = (function () {
     findById: findById,
     findByWorkEmail: findByWorkEmail,
     listAll: listAll,
+    listVerticals: listVerticals,
+    listVerticalCatalog: listVerticalCatalog,
     insert: insert,
     update: update,
     findUserByEmployeeId: findUserByEmployeeId,
