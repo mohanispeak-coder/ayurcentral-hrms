@@ -147,3 +147,11 @@ function devDisableTempDemoLogin() {
   Logger.log('devDisableTempDemoLogin: disabled');
   return { ok: true };
 }
+
+/**
+ * Run this from the Apps Script editor (after clasp push).
+ * Edit userId/password below, then Run → runTempDemoSetup.
+ */
+function runTempDemoSetup() {
+  devSetTempDemoCredentials('demo', 'ChangeMe123', 'ADMIN');
+}
