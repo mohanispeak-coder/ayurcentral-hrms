@@ -135,7 +135,8 @@ function apiGetAppBootstrap(sessionToken) {
         mode: mode,
         clientAssetsVersion: (typeof HRMS !== 'undefined' && HRMS.CLIENT_ASSETS_VERSION)
           ? HRMS.CLIENT_ASSETS_VERSION
-          : '1'
+          : '1',
+        tempDemoLoginEnabled: configured && ConfigService.isTempDemoLoginEnabled()
       },
       navigation: nav,
       phase: 'foundation'
@@ -198,6 +199,46 @@ function apiVerifyAuthOtp(email, code, sessionToken) {
     }
     HRMS_REQUEST_SESSION_TOKEN_ = result.sessionToken || '';
     var session = AuthService.resolveSession({ email: email, sessionToken: result.sessionToken });
+    if (!session.authorized) {
+      throw authorizationError_(session.message || 'Access denied.');
+    }
+    PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
+    return {
+      sessionToken: result.sessionToken,
+      expiresInSeconds: result.expiresInSeconds,
+      session: {
+        authorized: session.authorized,
+        email: session.email,
+        employee_id: session.employee_id,
+        role: session.role,
+        displayName: session.displayName,
+        demo: !!session.demo,
+        access: session.access || (typeof UserAccessService !== 'undefined'
+          ? UserAccessService.getFlagsForSession(session)
+          : null)
+      },
+      navigation: PermissionService.getNavForSession(session)
+    };
+  }, sessionToken);
+}
+
+/** TEMP: User ID + password login (no OTP). @return {Object} */
+function apiVerifyTempDemoLogin(userId, password, sessionToken) {
+  return hrmsRun_(function () {
+    try {
+      ConfigService.getSpreadsheetId();
+    } catch (e) {
+      throw configurationError_('HRMS database is not configured.');
+    }
+    if (!ConfigService.isTempDemoLoginEnabled()) {
+      throw validationError_('Demo login is not available.', { reason: 'DISABLED' });
+    }
+    var result = TempDemoAuthService.verifyLogin(userId, password);
+    if (!result.ok) {
+      throw validationError_(result.message, { reason: result.reason });
+    }
+    HRMS_REQUEST_SESSION_TOKEN_ = result.sessionToken || '';
+    var session = AuthService.resolveSession({ email: result.email, sessionToken: result.sessionToken });
     if (!session.authorized) {
       throw authorizationError_(session.message || 'Access denied.');
     }

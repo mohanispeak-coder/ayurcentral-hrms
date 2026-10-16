@@ -133,7 +133,18 @@ HRMS.SETTINGS_KEYS = {
   DEMO_EMAILS: 'demo_emails',
   DEMO_DEFAULT_ROLE: 'demo_default_role',
   DEMO_ROLES: 'demo_roles',
-  FORM_T_TEMPLATE_DRIVE_ID: 'form_t_template_drive_id'
+  FORM_T_TEMPLATE_DRIVE_ID: 'form_t_template_drive_id',
+  /** Temporary ID/password login — remove module when no longer needed. */
+  TEMP_DEMO_LOGIN_ENABLED: 'temp_demo_login_enabled',
+  TEMP_DEMO_USER_ID: 'temp_demo_user_id',
+  TEMP_DEMO_PASSWORD_SALT: 'temp_demo_password_salt',
+  TEMP_DEMO_PASSWORD_HASH: 'temp_demo_password_hash',
+  TEMP_DEMO_ROLE: 'temp_demo_role'
+};
+
+/** Synthetic session email for temporary demo login (not a real mailbox). */
+HRMS.TEMP_DEMO = {
+  SESSION_EMAIL: '__hrms_temp_demo__@login.local'
 };
 
 HRMS.DRIVE = {
@@ -307,11 +318,12 @@ HRMS.AUTH_CACHE = {
   OTP_PREFIX: 'hrms_otp_v1_',
   OTP_RATE_PREFIX: 'hrms_otp_rate_v1_',
   OTP_DEMO_RATE_PREFIX: 'hrms_otp_demo_rate_v1_',
+  TEMP_DEMO_RATE_PREFIX: 'hrms_temp_demo_rate_v1_',
   SESSION_PREFIX: 'hrms_sess_v1_'
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.16.1';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.16.2';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,
@@ -321,5 +333,6 @@ HRMS.AUTH_LIMITS = {
   OTP_RATE_WINDOW_SEC: 900,
   OTP_RATE_WINDOW_MS: 900000,
   OTP_MAX_VERIFY_ATTEMPTS: 5,
+  TEMP_DEMO_MAX_ATTEMPTS: 8,
   SESSION_TTL_SEC: 21600
 };

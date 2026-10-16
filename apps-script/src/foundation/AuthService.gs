@@ -93,6 +93,24 @@ function hrmsResolveAuthAccess_(input) {
     return session;
   }
 
+  if (input.tempDemoLogin) {
+    var tempRole = String(input.tempDemoRole || HRMS.ROLES.ADMIN).trim().toUpperCase();
+    if (typeof PermissionService !== 'undefined' && PermissionService.normalizeUserRole) {
+      tempRole = PermissionService.normalizeUserRole(tempRole);
+    }
+    return {
+      authorized: true,
+      email: email,
+      employee_id: '',
+      role: tempRole,
+      status: HRMS.USER_STATUS.ACTIVE,
+      displayName: 'Demo login',
+      demo: true,
+      reason: '',
+      message: ''
+    };
+  }
+
   var appMode = String(input.appMode || HRMS.APP_MODE.PRODUCTION).trim().toUpperCase();
   if (appMode === HRMS.APP_MODE.DEMO) {
     var demoEmails = input.demoEmails || [];
@@ -257,6 +275,11 @@ var AuthService = (function () {
           ConfigService.getSetting(HRMS.SETTINGS_KEYS.DEMO_EMAILS, '')
         );
         input.demoRole = resolveDemoRole_(email);
+      }
+      if (ConfigService.isTempDemoLoginEnabled() && email === ConfigService.getTempDemoSessionEmail()) {
+        input.tempDemoLogin = true;
+        input.tempDemoRole = ConfigService.getTempDemoRole();
+        return input;
       }
     } catch (ignore) {}
 

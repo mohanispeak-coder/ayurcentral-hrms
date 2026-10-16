@@ -161,6 +161,11 @@ var SchemaService = (function () {
     ['demo_emails', '', 'STRING', 'DEMO only: comma-separated Google emails', true],
     ['demo_default_role', 'ADMIN', 'STRING', 'DEMO only: default role for demo_emails', true],
     ['demo_roles', '', 'STRING', 'DEMO only: email:ROLE overrides (comma-separated)', true],
+    ['temp_demo_login_enabled', 'false', 'BOOLEAN', 'TEMP: enable User ID + password login (no OTP)', true],
+    ['temp_demo_user_id', '', 'STRING', 'TEMP: demo login user id', true],
+    ['temp_demo_password_salt', '', 'STRING', 'TEMP: password salt (set via devSetTempDemoCredentials)', true],
+    ['temp_demo_password_hash', '', 'STRING', 'TEMP: password hash (set via devSetTempDemoCredentials)', true],
+    ['temp_demo_role', 'ADMIN', 'STRING', 'TEMP: role for demo login session (default ADMIN)', true],
     ['employee_mandatory_fields_json', '', 'JSON', 'Employee field mandatory flags for create and bulk upload', false]
   ];
 

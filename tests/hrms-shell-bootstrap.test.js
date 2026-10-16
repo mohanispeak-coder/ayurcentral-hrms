@@ -44,7 +44,9 @@ var SHELL_IDS = [
   'btn-sign-out', 'loading-state', 'error-state', 'unauthorized-state', 'unauthorized-message',
   'auth-state', 'auth-step-email', 'auth-google-hint', 'auth-email', 'auth-email-error',
   'auth-send-btn', 'auth-step-code', 'auth-email-display', 'auth-code', 'auth-code-error',
-  'auth-verify-btn', 'auth-resend-btn', 'auth-change-email-btn', 'setup-state',
+  'auth-verify-btn', 'auth-resend-btn', 'auth-change-email-btn',
+  'auth-step-demo', 'auth-demo-user-id', 'auth-demo-password', 'auth-demo-error', 'auth-demo-btn',
+  'setup-state',
   'btn-run-setup', 'setup-result', 'page-content', 'main-content', 'module-ui-root',
   'toast-container'
 ];

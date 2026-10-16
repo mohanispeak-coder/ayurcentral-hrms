@@ -82,6 +82,22 @@
               <button type="button" class="btn btn-ghost btn-sm" id="auth-change-email-btn">Change email</button>
             </div>
           </div>
+          <div class="card auth-card hidden" id="auth-step-demo">
+            <h2>Demo sign-in</h2>
+            <p>Sign in with the demo user ID and password (no verification code).</p>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-demo-user-id">User ID</label>
+              <input class="form-input" type="text" id="auth-demo-user-id" autocomplete="username" placeholder="Demo user ID" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-demo-password">Password</label>
+              <input class="form-input" type="password" id="auth-demo-password" autocomplete="current-password" placeholder="Password" required>
+            </div>
+            <p id="auth-demo-error" class="alert alert-danger hidden" role="alert"></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="auth-demo-btn">Sign in</button>
+            </div>
+          </div>
         </div>
         <div id="setup-state" class="card auth-card hidden">
           <h2>System setup required</h2>

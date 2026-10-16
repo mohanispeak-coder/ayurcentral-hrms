@@ -2271,11 +2271,27 @@
     }
   }
 
+  function isTempDemoLoginEnabled_() {
+    return !!(state.app && state.app.tempDemoLoginEnabled);
+  }
+
+  function syncTempDemoAuthCard_() {
+    var demoCard = $('auth-step-demo');
+    if (!demoCard) return;
+    if (isTempDemoLoginEnabled_()) {
+      demoCard.classList.remove('hidden');
+    } else {
+      demoCard.classList.add('hidden');
+      showAuthError($('auth-demo-error'), '');
+    }
+  }
+
   function showAuthEmailStep() {
     $('auth-step-email').classList.remove('hidden');
     $('auth-step-code').classList.add('hidden');
     showAuthError($('auth-email-error'), '');
     showAuthError($('auth-code-error'), '');
+    syncTempDemoAuthCard_();
   }
 
   function showAuthCodeStep(email) {
@@ -2283,6 +2299,8 @@
     $('auth-email-display').textContent = email;
     $('auth-step-email').classList.add('hidden');
     $('auth-step-code').classList.remove('hidden');
+    var demoCard = $('auth-step-demo');
+    if (demoCard) demoCard.classList.add('hidden');
     $('auth-code').value = '';
     showAuthError($('auth-code-error'), '');
   }
@@ -2323,6 +2341,7 @@
     setAuthedChrome(false);
     $('auth-state').classList.remove('hidden');
     showAuthEmailStep();
+    syncTempDemoAuthCard_();
     if (state.authEmail) {
       $('auth-email').value = state.authEmail;
     }
@@ -2389,6 +2408,36 @@
     }
     onEnterSubmit($('auth-email'), 'auth-send-btn');
     onEnterSubmit($('auth-code'), 'auth-verify-btn');
+    onEnterSubmit($('auth-demo-user-id'), 'auth-demo-btn');
+    onEnterSubmit($('auth-demo-password'), 'auth-demo-btn');
+
+    $('auth-demo-btn').addEventListener('click', function () {
+      if (!isTempDemoLoginEnabled_()) return;
+      var userId = ($('auth-demo-user-id').value || '').trim();
+      var password = $('auth-demo-password').value || '';
+      showAuthError($('auth-demo-error'), '');
+      if (!userId || userId.length < 2) {
+        showAuthError($('auth-demo-error'), 'Enter your user ID.');
+        return;
+      }
+      if (!password) {
+        showAuthError($('auth-demo-error'), 'Enter your password.');
+        return;
+      }
+      var btn = $('auth-demo-btn');
+      callServer('apiVerifyTempDemoLogin', userId, password, { button: btn, loadingText: 'Signing in…' })
+        .then(function (data) {
+          setSessionToken(data.sessionToken);
+          applyBootstrapSuccess({
+            session: data.session,
+            app: state.app,
+            navigation: data.navigation || []
+          });
+        })
+        .catch(function (err) {
+          showAuthError($('auth-demo-error'), err.message || 'Sign-in failed.');
+        });
+    });
 
     $('auth-send-btn').addEventListener('click', function () {
       var email = ($('auth-email').value || '').trim();
@@ -2573,6 +2622,7 @@
         syncClientAssetsVersion_(data.app);
         state.app = data.app;
         if (data.session) state.session = data.session;
+        syncTempDemoAuthCard_();
 
         if (!data.app.configured && !data.session.authorized) {
           $('loading-state').classList.add('hidden');
