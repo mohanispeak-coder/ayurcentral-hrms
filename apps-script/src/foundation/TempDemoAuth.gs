@@ -120,6 +120,12 @@ var TempDemoAuthService = (function () {
 function devSetTempDemoCredentials(userId, password, role) {
   userId = hrmsTempDemoNormalizeUserId_(userId);
   password = String(password || '');
+  if (!userId && !password) {
+    throw new Error(
+      'Do not Run devSetTempDemoCredentials from the toolbar (it has no parameters). ' +
+      'Select runTempDemoSetup in the function dropdown, edit user ID/password inside that function, then Run.'
+    );
+  }
   if (!userId || userId.length < 2) {
     throw new Error('userId must be at least 2 characters');
   }
