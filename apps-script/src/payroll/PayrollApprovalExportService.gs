@@ -39,18 +39,40 @@ var PayrollApprovalExportService = (function () {
   }
 
   function exportSpreadsheetXlsx_(spreadsheetId) {
-    return PayrollService.exportSpreadsheetXlsxForTemplate_(spreadsheetId);
+    if (typeof AttendanceBulkService !== 'undefined' && AttendanceBulkService.exportSpreadsheetXlsx_) {
+      return AttendanceBulkService.exportSpreadsheetXlsx_(spreadsheetId);
+    }
+    SpreadsheetApp.flush();
+    var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+    var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
+      '/export?mimeType=' + encodeURIComponent(xlsxMime) + '&alt=media';
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) Utilities.sleep(400 * attempt);
+      try {
+        var resp = UrlFetchApp.fetch(v3Url, {
+          headers: auth,
+          muteHttpExceptions: true,
+          followRedirects: true
+        });
+        if (resp.getResponseCode() === 200) {
+          var b = resp.getBlob();
+          if (b && b.getBytes().length > 100) return b;
+        }
+      } catch (ignore) {}
+    }
+    throw configurationError_('Could not export calculated payroll Excel. Enable Drive API for this script project.');
   }
 
   function buildApprovalSpreadsheet_(detail) {
     detail = detail || {};
     var run = detail.run || {};
-    var rows = detail.rows || [];
+    var rows = (detail.rows || []).filter(function (row) { return row && row.record; });
     var componentCodes = collectComponentCodes_(rows);
-    var ss = SpreadsheetApp.create('HRMS Payroll Approval');
+    var ss = SpreadsheetApp.create('HRMS Calculated Payroll');
     var fileId = ss.getId();
     var sheet = ss.getSheets()[0];
-    sheet.setName('PayrollApproval');
+    sheet.setName('CalculatedPayroll');
     var headers = [
       'employee_id', 'employee_name', 'vertical_name', 'designation', 'department',
       'working_days', 'paid_days', 'lop_days', 'bonus', 'incentive', 'other_earnings',
@@ -92,26 +114,32 @@ var PayrollApprovalExportService = (function () {
       data.push(line);
     });
     if (data.length) {
-      sheet.getRange(2, 1, 1 + data.length, headers.length).setValues(data);
+      sheet.getRange(2, 1, data.length, headers.length).setValues(data);
     }
     sheet.getRange(1, 1).setNote('Run: ' + (run.payroll_run_id || '') + ' · Re-download after changing salary hold in HRMS.');
     SpreadsheetApp.flush();
-    var name = 'HRMS_Payroll_Approval_' + (run.payroll_run_id || 'run') + '.xlsx';
+    var name = 'HRMS_Calculated_Payroll_' + (run.payroll_run_id || 'run') + '.xlsx';
+    var blob;
     try {
-      var blob = exportSpreadsheetXlsx_(fileId);
-      return Utilities.newBlob(blob.getBytes(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name);
+      var exported = exportSpreadsheetXlsx_(fileId);
+      var bytes = exported.getBytes();
+      blob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name);
     } finally {
       try {
         DriveApp.getFileById(fileId).setTrashed(true);
       } catch (ignoreTrash) {}
     }
+    if (!blob || !blob.getBytes().length) {
+      throw configurationError_('Exported payroll file was empty.');
+    }
+    return blob;
   }
 
   function downloadApprovalPack(runId) {
     var detail = PayrollService.getRunDetail(runId, { skipSync: true });
     var st = String(detail.run.status || '').toUpperCase();
     if (st === HRMS.PAYROLL_STATUS.DRAFT) {
-      throw validationError_('Calculate payroll before downloading the approval file.');
+      throw validationError_('Calculate payroll before downloading the calculated payroll file.');
     }
     var blob = buildApprovalSpreadsheet_(detail);
     return {

@@ -107,7 +107,8 @@ check('payslip-pdf-export', /htmlToPdfBlob_/.test(payslip) && /baseName \+ '\.pd
 check('payroll-salary-hold-ui', /js-salary-hold/.test(client) && /apiSetPayrollSalaryHold/.test(api) &&
   /setSalaryHold/.test(payroll));
 check('payroll-approval-export', /apiDownloadPayrollApprovalExport/.test(api) &&
-  /PayrollApprovalExportService/.test(read('payroll/PayrollApprovalExportService.gs')));
+  /PayrollApprovalExportService/.test(read('payroll/PayrollApprovalExportService.gs')) &&
+  /Download calculated payroll/.test(client));
 check('payroll-department-review', /departmentReview/.test(payroll) && /dept-review/.test(client) &&
   /function trim_\(/.test(payroll));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
