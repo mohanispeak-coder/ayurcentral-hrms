@@ -174,9 +174,11 @@ const managerRec = { employee_id: 'EMP002', display_name: 'Mo Manager', email: '
 // --- payroll / payslip no net ---
 {
   const run = { payroll_run_id: 'PR-1', period_year: 2026, period_month: 8 };
-  const rec = { payroll_record_id: 'PREC-1', employee_id: 'EMP003', net_pay: 99999 };
+  const rec = { payroll_record_id: 'PREC-1', employee_id: 'EMP003', net_pay: 99999, payslip_document_id: 'DOC-PS-1' };
   const slip = E.payloads.payslipAvailable(rec, employeeRec, run);
-  check('NTF-payslip-subject', slip.email_subject === 'Payslip available — August 2026');
+  check('NTF-payslip-subject', slip.email_subject === 'Payslip available - August 2026');
+  check('NTF-payslip-doc-id', slip.payslip_document_id === 'DOC-PS-1');
+  check('NTF-payslip-email-pdf-copy', String(slip.email_body).indexOf('attached to this email as a PDF') >= 0);
   check('NTF-payslip-no-net-title', !E.payslipContainsNet(slip.title) && slip.title.indexOf('99999') < 0);
   check('NTF-payslip-no-net-body', !E.payslipContainsNet(slip.email_body) && String(slip.email_body).indexOf('99999') < 0);
   check('NTF-payslip-route', slip.action_route === 'my-payslips');

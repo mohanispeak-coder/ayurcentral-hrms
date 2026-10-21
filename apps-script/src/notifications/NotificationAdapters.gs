@@ -234,9 +234,19 @@ var NotificationPayrollAdapter = (function () {
       employeeMap = employeeMap || {};
       var inputs = [];
       (records || []).forEach(function (row) {
+        var docId = String(row.payslip_document_id || '').trim();
+        if (!docId && row.employee_id && run && run.payroll_run_id) {
+          var fresh = DbService.findOne(HRMS.SHEETS.PAYROLL_RECORDS, {
+            payroll_run_id: run.payroll_run_id,
+            employee_id: row.employee_id
+          });
+          docId = fresh && fresh.payslip_document_id ? String(fresh.payslip_document_id).trim() : '';
+        }
+        if (!docId) return;
+        var rowForPayload = Object.assign({}, row, { payslip_document_id: docId });
         var emp = employeeMap[row.employee_id] || NotificationService.resolveRecipient({ employee_id: row.employee_id });
         if (!emp) return;
-        var payload = NotificationEngine.payloads.payslipAvailable(row, emp, run);
+        var payload = NotificationEngine.payloads.payslipAvailable(rowForPayload, emp, run);
         if (NotificationEngine.payslipContainsNet(payload.title) ||
             NotificationEngine.payslipContainsNet(payload.email_subject)) {
           Logger.log('Skipped payslip notification - subject contained net pay');

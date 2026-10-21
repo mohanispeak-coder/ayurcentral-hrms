@@ -284,15 +284,45 @@ var NotificationService = (function () {
     return 'Employee ID: ' + id + '\n' + body;
   }
 
-  function sendMail_(to, subject, body) {
+  function sendMail_(to, subject, body, attachments) {
+    attachments = attachments || [];
     if (typeof NotificationService !== 'undefined' && NotificationService._testSendEmail) {
-      return NotificationService._testSendEmail(to, subject, body);
+      return NotificationService._testSendEmail(to, subject, body, attachments);
     }
-    MailApp.sendEmail({
+    var opts = {
       to: String(to).trim(),
       subject: subject,
       body: body
-    });
+    };
+    if (attachments && attachments.length) {
+      opts.attachments = attachments;
+    }
+    MailApp.sendEmail(opts);
+  }
+
+  function resolvePayslipEmailAttachments_(record, normalized) {
+    var type = String(record && record.type || '').toUpperCase();
+    if (type !== NotificationEngine.TYPE.PAYSLIP_AVAILABLE) return [];
+    var docId = normalized && normalized.payslip_document_id
+      ? String(normalized.payslip_document_id).trim()
+      : '';
+    if (!docId && record.recipient_employee_id && record.source_record_id) {
+      var rec = DbService.findOne(HRMS.SHEETS.PAYROLL_RECORDS, {
+        payroll_run_id: String(record.source_record_id),
+        employee_id: String(record.recipient_employee_id)
+      });
+      if (rec && rec.payslip_document_id) {
+        docId = String(rec.payslip_document_id).trim();
+      }
+    }
+    if (!docId) return [];
+    try {
+      var blob = PayslipService.getPayslipPdfBlobForEmail(docId);
+      return blob ? [blob] : [];
+    } catch (e) {
+      Logger.log('Payslip email attachment skipped: ' + (e.message || e));
+      return [];
+    }
   }
 
   function deliverEmail_(record, normalized) {
@@ -321,7 +351,8 @@ var NotificationService = (function () {
       errorMessage = 'NO_EMAIL';
     } else {
       try {
-        sendMail_(to, subject, body);
+        var attachments = resolvePayslipEmailAttachments_(record, normalized);
+        sendMail_(to, subject, body, attachments);
         status = NotificationEngine.EMAIL_STATUS.SENT;
         sentAt = now_();
       } catch (e) {

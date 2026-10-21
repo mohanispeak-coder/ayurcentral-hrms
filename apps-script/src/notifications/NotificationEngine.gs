@@ -434,7 +434,8 @@ var NotificationEngine = (function () {
       email_body: trim_(input.email_body) || trim_(input.message),
       actor_employee_id: trim_(input.actor_employee_id),
       force_email: input.force_email,
-      force_in_app: input.force_in_app
+      force_in_app: input.force_in_app,
+      payslip_document_id: trim_(input.payslip_document_id)
     };
   }
 
@@ -797,7 +798,8 @@ var NotificationEngine = (function () {
       email_body: extra.email_body || message,
       actor_employee_id: extra.actor_employee_id || '',
       force_email: extra.force_email,
-      force_in_app: extra.force_in_app
+      force_in_app: extra.force_in_app,
+      payslip_document_id: extra.payslip_document_id || ''
     };
   }
 
@@ -954,8 +956,9 @@ var NotificationEngine = (function () {
       message: 'Your payslip for ' + period + ' is available in My Payslips.',
       email_subject: subject,
       email_body: 'Hello ' + vars.display_name + ',\n\nYour payslip for ' + period +
-        ' is available in AyurCentral HRMS.\nOpen My Payslips to download it.\n\nEmployee ID: ' +
+        ' is attached to this email as a PDF. You can also open My Payslips in AyurCentral HRMS to download it again.\n\nEmployee ID: ' +
         vars.employee_id,
+      payslip_document_id: record && record.payslip_document_id ? String(record.payslip_document_id) : '',
       dedupe_bucket: String(record && record.payroll_record_id || run.payroll_run_id)
     });
   }

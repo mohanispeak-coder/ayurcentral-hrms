@@ -493,6 +493,38 @@ var PayslipService = (function () {
     return String(value);
   }
 
+  /**
+   * PDF blob for payroll notification emails (no end-user session).
+   * @param {string} documentId
+   * @return {GoogleAppsScript.Base.Blob}
+   */
+  function getPayslipPdfBlobForEmail(documentId) {
+    documentId = String(documentId || '').trim();
+    if (!documentId) throw new Error('Missing payslip document id.');
+    var doc = DbService.findOne(HRMS.SHEETS.DOCUMENTS, { document_id: documentId });
+    if (!doc || String(doc.category).toUpperCase() !== HRMS.DOCUMENT_CATEGORY.PAYSLIP) {
+      throw new Error('Payslip document not found.');
+    }
+    if (!isPayrollRunLocked_(doc.payroll_run_id)) {
+      throw new Error('Payslip is not available until payroll is finalized.');
+    }
+    if (!payslipDriveFileOk_(doc)) {
+      throw new Error('Payslip file is missing on Drive.');
+    }
+    var file = DriveApp.getFileById(doc.drive_file_id);
+    var packaged = packagePayslipFileForClient_(file.getBlob(), doc, { intent: 'download' });
+    if (!packaged || !packaged.base64) {
+      throw new Error('Could not package payslip for email.');
+    }
+    var bytes = Utilities.base64Decode(packaged.base64);
+    var mime = packaged.mimeType || 'application/pdf';
+    var name = packaged.fileName || 'payslip.pdf';
+    if (!isPdfBytes_(bytes)) {
+      throw new Error('Payslip email requires PDF; conversion failed.');
+    }
+    return Utilities.newBlob(bytes, mime, name);
+  }
+
   function getPayslipForDownload(documentId, intent) {
     var session = PermissionService.require(HRMS.ACTIONS.VIEW_OWN_PAYSLIP);
     var doc = DbService.findOne(HRMS.SHEETS.DOCUMENTS, { document_id: documentId });
@@ -945,6 +977,7 @@ var PayslipService = (function () {
     generateForRun: generateForRun,
     generateForEmployee: generateForEmployee,
     getPayslipForDownload: getPayslipForDownload,
+    getPayslipPdfBlobForEmail: getPayslipPdfBlobForEmail,
     listOwnPayslips: listOwnPayslips,
     listForEmployee: listForEmployee,
     findReusableDocument: findReusableDocument,
