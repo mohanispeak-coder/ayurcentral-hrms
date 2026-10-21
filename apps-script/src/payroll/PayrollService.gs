@@ -803,9 +803,21 @@ var PayrollService = (function () {
     }
   }
 
+  function attendanceInputCountMap_() {
+    var map = {};
+    DbService.getAllRecords(HRMS.SHEETS.PAYROLL_INPUTS).forEach(function (inp) {
+      if (!inputHasAttendance_(inp)) return;
+      var rid = String(inp.payroll_run_id || '');
+      if (!rid) return;
+      map[rid] = (map[rid] || 0) + 1;
+    });
+    return map;
+  }
+
   function listRuns(session) {
     requireHr_(session);
     var runs = DbService.getAllRecords(HRMS.SHEETS.PAYROLL_RUNS);
+    var attendanceByRun = attendanceInputCountMap_();
     runs.sort(function (a, b) {
       var ya = Number(a.period_year) - Number(b.period_year);
       if (ya !== 0) return ya > 0 ? -1 : 1;
@@ -815,20 +827,90 @@ var PayrollService = (function () {
     });
     return runs.map(function (r) {
       var ser = serializeRun_(r);
-      ser.attendance_input_count = countAttendanceInputs_(r.payroll_run_id);
+      ser.attendance_input_count = attendanceByRun[r.payroll_run_id] || 0;
       return ser;
     });
   }
 
   /**
+   * KPI summary for navigation reads — no per-employee row merge or employee index.
+   * @param {Array.<Object>} inputs
+   * @param {Array.<Object>} records
+   */
+  function buildSummaryLight_(inputs, records) {
+    inputs = inputs || [];
+    records = records || [];
+    var gross = 0;
+    var deductions = 0;
+    var net = 0;
+    var lopDays = 0;
+    var lopEmployees = 0;
+    var exceptionCount = 0;
+    inputs.forEach(function (inp) {
+      var lop = num_(inp.lop_days);
+      lopDays += lop;
+      if (lop > 0) lopEmployees++;
+    });
+    records.forEach(function (rec) {
+      gross += num_(rec.gross_earnings);
+      deductions += num_(rec.total_deductions);
+      net += num_(rec.net_pay);
+      if (rec.exception_flags) exceptionCount++;
+    });
+    return {
+      employee_count: inputs.length,
+      calculated_count: records.length,
+      skipped_count: Math.max(0, inputs.length - records.length),
+      gross_earnings: PayrollEngine.round2(gross),
+      total_deductions: PayrollEngine.round2(deductions),
+      net_pay: PayrollEngine.round2(net),
+      lop_days: PayrollEngine.round2(lopDays),
+      lop_employees: lopEmployees,
+      lop_mismatch_count: 0,
+      exception_count: exceptionCount,
+      has_totals: records.length > 0
+    };
+  }
+
+  /**
    * @param {string} runId
-   * @param {Object=} options { skipSync: true, alreadyLocked: true }
+   * @param {Object=} options { skipSync: true, alreadyLocked: true, light: true }
    */
   function getRunDetail(runId, options) {
     requireHr_();
     options = options || {};
     var run = getRun_(runId);
     var st = String(run.status).toUpperCase();
+    if (options.light) {
+      options.skipSync = true;
+      var lightInputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
+      var lightRecords = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
+      var lightPhase = uiPhaseForStatus_(run.status);
+      return {
+        run: serializeRun_(run),
+        rows: [],
+        summary: buildSummaryLight_(lightInputs, lightRecords),
+        exceptions: [],
+        exceptionSummary: {
+          total_employees: lightInputs.length,
+          ready_count: 0,
+          attention_count: 0,
+          exceptions: []
+        },
+        departmentTotals: [],
+        departmentReview: [],
+        payrollReviewColumns: { earnings: [], deductions: [], employers: [] },
+        lockBlocks: [],
+        finalizeBlockers: [],
+        payslipStatus: {},
+        uiPhase: lightPhase,
+        uiPhaseLabel: uiPhaseLabel_(lightPhase),
+        syncMeta: { added: 0, total: lightInputs.length, error: '' },
+        eligibleCount: lightInputs.length,
+        legacyImportHint: null,
+        light: true
+      };
+    }
     var syncMeta = { added: 0, total: 0, error: '' };
     if (!options.skipSync &&
         (st === HRMS.PAYROLL_STATUS.DRAFT || st === HRMS.PAYROLL_STATUS.CALCULATED)) {

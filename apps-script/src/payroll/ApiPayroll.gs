@@ -9,10 +9,29 @@ function apiListPayrollRuns(sessionToken) {
   }, sessionToken);
 }
 
-function apiGetPayrollRun(runId, sessionToken) {
+/**
+ * @param {string} runId
+ * @param {Object|string=} optionsOrToken Pass { full: true } for review tables; default is light read (skip sync).
+ * @param {string=} sessionToken
+ */
+function apiGetPayrollRun(runId, optionsOrToken, sessionToken) {
+  var options = {};
+  var token = sessionToken;
+  if (optionsOrToken && typeof optionsOrToken === 'object' && !optionsOrToken.hrmsCode) {
+    options = optionsOrToken;
+    token = sessionToken;
+  } else {
+    token = optionsOrToken;
+  }
+  if (options.full || options.skipSync === false) {
+    options.light = false;
+  } else {
+    options.light = true;
+    options.skipSync = true;
+  }
   return hrmsRun_(function () {
-    return PayrollService.getRunDetail(runId);
-  }, sessionToken);
+    return PayrollService.getRunDetail(runId, options);
+  }, token);
 }
 
 function apiSyncPayrollEmployees(runId, sessionToken) {

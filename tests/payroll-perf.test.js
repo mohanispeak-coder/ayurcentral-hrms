@@ -70,7 +70,8 @@ check('calc-still-rewrites-on-calculated', /DRAFT/.test(calcFn) && /CALCULATED/.
 check('detail-skip-sync-option', /options\.skipSync/.test(payroll));
 check('sync-already-locked', /options\.alreadyLocked/.test(fnBlock(payroll, 'syncEligibleEmployees', 'isEmployeeEligibleForPeriod')));
 check('seed-uses-lop-map', /function seedInputs_[\s\S]*getApprovedLopMapForPayroll/.test(payroll));
-check('api-get-run-still-syncs', /PayrollService\.getRunDetail\(runId\)/.test(api));
+check('api-get-run-light-read', /options\.light\s*=\s*true/.test(api) && /options\.skipSync\s*=\s*true/.test(api));
+check('get-run-detail-light-mode', /function buildSummaryLight_/.test(payroll) && /options\.light/.test(payroll));
 check('payload-omits-breakdown', /delete out\.component_breakdown/.test(payroll));
 check('ui-does-not-read-breakdown', !/component_breakdown/.test(client));
 

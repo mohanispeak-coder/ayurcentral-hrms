@@ -375,7 +375,11 @@
           loadList();
         }
       }
-      callServer(fn, query)
+      var hasCachedList = !!(empViewCache.lists[key] && empViewCache.lists[key].data);
+      var listRpcOpts = hasCachedList ? { background: true } : null;
+      var listRpcArgs = [fn, query];
+      if (listRpcOpts) listRpcArgs.push(listRpcOpts);
+      callServer.apply(null, listRpcArgs)
         .then(function (data) {
           if (gen !== listLoadGen_ || !stillOn(seq, route) || !$('emp-table-body')) return;
           empViewCache.lists[key] = { data: data, query: query };
