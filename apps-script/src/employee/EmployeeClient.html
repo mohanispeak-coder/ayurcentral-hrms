@@ -1416,11 +1416,7 @@
       a.click();
       URL.revokeObjectURL(url);
       if (file && file.templateVersion) {
-        var req = (file.mandatoryFieldIds && file.mandatoryFieldIds.length)
-          ? (' Required * columns: ' + file.mandatoryFieldIds.join(', ') + '.')
-          : '';
-        showToast('Template v' + file.templateVersion + ' downloaded.' + req +
-          ' Single Employees sheet: vertical_name and salary_structure_id dropdowns.', 'success');
+        showToast('Template downloaded successfully.', 'success');
       }
     }
 
