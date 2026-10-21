@@ -91,7 +91,8 @@ var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 9', /TEMPLATE_VERSION_ = '9'/.test(bulkSrc));
+check('bulk template version 10', /TEMPLATE_VERSION_ = '10'/.test(bulkSrc));
+check('drive v3 export uses alt=media', /alt=media/.test(bulkSrc));
 check('materialize xlsx before cleanup', /materializeXlsxBlob_/.test(bulkSrc));
 check('bulk header labels use mandatory fields', /bulkHeaderLabels_/.test(bulkSrc) && /mandatoryFieldIds/.test(bulkSrc));
 check('no silent plain csv template fallback', !/buildTemplatePlainCsv_\(variant\), variant, 'text\/csv'\)/.test(bulkSrc));

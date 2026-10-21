@@ -76,7 +76,7 @@ var AttendanceBulkService = (function () {
     }
 
     var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
-      '/export?mimeType=' + encodeURIComponent(xlsxMime);
+      '/export?mimeType=' + encodeURIComponent(xlsxMime) + '&alt=media';
     var blob = tryFetchExport(v3Url, 'Drive v3 export');
     if (blob) return blob;
 

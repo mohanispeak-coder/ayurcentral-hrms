@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '9';
+  var TEMPLATE_VERSION_ = '10';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -287,31 +287,54 @@ var EmployeeBulkService = (function () {
   }
 
   function exportSpreadsheetXlsx_(spreadsheetId) {
-    var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     SpreadsheetApp.flush();
+    Utilities.sleep(300);
+    var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+
+    function tryFetchExport_(url, label) {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) Utilities.sleep(400 * attempt);
+        try {
+          var resp = UrlFetchApp.fetch(url, {
+            headers: auth,
+            muteHttpExceptions: true,
+            followRedirects: true
+          });
+          if (resp.getResponseCode() === 200) {
+            var b = resp.getBlob();
+            if (b && b.getBytes().length > 100) {
+              return b.setContentType(xlsxMime);
+            }
+          }
+          Logger.log(label + ' attempt ' + (attempt + 1) + ' HTTP ' + resp.getResponseCode());
+        } catch (fetchErr) {
+          Logger.log(label + ' attempt ' + (attempt + 1) + ' failed: ' + (fetchErr.message || fetchErr));
+        }
+      }
+      return null;
+    }
+
+    var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
+      '/export?mimeType=' + encodeURIComponent(xlsxMime) + '&alt=media';
+    var blob = tryFetchExport_(v3Url, 'Drive v3 export');
+    if (blob) return blob;
+
+    var docsUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
+    blob = tryFetchExport_(docsUrl, 'Docs export');
+    if (blob) return blob;
+
     try {
       var viaDriveApp = DriveApp.getFileById(spreadsheetId).getAs(xlsxMime);
-      if (viaDriveApp && viaDriveApp.getBytes() && viaDriveApp.getBytes().length > 500) {
+      if (viaDriveApp && viaDriveApp.getBytes() && viaDriveApp.getBytes().length > 100) {
         return viaDriveApp;
       }
     } catch (driveAppExportErr) {
-      // try advanced service / URL export below
+      Logger.log('DriveApp.getAs export failed: ' + (driveAppExportErr.message || driveAppExportErr));
     }
-    if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
-      return Drive.Files.export(spreadsheetId, xlsxMime);
-    }
-    var token = ScriptApp.getOAuthToken();
-    var exportUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
-    var response = UrlFetchApp.fetch(exportUrl, {
-      headers: { Authorization: 'Bearer ' + token },
-      muteHttpExceptions: true
-    });
-    if (response.getResponseCode() === 200) {
-      return response.getBlob().setContentType(xlsxMime);
-    }
+
     throw configurationError_(
-      'Could not export Excel template (bold headers and vertical_name dropdown require a real .xlsx file).' +
-      driveApiHint_()
+      'Could not export Excel template.' + driveApiHint_()
     );
   }
 
@@ -440,8 +463,12 @@ var EmployeeBulkService = (function () {
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    if (sheetHeaders.indexOf('vertical_name') >= 0) {
-      applyVerticalColumnDropdown_(employees, sheetHeaders.length, templateVerticals);
+    try {
+      if (sheetHeaders.indexOf('vertical_name') >= 0) {
+        applyVerticalColumnDropdown_(employees, sheetHeaders.length, templateVerticals);
+      }
+    } catch (dropdownErr) {
+      Logger.log('Bulk template vertical dropdown skipped: ' + dropdownErr.message);
     }
     employees.activate();
 
