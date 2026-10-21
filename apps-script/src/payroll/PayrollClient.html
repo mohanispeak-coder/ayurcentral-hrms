@@ -2606,18 +2606,23 @@
     function payslipActionHtml_(row, runId) {
       var rec = row.record;
       if (!rec) return '<td>-</td>';
-      if (isRowOnSalaryHold_(row)) {
-        return '<td class="hint">—</td>';
-      }
+      var empId = escapeHtml(row.employee.employee_id);
+      var empName = escapeHtml(row.employee.display_name || row.employee.employee_id);
       var ready = !!(rec.payslip_document_id);
-      var html = '<td class="payslip-actions">';
+      var html = '<td class="payslip-actions" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+      if (isRowOnSalaryHold_(row)) {
+        html += '<button type="button" class="btn btn-primary btn-sm js-salary-payout-btn" data-emp="' + empId +
+          '" data-hold="NO" title="Allow payslip for this finalized month">Release hold</button>';
+        html += '<button type="button" class="btn btn-secondary btn-sm" disabled title="Release hold first">Generate &amp; notify</button>';
+        html += '</td>';
+        return html;
+      }
       if (ready) {
         html += '<button type="button" class="btn btn-secondary btn-sm js-pay-dl" data-id="' +
-          escapeHtml(rec.payslip_document_id) + '">Download</button> ';
+          escapeHtml(rec.payslip_document_id) + '">Download</button>';
       }
-      html += '<button type="button" class="btn btn-primary btn-sm js-gen-payslip" data-emp="' +
-        escapeHtml(row.employee.employee_id) + '" data-run="' + escapeHtml(runId) + '" data-name="' +
-        escapeHtml(row.employee.display_name || row.employee.employee_id) + '">' +
+      html += '<button type="button" class="btn btn-primary btn-sm js-gen-payslip" data-emp="' + empId +
+        '" data-run="' + escapeHtml(runId) + '" data-name="' + empName + '">' +
         (ready ? 'Regenerate & notify' : 'Generate & notify') + '</button></td>';
       return html;
     }
@@ -2811,7 +2816,7 @@
           '<p>Finalize payroll first, then generate payslip files for all employees.</p></div></div>';
         return html;
       }
-      html += '<p class="page-lede">Use <strong>Generate all payslips</strong> for everyone who is not on salary hold, or use per-row <strong>Generate &amp; notify</strong> below.</p>';
+      html += '<p class="page-lede">Use <strong>Generate all payslips</strong> for everyone not on hold. If someone was on hold, use <strong>Release hold</strong> on their row, then <strong>Generate &amp; notify</strong> (works after finalize).</p>';
       var rows = payslipRows_(detail);
       var runId = detail.run.payroll_run_id;
       if (!rows.length) {

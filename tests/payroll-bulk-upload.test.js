@@ -106,6 +106,9 @@ check('per-employee-payslip-notify', /notifyPayslipsAvailable[\s\S]*\[snapshot\.
 check('payslip-pdf-export', /htmlToPdfBlob_/.test(payslip) && /baseName \+ '\.pdf'/.test(payslip));
 check('payroll-salary-hold-ui', /js-salary-payout-btn/.test(client) && /Release hold/.test(client) &&
   /apiSetPayrollSalaryHold/.test(api) && /setSalaryHold/.test(payroll));
+check('payroll-release-hold-after-lock', /assertSalaryHoldMutable_\(run, holdNorm\)/.test(payroll) &&
+  /New salary holds cannot be added after finalize/.test(payroll) &&
+  /Release hold/.test(client) && /js-salary-payout-btn/.test(client));
 check('payroll-approval-export', /apiDownloadPayrollApprovalExport/.test(api) &&
   /PayrollApprovalExportService/.test(read('payroll/PayrollApprovalExportService.gs')) &&
   /Download calculated payroll/.test(client) &&

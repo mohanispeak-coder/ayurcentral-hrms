@@ -70,10 +70,10 @@ var PayrollService = (function () {
     return map;
   }
 
-  function assertSalaryHoldMutable_(run) {
+  function assertSalaryHoldMutable_(run, hold) {
     var st = String(run.status).toUpperCase();
-    if (st === HRMS.PAYROLL_STATUS.LOCKED) {
-      throw conflictError_('Payroll is finalized. Salary hold cannot be changed on a locked run.');
+    if (st === HRMS.PAYROLL_STATUS.LOCKED && normalizeSalaryHoldValue_(hold) === 'YES') {
+      throw conflictError_('Payroll is finalized. New salary holds cannot be added after finalize. Use Release hold on the Payslips row to pay someone.');
     }
   }
 
@@ -155,7 +155,8 @@ var PayrollService = (function () {
     if (!employeeId) throw validationError_('employee_id is required.');
     return withScriptLock_(function () {
       var run = getRun_(runId);
-      assertSalaryHoldMutable_(run);
+      var holdNorm = normalizeSalaryHoldValue_(hold);
+      assertSalaryHoldMutable_(run, holdNorm);
       var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
       var target = null;
       var norm = normalizeEmployeeId_(employeeId);
@@ -165,14 +166,17 @@ var PayrollService = (function () {
         }
       });
       if (!target) throw notFoundError_('Employee not found in this payroll run.');
+      if (holdNorm === 'NO' && !isSalaryHold_(target)) {
+        return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
+      }
       DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', target.payroll_input_id, {
-        salary_hold: normalizeSalaryHoldValue_(hold)
+        salary_hold: holdNorm
       });
       AuditService.log(
-        normalizeSalaryHoldValue_(hold) === 'YES' ? 'PAYROLL_SALARY_HOLD' : 'PAYROLL_SALARY_UNHOLD',
+        holdNorm === 'YES' ? 'PAYROLL_SALARY_HOLD' : 'PAYROLL_SALARY_UNHOLD',
         'PayrollInputs',
         target.payroll_input_id,
-        normalizeSalaryHoldValue_(hold) === 'YES' ? ('Hold salary ' + employeeId) : ('Release salary hold ' + employeeId),
+        holdNorm === 'YES' ? ('Hold salary ' + employeeId) : ('Release salary hold ' + employeeId),
         session.employee_id
       );
       return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
