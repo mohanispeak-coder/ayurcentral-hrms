@@ -91,7 +91,8 @@ var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 11', /TEMPLATE_VERSION_ = '11'/.test(bulkSrc));
+check('bulk template version 12', /TEMPLATE_VERSION_ = '12'/.test(bulkSrc));
+check('salary structure label uses hyphen', /\+ ' - ' \+ s\.structure_name/.test(bulkSrc));
 check('drive v3 export uses alt=media', /alt=media/.test(bulkSrc));
 check('materialize xlsx before cleanup', /materializeXlsxBlob_/.test(bulkSrc));
 check('bulk header labels use mandatory fields', /bulkHeaderLabels_/.test(bulkSrc) && /mandatoryFieldIds/.test(bulkSrc));

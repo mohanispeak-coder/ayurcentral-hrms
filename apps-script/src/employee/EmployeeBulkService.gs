@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '11';
+  var TEMPLATE_VERSION_ = '12';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -267,7 +267,7 @@ var EmployeeBulkService = (function () {
       if (typeof SalaryStructureTypeService !== 'undefined' && SalaryStructureTypeService.listStructureTypeOptions) {
         return SalaryStructureTypeService.listStructureTypeOptions({ activeOnly: true })
           .map(function (s) {
-            return s.salary_structure_id + ' \u2014 ' + s.structure_name +
+            return s.salary_structure_id + ' - ' + s.structure_name +
               (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
           });
       }
@@ -281,7 +281,7 @@ var EmployeeBulkService = (function () {
     var type = SalaryStructureTypeService.findTypeById(structureRef) ||
       SalaryStructureTypeService.findTypeByName(structureRef);
     if (type) return type;
-    var idPart = structureRef.split(/\s+\u2014\s+|\s+-\s+/)[0];
+    var idPart = structureRef.split(/\s+-\s+/)[0];
     idPart = trim_(idPart);
     if (idPart) return SalaryStructureTypeService.findTypeById(idPart);
     return null;
