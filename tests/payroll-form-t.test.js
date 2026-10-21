@@ -40,6 +40,12 @@ check('form-t-payroll-period-context', /readPayrollPeriodContext/.test(formTClie
   /resolveRunForFormT_/.test(formTClient) && /formt-apply-period/.test(formTClient) &&
   /monthSelectHtml_/.test(formTClient));
 check('form-t-prefer-locked-run', /LOCKED/.test(formTSrc) && /locked\.length/.test(formTSrc));
+var scripts = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'src', 'ui', 'Scripts.html'), 'utf8');
+check('payroll-period-clear-runid', /hasOwnProperty\.call\(params, 'runId'\)/.test(scripts));
+check('payroll-period-stale-runid', /byId\.period_year\) !== out\.year/.test(scripts));
+check('payroll-pick-locked-run', /pickBestRunForMonth_/.test(scripts) && /LOCKED/.test(scripts));
+check('form-t-viewcache-period', /periodKey === periodKey_/.test(formTClient));
+check('form-t-pp-period-mismatch', /ppPeriodMismatch/.test(formTClient));
 check('form-t-resolve-run-vertical', /resolveRunIdForVertical_/.test(formTSrc));
 check('form-t-module-ui', /payroll\/FormTClient/.test(apiFoundation));
 check('form-t-template-asset', fs.existsSync(templatePath));

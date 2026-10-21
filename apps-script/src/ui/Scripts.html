@@ -207,16 +207,25 @@
     });
   }
 
+  function pickBestRunForMonth_(matches) {
+    if (!matches || !matches.length) return null;
+    var locked = matches.filter(function (r) {
+      return String(r.status || '').toUpperCase() === 'LOCKED';
+    });
+    if (locked.length) return locked[0];
+    var open = matches.filter(function (r) {
+      return String(r.status || '').toUpperCase() !== 'LOCKED';
+    });
+    if (open.length === 1) return open[0];
+    return matches[0];
+  }
+
   function findRunForVerticalMonth_(runs, year, month, vertical) {
     var list = runsForPayrollMonth_(runs, year, month);
     var want = String(vertical || '').trim().toUpperCase();
-    if (!want) return null;
-    var open = list.filter(function (r) {
-      return String(r.status || '').toUpperCase() !== 'LOCKED' && runVerticalFromRow_(r) === want;
-    });
-    if (open.length) return open[0];
-    var any = list.filter(function (r) { return runVerticalFromRow_(r) === want; });
-    return any.length ? any[0] : null;
+    if (!want) return pickBestRunForMonth_(list);
+    var vertMatches = list.filter(function (r) { return runVerticalFromRow_(r) === want; });
+    return pickBestRunForMonth_(vertMatches);
   }
 
   /**
@@ -353,6 +362,11 @@
     var byId = out.runId
       ? (runs || []).filter(function (r) { return r.payroll_run_id === out.runId; })[0]
       : null;
+    if (byId && out.year && out.month &&
+        (Number(byId.period_year) !== out.year || Number(byId.period_month) !== out.month)) {
+      out.runId = '';
+      byId = null;
+    }
     var runV = byId ? runVerticalFromRow_(byId) : '';
 
     if (byId) {
@@ -371,12 +385,16 @@
       }
     } else if (byId && !out.vertical && runV) {
       out.vertical = runV;
-    } else if (!byId && out.vertical && out.year && out.month) {
+    } else if (!byId && out.year && out.month) {
       var match = findRunForVerticalMonth_(runs, out.year, out.month, out.vertical);
       if (match) {
         out.runId = match.payroll_run_id;
         out.year = Number(match.period_year);
         out.month = Number(match.period_month);
+        if (!out.vertical) {
+          var mv = runVerticalFromRow_(match);
+          if (mv) out.vertical = mv;
+        }
       }
     } else if (byId && !out.vertical && runV) {
       out.vertical = runV;
@@ -391,7 +409,9 @@
     var next = {
       year: params.year != null ? Number(params.year) : prev.year,
       month: params.month != null ? Number(params.month) : prev.month,
-      runId: params.runId ? String(params.runId) : (prev.runId || ''),
+      runId: Object.prototype.hasOwnProperty.call(params, 'runId')
+        ? String(params.runId || '').trim()
+        : (prev.runId || ''),
       vertical: params.vertical ? String(params.vertical).trim().toUpperCase() : (prev.vertical || ''),
       updatedAt: Date.now()
     };
@@ -1999,8 +2019,11 @@
         if (pp) {
           if (pp.year != null && params.year == null) params.year = pp.year;
           if (pp.month != null && params.month == null) params.month = pp.month;
-          if (pp.runId && params.runId == null) params.runId = pp.runId;
-          if (pp.vertical && params.vertical == null) params.vertical = pp.vertical;
+          var ctxPeriodSet = params.year != null && params.month != null;
+          var ppPeriodMismatch = ctxPeriodSet && pp.year != null && pp.month != null &&
+            (Number(params.year) !== Number(pp.year) || Number(params.month) !== Number(pp.month));
+          if (pp.runId && params.runId == null && !ppPeriodMismatch) params.runId = pp.runId;
+          if (pp.vertical && params.vertical == null && !ppPeriodMismatch) params.vertical = pp.vertical;
         }
       }
       persistPayrollPeriodContext_(params);

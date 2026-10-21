@@ -127,8 +127,11 @@
         if (pp) {
           if (pp.year != null && params.year == null) params.year = pp.year;
           if (pp.month != null && params.month == null) params.month = pp.month;
-          if (pp.runId && params.runId == null) params.runId = pp.runId;
-          if (pp.vertical && params.vertical == null) params.vertical = pp.vertical;
+          var ctxPeriodSet = params.year != null && params.month != null;
+          var ppPeriodMismatch = ctxPeriodSet && pp.year != null && pp.month != null &&
+            (Number(params.year) !== Number(pp.year) || Number(params.month) !== Number(pp.month));
+          if (pp.runId && params.runId == null && !ppPeriodMismatch) params.runId = pp.runId;
+          if (pp.vertical && params.vertical == null && !ppPeriodMismatch) params.vertical = pp.vertical;
         }
       }
       return params;
@@ -232,17 +235,20 @@
     function render_(params) {
       params = mergePayrollNavParams_(params || {});
       applyRouteParams_(params);
-      if (params.runId && viewCache_ && viewCache_.run &&
-          viewCache_.run.payroll_run_id !== String(params.runId).trim()) {
-        viewCache_ = null;
+      if (viewCache_ && viewCache_.run) {
+        var cacheRunId = String(viewCache_.run.payroll_run_id || '').trim();
+        var wantRunId = params.runId ? String(params.runId).trim() : '';
+        if (viewCache_.periodKey !== periodKey_() ||
+            (wantRunId && cacheRunId !== wantRunId)) {
+          viewCache_ = null;
+        }
       }
-      if (App.persistPayrollPeriodContext) App.persistPayrollPeriodContext(params);
 
       var page = pageEl_();
       if (!page) return;
 
       var forceRefresh = App.isModuleRefresh && App.isModuleRefresh(MODULE_KEY_);
-      if (!forceRefresh && viewCache_ && viewCache_.run) {
+      if (!forceRefresh && viewCache_ && viewCache_.run && viewCache_.periodKey === periodKey_()) {
         var wantRunId = params.runId || runState_.runId;
         if (!wantRunId || viewCache_.run.payroll_run_id === String(wantRunId).trim()) {
           period_.year = Number(viewCache_.run.period_year);

@@ -121,8 +121,11 @@
         if (pp) {
           if (pp.year != null && params.year == null) params.year = pp.year;
           if (pp.month != null && params.month == null) params.month = pp.month;
-          if (pp.runId && params.runId == null) params.runId = pp.runId;
-          if (pp.vertical && params.vertical == null) params.vertical = pp.vertical;
+          var ctxPeriodSet = params.year != null && params.month != null;
+          var ppPeriodMismatch = ctxPeriodSet && pp.year != null && pp.month != null &&
+            (Number(params.year) !== Number(pp.year) || Number(params.month) !== Number(pp.month));
+          if (pp.runId && params.runId == null && !ppPeriodMismatch) params.runId = pp.runId;
+          if (pp.vertical && params.vertical == null && !ppPeriodMismatch) params.vertical = pp.vertical;
         }
       }
       return params;
