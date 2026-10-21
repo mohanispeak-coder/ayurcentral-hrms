@@ -302,7 +302,16 @@ var PayrollApprovalExportService = (function () {
     };
   }
 
+  function collectComponentColumnsFromRecords_(records) {
+    var rows = (records || []).map(function (rec) {
+      return { record: rec };
+    });
+    return collectComponentColumns_(rows);
+  }
+
   return {
-    downloadApprovalPack: downloadApprovalPack
+    downloadApprovalPack: downloadApprovalPack,
+    lineMapsFromRecord: lineMapsFromRecord_,
+    collectComponentColumnsFromRecords: collectComponentColumnsFromRecords_
   };
 })();

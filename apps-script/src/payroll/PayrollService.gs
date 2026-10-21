@@ -90,6 +90,19 @@ var PayrollService = (function () {
     return trim_(dept) || 'Unknown';
   }
 
+  function payrollLineMapsForReview_(record) {
+    if (typeof PayrollApprovalExportService !== 'undefined' &&
+        PayrollApprovalExportService.lineMapsFromRecord) {
+      return PayrollApprovalExportService.lineMapsFromRecord(record);
+    }
+    return {
+      earnings: {},
+      deductions: {},
+      employers: {},
+      extras: { bonus: 0, incentive: 0, other_earnings: 0, other_deductions: 0, tds_amount: 0 }
+    };
+  }
+
   function buildDepartmentReview_(records, employees, inputs) {
     var holdByEmp = {};
     (inputs || []).forEach(function (inp) {
@@ -119,13 +132,23 @@ var PayrollService = (function () {
       var emp = employees[r.employee_id] || employees[normalizeEmployeeId_(r.employee_id)] || {};
       var held = !!holdByEmp[String(r.employee_id)] || !!holdByEmp[normalizeEmployeeId_(r.employee_id)];
       if (held) g.held_count++;
+      var maps = payrollLineMapsForReview_(r);
+      var extras = maps.extras || {};
       g.employees.push({
         employee_id: r.employee_id,
         display_name: employeeDisplayName_(emp) || r.employee_id,
         gross_earnings: num_(r.gross_earnings),
         total_deductions: num_(r.total_deductions),
         net_pay: num_(r.net_pay),
-        salary_hold: held ? 'YES' : 'NO'
+        salary_hold: held ? 'YES' : 'NO',
+        earnings: maps.earnings || {},
+        deductions: maps.deductions || {},
+        employers: maps.employers || {},
+        bonus: num_(extras.bonus),
+        incentive: num_(extras.incentive),
+        other_earnings: num_(extras.other_earnings),
+        other_deductions: num_(extras.other_deductions),
+        tds_amount: num_(extras.tds_amount)
       });
     });
     return Object.keys(groups).sort().map(function (k) {
@@ -769,6 +792,10 @@ var PayrollService = (function () {
       exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
       departmentReview: buildDepartmentReview_(records, employees, inputs),
+      payrollReviewColumns: (typeof PayrollApprovalExportService !== 'undefined' &&
+        PayrollApprovalExportService.collectComponentColumnsFromRecords)
+        ? PayrollApprovalExportService.collectComponentColumnsFromRecords(records)
+        : { earnings: [], deductions: [], employers: [] },
       lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
       finalizeBlockers: buildFinalizeBlockers_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
       payslipStatus: payslipStatus_(records, inputs),
