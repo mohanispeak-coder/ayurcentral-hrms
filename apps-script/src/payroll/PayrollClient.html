@@ -2573,7 +2573,7 @@
           title: 'Generate all payslips?',
           body: 'Creates payslip files for employees who do not have one yet for this payroll month. ' +
             'Already generated payslips are kept (each month stays in Drive for lifetime download). ' +
-            'Sends email notifications. Payroll amounts stay unchanged.',
+            'Sends email notifications with the payslip PDF attached. Payroll amounts stay unchanged.',
           okLabel: 'Generate missing payslips'
         }).then(function (ok) {
           if (!ok) return;
@@ -2659,7 +2659,7 @@
       confirmModal({
         title: 'Regenerate payslip for ' + empName + '?',
         body: 'Creates a new payslip file for this employee and month. The previous file is moved to Archive in Drive (not deleted). ' +
-          'Sends the payslip email notification. Payroll amounts stay unchanged.',
+          'Sends the payslip email with PDF attached. Payroll amounts stay unchanged.',
         okLabel: 'Regenerate & notify'
       }).then(function (ok) {
         if (!ok) return;
