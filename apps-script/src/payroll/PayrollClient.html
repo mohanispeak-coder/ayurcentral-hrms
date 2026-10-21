@@ -27,8 +27,43 @@
 .payroll-page .problem-list { margin: 8px 0 0; padding-left: 18px; }
 .payroll-page .problem-list li { margin-bottom: 4px; }
 .payroll-page .upload-preview { margin-top: 12px; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; }
-.payroll-page .finalize-summary dt { font-weight: 600; margin-top: 8px; }
-.payroll-page .finalize-summary dd { margin: 2px 0 0; }
+.payroll-page .page-header.payroll-run-header {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 16px;
+}
+.payroll-page .page-header.payroll-run-header .page-header-text { flex: 1 1 240px; min-width: 0; }
+.payroll-page .page-header.payroll-run-header .page-header-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.modal-payroll-finalize { max-width: 520px; }
+.modal-payroll-finalize .modal-header {
+  padding: 22px 24px 0; border-bottom: none;
+}
+.modal-payroll-finalize .modal-title { font-size: 1.125rem; }
+.modal-payroll-finalize .modal-desc { margin: 6px 0 0; }
+.modal-payroll-finalize .modal-body { padding: 18px 24px 0; }
+.modal-payroll-finalize .finalize-modal-meta {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+}
+.modal-payroll-finalize .finalize-kpi-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+@media (max-width: 480px) { .modal-payroll-finalize .finalize-kpi-grid { grid-template-columns: 1fr; } }
+.modal-payroll-finalize .finalize-kpi {
+  padding: 12px 14px; border-radius: 10px; border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+.modal-payroll-finalize .finalize-kpi-label {
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--color-text-muted); margin-bottom: 4px;
+}
+.modal-payroll-finalize .finalize-kpi-value { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; }
+.modal-payroll-finalize .finalize-kpi-value.net { color: var(--color-primary); font-size: 1.2rem; }
+.modal-payroll-finalize .finalize-modal-note {
+  margin: 16px 0 0; padding: 12px 14px; border-radius: 8px;
+  background: var(--color-warning-bg); border: 1px solid var(--color-warning-border);
+  font-size: var(--text-sm); line-height: 1.45; color: var(--color-text);
+}
+.modal-payroll-finalize .finalize-modal-exceptions { margin-top: 14px; }
 .payroll-page .hidden-file { display: none !important; }
 .payroll-page .bulk-upload-card.collapsible-section { margin-top: 12px; }
 .payroll-page details.collapsible-section,
@@ -762,6 +797,32 @@
       });
     }
 
+    function payrollFinalizeModal_(detail) {
+      detail = detail || {};
+      return new Promise(function (resolve) {
+        var wrap = document.createElement('div');
+        wrap.className = 'modal-backdrop';
+        wrap.innerHTML = '<div class="modal modal-dialog modal-payroll-finalize" role="dialog" aria-modal="true" aria-labelledby="payroll-finalize-title">' +
+          '<div class="modal-header">' +
+          '<h3 class="modal-title" id="payroll-finalize-title">Finalize payroll</h3>' +
+          '<p class="modal-desc">Review totals below. After finalizing, amounts are locked for this month and you can generate payslips.</p>' +
+          '</div>' +
+          '<div class="modal-body">' + buildFinalizeModalHtml_(detail) + '</div>' +
+          '<div class="modal-footer modal-actions">' +
+          '<button type="button" class="btn btn-secondary" id="payroll-modal-cancel">Not now</button>' +
+          '<button type="button" class="btn btn-danger-solid" id="payroll-modal-ok">Finalize payroll</button>' +
+          '</div></div>';
+        document.body.appendChild(wrap);
+        function close(ok) {
+          wrap.remove();
+          resolve(!!ok);
+        }
+        wrap.querySelector('#payroll-modal-cancel').addEventListener('click', function () { close(false); });
+        wrap.querySelector('#payroll-modal-ok').addEventListener('click', function () { close(true); });
+        wrap.addEventListener('click', function (ev) { if (ev.target === wrap) close(false); });
+      });
+    }
+
     function monthOptions(selected) {
       return MONTHS.map(function (name, i) {
         var v = i + 1;
@@ -1117,10 +1178,15 @@
       var vertLabel = currentRun
         ? (currentRun.vertical_name ? String(currentRun.vertical_name) : 'Combined')
         : verticalLabel_(homeState.vertical);
-      html += '<div class="page-header"><h2>Payroll - ' + escapeHtml(fmtPeriod(year, month)) +
+      html += '<div class="page-header payroll-run-header"><div class="page-header-text"><h2>Payroll - ' + escapeHtml(fmtPeriod(year, month)) +
         (vertLabel ? ' <span class="phase-chip">' + escapeHtml(vertLabel) + '</span>' : '') +
         (currentRun ? ' <span class="phase-chip">' + escapeHtml(phaseLabel) + '</span>' : '') + '</h2>' +
         '<p class="page-lede">Step 3 - calculate, review exceptions, and finalize after salary and attendance are complete.</p></div>';
+      if (currentRun && detail) {
+        html += '<div class="page-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-payroll-run" title="Reload this payroll run from the server">' +
+          '<span class="module-refresh-icon" aria-hidden="true">↻</span> Refresh</button></div>';
+      }
+      html += '</div>';
 
       html += paintPayrollPipelineNav_('payroll', detail, year, month);
       html += paintPayrollPeriodCard_(year, month);
@@ -1175,6 +1241,7 @@
       bindPayrollPeriodCard_(page, seq);
       bindUnifiedPayroll_(page, seq, detail, currentRun, openRun, lockedRun);
       bindPayrollFixActions_(page);
+      if (App.ensureModuleRefreshControls) App.ensureModuleRefreshControls();
     }
 
     function repaintCurrentPayrollView_(page, seq, detail) {
@@ -1419,6 +1486,8 @@
         html += '<button type="button" class="btn btn-primary" id="btn-calc"' +
           (attendanceComplete ? '' : ' disabled title="Complete attendance for all employees first"') + '>' +
           (st === 'CALCULATED' ? 'Recalculate payroll' : 'Calculate payroll') + '</button>';
+      } else if (st !== 'DRAFT') {
+        html += '<button type="button" class="btn btn-secondary" id="btn-refresh-payroll-run-step">Refresh payroll data</button>';
       }
       if (editable) {
         html += '<button type="button" class="btn btn-secondary" id="btn-save-inputs">Save days &amp; extras</button>';
@@ -1839,8 +1908,17 @@
         refreshPayrollPage_({ runId: runPicker.value });
       });
 
+      function bindRefreshPayroll_(btnId) {
+        var btn = $(btnId);
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          reloadPayrollRunFromServer_(currentRun.payroll_run_id, page, seq, btn);
+        });
+      }
       if (detail && currentRun) {
         var editable = statusKey(currentRun.status) === 'DRAFT' || statusKey(currentRun.status) === 'CALCULATED';
+        bindRefreshPayroll_('btn-refresh-payroll-run');
+        bindRefreshPayroll_('btn-refresh-payroll-run-step');
         bindSalaryHoldControls_(page);
         bindRunTable_(page, detail, editable);
         bindUnifiedActions_(currentRun.payroll_run_id, page, detail);
@@ -2125,18 +2203,31 @@
     }
 
     function buildFinalizeModalHtml_(detail) {
-      var run = detail.run;
+      var run = detail.run || {};
       var summary = detail.summary || {};
-      var html = '<dl class="finalize-summary">' +
-        '<dt>Month</dt><dd>' + escapeHtml(fmtPeriod(run.period_year, run.period_month)) + '</dd>' +
-        '<dt>Employees</dt><dd>' + (summary.employee_count || 0) + '</dd>' +
-        '<dt>Gross pay</dt><dd>' + fmtMoneyInr(summary.gross_earnings) + '</dd>' +
-        '<dt>Deductions</dt><dd>' + fmtMoneyInr(summary.total_deductions) + '</dd>' +
-        '<dt>Net pay</dt><dd>' + fmtMoneyInr(summary.net_pay) + '</dd></dl>';
+      var vert = run.vertical_name ? String(run.vertical_name) : 'Combined';
+      var ps = detail.payslipStatus || {};
+      var held = ps.held_count || 0;
+      var html = '<div class="finalize-modal-meta">' +
+        '<span class="phase-chip">' + escapeHtml(fmtPeriod(run.period_year, run.period_month)) + '</span>' +
+        '<span class="phase-chip">' + escapeHtml(vert) + '</span>' +
+        '<span class="phase-chip">' + escapeHtml(statusKey(run.status)) + '</span></div>';
+      html += '<div class="finalize-kpi-grid">' +
+        '<div class="finalize-kpi"><div class="finalize-kpi-label">Employees</div><div class="finalize-kpi-value">' +
+        escapeHtml(String(summary.employee_count || 0)) + '</div></div>' +
+        '<div class="finalize-kpi"><div class="finalize-kpi-label">Gross pay</div><div class="finalize-kpi-value">' +
+        escapeHtml(fmtMoneyInr(summary.gross_earnings)) + '</div></div>' +
+        '<div class="finalize-kpi"><div class="finalize-kpi-label">Deductions</div><div class="finalize-kpi-value">' +
+        escapeHtml(fmtMoneyInr(summary.total_deductions)) + '</div></div>' +
+        '<div class="finalize-kpi"><div class="finalize-kpi-label">Net pay</div><div class="finalize-kpi-value net">' +
+        escapeHtml(fmtMoneyInr(summary.net_pay)) + '</div></div></div>';
+      if (held > 0) {
+        html += '<p class="hint" style="margin-top:12px">' + held + ' employee(s) on salary hold — payslips will be skipped for them until you release hold (before finalize).</p>';
+      }
       var problems = (detail.exceptionSummary && detail.exceptionSummary.exceptions) || detail.exceptions || [];
       var lockBlocks = detail.lockBlocks || [];
       if (problems.length || lockBlocks.length) {
-        html += '<div class="alert alert-warning" style="margin-top:12px"><strong>Important exceptions</strong><ul class="problem-list">';
+        html += '<div class="alert alert-warning finalize-modal-exceptions"><strong>Review before you finalize</strong><ul class="problem-list">';
         lockBlocks.forEach(function (b) {
           html += '<li>' + escapeHtml(b) + '</li>';
         });
@@ -2147,8 +2238,27 @@
         });
         html += '</ul></div>';
       }
-      html += '<p style="margin-top:12px">Finalizing locks all amounts permanently. Generate payslips after finalizing.</p>';
+      html += '<div class="finalize-modal-note"><strong>This cannot be undone on this run.</strong> Finalizing locks payroll amounts for ' +
+        escapeHtml(fmtPeriod(run.period_year, run.period_month)) + '. You can then generate payslips and share them with employees.</div>';
       return html;
+    }
+
+    function reloadPayrollRunFromServer_(runId, page, seq, btn) {
+      runId = String(runId || '').trim();
+      if (!runId) return;
+      if (btn && !setButtonLoading(btn, 'Refreshing…')) return;
+      if (App.invalidateModuleViewCachePrefix) App.invalidateModuleViewCachePrefix('payroll');
+      rpc('apiGetPayrollRun', [runId], btn, 'Refreshing…', $('pr-action-feedback'))
+        .then(function (next) {
+          payrollState.detail = next;
+          homeState.overview = next;
+          repaintCurrentPayrollView_(page, seq, next);
+          showToast('Payroll data refreshed.', 'success');
+        })
+        .catch(function (err) {
+          if (btn) restoreButton(btn);
+          showToast(err.message || 'Refresh failed', 'error');
+        });
     }
 
     function bindUnifiedActions_(runId, page, detail) {
@@ -2225,12 +2335,7 @@
           showToast('Resolve all issues before finalizing.', 'error');
           return;
         }
-        confirmModal({
-          title: 'Finalize payroll?',
-          htmlBody: buildFinalizeModalHtml_(detail),
-          okLabel: 'Finalize payroll',
-          danger: true
-        }).then(function (ok) {
+        payrollFinalizeModal_(detail).then(function (ok) {
           if (!ok) return;
           if (!setButtonLoading(finalize, 'Finalizing...')) return;
           rpc('apiFinalizePayroll', [runId], finalize, 'Finalizing...', $('pr-action-feedback'))
