@@ -145,7 +145,7 @@ var arvindReg = {
   '11': 'W/H', '12': 'P', '13': 'P', '14': 'P', '15': 'P', '16': 'P', '17': 'P', '18': 'W/H', '19': 'H', '20': 'H',
   '21': 'H', '22': 'P', '23': 'L', '24': 'P', '25': 'W/H', '26': 'P', '27': '1/2P', '28': 'P', '29': 'P', '30': '1/2P', '31': 'P'
 };
-var arvindSum = Reg.summarize_(arvindReg, 2026, 9, 'SAPL',
+var arvindSum = Reg.summarize_(arvindReg, 2026, 1, 'SAPL',
   { employee_id: 'SAPL-0315', vertical_name: 'SAPL', joining_date: '2020-01-01' });
 check('days-total-counts-half-days-as-full-cells', arvindSum.days_total === 31 && arvindSum.days_in_month === 31,
   'days_total=' + arvindSum.days_total);
