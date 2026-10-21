@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '6';
+  var TEMPLATE_VERSION_ = '7';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -198,7 +198,9 @@ var EmployeeBulkService = (function () {
 
   function formatEmployeeHeaderRow_(employeesSheet, numColumns) {
     if (numColumns < 1) return;
-    employeesSheet.getRange(1, 1, 1, numColumns).setFontWeight('bold');
+    var headerRange = employeesSheet.getRange(1, 1, 1, numColumns);
+    headerRange.setFontWeight('bold');
+    headerRange.setBackground('#e8eef3');
   }
 
   function findVerticalNameColumn_(sheet, numColumns) {
@@ -241,12 +243,17 @@ var EmployeeBulkService = (function () {
   }
 
   function exportSpreadsheetXlsx_(spreadsheetId) {
-    if (typeof Drive === 'undefined' || !Drive.Files) {
-      throw configurationError_('Google Drive advanced service is not available.' + driveApiHint_());
-    }
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     SpreadsheetApp.flush();
-    if (Drive.Files.export) {
+    try {
+      var viaDriveApp = DriveApp.getFileById(spreadsheetId).getAs(xlsxMime);
+      if (viaDriveApp && viaDriveApp.getBytes() && viaDriveApp.getBytes().length > 500) {
+        return viaDriveApp;
+      }
+    } catch (driveAppExportErr) {
+      // try advanced service / URL export below
+    }
+    if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.export) {
       return Drive.Files.export(spreadsheetId, xlsxMime);
     }
     var token = ScriptApp.getOAuthToken();
@@ -258,7 +265,10 @@ var EmployeeBulkService = (function () {
     if (response.getResponseCode() === 200) {
       return response.getBlob().setContentType(xlsxMime);
     }
-    throw configurationError_('Drive export is unavailable.' + driveApiHint_());
+    throw configurationError_(
+      'Could not export Excel template (bold headers and vertical_name dropdown require a real .xlsx file).' +
+      driveApiHint_()
+    );
   }
 
   function convertUploadToSheetId_(blob) {
@@ -413,24 +423,16 @@ var EmployeeBulkService = (function () {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     var refs = listReferenceValues_(session);
-    try {
-      var blob = buildTemplateFlatXlsx_(refs, variant);
-      return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    } catch (e) {
-      return packDownload_(buildTemplatePlainCsv_(variant), variant, 'text/csv');
-    }
+    var blob = buildTemplateFlatXlsx_(refs, variant);
+    return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
 
   function downloadTemplate(session, variant) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     var refs = listReferenceValues_(session);
-    try {
-      var blob = buildTemplateSpreadsheet_(refs, variant);
-      return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    } catch (e) {
-      return downloadCsvTemplate(session, variant);
-    }
+    var blob = buildTemplateSpreadsheet_(refs, variant);
+    return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
 
   function parseCsvRows_(text) {

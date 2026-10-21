@@ -90,11 +90,9 @@ var badRows = [{ rowNumber: 2, employee_id: 'BAD', first_name: '', last_name: 'X
 var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
 
-var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
-check('csv template download has payload', csvTpl.base64.length > 10);
-
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 6', /TEMPLATE_VERSION_ = '6'/.test(bulkSrc));
+check('bulk template version 7', /TEMPLATE_VERSION_ = '7'/.test(bulkSrc));
+check('no silent plain csv template fallback', !/buildTemplatePlainCsv_\(variant\), variant, 'text\/csv'\)/.test(bulkSrc));
 check('employee header row bold', /formatEmployeeHeaderRow_/.test(bulkSrc) && /setFontWeight\('bold'\)/.test(bulkSrc));
 check('vertical column dropdown only', /applyVerticalColumnDropdown_/.test(bulkSrc) &&
   /findVerticalNameColumn_/.test(bulkSrc) && /requireValueInList/.test(bulkSrc) &&

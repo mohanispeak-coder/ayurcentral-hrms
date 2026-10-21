@@ -1415,6 +1415,9 @@
       a.download = file.fileName || file.title || (file.is_pdf === false ? 'payslip.html' : 'download');
       a.click();
       URL.revokeObjectURL(url);
+      if (file && file.templateVersion) {
+        showToast('Template v' + file.templateVersion + ' downloaded. Row 1 is bold; use vertical_name dropdown on Employees sheet.', 'success');
+      }
     }
 
     var bulkState = { uploadId: null, preview: null };
