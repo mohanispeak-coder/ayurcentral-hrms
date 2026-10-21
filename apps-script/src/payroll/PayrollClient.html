@@ -1579,7 +1579,6 @@
         (onHold ? ' disabled aria-disabled="true"' : '') + ' title="Pause payslip for this month">Hold salary</button>' +
         '<button type="button" class="btn btn-primary btn-sm js-salary-payout-btn" data-emp="' + emp + '" data-hold="NO"' +
         (!onHold ? ' disabled aria-disabled="true"' : '') + ' title="Allow payslip again">Release hold</button>' +
-        (onHold ? '<span class="hint">On hold</span>' : '') +
         '</div>';
     }
 
@@ -2528,8 +2527,14 @@
       if (approvalDl) approvalDl.addEventListener('click', function () {
         if (!setButtonLoading(approvalDl, 'Downloading...')) return;
         rpc('apiDownloadPayrollApprovalExport', [runId], approvalDl, 'Downloading...', $('pr-action-feedback'))
-          .then(function (file) { downloadBlob(file); })
-          .catch(function (err) { showToast(err.message || 'Download failed', 'error'); });
+          .then(function (file) {
+            if (!file || !file.base64) {
+              showToast('Download returned an empty file. Try Refresh, then download again.', 'error');
+              return;
+            }
+            downloadBlob(file);
+          })
+          .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
       });
     }
 
@@ -2602,7 +2607,7 @@
       var rec = row.record;
       if (!rec) return '<td>-</td>';
       if (isRowOnSalaryHold_(row)) {
-        return '<td class="hint">On hold — set Pay in the grid above before generating a payslip.</td>';
+        return '<td class="hint">—</td>';
       }
       var ready = !!(rec.payslip_document_id);
       var html = '<td class="payslip-actions">';
@@ -2828,7 +2833,7 @@
         html += '<tr><td>' + escapeHtml(row.employee.display_name) +
           '<div class="hint">' + escapeHtml(row.employee.employee_id) + '</div></td>' +
           '<td class="num">' + fmtMoney(rec.net_pay) + '</td>' +
-          '<td>' + (onHold ? 'Salary on hold' : (ready ? 'Ready to download' : 'Not generated yet')) + '</td>' +
+          '<td>' + (onHold ? '—' : (ready ? 'Ready to download' : 'Not generated yet')) + '</td>' +
           payslipActionHtml_(row, runId) + '</tr>';
       });
       html += '</tbody></table></div></div>';

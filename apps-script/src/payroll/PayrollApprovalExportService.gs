@@ -85,33 +85,84 @@ var PayrollApprovalExportService = (function () {
     };
   }
 
-  /** Client getRunDetail strips component_breakdown; load full records for export. */
-  function rowsWithFullRecords_(runId, detail) {
-    var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
-    var recByEmp = {};
-    records.forEach(function (r) {
-      recByEmp[String(r.employee_id)] = r;
-      if (typeof normalizeEmployeeId_ === 'function') {
-        var norm = normalizeEmployeeId_(r.employee_id);
-        if (norm) recByEmp[norm] = r;
-      }
+  function indexInputs_(runId) {
+    var map = {};
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      map[String(inp.employee_id)] = inp;
+      map[normEmpId_(inp.employee_id)] = inp;
     });
-    return (detail.rows || []).map(function (row) {
-      var empId = String((row.employee && row.employee.employee_id) || (row.input && row.input.employee_id) || '');
-      var rec = recByEmp[empId];
-      if (!rec && typeof normalizeEmployeeId_ === 'function') {
-        rec = recByEmp[normalizeEmployeeId_(empId)];
+    return map;
+  }
+
+  function employeeSnapshot_(employeeId, detailRows, cache) {
+    var key = String(employeeId || '');
+    if (cache[key]) return cache[key];
+    var norm = normEmpId_(key);
+    var fromDetail = null;
+    (detailRows || []).some(function (row) {
+      var emp = row.employee || {};
+      if (String(emp.employee_id) === key || normEmpId_(emp.employee_id) === norm) {
+        fromDetail = emp;
+        return true;
       }
-      if (!rec) return null;
-      return { input: row.input, employee: row.employee, record: rec };
-    }).filter(Boolean);
+      return false;
+    });
+    if (fromDetail) {
+      cache[key] = fromDetail;
+      return fromDetail;
+    }
+    var empRow = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: key });
+    if (!empRow && norm) {
+      empRow = DbService.findOne(HRMS.SHEETS.EMPLOYEES, { employee_id: norm });
+    }
+    var snap = {
+      employee_id: key,
+      display_name: empRow ? trim_(empRow.display_name || ((empRow.first_name || '') + ' ' + (empRow.last_name || '')).trim()) : key,
+      vertical_name: empRow ? empRow.vertical_name : '',
+      designation: empRow ? empRow.designation : '',
+      department: empRow ? empRow.department : ''
+    };
+    if (!trim_(snap.display_name)) snap.display_name = key;
+    cache[key] = snap;
+    return snap;
+  }
+
+  /** Build export rows from payroll records (client API strips component_breakdown). */
+  function rowsWithFullRecords_(runId, detail) {
+    detail = detail || {};
+    var inputsByEmp = indexInputs_(runId);
+    var empCache = {};
+    var records = DbService.findRecords(HRMS.SHEETS.PAYROLL_RECORDS, { payroll_run_id: runId });
+    records = records.filter(function (r) {
+      return trim_(r.component_breakdown) || num_(r.net_pay) !== 0 || num_(r.gross_earnings) !== 0;
+    });
+    records.sort(function (a, b) {
+      return String(a.employee_id).localeCompare(String(b.employee_id));
+    });
+    return records.map(function (rec) {
+      var empId = String(rec.employee_id || '');
+      var inp = inputsByEmp[empId] || inputsByEmp[normEmpId_(empId)] || {};
+      return {
+        input: inp,
+        employee: employeeSnapshot_(empId, detail.rows, empCache),
+        record: rec
+      };
+    });
+  }
+
+  function setSheetValues_(sheet, startRow, startCol, values) {
+    if (!values || !values.length) return;
+    var numRows = values.length;
+    var numCols = values[0].length;
+    sheet.getRange(startRow, startCol, numRows, numCols).setValues(values);
   }
 
   function exportSpreadsheetXlsx_(spreadsheetId) {
+    SpreadsheetApp.flush();
+    Utilities.sleep(300);
     if (typeof AttendanceBulkService !== 'undefined' && AttendanceBulkService.exportSpreadsheetXlsx_) {
       return AttendanceBulkService.exportSpreadsheetXlsx_(spreadsheetId);
     }
-    SpreadsheetApp.flush();
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
     var v3Url = 'https://www.googleapis.com/drive/v3/files/' + spreadsheetId +
@@ -158,59 +209,73 @@ var PayrollApprovalExportService = (function () {
     var headers = fixedHeaders.concat(earningHeaders).concat(varEarnHeaders).concat(dedHeaders)
       .concat(varDedHeaders).concat(employerHeaders);
 
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8eef3');
-    sheet.setFrozenRows(1);
+    try {
+      setSheetValues_(sheet, 1, 1, [headers]);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8eef3');
+      sheet.setFrozenRows(1);
 
-    var data = [];
-    rows.forEach(function (row) {
-      var emp = row.employee || {};
-      var inp = row.input || {};
-      var rec = row.record || {};
-      var maps = lineMapsFromRecord_(rec);
-      var line = [
-        emp.employee_id || inp.employee_id || '',
-        emp.display_name || '',
-        trim_(emp.vertical_name),
-        trim_(emp.designation),
-        trim_(emp.department),
-        num_(inp.working_days),
-        num_(inp.paid_days),
-        num_(inp.lop_days)
-      ];
-      cols.earnings.forEach(function (code) {
-        line.push(maps.earnings[code] || 0);
+      var data = [];
+      rows.forEach(function (row) {
+        var emp = row.employee || {};
+        var inp = row.input || {};
+        var rec = row.record || {};
+        var maps = lineMapsFromRecord_(rec);
+        var line = [
+          emp.employee_id || inp.employee_id || '',
+          emp.display_name || '',
+          trim_(emp.vertical_name),
+          trim_(emp.designation),
+          trim_(emp.department),
+          num_(inp.working_days),
+          num_(inp.paid_days),
+          num_(inp.lop_days)
+        ];
+        cols.earnings.forEach(function (code) {
+          line.push(maps.earnings[code] || 0);
+        });
+        line.push(num_(maps.extras.bonus));
+        line.push(num_(maps.extras.incentive));
+        line.push(num_(maps.extras.other_earnings));
+        line.push(num_(rec.gross_earnings));
+        cols.deductions.forEach(function (code) {
+          line.push(maps.deductions[code] || 0);
+        });
+        line.push(num_(maps.extras.other_deductions));
+        line.push(num_(maps.extras.tds_amount));
+        line.push(num_(rec.total_deductions));
+        line.push(num_(rec.net_pay));
+        cols.employers.forEach(function (code) {
+          line.push(maps.employers[code] || 0);
+        });
+        if (line.length !== headers.length) {
+          throw new Error('Column mismatch for ' + emp.employee_id + ': ' + line.length + ' vs ' + headers.length);
+        }
+        data.push(line);
       });
-      line.push(num_(maps.extras.bonus));
-      line.push(num_(maps.extras.incentive));
-      line.push(num_(maps.extras.other_earnings));
-      line.push(num_(rec.gross_earnings));
-      cols.deductions.forEach(function (code) {
-        line.push(maps.deductions[code] || 0);
-      });
-      line.push(num_(maps.extras.other_deductions));
-      line.push(num_(maps.extras.tds_amount));
-      line.push(num_(rec.total_deductions));
-      line.push(num_(rec.net_pay));
-      cols.employers.forEach(function (code) {
-        line.push(maps.employers[code] || 0);
-      });
-      data.push(line);
-    });
 
-    if (data.length) {
-      sheet.getRange(2, 1, 1 + data.length, headers.length).setValues(data);
+      setSheetValues_(sheet, 2, 1, data);
+      sheet.getRange(1, 1).setNote(
+        'Run: ' + (run.payroll_run_id || '') +
+        ' · earn_* = earnings (Basic, HRA, etc.), ded_* = deductions (PF, ESIC, PT, etc.).'
+      );
+      SpreadsheetApp.flush();
+    } catch (sheetErr) {
+      try {
+        DriveApp.getFileById(fileId).setTrashed(true);
+      } catch (ignoreTrash) {}
+      if (sheetErr.hrmsCode) throw sheetErr;
+      throw validationError_('Could not build payroll Excel: ' + (sheetErr.message || sheetErr));
     }
-    sheet.getRange(1, 1).setNote(
-      'Run: ' + (run.payroll_run_id || '') +
-      ' · earn_* = structure earnings (Basic, HRA, etc.), ded_* = deductions (PF, ESIC, PT, etc.).'
-    );
-    SpreadsheetApp.flush();
+
     var name = 'HRMS_Calculated_Payroll_' + (run.payroll_run_id || 'run') + '.xlsx';
     var blob;
     try {
       var exported = exportSpreadsheetXlsx_(fileId);
-      blob = Utilities.newBlob(exported.getBytes(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name);
+      var bytes = exported.getBytes();
+      blob = Utilities.newBlob(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name);
+    } catch (exportErr) {
+      if (exportErr.hrmsCode) throw exportErr;
+      throw configurationError_('Could not export payroll file: ' + (exportErr.message || exportErr));
     } finally {
       try {
         DriveApp.getFileById(fileId).setTrashed(true);
