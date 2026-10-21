@@ -82,6 +82,15 @@ var MonthlyLeaveService = (function () {
    * @param {number} joinDay Day of month (1–31)
    * @return {number}
    */
+  function joinPolicySettingsForClient_() {
+    return {
+      join_grant_after_day: joinGrantAfterDay_(),
+      join_half_from_day: joinHalfFromDay_(),
+      join_half_to_day: joinHalfToDay_(),
+      join_month_rules_note: 'Join month: days 1–9 full; days 10–20 half (0 if monthly entitlement is 1); after cut-off no grant.'
+    };
+  }
+
   function joinMonthGrantForBase_(base, joinDay) {
     base = num_(base, 0);
     if (base <= 0) return 0;
@@ -291,6 +300,7 @@ var MonthlyLeaveService = (function () {
       carry_forward_days: openingCf,
       carry_forward_note: carryNote || (openingCf > 0 ? 'Includes carried-forward balance from prior month.' : ''),
       leave_year_mode: yearMode,
+      join_policy: joinPolicySettingsForClient_(),
       join_grant_after_day: joinGrantAfterDay_(),
       code_counts: emptyCountsFromPayrollInput_(employeeId, year, month),
       source: 'leave_monthly_ledger',
@@ -342,6 +352,7 @@ var MonthlyLeaveService = (function () {
       carry_forward_days: openingCf,
       carry_forward_note: carryNote || (openingCf > 0 ? 'Includes carried-forward balance from prior month.' : ''),
       leave_year_mode: yearMode,
+      join_policy: joinPolicySettingsForClient_(),
       join_grant_after_day: joinGrantAfterDay_(),
       code_counts: counts,
       source: 'attendance_register'
@@ -492,6 +503,7 @@ var MonthlyLeaveService = (function () {
     joinGrantAfterDay_: joinGrantAfterDay_,
     joinHalfFromDay_: joinHalfFromDay_,
     joinHalfToDay_: joinHalfToDay_,
+    joinPolicySettingsForClient_: joinPolicySettingsForClient_,
     leaveUsedFromCounts_: leaveUsedFromCounts_,
     registerPoolConsumingDays_: registerPoolConsumingDays_,
     availableAfterCounts_: availableAfterCounts_,

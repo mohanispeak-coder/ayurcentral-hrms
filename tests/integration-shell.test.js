@@ -62,6 +62,13 @@ check('payslip-email-pdf-attach', /getPayslipPdfBlobForEmail/.test(read('payroll
 check('payslip-email-work-email', /employeeHint_/.test(read('notifications/NotificationAdapters.gs')) &&
   /work_email/.test(read('notifications/NotificationAdapters.gs')) &&
   /ensureRecipientResolved_/.test(read('notifications/NotificationService.gs')));
+check('leave-join-policy-wired', /joinMonthGrantForBase_/.test(read('leave/MonthlyLeaveService.gs')) &&
+  /leave_join_half_from_day/.test(read('foundation/SchemaService.gs')) &&
+  /leave_join_half_from_day/.test(read('leave/LeavePolicyService.gs')) &&
+  /apiLeaveSavePolicySettings/.test(read('leave/ApiLeave.gs')) &&
+  /lp-join-half-from/.test(read('ui/SettingsClient.html')) &&
+  /computeLeaveYearEntitlement[\s\S]*grantForEmployeeMonth_/.test(read('leave/LeavePolicyService.gs')));
+check('leave-join-attendance-register', /MonthlyLeaveService\.grantForEmployeeMonth_/.test(read('payroll/AttendanceRegisterService.gs')));
 check('payroll-finalize-api', /apiFinalizePayroll/.test(payrollApi));
 check('payroll-bulk-api', /apiValidatePayrollUpload/.test(payrollApi) && /PayrollBulkService/.test(payrollBulk));
 check('ats-apply-notify', /notifyNewApplication/.test(ats));

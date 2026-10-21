@@ -48,15 +48,36 @@ var LeavePolicyService = (function () {
   }
 
   function joinGrantAfterDay_() {
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.joinGrantAfterDay_) {
+      return MonthlyLeaveService.joinGrantAfterDay_();
+    }
     return clampJoinDaySetting_(ConfigService.getSetting('leave_join_grant_after_day', 20), 20);
   }
 
   function joinHalfFromDay_() {
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.joinHalfFromDay_) {
+      return MonthlyLeaveService.joinHalfFromDay_();
+    }
     return clampJoinDaySetting_(ConfigService.getSetting('leave_join_half_from_day', 10), 10);
   }
 
   function joinHalfToDay_() {
+    if (typeof MonthlyLeaveService !== 'undefined' && MonthlyLeaveService.joinHalfToDay_) {
+      return MonthlyLeaveService.joinHalfToDay_();
+    }
     return clampJoinDaySetting_(ConfigService.getSetting('leave_join_half_to_day', 20), 20);
+  }
+
+  function assertJoinPolicyDaysConsistent_() {
+    var from = joinHalfFromDay_();
+    var to = joinHalfToDay_();
+    var cut = joinGrantAfterDay_();
+    if (from > to) {
+      throw validationError_('Half-grant start day cannot be after half-grant through day.');
+    }
+    if (to > cut) {
+      throw validationError_('Half-grant through day cannot be after the no-grant cut-off day.');
+    }
   }
 
   function verticalPoliciesEqual_(a, b) {
@@ -109,6 +130,7 @@ var LeavePolicyService = (function () {
       if (ht !== joinHalfToDay_()) recalcAllEntitlements = true;
       upsertSetting_('leave_join_half_to_day', String(ht), session);
     }
+    assertJoinPolicyDaysConsistent_();
     return { recalcAllEntitlements: recalcAllEntitlements };
   }
 
@@ -581,6 +603,8 @@ var LeavePolicyService = (function () {
     leaveYearStartMonth: leaveYearStartMonth,
     leaveYearMode: leaveYearMode_,
     joinGrantAfterDay: joinGrantAfterDay_,
+    joinHalfFromDay: joinHalfFromDay_,
+    joinHalfToDay: joinHalfToDay_,
     getPolicyBundle: getPolicyBundle,
     savePolicyBundle: savePolicyBundle,
     listVerticalPolicies: listVerticalPolicies,
