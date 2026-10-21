@@ -94,7 +94,8 @@ var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
 check('csv template download has payload', csvTpl.base64.length > 10);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 5', /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
+check('bulk template version 6', /TEMPLATE_VERSION_ = '6'/.test(bulkSrc));
+check('employee header row bold', /formatEmployeeHeaderRow_/.test(bulkSrc) && /setFontWeight\('bold'\)/.test(bulkSrc));
 check('vertical column dropdown only', /applyVerticalColumnDropdown_/.test(bulkSrc) &&
   /findVerticalNameColumn_/.test(bulkSrc) && /requireValueInList/.test(bulkSrc) &&
   /verticalsForTemplate_/.test(bulkSrc));

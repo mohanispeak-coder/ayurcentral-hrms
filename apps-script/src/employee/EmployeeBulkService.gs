@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '5';
+  var TEMPLATE_VERSION_ = '6';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -196,6 +196,11 @@ var EmployeeBulkService = (function () {
     return out;
   }
 
+  function formatEmployeeHeaderRow_(employeesSheet, numColumns) {
+    if (numColumns < 1) return;
+    employeesSheet.getRange(1, 1, 1, numColumns).setFontWeight('bold');
+  }
+
   function findVerticalNameColumn_(sheet, numColumns) {
     var labels = sheet.getRange(1, 1, 1, numColumns).getValues()[0];
     for (var i = 0; i < labels.length; i++) {
@@ -311,6 +316,7 @@ var EmployeeBulkService = (function () {
       return required.indexOf(h) >= 0 ? h + '*' : h;
     });
     employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
+    formatEmployeeHeaderRow_(employees, sheetHeaders.length);
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
@@ -374,6 +380,7 @@ var EmployeeBulkService = (function () {
       return required.indexOf(h) >= 0 ? h + '*' : h;
     });
     employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
+    formatEmployeeHeaderRow_(employees, sheetHeaders.length);
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
