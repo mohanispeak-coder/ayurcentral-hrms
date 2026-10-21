@@ -49,7 +49,8 @@ check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
   /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
 check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '12'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '13'/.test(bulkSrc));
+check('days-formula-sums-summary-p-through-h', /DAYS: '=SUM\('/.test(regSrc) && /sumColH = sumColP \+ 6/.test(regSrc));
 check('attendance-payroll-extra-columns', /TDS, Advance, LCD, LWF/.test(bulkSrc) &&
   /AttendancePayrollExtras/.test(regSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
@@ -149,6 +150,9 @@ var arvindSum = Reg.summarize_(arvindReg, 2026, 1, 'SAPL',
   { employee_id: 'SAPL-0315', vertical_name: 'SAPL', joining_date: '2020-01-01' });
 check('days-total-counts-half-days-as-full-cells', arvindSum.days_total === 31 && arvindSum.days_in_month === 31,
   'days_total=' + arvindSum.days_total);
+check('days-total-equals-summary-p-through-h', arvindSum.days_total ===
+  arvindSum.present + arvindSum.week_off_holiday + arvindSum.absent_a_column +
+  arvindSum.leave_days_l_column + arvindSum.week_off + arvindSum.medical_leave_l_column + arvindSum.holiday);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');
