@@ -4,7 +4,7 @@
 var HRMS = HRMS || {};
 
 var AttendanceBulkService = (function () {
-  var TEMPLATE_VERSION_ = '13';
+  var TEMPLATE_VERSION_ = '14';
   var MAX_ROWS_ = 500;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_attendance_upload_';
@@ -223,7 +223,7 @@ var AttendanceBulkService = (function () {
         ['Public holidays from Holiday calendar (Attendance → Holidays) are pre-filled as H for this month when configured.'],
         ['Column leave_pool = monthly pool (grant + carry + HR adjustments) from Settings → Leave policy when you download. Re-download after policy changes.'],
         ['Leave Balance = leave_pool minus L, ML, and ½P (paid leave usage). Code A (LOP) does not reduce this balance.'],
-        ['Summary columns (P includes half-days, W/H, A, L, WO, ML, H, Leave Balance, DAYS) calculate in Excel.'],
+        ['Summary: P, W/H, A, L, WO, ML, H, Leave Balance. DAYS = paid days (P+W/H+L+WO+ML+H; excludes A/LOP).'],
         ['After DAYS: TDS, Advance, LCD, LWF (deductions) and Arrears (adds to net pay). Leave blank for 0.'],
         ['New hires are added to open payroll months automatically when saved in Employees.'],
         ['Sheet name for upload: Attendance']

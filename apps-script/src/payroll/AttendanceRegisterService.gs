@@ -92,13 +92,12 @@ var AttendanceRegisterService = (function () {
   }
 
   /**
-   * DAYS = sum of summary P…H (same as Excel AJ:AP), so ½P is split across present / L / A columns.
+   * DAYS column = paid days for the month (excludes A = absent / LOP). ½P is already split into P + L.
    */
   function computeDaysTotalFromSummary_(summary) {
     summary = summary || {};
     return (Number(summary.present) || 0) +
       (Number(summary.week_off_holiday) || 0) +
-      (Number(summary.absent_a_column) || 0) +
       (Number(summary.leave_days_l_column) || 0) +
       (Number(summary.week_off) || 0) +
       (Number(summary.medical_leave_l_column) || 0) +
@@ -149,7 +148,6 @@ var AttendanceRegisterService = (function () {
     var summaryForDays = {
       present: counts.P + halfPresent,
       week_off_holiday: counts['W/H'],
-      absent_a_column: colSplit.absent_a_column,
       leave_days_l_column: colSplit.leave_days_l_column,
       week_off: counts.WO,
       medical_leave_l_column: colSplit.medical_leave_l_column,
@@ -355,8 +353,14 @@ var AttendanceRegisterService = (function () {
     var poolCell = colToLetter_(TEMPLATE_POOL_COL_) + sheetRow;
     var poolLeave = poolAwareLeaveExprs_(range, poolCell);
     var sumColP = lastDayCol + 1;
+    var sumColWH = sumColP + 1;
+    var sumColL = sumColP + 3;
+    var sumColWO = sumColP + 4;
+    var sumColML = sumColP + 5;
     var sumColH = sumColP + 6;
-    var summarySumRange = colToLetter_(sumColP) + sheetRow + ':' + colToLetter_(sumColH) + sheetRow;
+    var paidDaysExpr = colToLetter_(sumColP) + sheetRow + '+' + colToLetter_(sumColWH) + sheetRow + '+' +
+      colToLetter_(sumColL) + sheetRow + '+' + colToLetter_(sumColWO) + sheetRow + '+' +
+      colToLetter_(sumColML) + sheetRow + '+' + colToLetter_(sumColH) + sheetRow;
     var formulas = {
       P: '=COUNTIF(' + range + ',"P")+' + halfDayCountExpr_(range, true),
       'W/H': '=COUNTIF(' + range + ',"W"&CHAR(47)&"H")+COUNTIF(' + range + ',"WH")+COUNTIF(' + range + ',"W")',
@@ -367,7 +371,7 @@ var AttendanceRegisterService = (function () {
       H: '=COUNTIF(' + range + ',"H")',
       'Leave Balance': leaveBalanceFormula_(range, poolCell),
       'Leave Balan': leaveBalanceFormula_(range, poolCell),
-      DAYS: '=SUM(' + summarySumRange + ')'
+      DAYS: '=' + paidDaysExpr
     };
     return formulas;
   }
