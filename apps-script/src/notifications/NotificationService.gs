@@ -402,16 +402,21 @@ var NotificationService = (function () {
    * @param {Object} input
    * @return {Object}
    */
-  function createNotification(input) {
-    ensure_();
+  function ensureRecipientResolved_(input) {
     input = input || {};
-    if (!trim_(input.recipient_email) || !trim_(input.recipient_employee_id)) {
-      var resolved = resolveRecipient(input);
-      if (resolved) {
-        input.recipient_employee_id = input.recipient_employee_id || resolved.employee_id;
-        input.recipient_email = input.recipient_email || resolved.email;
+    var resolved = resolveRecipient(input);
+    if (resolved) {
+      input.recipient_employee_id = input.recipient_employee_id || resolved.employee_id;
+      if (!trim_(input.recipient_email)) {
+        input.recipient_email = resolved.email;
       }
     }
+    return input;
+  }
+
+  function createNotification(input) {
+    ensure_();
+    input = ensureRecipientResolved_(input || {});
     var store = sheetStore_();
     var result = NotificationEngine.inbox.create(store, input, runtimeCtx_(input.recipient_employee_id));
     if (!result.ok) {
@@ -452,15 +457,7 @@ var NotificationService = (function () {
     ensure_();
     inputs = inputs || [];
     var prepared = inputs.map(function (input) {
-      input = input || {};
-      if (!trim_(input.recipient_email) || !trim_(input.recipient_employee_id)) {
-        var resolved = resolveRecipient(input);
-        if (resolved) {
-          input.recipient_employee_id = input.recipient_employee_id || resolved.employee_id;
-          input.recipient_email = input.recipient_email || resolved.email;
-        }
-      }
-      return input;
+      return ensureRecipientResolved_(input || {});
     });
     var prefs = loadPreferences_('');
     var store = sheetStore_();

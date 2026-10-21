@@ -182,6 +182,17 @@ var NotificationLeaveAdapter = (function () {
 })();
 
 var NotificationPayrollAdapter = (function () {
+  function employeeHint_(emp) {
+    emp = emp || {};
+    var dn = String(emp.display_name || '').trim();
+    if (!dn) dn = String((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+    return {
+      employee_id: emp.employee_id,
+      email: emp.work_email || emp.email,
+      display_name: dn || emp.employee_id
+    };
+  }
+
   function hrRecipients_() {
     return NotificationService.listHrAdminRecipients();
   }
@@ -244,16 +255,33 @@ var NotificationPayrollAdapter = (function () {
         }
         if (!docId) return;
         var rowForPayload = Object.assign({}, row, { payslip_document_id: docId });
-        var emp = employeeMap[row.employee_id] || NotificationService.resolveRecipient({ employee_id: row.employee_id });
-        if (!emp) return;
+        var rawEmp = employeeMap[row.employee_id] ||
+          employeeMap[String(row.employee_id || '').trim().toUpperCase()] ||
+          NotificationService.resolveRecipient({ employee_id: row.employee_id });
+        if (!rawEmp) return;
+        var emp = employeeHint_(rawEmp);
+        if (!String(emp.email || '').trim()) {
+          Logger.log('Skipped payslip email for ' + row.employee_id + ' — no work_email on employee record.');
+          return;
+        }
         var payload = NotificationEngine.payloads.payslipAvailable(rowForPayload, emp, run);
         if (NotificationEngine.payslipContainsNet(payload.title) ||
             NotificationEngine.payslipContainsNet(payload.email_subject)) {
           Logger.log('Skipped payslip notification - subject contained net pay');
           return;
         }
+        var docRow = DbService.findOne(HRMS.SHEETS.DOCUMENTS, { document_id: docId });
+        var uploadedKey = docRow && docRow.uploaded_at
+          ? String(docRow.uploaded_at instanceof Date ? docRow.uploaded_at.toISOString() : docRow.uploaded_at)
+          : '0';
+        payload.dedupe_bucket = docId + '|' + uploadedKey;
+        payload.force_email = true;
         inputs.push(payload);
       });
+      if (!inputs.length) {
+        Logger.log('notifyPayslipsAvailable: no payslip emails queued (missing docs or work_email).');
+        return { ok: true, created: 0, emailed: 0, skipped: true };
+      }
       return NotificationService.createNotifications(inputs);
     } catch (e) {
       Logger.log('NotificationPayrollAdapter.notifyPayslipsAvailable: ' + (e.message || e));

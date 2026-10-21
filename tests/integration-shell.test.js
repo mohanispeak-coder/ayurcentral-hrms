@@ -59,6 +59,9 @@ check('payroll-payslip-notify', /notifyPayslipsAvailable/.test(payroll));
 check('payslip-email-pdf-attach', /getPayslipPdfBlobForEmail/.test(read('payroll/PayslipService.gs')) &&
   /resolvePayslipEmailAttachments_/.test(read('notifications/NotificationService.gs')) &&
   /opts\.attachments/.test(read('notifications/NotificationService.gs')));
+check('payslip-email-work-email', /employeeHint_/.test(read('notifications/NotificationAdapters.gs')) &&
+  /work_email/.test(read('notifications/NotificationAdapters.gs')) &&
+  /ensureRecipientResolved_/.test(read('notifications/NotificationService.gs')));
 check('payroll-finalize-api', /apiFinalizePayroll/.test(payrollApi));
 check('payroll-bulk-api', /apiValidatePayrollUpload/.test(payrollApi) && /PayrollBulkService/.test(payrollBulk));
 check('ats-apply-notify', /notifyNewApplication/.test(ats));

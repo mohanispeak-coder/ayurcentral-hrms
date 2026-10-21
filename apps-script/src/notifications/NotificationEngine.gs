@@ -959,7 +959,7 @@ var NotificationEngine = (function () {
         ' is attached to this email as a PDF. You can also open My Payslips in AyurCentral HRMS to download it again.\n\nEmployee ID: ' +
         vars.employee_id,
       payslip_document_id: record && record.payslip_document_id ? String(record.payslip_document_id) : '',
-      dedupe_bucket: String(record && record.payroll_record_id || run.payroll_run_id)
+      dedupe_bucket: String(record && record.payslip_document_id || record && record.payroll_record_id || run.payroll_run_id)
     });
   }
 
