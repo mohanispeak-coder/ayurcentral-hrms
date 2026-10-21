@@ -40,11 +40,23 @@ var LeavePolicyService = (function () {
     return 1;
   }
 
-  function joinGrantAfterDay_() {
-    var d = num_(ConfigService.getSetting('leave_join_grant_after_day', 20), 20);
+  function clampJoinDaySetting_(value, fallback) {
+    var d = num_(value, fallback);
     if (d < 1) d = 1;
     if (d > 28) d = 28;
     return Math.floor(d);
+  }
+
+  function joinGrantAfterDay_() {
+    return clampJoinDaySetting_(ConfigService.getSetting('leave_join_grant_after_day', 20), 20);
+  }
+
+  function joinHalfFromDay_() {
+    return clampJoinDaySetting_(ConfigService.getSetting('leave_join_half_from_day', 10), 10);
+  }
+
+  function joinHalfToDay_() {
+    return clampJoinDaySetting_(ConfigService.getSetting('leave_join_half_to_day', 20), 20);
   }
 
   function verticalPoliciesEqual_(a, b) {
@@ -78,6 +90,24 @@ var LeavePolicyService = (function () {
       var cutInt = Math.floor(cut);
       if (cutInt !== joinGrantAfterDay_()) recalcAllEntitlements = true;
       upsertSetting_('leave_join_grant_after_day', String(cutInt), session);
+    }
+    if (payload.leave_join_half_from_day != null) {
+      var hfRaw = num_(payload.leave_join_half_from_day, NaN);
+      if (!isFinite(hfRaw) || hfRaw < 1 || hfRaw > 28) {
+        throw validationError_('Half-grant start day must be between 1 and 28.');
+      }
+      var hf = clampJoinDaySetting_(hfRaw, 10);
+      if (hf !== joinHalfFromDay_()) recalcAllEntitlements = true;
+      upsertSetting_('leave_join_half_from_day', String(hf), session);
+    }
+    if (payload.leave_join_half_to_day != null) {
+      var htRaw = num_(payload.leave_join_half_to_day, NaN);
+      if (!isFinite(htRaw) || htRaw < 1 || htRaw > 28) {
+        throw validationError_('Half-grant end day must be between 1 and 28.');
+      }
+      var ht = clampJoinDaySetting_(htRaw, 20);
+      if (ht !== joinHalfToDay_()) recalcAllEntitlements = true;
+      upsertSetting_('leave_join_half_to_day', String(ht), session);
     }
     return { recalcAllEntitlements: recalcAllEntitlements };
   }
@@ -207,8 +237,11 @@ var LeavePolicyService = (function () {
       leave_year_mode: leaveYearMode_(),
       leave_year_start_month: leaveYearStartMonth(),
       leave_join_grant_after_day: joinGrantAfterDay_(),
+      leave_join_half_from_day: joinHalfFromDay_(),
+      leave_join_half_to_day: joinHalfToDay_(),
       monthly_limit_semantics: 'ENTITLEMENT_ACCRUAL',
       monthly_limit_note: 'Monthly value is entitlement accrued per eligible calendar month (not a separate cap on applications). ' +
+        'Join month: days 1–9 full grant; days 10–20 half grant (0 if monthly entitlement is 1); after cut-off day no grant. ' +
         'Attendance register Leave Balance = pool minus L, ML, and ½ day per 1/2P; excess leave (incl. half-days) becomes LOP at payroll.'
     };
   }

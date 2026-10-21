@@ -73,13 +73,20 @@
       var verts = lp.verticals || [];
       var leavePolicyHtml = '<div class="card"><h2>Leave policy</h2>' +
         '<p class="hint">Monthly values are <strong>entitlement per eligible month</strong> (vertical-specific). ' +
-        'Leave applications use the leave-year balance; attendance templates use the monthly bucket (grant + carry-forward − L/ML/½P).</p>' +
+        'In the <strong>join month</strong>: days 1–9 full grant; days 10–20 half grant (none if monthly entitlement is only 1); ' +
+        'after the cut-off day no grant. Later months always use the full monthly value.</p>' +
         '<div class="form-row">' +
         '<div class="form-group"><label class="form-label" for="lp-year-mode">Leave year</label>' +
         '<select class="form-select" id="lp-year-mode"><option value="CALENDAR"' +
         (String(lg.leave_year_mode || 'CALENDAR') === 'CALENDAR' ? ' selected' : '') + '>Calendar (Jan–Dec)</option>' +
         '<option value="FINANCIAL"' + (String(lg.leave_year_mode) === 'FINANCIAL' ? ' selected' : '') + '>Financial (Apr–Mar)</option></select></div>' +
-        '<div class="form-group"><label class="form-label" for="lp-join-cut">Joining-date cut-off (day of month)</label>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-half-from">Half grant from day</label>' +
+        '<input class="form-input" type="number" min="1" max="28" id="lp-join-half-from" value="' +
+        escapeHtml(String(lg.leave_join_half_from_day != null ? lg.leave_join_half_from_day : 10)) + '"></div>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-half-to">Half grant through day</label>' +
+        '<input class="form-input" type="number" min="1" max="28" id="lp-join-half-to" value="' +
+        escapeHtml(String(lg.leave_join_half_to_day != null ? lg.leave_join_half_to_day : 20)) + '"></div>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-cut">No grant after day</label>' +
         '<input class="form-input" type="number" min="1" max="28" id="lp-join-cut" value="' +
         escapeHtml(String(lg.leave_join_grant_after_day != null ? lg.leave_join_grant_after_day : 20)) + '"></div></div>' +
         '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Vertical</th><th class="num">Monthly entitlement</th>' +
@@ -235,6 +242,8 @@
           callServer('apiLeaveSavePolicySettings', {
             global: {
               leave_year_mode: $('lp-year-mode').value,
+              leave_join_half_from_day: $('lp-join-half-from').value,
+              leave_join_half_to_day: $('lp-join-half-to').value,
               leave_join_grant_after_day: $('lp-join-cut').value
             },
             verticals: verticals

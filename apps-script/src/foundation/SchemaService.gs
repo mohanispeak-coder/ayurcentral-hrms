@@ -124,6 +124,8 @@ var SchemaService = (function () {
     ['leave_year_start_month', '1', 'NUMBER', 'Leave year starts (1-12)', false],
     ['leave_year_mode', 'CALENDAR', 'STRING', 'CALENDAR or FINANCIAL (FY uses leave_year_start_month)', false],
     ['leave_join_grant_after_day', '20', 'NUMBER', 'Join after this day in month = no grant that month', false],
+    ['leave_join_half_from_day', '10', 'NUMBER', 'Join month: half grant from this day (inclusive)', false],
+    ['leave_join_half_to_day', '20', 'NUMBER', 'Join month: half grant through this day (inclusive)', false],
     ['leave_count_method', 'WEEKDAYS_ONLY', 'STRING', 'WEEKDAYS_ONLY or CALENDAR_DAYS', false],
     ['default_working_days', '26', 'NUMBER', 'Default working days per month', false],
     ['payroll_round', 'NEAREST_RUPEE', 'STRING', 'PAISE_2 or NEAREST_RUPEE', false],

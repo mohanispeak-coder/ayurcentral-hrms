@@ -52,11 +52,55 @@ var MonthlyLeaveService = (function () {
     return monthlyGrantDefault_(verticalCode);
   }
 
-  function joinGrantAfterDay_() {
-    var d = num_(ConfigService.getSetting('leave_join_grant_after_day', 20), 20);
+  function clampJoinDaySetting_(value, fallback) {
+    var d = num_(value, fallback);
     if (d < 1) d = 1;
     if (d > 28) d = 28;
-    return d;
+    return Math.floor(d);
+  }
+
+  function joinGrantAfterDay_() {
+    return clampJoinDaySetting_(ConfigService.getSetting('leave_join_grant_after_day', 20), 20);
+  }
+
+  function joinHalfFromDay_() {
+    return clampJoinDaySetting_(ConfigService.getSetting('leave_join_half_from_day', 10), 10);
+  }
+
+  function joinHalfToDay_() {
+    return clampJoinDaySetting_(ConfigService.getSetting('leave_join_half_to_day', 20), 20);
+  }
+
+  function roundGrantHalfStep_(value) {
+    var n = num_(value, 0);
+    return Math.round(n * 2) / 2;
+  }
+
+  /**
+   * Join-month grant only (not applied to later months).
+   * @param {number} base Monthly vertical entitlement
+   * @param {number} joinDay Day of month (1–31)
+   * @return {number}
+   */
+  function joinMonthGrantForBase_(base, joinDay) {
+    base = num_(base, 0);
+    if (base <= 0) return 0;
+    var d = Math.floor(num_(joinDay, 0));
+    if (d < 1) return base;
+    var noAfter = joinGrantAfterDay_();
+    var halfFrom = joinHalfFromDay_();
+    var halfTo = joinHalfToDay_();
+    if (halfFrom > halfTo) {
+      var tmp = halfFrom;
+      halfFrom = halfTo;
+      halfTo = tmp;
+    }
+    if (d > noAfter) return 0;
+    if (d >= halfFrom && d <= halfTo) {
+      if (base < 2) return 0;
+      return roundGrantHalfStep_(base * 0.5);
+    }
+    return base;
   }
 
   function parseDate_(s) {
@@ -78,8 +122,7 @@ var MonthlyLeaveService = (function () {
     var joinM = join.getMonth() + 1;
     if (joinY > y || (joinY === y && joinM > m)) return 0;
     if (joinY === y && joinM === m) {
-      var afterDay = joinGrantAfterDay_();
-      if (join.getDate() > afterDay) return 0;
+      return joinMonthGrantForBase_(base, join.getDate());
     }
     return base;
   }
@@ -445,6 +488,10 @@ var MonthlyLeaveService = (function () {
 
   return {
     grantForEmployeeMonth_: grantForEmployeeMonth_,
+    joinMonthGrantForBase_: joinMonthGrantForBase_,
+    joinGrantAfterDay_: joinGrantAfterDay_,
+    joinHalfFromDay_: joinHalfFromDay_,
+    joinHalfToDay_: joinHalfToDay_,
     leaveUsedFromCounts_: leaveUsedFromCounts_,
     registerPoolConsumingDays_: registerPoolConsumingDays_,
     availableAfterCounts_: availableAfterCounts_,
