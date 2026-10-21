@@ -19,10 +19,21 @@ var PayrollApprovalExportService = (function () {
   }
 
   function parseBreakdown_(rec) {
-    if (!rec) return { lines: [], bonus: 0, incentive: 0, other_earnings: 0, other_deductions: 0, tds_amount: 0 };
+    if (!rec) {
+      return {
+        raw: {},
+        lines: [],
+        bonus: 0,
+        incentive: 0,
+        other_earnings: 0,
+        other_deductions: 0,
+        tds_amount: 0
+      };
+    }
     try {
       var bd = JSON.parse(rec.component_breakdown || '{}');
       return {
+        raw: bd,
         lines: bd.lines || [],
         bonus: num_(bd.bonus != null ? bd.bonus : rec.bonus),
         incentive: num_(bd.incentive != null ? bd.incentive : rec.incentive),
@@ -31,17 +42,24 @@ var PayrollApprovalExportService = (function () {
         tds_amount: num_(bd.tds_amount != null ? bd.tds_amount : rec.tds_amount)
       };
     } catch (ignore) {
-      return { lines: [], bonus: num_(rec.bonus), incentive: num_(rec.incentive), other_earnings: num_(rec.other_earnings),
-        other_deductions: num_(rec.other_deductions), tds_amount: num_(rec.tds_amount) };
+      return {
+        raw: {},
+        lines: [],
+        bonus: num_(rec.bonus),
+        incentive: num_(rec.incentive),
+        other_earnings: num_(rec.other_earnings),
+        other_deductions: num_(rec.other_deductions),
+        tds_amount: num_(rec.tds_amount)
+      };
     }
   }
 
-  function lineMapsFromRecord_(rec) {
-    var bd = parseBreakdown_(rec);
-    var earnings = {};
-    var deductions = {};
-    var employers = {};
-    (bd.lines || []).forEach(function (line) {
+  function sectionLines_(bd, key) {
+    return (bd && bd.sections && bd.sections[key] && bd.sections[key].lines) ? bd.sections[key].lines : [];
+  }
+
+  function applyLinesToMaps_(lines, earnings, deductions, employers) {
+    (lines || []).forEach(function (line) {
       var code = trim_(line.component_code || line.code).toUpperCase();
       if (!code) return;
       var kind = String(line.component_kind || '').toUpperCase();
@@ -50,6 +68,23 @@ var PayrollApprovalExportService = (function () {
       else if (kind === 'EMPLOYER') employers[code] = amt;
       else earnings[code] = amt;
     });
+  }
+
+  function lineMapsFromRecord_(rec) {
+    var bd = parseBreakdown_(rec);
+    var earnings = {};
+    var deductions = {};
+    var employers = {};
+    var raw = bd.raw || {};
+    applyLinesToMaps_(sectionLines_(raw, 'earned_pay'), earnings, deductions, employers);
+    applyLinesToMaps_(sectionLines_(raw, 'deduction_formulas'), earnings, deductions, employers);
+    applyLinesToMaps_(sectionLines_(raw, 'manual_deductions'), earnings, deductions, employers);
+    if (!Object.keys(earnings).length && !Object.keys(deductions).length && !Object.keys(employers).length) {
+      applyLinesToMaps_(sectionLines_(raw, 'rate_of_pay'), earnings, deductions, employers);
+    }
+    if (!Object.keys(earnings).length && !Object.keys(deductions).length && !Object.keys(employers).length) {
+      applyLinesToMaps_(bd.lines, earnings, deductions, employers);
+    }
     return { earnings: earnings, deductions: deductions, employers: employers, extras: bd };
   }
 

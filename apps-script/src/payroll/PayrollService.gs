@@ -90,6 +90,82 @@ var PayrollService = (function () {
     return trim_(dept) || 'Unknown';
   }
 
+  var REVIEW_EARN_ORDER_ = ['BASIC', 'BP', 'DA', 'BASIC_DA', 'HRA', 'CONV', 'CONVEYANCE', 'MED', 'MEDICAL', 'SA', 'SPECIAL'];
+  var REVIEW_DED_ORDER_ = ['PF', 'ESI', 'ESIC', 'PT', 'ADVANCE', 'ADV', 'LCD', 'LWF', 'TDS'];
+
+  function sortReviewComponentCodes_(codes, preferredOrder) {
+    var set = {};
+    (codes || []).forEach(function (c) { set[String(c).toUpperCase()] = true; });
+    var ordered = [];
+    (preferredOrder || []).forEach(function (c) {
+      c = String(c).toUpperCase();
+      if (set[c]) {
+        ordered.push(c);
+        delete set[c];
+      }
+    });
+    Object.keys(set).sort().forEach(function (c) { ordered.push(c); });
+    return ordered;
+  }
+
+  function unionCodeLists_(a, b) {
+    var set = {};
+    (a || []).concat(b || []).forEach(function (c) {
+      var u = String(c || '').trim().toUpperCase();
+      if (u) set[u] = true;
+    });
+    return Object.keys(set);
+  }
+
+  function collectStructureComponentColumns_(records) {
+    var earn = {};
+    var ded = {};
+    var er = {};
+    var structureIds = {};
+    (records || []).forEach(function (r) {
+      var sid = trim_(r.salary_structure_id);
+      if (sid) structureIds[sid] = true;
+    });
+    Object.keys(structureIds).forEach(function (sid) {
+      DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: sid }).forEach(function (c) {
+        var code = trim_(c.component_code).toUpperCase();
+        if (!code) return;
+        var kind = String(c.component_kind || '').toUpperCase();
+        if (kind === HRMS.COMPONENT_KIND.DEDUCTION) ded[code] = true;
+        else if (kind === HRMS.COMPONENT_KIND.EMPLOYER) er[code] = true;
+        else earn[code] = true;
+      });
+    });
+    return {
+      earnings: Object.keys(earn),
+      deductions: Object.keys(ded),
+      employers: Object.keys(er)
+    };
+  }
+
+  function buildPayrollReviewColumns_(records) {
+    var fromBreakdown = { earnings: [], deductions: [], employers: [] };
+    if (typeof PayrollApprovalExportService !== 'undefined' &&
+        PayrollApprovalExportService.collectComponentColumnsFromRecords) {
+      fromBreakdown = PayrollApprovalExportService.collectComponentColumnsFromRecords(records);
+    }
+    var fromStructure = collectStructureComponentColumns_(records);
+    return {
+      earnings: sortReviewComponentCodes_(
+        unionCodeLists_(fromBreakdown.earnings, fromStructure.earnings),
+        REVIEW_EARN_ORDER_
+      ),
+      deductions: sortReviewComponentCodes_(
+        unionCodeLists_(fromBreakdown.deductions, fromStructure.deductions),
+        REVIEW_DED_ORDER_
+      ),
+      employers: sortReviewComponentCodes_(
+        unionCodeLists_(fromBreakdown.employers, fromStructure.employers),
+        ['EMPLOYER_PF', 'PF_EMPLOYER']
+      )
+    };
+  }
+
   function payrollLineMapsForReview_(record) {
     if (typeof PayrollApprovalExportService !== 'undefined' &&
         PayrollApprovalExportService.lineMapsFromRecord) {
@@ -792,10 +868,7 @@ var PayrollService = (function () {
       exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
       departmentReview: buildDepartmentReview_(records, employees, inputs),
-      payrollReviewColumns: (typeof PayrollApprovalExportService !== 'undefined' &&
-        PayrollApprovalExportService.collectComponentColumnsFromRecords)
-        ? PayrollApprovalExportService.collectComponentColumnsFromRecords(records)
-        : { earnings: [], deductions: [], employers: [] },
+      payrollReviewColumns: buildPayrollReviewColumns_(records),
       lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
       finalizeBlockers: buildFinalizeBlockers_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
       payslipStatus: payslipStatus_(records, inputs),

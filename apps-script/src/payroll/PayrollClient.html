@@ -1598,8 +1598,36 @@
       return '<td class="num">' + fmtMoneyInr(n) + '</td>';
     }
 
-    function paintDeptReviewEmployeeTable_(dept, detail, st) {
+    function resolvePayrollReviewColumns_(detail) {
       var cols = (detail && detail.payrollReviewColumns) || { earnings: [], deductions: [], employers: [] };
+      var earn = {};
+      var ded = {};
+      var er = {};
+      function addKeys_(arr, bucket) {
+        (arr || []).forEach(function (k) {
+          var u = String(k || '').trim().toUpperCase();
+          if (u) bucket[u] = true;
+        });
+      }
+      addKeys_(cols.earnings, earn);
+      addKeys_(cols.deductions, ded);
+      addKeys_(cols.employers, er);
+      (detail.departmentReview || []).forEach(function (dept) {
+        (dept.employees || []).forEach(function (emp) {
+          Object.keys(emp.earnings || {}).forEach(function (k) { earn[String(k).toUpperCase()] = true; });
+          Object.keys(emp.deductions || {}).forEach(function (k) { ded[String(k).toUpperCase()] = true; });
+          Object.keys(emp.employers || {}).forEach(function (k) { er[String(k).toUpperCase()] = true; });
+        });
+      });
+      return {
+        earnings: Object.keys(earn).sort(),
+        deductions: Object.keys(ded).sort(),
+        employers: Object.keys(er).sort()
+      };
+    }
+
+    function paintDeptReviewEmployeeTable_(dept, detail, st) {
+      var cols = resolvePayrollReviewColumns_(detail);
       var earnCols = cols.earnings || [];
       var dedCols = cols.deductions || [];
       var erCols = cols.employers || [];
