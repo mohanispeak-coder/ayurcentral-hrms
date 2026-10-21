@@ -11,10 +11,6 @@ var PayrollApprovalExportService = (function () {
     return isFinite(n) ? n : 0;
   }
 
-  function isHold_(inp) {
-    return String(inp && inp.salary_hold || '').toUpperCase() === 'YES';
-  }
-
   function componentMapFromRecord_(rec) {
     var map = {};
     if (!rec) return map;
@@ -76,8 +72,7 @@ var PayrollApprovalExportService = (function () {
     var headers = [
       'employee_id', 'employee_name', 'vertical_name', 'designation', 'department',
       'working_days', 'paid_days', 'lop_days', 'bonus', 'incentive', 'other_earnings',
-      'other_deductions', 'tds_amount', 'gross_earnings', 'total_deductions', 'net_pay',
-      'salary_hold'
+      'other_deductions', 'tds_amount', 'gross_earnings', 'total_deductions', 'net_pay'
     ].concat(componentCodes);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8eef3');
@@ -105,8 +100,7 @@ var PayrollApprovalExportService = (function () {
         num_(inp.tds_amount),
         num_(rec.gross_earnings),
         num_(rec.total_deductions),
-        num_(rec.net_pay),
-        isHold_(inp) ? 'YES' : 'NO'
+        num_(rec.net_pay)
       ];
       componentCodes.forEach(function (code) {
         line.push(comps[code] || 0);
@@ -116,7 +110,7 @@ var PayrollApprovalExportService = (function () {
     if (data.length) {
       sheet.getRange(2, 1, data.length, headers.length).setValues(data);
     }
-    sheet.getRange(1, 1).setNote('Run: ' + (run.payroll_run_id || '') + ' · Re-download after changing salary hold in HRMS.');
+    sheet.getRange(1, 1).setNote('Run: ' + (run.payroll_run_id || '') + ' · Calculated payroll export from HRMS.');
     SpreadsheetApp.flush();
     var name = 'HRMS_Calculated_Payroll_' + (run.payroll_run_id || 'run') + '.xlsx';
     var blob;

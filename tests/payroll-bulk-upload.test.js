@@ -104,8 +104,8 @@ check('per-employee-payslip', /js-gen-payslip/.test(client) && /apiRegeneratePay
 check('per-employee-payslip-notify', /notifyPayslipsAvailable[\s\S]*\[snapshot\.record\]/.test(payroll) &&
   /Generate & notify/.test(client));
 check('payslip-pdf-export', /htmlToPdfBlob_/.test(payslip) && /baseName \+ '\.pdf'/.test(payslip));
-check('payroll-salary-hold-ui', /js-salary-hold/.test(client) && /apiSetPayrollSalaryHold/.test(api) &&
-  /setSalaryHold/.test(payroll));
+check('payroll-salary-hold-ui', /js-salary-payout-btn/.test(client) && /Release hold/.test(client) &&
+  /apiSetPayrollSalaryHold/.test(api) && /setSalaryHold/.test(payroll));
 check('payroll-approval-export', /apiDownloadPayrollApprovalExport/.test(api) &&
   /PayrollApprovalExportService/.test(read('payroll/PayrollApprovalExportService.gs')) &&
   /Download calculated payroll/.test(client));

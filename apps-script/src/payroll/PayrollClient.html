@@ -1499,15 +1499,19 @@
       return st !== 'DRAFT' && st !== 'LOCKED';
     }
 
-    function salaryHoldSelectHtml_(employeeId, salaryHold, st) {
+    function salaryHoldButtonsHtml_(employeeId, salaryHold, st) {
       var onHold = String(salaryHold || '').toUpperCase() === 'YES';
       if (!payoutHoldEditable_(st)) {
-        return onHold ? '<span class="phase-chip">On hold</span>' : 'Pay';
+        return onHold ? '<span class="phase-chip">On hold</span>' : '<span class="hint">Pay</span>';
       }
-      return '<select class="form-select js-salary-hold" data-emp="' + escapeHtml(employeeId) + '" style="max-width:148px" title="Pay = normal payout. Hold salary = skip payslip until you choose Pay again.">' +
-        '<option value="NO"' + (!onHold ? ' selected' : '') + '>Pay</option>' +
-        '<option value="YES"' + (onHold ? ' selected' : '') + '>Hold salary</option>' +
-        '</select>';
+      var emp = escapeHtml(employeeId);
+      return '<div class="payout-hold-btns" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">' +
+        '<button type="button" class="btn btn-secondary btn-sm js-salary-payout-btn" data-emp="' + emp + '" data-hold="YES"' +
+        (onHold ? ' disabled aria-disabled="true"' : '') + ' title="Pause payslip for this month">Hold salary</button>' +
+        '<button type="button" class="btn btn-primary btn-sm js-salary-payout-btn" data-emp="' + emp + '" data-hold="NO"' +
+        (!onHold ? ' disabled aria-disabled="true"' : '') + ' title="Allow payslip again">Release hold</button>' +
+        (onHold ? '<span class="hint">On hold</span>' : '') +
+        '</div>';
     }
 
     function paintReviewSection_(detail, st) {
@@ -1525,7 +1529,7 @@
         ? detail.departmentReview
         : null;
       if (deptReview) {
-        html += '<p class="hint">Expand a department (+) to see each employee. In <strong>Payout</strong>, choose <strong>Pay</strong> or <strong>Hold salary</strong> (switch back to Pay to release hold).</p>';
+        html += '<p class="hint">Expand a department (+) to see each employee. Use <strong>Hold salary</strong> or <strong>Release hold</strong> in the Payout column (buttons, not the Excel download).</p>';
         deptReview.forEach(function (dept) {
           var holdNote = dept.held_count ? (' · ' + dept.held_count + ' on hold') : '';
           html += '<details class="dept-review" style="margin-top:8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;padding:6px 10px">' +
@@ -1537,7 +1541,7 @@
             html += '<tr><td>' + escapeHtml(emp.display_name) + '<div class="hint mono">' + escapeHtml(emp.employee_id) + '</div></td>' +
               '<td class="num">' + fmtMoneyInr(emp.gross_earnings) + '</td><td class="num">' + fmtMoneyInr(emp.total_deductions) + '</td>' +
               '<td class="num">' + fmtMoneyInr(emp.net_pay) + '</td><td>' +
-              salaryHoldSelectHtml_(emp.employee_id, emp.salary_hold, st) + '</td></tr>';
+              salaryHoldButtonsHtml_(emp.employee_id, emp.salary_hold, st) + '</td></tr>';
           });
           html += '</tbody></table></div></details>';
         });
@@ -1553,7 +1557,7 @@
       }
       if (st !== 'DRAFT') {
         html += '<div class="primary-next" style="margin-top:12px"><button type="button" class="btn btn-secondary" id="btn-download-approval-xlsx">Download calculated payroll</button></div>';
-        html += '<p class="hint">Excel with attendance, salary components, and hold flags. Download again after you change payout holds.</p>';
+        html += '<p class="hint">Excel with attendance and salary components for review. Hold/release is done only with the buttons above.</p>';
       }
       html += '</div>';
       return html;
@@ -2486,7 +2490,7 @@
       if (st === 'DRAFT') {
         return '<td class="hint">After calculate</td>';
       }
-      return '<td>' + salaryHoldSelectHtml_(empId, inp.salary_hold, st) + '</td>';
+      return '<td>' + salaryHoldButtonsHtml_(empId, inp.salary_hold, st) + '</td>';
     }
 
     function payslipActionHtml_(row, runId) {
@@ -2786,15 +2790,16 @@
       var root = page.querySelector('.payroll-page') || page;
       if (!root || root.getAttribute('data-hold-bound') === '1') return;
       root.setAttribute('data-hold-bound', '1');
-      root.addEventListener('change', function (ev) {
-        var holdSel = ev.target && ev.target.classList && ev.target.classList.contains('js-salary-hold') ? ev.target : null;
-        if (!holdSel) return;
+      root.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('.js-salary-payout-btn') : null;
+        if (!btn || btn.disabled) return;
         var d = payrollState.detail;
         if (!d || !d.run) return;
-        var empId = holdSel.getAttribute('data-emp');
-        var holdVal = holdSel.value;
-        holdSel.disabled = true;
-        rpc('apiSetPayrollSalaryHold', [d.run.payroll_run_id, empId, holdVal], null, 'Updating…', $('pr-action-feedback'))
+        var empId = btn.getAttribute('data-emp');
+        var holdVal = btn.getAttribute('data-hold');
+        if (holdVal !== 'YES' && holdVal !== 'NO') return;
+        if (!setButtonLoading(btn, holdVal === 'YES' ? 'Holding…' : 'Releasing…')) return;
+        rpc('apiSetPayrollSalaryHold', [d.run.payroll_run_id, empId, holdVal], btn, 'Updating…', $('pr-action-feedback'))
           .then(function (next) {
             payrollState.detail = next;
             invalidatePayrollRunPeers_(d.run.payroll_run_id);
@@ -2802,7 +2807,7 @@
             showToast(holdVal === 'YES' ? 'Salary on hold for this month.' : 'Salary hold released — employee will be paid.', 'success');
           })
           .catch(function (err) {
-            holdSel.disabled = false;
+            restoreButton(btn);
             showToast(err.message || 'Could not update salary hold', 'error');
           });
       });
