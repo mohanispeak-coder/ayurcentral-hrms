@@ -91,21 +91,15 @@ var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
 
 var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
-var decodedTpl = Buffer.from(csvTpl.base64, 'base64').toString('utf8');
-check('csv template has base64', csvTpl.fileName.indexOf('.csv') >= 0 && csvTpl.base64.length > 10);
-check('csv template has vertical column', decodedTpl.indexOf('vertical_name') >= 0);
-check('csv template has father_husband_name column', decodedTpl.indexOf('father_husband_name') >= 0);
-check('csv template has uan_no column', decodedTpl.indexOf('uan_no') >= 0);
+check('csv template download has payload', csvTpl.base64.length > 10);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 5', /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
-check('vertical dropdown validation', /applyEmployeeSheetDropdowns_/.test(bulkSrc) &&
-  /requireValueInRange/.test(bulkSrc) && /verticalsForTemplate_/.test(bulkSrc));
-check('csv lists verticals', /LIST,verticals/.test(bulkSrc) && /findCsvHeaderRowIndex_/.test(bulkSrc));
-
-var csvWithList = '# comment\nLIST,verticals,SAPL\nLIST,verticals,AOPL\n\n' + csv;
-var rowsWithPreamble = Bulk.parseCsvRows(csvWithList);
-check('csv parse skips list preamble', rowsWithPreamble.length === 1 && rowsWithPreamble[0].vertical_name === 'SAPL');
+check('bulk template version 4', /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
+check('vertical column dropdown only', /applyVerticalColumnDropdown_/.test(bulkSrc) &&
+  /requireValueInList/.test(bulkSrc) && /requireValueInRange/.test(bulkSrc) &&
+  /verticalsForTemplate_/.test(bulkSrc));
+check('csv path uses flat xlsx with vertical dropdown', /buildTemplateFlatXlsx_/.test(bulkSrc));
+check('no csv list preamble', !/LIST,verticals/.test(bulkSrc) && !/findCsvHeaderRowIndex_/.test(bulkSrc));
 
 if (fails) {
   console.error(fails + ' test(s) failed');

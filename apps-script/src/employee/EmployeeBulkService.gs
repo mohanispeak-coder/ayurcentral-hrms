@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '5';
+  var TEMPLATE_VERSION_ = '4';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -195,17 +195,20 @@ var EmployeeBulkService = (function () {
     return out;
   }
 
-  function applyEmployeeSheetDropdowns_(employeesSheet, listsSheet, headers, verticals) {
+  /** Data validation dropdown on vertical_name only (no other column dropdowns). */
+  function applyVerticalColumnDropdown_(employeesSheet, headers, verticals, listsSheet) {
     verticals = verticalsForTemplate_(verticals);
     var vertCol = headers.indexOf('vertical_name') + 1;
     if (vertCol < 1 || !verticals.length) return;
-    var listStartRow = 2;
-    var listEndRow = listStartRow + verticals.length - 1;
-    var rule = SpreadsheetApp.newDataValidation()
-      .requireValueInRange(listsSheet.getRange(listStartRow, 6, listEndRow, 6), true)
-      .setAllowInvalid(false)
-      .build();
-    employeesSheet.getRange(2, vertCol, MAX_ROWS_ + 1, vertCol).setDataValidation(rule);
+    var builder = SpreadsheetApp.newDataValidation().setAllowInvalid(false);
+    if (listsSheet) {
+      var listStartRow = 2;
+      var listEndRow = listStartRow + verticals.length - 1;
+      builder = builder.requireValueInRange(listsSheet.getRange(listStartRow, 6, listEndRow, 6), true);
+    } else {
+      builder = builder.requireValueInList(verticals, true);
+    }
+    employeesSheet.getRange(2, vertCol, MAX_ROWS_ + 1, vertCol).setDataValidation(builder.build());
   }
 
   function listSalaryStructureNames_() {
@@ -260,60 +263,47 @@ var EmployeeBulkService = (function () {
     }
   }
 
-  function csvEscape_(v) {
-    v = v == null ? '' : String(v);
-    if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
-      return '"' + v.replace(/"/g, '""') + '"';
-    }
-    return v;
-  }
-
-  function buildTemplateCsv_(variant, refs) {
+  function buildTemplatePlainCsv_(variant) {
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
-    refs = refs || {};
     var sample = sampleRow_(variant);
-    var verticals = verticalsForTemplate_(refs.verticals);
+    var esc = function (v) {
+      v = v == null ? '' : String(v);
+      if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
+        return '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    };
     var headers = bulkHeaders_();
-    var required = requiredHeaders_();
-    var headerLabels = headers.map(function (h) {
-      return (required.indexOf(h) >= 0 ? h + '*' : h);
-    });
-    var lines = [];
-    lines.push('# HRMS bulk employee upload — template version ' + TEMPLATE_VERSION_);
-    lines.push('# vertical_name: use exactly one of — ' + verticals.join(', '));
-    lines.push('#');
-    lines.push('# Allowed verticals (Lists):');
-    verticals.forEach(function (v) {
-      lines.push('LIST,verticals,' + csvEscape_(v));
-    });
-    lines.push('#');
-    lines.push(headerLabels.join(','));
-    lines.push(headers.map(function (h) { return csvEscape_(sample[h] || ''); }).join(','));
+    var lines = [headers.join(',')];
+    lines.push(headers.map(function (h) { return esc(sample[h] || ''); }).join(','));
     var name = templateFileBase_(variant) + '.csv';
     return Utilities.newBlob(lines.join('\n'), 'text/csv', name);
   }
 
-  function findCsvHeaderRowIndex_(rows) {
-    for (var r = 0; r < rows.length; r++) {
-      var first = normalizeHeader_(rows[r][0] || '').replace(/\*$/, '');
-      if (first === 'employee_id') return r;
+  /** Single-sheet Excel file (CSV download path): vertical_name dropdown only. */
+  function buildTemplateFlatXlsx_(refs, variant) {
+    variant = variant === 'legacy' ? 'legacy' : 'new_hire';
+    var sample = sampleRow_(variant);
+    var ss = SpreadsheetApp.create('HRMS Bulk Employee Upload');
+    var fileId = ss.getId();
+    var employees = ss.getSheets()[0];
+    employees.setName('Employees');
+    var sheetHeaders = bulkHeaders_();
+    var required = requiredHeaders_();
+    var headerLabels = sheetHeaders.map(function (h) {
+      return required.indexOf(h) >= 0 ? h + '*' : h;
+    });
+    employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
+    var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
+    employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
+    employees.setFrozenRows(1);
+    applyVerticalColumnDropdown_(employees, sheetHeaders, refs.verticals, null);
+    var xlsxName = templateFileBase_(variant) + '.xlsx';
+    try {
+      return exportSpreadsheetXlsx_(fileId).setName(xlsxName);
+    } finally {
+      DriveApp.getFileById(fileId).setTrashed(true);
     }
-    return 0;
-  }
-
-  function isCsvMetaRow_(line) {
-    if (!line || !line.length) return true;
-    var c0 = trim_(line[0]);
-    if (!c0) {
-      var allBlank = true;
-      for (var i = 0; i < line.length; i++) {
-        if (trim_(line[i])) allBlank = false;
-      }
-      return allBlank;
-    }
-    if (c0.indexOf('#') === 0) return true;
-    if (normalizeHeader_(c0) === 'list') return true;
-    return false;
   }
 
   function buildTemplateSpreadsheet_(refs, variant) {
@@ -326,7 +316,7 @@ var EmployeeBulkService = (function () {
     instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
-    instructionLines.push(['vertical_name* uses a dropdown (SAPL, AOPL, AOMS, …) — pick from the list on each row.']);
+    instructionLines.push(['vertical_name* has a dropdown on the Employees sheet (SAPL, AOPL, AOMS, …).']);
     instructionLines.push(['salary_structure_id (optional) is the structure ID from the Salary structures screen (e.g. SS-001); a structure name is also accepted. See the Lists sheet. ctc_monthly is the monthly CTC amount (number).']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
@@ -369,7 +359,7 @@ var EmployeeBulkService = (function () {
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    applyEmployeeSheetDropdowns_(employees, lists, sheetHeaders, templateVerticals);
+    applyVerticalColumnDropdown_(employees, sheetHeaders, templateVerticals, lists);
 
     var blob;
     var xlsxName = templateFileBase_(variant) + '.xlsx';
@@ -397,8 +387,12 @@ var EmployeeBulkService = (function () {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     var refs = listReferenceValues_(session);
-    var blob = buildTemplateCsv_(variant, refs);
-    return packDownload_(blob, variant, 'text/csv');
+    try {
+      var blob = buildTemplateFlatXlsx_(refs, variant);
+      return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    } catch (e) {
+      return packDownload_(buildTemplatePlainCsv_(variant), variant, 'text/csv');
+    }
   }
 
   function downloadTemplate(session, variant) {
@@ -416,16 +410,19 @@ var EmployeeBulkService = (function () {
   function parseCsvRows_(text) {
     var rows = Utilities.parseCsv(text);
     if (!rows || rows.length < 2) return [];
-    var headerRowIdx = findCsvHeaderRowIndex_(rows);
-    var headers = rows[headerRowIdx].map(normalizeHeader_);
+    var headers = rows[0].map(normalizeHeader_);
     var out = [];
-    for (var r = headerRowIdx + 1; r < rows.length; r++) {
+    for (var r = 1; r < rows.length; r++) {
       var line = rows[r];
-      if (isCsvMetaRow_(line)) continue;
+      if (!line || !line.length) continue;
+      var allBlank = true;
+      for (var c = 0; c < line.length; c++) {
+        if (trim_(line[c])) allBlank = false;
+      }
+      if (allBlank) continue;
       var row = { rowNumber: r + 1 };
       for (var i = 0; i < headers.length; i++) {
-        var key = (headers[i] || '').replace(/\*$/, '');
-        if (!key) continue;
+        var key = headers[i].replace(/\*$/, '');
         row[key] = trim_(line[i]);
       }
       out.push(row);
