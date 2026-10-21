@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '10';
+  var TEMPLATE_VERSION_ = '11';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -195,28 +195,14 @@ var EmployeeBulkService = (function () {
     return trim_(header).toLowerCase().replace(/\s+/g, '_');
   }
 
-  function uniqueSorted_(values) {
-    var map = {};
-    (values || []).forEach(function (v) {
-      v = trim_(v);
-      if (v) map[v] = true;
-    });
-    return Object.keys(map).sort();
-  }
-
   function listReferenceValues_(session) {
-    var directory = EmployeeService.listDirectory(session, { page: 1, pageSize: 5000 });
     return {
-      departments: uniqueSorted_(directory.departments || []),
-      designations: uniqueSorted_(EmployeeRepository.listAll().map(function (e) { return e.designation; })),
-      locations: uniqueSorted_(directory.locations || []),
-      employment_types: ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'],
       verticals: EmployeeService.listVerticals(session),
       salary_structures: listSalaryStructureNames_()
     };
   }
 
-  /** Dropdown order for bulk template (Lists sheet + Employees validation). */
+  /** Dropdown order for bulk template vertical_name column. */
   function verticalsForTemplate_(verticals) {
     var src = (verticals || []).map(function (v) { return trim_(v).toUpperCase(); }).filter(Boolean);
     var order = ['SAPL', 'AOPL', 'AOMS', 'OTHERS'];
@@ -238,26 +224,42 @@ var EmployeeBulkService = (function () {
     headerRange.setBackground('#e8eef3');
   }
 
-  function findVerticalNameColumn_(sheet, numColumns) {
+  function findBulkColumn_(sheet, numColumns, headerKey) {
     var labels = sheet.getRange(1, 1, 1, numColumns).getValues()[0];
     for (var i = 0; i < labels.length; i++) {
       var key = normalizeHeader_(labels[i]).replace(/\*$/, '');
-      if (key === 'vertical_name') return i + 1;
+      if (key === headerKey) return i + 1;
     }
     return 0;
   }
 
-  /** Data validation dropdown on vertical_name column only (header is vertical_name or vertical_name*). */
-  function applyVerticalColumnDropdown_(employeesSheet, numColumns, verticals) {
-    verticals = verticalsForTemplate_(verticals);
-    if (!verticals.length) return;
-    var vertCol = findVerticalNameColumn_(employeesSheet, numColumns);
-    if (vertCol < 1) return;
+  function applyColumnListDropdown_(employeesSheet, col, values, allowBlank) {
+    if (col < 1 || !values || !values.length) return;
+    if (values.length > 500) values = values.slice(0, 500);
     var rule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(verticals, true)
-      .setAllowInvalid(false)
+      .requireValueInList(values, true)
+      .setAllowInvalid(!!allowBlank)
       .build();
-    employeesSheet.getRange(2, vertCol, MAX_ROWS_, 1).setDataValidation(rule);
+    employeesSheet.getRange(2, col, MAX_ROWS_, 1).setDataValidation(rule);
+  }
+
+  /** vertical_name and salary_structure_id dropdowns from live HRMS lists (re-download for updates). */
+  function applyBulkTemplateDropdowns_(employeesSheet, sheetHeaders, refs) {
+    var n = sheetHeaders.length;
+    var vertCol = findBulkColumn_(employeesSheet, n, 'vertical_name');
+    if (vertCol > 0) {
+      applyColumnListDropdown_(employeesSheet, vertCol, verticalsForTemplate_(refs.verticals), false);
+    }
+    var salCol = findBulkColumn_(employeesSheet, n, 'salary_structure_id');
+    var salaryOptions = refs.salary_structures || listSalaryStructureNames_();
+    if (salCol > 0 && salaryOptions.length) {
+      applyColumnListDropdown_(
+        employeesSheet,
+        salCol,
+        salaryOptions,
+        !isBulkFieldMandatory_('salary_structure_id')
+      );
+    }
   }
 
   function listSalaryStructureNames_() {
@@ -271,6 +273,18 @@ var EmployeeBulkService = (function () {
       }
     } catch (ignore) {}
     return [];
+  }
+
+  function resolveSalaryStructureType_(structureRef) {
+    structureRef = trim_(structureRef);
+    if (!structureRef || typeof SalaryStructureTypeService === 'undefined') return null;
+    var type = SalaryStructureTypeService.findTypeById(structureRef) ||
+      SalaryStructureTypeService.findTypeByName(structureRef);
+    if (type) return type;
+    var idPart = structureRef.split(/\s+\u2014\s+|\s+-\s+/)[0];
+    idPart = trim_(idPart);
+    if (idPart) return SalaryStructureTypeService.findTypeById(idPart);
+    return null;
   }
 
   function driveApiHint_() {
@@ -379,8 +393,8 @@ var EmployeeBulkService = (function () {
     return Utilities.newBlob(lines.join('\n'), 'text/csv', name);
   }
 
-  /** Single-sheet Excel file (CSV download path): vertical_name dropdown only. */
-  function buildTemplateFlatXlsx_(refs, variant) {
+  /** Single Employees sheet: bold headers, vertical + salary structure dropdowns from live HRMS data. */
+  function buildTemplateEmployeesXlsx_(refs, variant) {
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     var sample = sampleRow_(variant);
     var ss = SpreadsheetApp.create('HRMS Bulk Employee Upload');
@@ -395,83 +409,11 @@ var EmployeeBulkService = (function () {
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
     try {
-      if (sheetHeaders.indexOf('vertical_name') >= 0) {
-        applyVerticalColumnDropdown_(employees, sheetHeaders.length, refs.verticals);
-      }
+      applyBulkTemplateDropdowns_(employees, sheetHeaders, refs);
     } catch (dropdownErr) {
-      Logger.log('Bulk flat template vertical dropdown skipped: ' + dropdownErr.message);
+      Logger.log('Bulk template dropdowns skipped: ' + dropdownErr.message);
     }
     employees.activate();
-    var xlsxName = templateFileBase_(variant) + '.xlsx';
-    try {
-      return materializeXlsxBlob_(exportSpreadsheetXlsx_(fileId), xlsxName);
-    } finally {
-      try {
-        DriveApp.getFileById(fileId).setTrashed(true);
-      } catch (ignoreTrash) {}
-    }
-  }
-
-  function buildTemplateSpreadsheet_(refs, variant) {
-    variant = variant === 'legacy' ? 'legacy' : 'new_hire';
-    var sample = sampleRow_(variant);
-    var ss = SpreadsheetApp.create('HRMS Bulk Employee Upload');
-    var fileId = ss.getId();
-    var instructions = ss.getSheets()[0];
-    instructions.setName('Instructions');
-    instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
-    var instructionLines = instructionLines_(variant);
-    instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
-    instructionLines.push(['Open the Employees sheet. In the vertical_name column, use the cell dropdown (SAPL, AOPL, AOMS, …).']);
-    instructionLines.push(['salary_structure_id (optional) is the structure ID from the Salary structures screen (e.g. SS-001); a structure name is also accepted. See the Lists sheet. ctc_monthly is the monthly CTC amount (number).']);
-    instructionLines.push(['']);
-    instructionLines.push(['Verticals:']);
-    instructionLines.push(['AOPL - AOPL-0001, AOPL-0002, ...']);
-    instructionLines.push(['SAPL - SAPL-0001, SAPL-0002, ...']);
-    instructionLines.push(['AOMS - AOMS-0001, AOMS-0002, ...']);
-    instructions.getRange(3, 1, instructionLines.length, 1).setValues(instructionLines);
-
-    var lists = ss.insertSheet('Lists');
-    lists.getRange(1, 1).setValue('departments');
-    lists.getRange(1, 2).setValue('designations');
-    lists.getRange(1, 3).setValue('locations');
-    lists.getRange(1, 4).setValue('employment_types');
-    lists.getRange(1, 5).setValue('create_login');
-    lists.getRange(1, 6).setValue('verticals');
-    lists.getRange(1, 7).setValue('salary_structure_ids');
-    var templateVerticals = verticalsForTemplate_(refs.verticals);
-    var salaryStructures = refs.salary_structures || [];
-    var maxList = Math.max(
-      refs.departments.length, refs.designations.length, refs.locations.length,
-      refs.employment_types.length, 2, templateVerticals.length, salaryStructures.length
-    );
-    for (var i = 0; i < maxList; i++) {
-      lists.getRange(i + 2, 1).setValue(refs.departments[i] || '');
-      lists.getRange(i + 2, 2).setValue(refs.designations[i] || '');
-      lists.getRange(i + 2, 3).setValue(refs.locations[i] || '');
-      lists.getRange(i + 2, 4).setValue(refs.employment_types[i] || '');
-      lists.getRange(i + 2, 5).setValue(i === 0 ? 'YES' : (i === 1 ? 'NO' : ''));
-      lists.getRange(i + 2, 6).setValue(templateVerticals[i] || '');
-      lists.getRange(i + 2, 7).setValue(salaryStructures[i] || '');
-    }
-
-    var employees = ss.insertSheet('Employees');
-    var sheetHeaders = bulkHeaders_();
-    var headerLabels = bulkHeaderLabels_(sheetHeaders);
-    employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
-    formatEmployeeHeaderRow_(employees, sheetHeaders.length);
-    var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
-    employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
-    employees.setFrozenRows(1);
-    try {
-      if (sheetHeaders.indexOf('vertical_name') >= 0) {
-        applyVerticalColumnDropdown_(employees, sheetHeaders.length, templateVerticals);
-      }
-    } catch (dropdownErr) {
-      Logger.log('Bulk template vertical dropdown skipped: ' + dropdownErr.message);
-    }
-    employees.activate();
-
     var xlsxName = templateFileBase_(variant) + '.xlsx';
     try {
       return materializeXlsxBlob_(exportSpreadsheetXlsx_(fileId), xlsxName);
@@ -500,7 +442,7 @@ var EmployeeBulkService = (function () {
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     try {
       var refs = listReferenceValues_(session);
-      var blob = buildTemplateFlatXlsx_(refs, variant);
+      var blob = buildTemplateEmployeesXlsx_(refs, variant);
       return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (e) {
       throw configurationError_('Bulk template download failed: ' + (e && e.message ? e.message : String(e)));
@@ -512,7 +454,7 @@ var EmployeeBulkService = (function () {
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
     try {
       var refs = listReferenceValues_(session);
-      var blob = buildTemplateSpreadsheet_(refs, variant);
+      var blob = buildTemplateEmployeesXlsx_(refs, variant);
       return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (e) {
       if (e && e.hrmsCode) throw e;
@@ -691,10 +633,7 @@ var EmployeeBulkService = (function () {
       var resolvedStructureId = '';
       if (structureRef) {
         var structureType = null;
-        if (typeof SalaryStructureTypeService !== 'undefined') {
-          structureType = SalaryStructureTypeService.findTypeById(structureRef) ||
-            SalaryStructureTypeService.findTypeByName(structureRef);
-        }
+        structureType = resolveSalaryStructureType_(structureRef);
         if (!structureType) {
           rowErrors.push({ field: 'salary_structure_id', message: 'Salary structure ID (or name) was not found.' });
         } else if (String(structureType.status || '').toUpperCase() !== HRMS.STRUCTURE_TYPE_STATUS.ACTIVE) {

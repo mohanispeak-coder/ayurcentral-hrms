@@ -91,16 +91,18 @@ var bad = Bulk.validateRows(badRows, session);
 check('validate catches bad id', bad.errorCount === 1);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 10', /TEMPLATE_VERSION_ = '10'/.test(bulkSrc));
+check('bulk template version 11', /TEMPLATE_VERSION_ = '11'/.test(bulkSrc));
 check('drive v3 export uses alt=media', /alt=media/.test(bulkSrc));
 check('materialize xlsx before cleanup', /materializeXlsxBlob_/.test(bulkSrc));
 check('bulk header labels use mandatory fields', /bulkHeaderLabels_/.test(bulkSrc) && /mandatoryFieldIds/.test(bulkSrc));
 check('no silent plain csv template fallback', !/buildTemplatePlainCsv_\(variant\), variant, 'text\/csv'\)/.test(bulkSrc));
 check('employee header row bold', /formatEmployeeHeaderRow_/.test(bulkSrc) && /setFontWeight\('bold'\)/.test(bulkSrc));
-check('vertical column dropdown only', /applyVerticalColumnDropdown_/.test(bulkSrc) &&
-  /findVerticalNameColumn_/.test(bulkSrc) && /requireValueInList/.test(bulkSrc) &&
+check('bulk dropdowns vertical and salary', /applyBulkTemplateDropdowns_/.test(bulkSrc) &&
+  /findBulkColumn_/.test(bulkSrc) && /listSalaryStructureNames_/.test(bulkSrc) &&
   /verticalsForTemplate_/.test(bulkSrc));
-check('csv path uses flat xlsx with vertical dropdown', /buildTemplateFlatXlsx_/.test(bulkSrc));
+check('single employees sheet template', /buildTemplateEmployeesXlsx_/.test(bulkSrc) &&
+  !/insertSheet\('Lists'\)/.test(bulkSrc));
+check('resolve salary structure from dropdown label', /resolveSalaryStructureType_/.test(bulkSrc));
 check('no csv list preamble', !/LIST,verticals/.test(bulkSrc) && !/findCsvHeaderRowIndex_/.test(bulkSrc));
 
 if (fails) {

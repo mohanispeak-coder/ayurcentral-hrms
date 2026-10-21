@@ -1420,7 +1420,7 @@
           ? (' Required * columns: ' + file.mandatoryFieldIds.join(', ') + '.')
           : '';
         showToast('Template v' + file.templateVersion + ' downloaded.' + req +
-          ' Row 1 is bold; vertical_name has a dropdown on the Employees sheet.', 'success');
+          ' Single Employees sheet: vertical_name and salary_structure_id dropdowns.', 'success');
       }
     }
 
@@ -1448,7 +1448,7 @@
         '<div class="card">' +
         (App.bulkRequiredColumnsHtml ? App.bulkRequiredColumnsHtml(reqCols) : '') +
         '<p class="form-hint">When create_login is YES, google_login_email is also required. ' +
-        'Excel templates include Instructions and Lists; CSV downloads a one-sheet .xlsx with a vertical_name dropdown only.</p>' +
+        'Templates are a single Employees sheet with dropdowns for vertical_name and salary_structure_id (re-download to pick up new structures).</p>' +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-template">New hire - Excel</button>' +
         '<button type="button" class="btn btn-secondary" id="btn-bulk-template-csv">New hire - CSV</button>' +
