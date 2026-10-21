@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '3';
+  var TEMPLATE_VERSION_ = '4';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -180,6 +180,34 @@ var EmployeeBulkService = (function () {
     };
   }
 
+  /** Dropdown order for bulk template (Lists sheet + Employees validation). */
+  function verticalsForTemplate_(verticals) {
+    var src = (verticals || []).map(function (v) { return trim_(v).toUpperCase(); }).filter(Boolean);
+    var order = ['SAPL', 'AOPL', 'AOMS', 'OTHERS'];
+    var out = [];
+    order.forEach(function (v) {
+      if (src.indexOf(v) >= 0) out.push(v);
+    });
+    src.forEach(function (v) {
+      if (out.indexOf(v) < 0) out.push(v);
+    });
+    if (!out.length) return ['SAPL', 'AOPL', 'AOMS'];
+    return out;
+  }
+
+  function applyEmployeeSheetDropdowns_(employeesSheet, listsSheet, headers, verticals) {
+    verticals = verticalsForTemplate_(verticals);
+    var vertCol = headers.indexOf('vertical_name') + 1;
+    if (vertCol < 1 || !verticals.length) return;
+    var listStartRow = 2;
+    var listEndRow = listStartRow + verticals.length - 1;
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInRange(listsSheet.getRange(listStartRow, 6, listEndRow, 6), true)
+      .setAllowInvalid(false)
+      .build();
+    employeesSheet.getRange(2, vertCol, MAX_ROWS_ + 1, vertCol).setDataValidation(rule);
+  }
+
   function listSalaryStructureNames_() {
     try {
       if (typeof SalaryStructureTypeService !== 'undefined' && SalaryStructureTypeService.listStructureTypeOptions) {
@@ -259,7 +287,7 @@ var EmployeeBulkService = (function () {
     instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
-    instructionLines.push(['vertical_name is required and must be one of the values on the Lists sheet.']);
+    instructionLines.push(['vertical_name* uses a dropdown (SAPL, AOPL, AOMS, …) — pick from the list on each row.']);
     instructionLines.push(['salary_structure_id (optional) is the structure ID from the Salary structures screen (e.g. SS-001); a structure name is also accepted. See the Lists sheet. ctc_monthly is the monthly CTC amount (number).']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
@@ -276,10 +304,11 @@ var EmployeeBulkService = (function () {
     lists.getRange(1, 5).setValue('create_login');
     lists.getRange(1, 6).setValue('verticals');
     lists.getRange(1, 7).setValue('salary_structure_ids');
+    var templateVerticals = verticalsForTemplate_(refs.verticals);
     var salaryStructures = refs.salary_structures || [];
     var maxList = Math.max(
       refs.departments.length, refs.designations.length, refs.locations.length,
-      refs.employment_types.length, 2, refs.verticals.length, salaryStructures.length
+      refs.employment_types.length, 2, templateVerticals.length, salaryStructures.length
     );
     for (var i = 0; i < maxList; i++) {
       lists.getRange(i + 2, 1).setValue(refs.departments[i] || '');
@@ -287,7 +316,7 @@ var EmployeeBulkService = (function () {
       lists.getRange(i + 2, 3).setValue(refs.locations[i] || '');
       lists.getRange(i + 2, 4).setValue(refs.employment_types[i] || '');
       lists.getRange(i + 2, 5).setValue(i === 0 ? 'YES' : (i === 1 ? 'NO' : ''));
-      lists.getRange(i + 2, 6).setValue(refs.verticals[i] || '');
+      lists.getRange(i + 2, 6).setValue(templateVerticals[i] || '');
       lists.getRange(i + 2, 7).setValue(salaryStructures[i] || '');
     }
 
@@ -301,6 +330,7 @@ var EmployeeBulkService = (function () {
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
+    applyEmployeeSheetDropdowns_(employees, lists, sheetHeaders, templateVerticals);
 
     var blob;
     var xlsxName = templateFileBase_(variant) + '.xlsx';

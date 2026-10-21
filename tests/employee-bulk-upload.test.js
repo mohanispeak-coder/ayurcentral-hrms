@@ -97,6 +97,11 @@ check('csv template has vertical column', decodedTpl.indexOf('vertical_name') >=
 check('csv template has father_husband_name column', decodedTpl.indexOf('father_husband_name') >= 0);
 check('csv template has uan_no column', decodedTpl.indexOf('uan_no') >= 0);
 
+var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
+check('bulk template version 4', /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
+check('vertical dropdown validation', /applyEmployeeSheetDropdowns_/.test(bulkSrc) &&
+  /requireValueInRange/.test(bulkSrc) && /verticalsForTemplate_/.test(bulkSrc));
+
 if (fails) {
   console.error(fails + ' test(s) failed');
   process.exit(1);
