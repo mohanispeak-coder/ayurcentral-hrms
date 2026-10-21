@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '7';
+  var TEMPLATE_VERSION_ = '8';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -33,6 +33,39 @@ var EmployeeBulkService = (function () {
       }
     } catch (ignore) {}
     return REQUIRED_HEADERS_DEFAULT_.slice();
+  }
+
+  function isBulkFieldMandatory_(fieldId) {
+    return requiredHeaders_().indexOf(fieldId) >= 0;
+  }
+
+  /** Header row labels: * suffix matches Employee mandatory fields (bulk mode). */
+  function bulkHeaderLabels_(sheetHeaders) {
+    var required = requiredHeaders_();
+    return sheetHeaders.map(function (h) {
+      return required.indexOf(h) >= 0 ? h + '*' : h;
+    });
+  }
+
+  function validateVerticalNameForRow_(payload, rowErrors, allowedVerticals) {
+    var verticalName = trim_(payload.vertical_name).toUpperCase();
+    if (!verticalName) {
+      return '';
+    }
+    if (allowedVerticals.indexOf(verticalName) < 0) {
+      var label = 'vertical_name';
+      try {
+        if (typeof EmployeeMandatoryFieldService !== 'undefined' && EmployeeMandatoryFieldService.fieldLabel) {
+          label = EmployeeMandatoryFieldService.fieldLabel('vertical_name');
+        }
+      } catch (ignoreLabel) {}
+      rowErrors.push({
+        field: 'vertical_name',
+        message: 'Select a valid ' + label + ' (SAPL, AOPL, AOMS, …).'
+      });
+      return '';
+    }
+    return verticalName;
   }
 
   var SAMPLE_ROW_NEW_HIRE_ = {
@@ -121,9 +154,11 @@ var EmployeeBulkService = (function () {
         ? ['Legacy / existing employees - set create_login to NO unless issuing portal access now.']
         : ['New hires - use create_login YES when creating Google sign-in.'];
     }
+    var mandatoryIds = requiredHeaders_();
     var base = [
       ['Template version: ' + TEMPLATE_VERSION_],
       ['Variant: ' + (variant === 'legacy' ? 'Existing / legacy employees' : 'New hires')],
+      ['Required columns (Employee mandatory fields): ' + mandatoryIds.join(', ')],
       ['Required columns are marked with * in the Employees sheet header row.'],
       ['Employee code format: SAPL-0001, AOPL-0001, AOMS-0001 (provided by HR, not auto-generated).'],
       ['Dates must be YYYY-MM-DD.'],
@@ -321,16 +356,15 @@ var EmployeeBulkService = (function () {
     var employees = ss.getSheets()[0];
     employees.setName('Employees');
     var sheetHeaders = bulkHeaders_();
-    var required = requiredHeaders_();
-    var headerLabels = sheetHeaders.map(function (h) {
-      return required.indexOf(h) >= 0 ? h + '*' : h;
-    });
+    var headerLabels = bulkHeaderLabels_(sheetHeaders);
     employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
     formatEmployeeHeaderRow_(employees, sheetHeaders.length);
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    applyVerticalColumnDropdown_(employees, sheetHeaders.length, refs.verticals);
+    if (sheetHeaders.indexOf('vertical_name') >= 0) {
+      applyVerticalColumnDropdown_(employees, sheetHeaders.length, refs.verticals);
+    }
     employees.activate();
     var xlsxName = templateFileBase_(variant) + '.xlsx';
     try {
@@ -385,16 +419,15 @@ var EmployeeBulkService = (function () {
 
     var employees = ss.insertSheet('Employees');
     var sheetHeaders = bulkHeaders_();
-    var required = requiredHeaders_();
-    var headerLabels = sheetHeaders.map(function (h) {
-      return required.indexOf(h) >= 0 ? h + '*' : h;
-    });
+    var headerLabels = bulkHeaderLabels_(sheetHeaders);
     employees.getRange(1, 1, 1, sheetHeaders.length).setValues([headerLabels]);
     formatEmployeeHeaderRow_(employees, sheetHeaders.length);
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    applyVerticalColumnDropdown_(employees, sheetHeaders.length, templateVerticals);
+    if (sheetHeaders.indexOf('vertical_name') >= 0) {
+      applyVerticalColumnDropdown_(employees, sheetHeaders.length, templateVerticals);
+    }
     employees.activate();
 
     var blob;
@@ -415,6 +448,7 @@ var EmployeeBulkService = (function () {
       mimeType: mimeType || 'application/octet-stream',
       base64: Utilities.base64Encode(blob.getBytes()),
       templateVersion: TEMPLATE_VERSION_,
+      mandatoryFieldIds: requiredHeaders_(),
       variant: variant === 'legacy' ? 'legacy' : 'new_hire'
     };
   }
@@ -578,10 +612,7 @@ var EmployeeBulkService = (function () {
           createUser: payload.create_user
         });
       }
-      var verticalName = trim_(payload.vertical_name).toUpperCase();
-      if (verticalName && allowedVerticals.indexOf(verticalName) < 0) {
-        rowErrors.push({ field: 'vertical_name', message: 'Select a valid vertical.' });
-      }
+      var verticalName = validateVerticalNameForRow_(payload, rowErrors, allowedVerticals);
       var empType = trim_(payload.employment_type).toUpperCase();
       if (empType && ['PERMANENT', 'CONTRACT', 'INTERN', 'CONSULTANT'].indexOf(empType) < 0) {
         rowErrors.push({ field: 'employment_type', message: 'Invalid employment type.' });

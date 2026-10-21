@@ -118,6 +118,11 @@ check('bank_ifsc not mandatory by default', base.svc.isMandatory('bank_ifsc') ==
 
 base.svc.saveConfig({ fields: [{ id: 'bank_ifsc', mandatory: true }, { id: 'phone', mandatory: true }] });
 check('save persists bank_ifsc', base.svc.isMandatory('bank_ifsc') === true);
+
+var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
+check('bulk template ties headers to mandatory config', /bulkHeaderLabels_/.test(bulkSrc) &&
+  /listMandatoryFieldIds\('bulk'\)/.test(bulkSrc));
+check('bulk validates vertical against mandatory', /validateVerticalNameForRow_/.test(bulkSrc));
 check('save persists phone', base.svc.isMandatory('phone') === true);
 check('stored json omits locked-only noise', base.getStored().indexOf('employee_id') >= 0);
 

@@ -1416,7 +1416,11 @@
       a.click();
       URL.revokeObjectURL(url);
       if (file && file.templateVersion) {
-        showToast('Template v' + file.templateVersion + ' downloaded. Row 1 is bold; use vertical_name dropdown on Employees sheet.', 'success');
+        var req = (file.mandatoryFieldIds && file.mandatoryFieldIds.length)
+          ? (' Required * columns: ' + file.mandatoryFieldIds.join(', ') + '.')
+          : '';
+        showToast('Template v' + file.templateVersion + ' downloaded.' + req +
+          ' Row 1 is bold; vertical_name has a dropdown on the Employees sheet.', 'success');
       }
     }
 
