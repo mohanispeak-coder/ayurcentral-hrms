@@ -17,6 +17,16 @@
 .payroll-page .kpi-hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px; }
 .payroll-page .period-selects { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .payroll-page th.num, .payroll-page td.num { text-align: right; }
+.payroll-page .payroll-dept-review-table { min-width: max-content; font-size: 0.8125rem; }
+.payroll-page .payroll-dept-review-table th,
+.payroll-page .payroll-dept-review-table td { white-space: nowrap; }
+.payroll-page .payroll-dept-review-table .payroll-review-sticky {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--color-surface, #fff);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
+  min-width: 140px; max-width: 200px; white-space: normal;
+}
+.payroll-page .payroll-dept-review-table thead .payroll-review-sticky { z-index: 3; }
 .payroll-page .section-details.collapsible-section > summary { padding: 8px 0; }
 .payroll-page .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 @media (max-width: 640px) { .payroll-page .check-grid { grid-template-columns: 1fr; } }
@@ -1582,6 +1592,89 @@
         '</div>';
     }
 
+    function reviewAmountCell_(value) {
+      var n = Number(value);
+      if (!isFinite(n) || n === 0) return '<td class="num muted">—</td>';
+      return '<td class="num">' + fmtMoneyInr(n) + '</td>';
+    }
+
+    function resolvePayrollReviewColumns_(detail) {
+      var cols = (detail && detail.payrollReviewColumns) || { earnings: [], deductions: [], employers: [] };
+      var earn = {};
+      var ded = {};
+      var er = {};
+      function addKeys_(arr, bucket) {
+        (arr || []).forEach(function (k) {
+          var u = String(k || '').trim().toUpperCase();
+          if (u) bucket[u] = true;
+        });
+      }
+      addKeys_(cols.earnings, earn);
+      addKeys_(cols.deductions, ded);
+      addKeys_(cols.employers, er);
+      (detail.departmentReview || []).forEach(function (dept) {
+        (dept.employees || []).forEach(function (emp) {
+          Object.keys(emp.earnings || {}).forEach(function (k) { earn[String(k).toUpperCase()] = true; });
+          Object.keys(emp.deductions || {}).forEach(function (k) { ded[String(k).toUpperCase()] = true; });
+          Object.keys(emp.employers || {}).forEach(function (k) { er[String(k).toUpperCase()] = true; });
+        });
+      });
+      return {
+        earnings: Object.keys(earn).sort(),
+        deductions: Object.keys(ded).sort(),
+        employers: Object.keys(er).sort()
+      };
+    }
+
+    function paintDeptReviewEmployeeTable_(dept, detail, st) {
+      var cols = resolvePayrollReviewColumns_(detail);
+      var earnCols = cols.earnings || [];
+      var dedCols = cols.deductions || [];
+      var erCols = cols.employers || [];
+      var html = '<div class="table-wrap table-wrap--scroll-hint" style="overflow-x:auto;margin-top:8px">' +
+        '<table class="data-table payroll-dept-review-table"><thead><tr>' +
+        '<th class="payroll-review-sticky">Employee</th>';
+      earnCols.forEach(function (code) {
+        html += '<th class="num" title="Earning component">' + escapeHtml(code) + '</th>';
+      });
+      html += '<th class="num">Bonus</th><th class="num">Incentive</th><th class="num">Other earn</th>';
+      dedCols.forEach(function (code) {
+        html += '<th class="num" title="Deduction component">' + escapeHtml(code) + '</th>';
+      });
+      html += '<th class="num">Other ded</th><th class="num">TDS</th>';
+      erCols.forEach(function (code) {
+        html += '<th class="num" title="Employer contribution">' + escapeHtml(code) + '</th>';
+      });
+      html += '<th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th><th>Payout</th></tr></thead><tbody>';
+      (dept.employees || []).forEach(function (emp) {
+        var earn = emp.earnings || {};
+        var ded = emp.deductions || {};
+        var er = emp.employers || {};
+        html += '<tr><td class="payroll-review-sticky">' + escapeHtml(emp.display_name) +
+          '<div class="hint mono">' + escapeHtml(emp.employee_id) + '</div></td>';
+        earnCols.forEach(function (code) {
+          html += reviewAmountCell_(earn[code]);
+        });
+        html += reviewAmountCell_(emp.bonus);
+        html += reviewAmountCell_(emp.incentive);
+        html += reviewAmountCell_(emp.other_earnings);
+        dedCols.forEach(function (code) {
+          html += reviewAmountCell_(ded[code]);
+        });
+        html += reviewAmountCell_(emp.other_deductions);
+        html += reviewAmountCell_(emp.tds_amount);
+        erCols.forEach(function (code) {
+          html += reviewAmountCell_(er[code]);
+        });
+        html += '<td class="num">' + fmtMoneyInr(emp.gross_earnings) + '</td>';
+        html += '<td class="num">' + fmtMoneyInr(emp.total_deductions) + '</td>';
+        html += '<td class="num">' + fmtMoneyInr(emp.net_pay) + '</td><td>' +
+          salaryHoldButtonsHtml_(emp.employee_id, emp.salary_hold, st) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      return html;
+    }
+
     function paintReviewSection_(detail, st) {
       if (!detail || st === 'DRAFT') return '';
       var html = '<div class="card" id="payroll-review-card"><h2>Review summary</h2>';
@@ -1597,21 +1690,15 @@
         ? detail.departmentReview
         : null;
       if (deptReview) {
-        html += '<p class="hint">Expand a department (+) to see each employee. Use <strong>Hold salary</strong> or <strong>Release hold</strong> in the Payout column (buttons, not the Excel download).</p>';
+        html += '<p class="hint">Expand a department (+) for the full salary breakup (Basic, HRA, SA, PF, etc.). Scroll horizontally to see all columns. ' +
+          'Use <strong>Hold salary</strong> or <strong>Release hold</strong> in the Payout column (buttons, not the Excel download).</p>';
         deptReview.forEach(function (dept) {
           var holdNote = dept.held_count ? (' · ' + dept.held_count + ' on hold') : '';
           html += '<details class="dept-review" style="margin-top:8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;padding:6px 10px">' +
             '<summary><strong>' + escapeHtml(dept.department) + '</strong> — ' + dept.count + ' employee(s) · Net ' +
             fmtMoneyInr(dept.net_pay) + holdNote + '</summary>';
-          html += '<div class="table-wrap" style="margin-top:8px"><table class="data-table"><thead><tr>' +
-            '<th>Employee</th><th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th><th>Payout</th></tr></thead><tbody>';
-          (dept.employees || []).forEach(function (emp) {
-            html += '<tr><td>' + escapeHtml(emp.display_name) + '<div class="hint mono">' + escapeHtml(emp.employee_id) + '</div></td>' +
-              '<td class="num">' + fmtMoneyInr(emp.gross_earnings) + '</td><td class="num">' + fmtMoneyInr(emp.total_deductions) + '</td>' +
-              '<td class="num">' + fmtMoneyInr(emp.net_pay) + '</td><td>' +
-              salaryHoldButtonsHtml_(emp.employee_id, emp.salary_hold, st) + '</td></tr>';
-          });
-          html += '</tbody></table></div></details>';
+          html += paintDeptReviewEmployeeTable_(dept, detail, st);
+          html += '</details>';
         });
       } else if (detail.departmentTotals && detail.departmentTotals.length) {
         html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Department</th><th>Count</th><th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th></tr></thead><tbody>';

@@ -90,6 +90,95 @@ var PayrollService = (function () {
     return trim_(dept) || 'Unknown';
   }
 
+  var REVIEW_EARN_ORDER_ = ['BASIC', 'BP', 'DA', 'BASIC_DA', 'HRA', 'CONV', 'CONVEYANCE', 'MED', 'MEDICAL', 'SA', 'SPECIAL'];
+  var REVIEW_DED_ORDER_ = ['PF', 'ESI', 'ESIC', 'PT', 'ADVANCE', 'ADV', 'LCD', 'LWF', 'TDS'];
+
+  function sortReviewComponentCodes_(codes, preferredOrder) {
+    var set = {};
+    (codes || []).forEach(function (c) { set[String(c).toUpperCase()] = true; });
+    var ordered = [];
+    (preferredOrder || []).forEach(function (c) {
+      c = String(c).toUpperCase();
+      if (set[c]) {
+        ordered.push(c);
+        delete set[c];
+      }
+    });
+    Object.keys(set).sort().forEach(function (c) { ordered.push(c); });
+    return ordered;
+  }
+
+  function unionCodeLists_(a, b) {
+    var set = {};
+    (a || []).concat(b || []).forEach(function (c) {
+      var u = String(c || '').trim().toUpperCase();
+      if (u) set[u] = true;
+    });
+    return Object.keys(set);
+  }
+
+  function collectStructureComponentColumns_(records) {
+    var earn = {};
+    var ded = {};
+    var er = {};
+    var structureIds = {};
+    (records || []).forEach(function (r) {
+      var sid = trim_(r.salary_structure_id);
+      if (sid) structureIds[sid] = true;
+    });
+    Object.keys(structureIds).forEach(function (sid) {
+      DbService.findRecords(HRMS.SHEETS.SALARY_COMPONENTS, { salary_structure_id: sid }).forEach(function (c) {
+        var code = trim_(c.component_code).toUpperCase();
+        if (!code) return;
+        var kind = String(c.component_kind || '').toUpperCase();
+        if (kind === HRMS.COMPONENT_KIND.DEDUCTION) ded[code] = true;
+        else if (kind === HRMS.COMPONENT_KIND.EMPLOYER) er[code] = true;
+        else earn[code] = true;
+      });
+    });
+    return {
+      earnings: Object.keys(earn),
+      deductions: Object.keys(ded),
+      employers: Object.keys(er)
+    };
+  }
+
+  function buildPayrollReviewColumns_(records) {
+    var fromBreakdown = { earnings: [], deductions: [], employers: [] };
+    if (typeof PayrollApprovalExportService !== 'undefined' &&
+        PayrollApprovalExportService.collectComponentColumnsFromRecords) {
+      fromBreakdown = PayrollApprovalExportService.collectComponentColumnsFromRecords(records);
+    }
+    var fromStructure = collectStructureComponentColumns_(records);
+    return {
+      earnings: sortReviewComponentCodes_(
+        unionCodeLists_(fromBreakdown.earnings, fromStructure.earnings),
+        REVIEW_EARN_ORDER_
+      ),
+      deductions: sortReviewComponentCodes_(
+        unionCodeLists_(fromBreakdown.deductions, fromStructure.deductions),
+        REVIEW_DED_ORDER_
+      ),
+      employers: sortReviewComponentCodes_(
+        unionCodeLists_(fromBreakdown.employers, fromStructure.employers),
+        ['EMPLOYER_PF', 'PF_EMPLOYER']
+      )
+    };
+  }
+
+  function payrollLineMapsForReview_(record) {
+    if (typeof PayrollApprovalExportService !== 'undefined' &&
+        PayrollApprovalExportService.lineMapsFromRecord) {
+      return PayrollApprovalExportService.lineMapsFromRecord(record);
+    }
+    return {
+      earnings: {},
+      deductions: {},
+      employers: {},
+      extras: { bonus: 0, incentive: 0, other_earnings: 0, other_deductions: 0, tds_amount: 0 }
+    };
+  }
+
   function buildDepartmentReview_(records, employees, inputs) {
     var holdByEmp = {};
     (inputs || []).forEach(function (inp) {
@@ -119,13 +208,23 @@ var PayrollService = (function () {
       var emp = employees[r.employee_id] || employees[normalizeEmployeeId_(r.employee_id)] || {};
       var held = !!holdByEmp[String(r.employee_id)] || !!holdByEmp[normalizeEmployeeId_(r.employee_id)];
       if (held) g.held_count++;
+      var maps = payrollLineMapsForReview_(r);
+      var extras = maps.extras || {};
       g.employees.push({
         employee_id: r.employee_id,
         display_name: employeeDisplayName_(emp) || r.employee_id,
         gross_earnings: num_(r.gross_earnings),
         total_deductions: num_(r.total_deductions),
         net_pay: num_(r.net_pay),
-        salary_hold: held ? 'YES' : 'NO'
+        salary_hold: held ? 'YES' : 'NO',
+        earnings: maps.earnings || {},
+        deductions: maps.deductions || {},
+        employers: maps.employers || {},
+        bonus: num_(extras.bonus),
+        incentive: num_(extras.incentive),
+        other_earnings: num_(extras.other_earnings),
+        other_deductions: num_(extras.other_deductions),
+        tds_amount: num_(extras.tds_amount)
       });
     });
     return Object.keys(groups).sort().map(function (k) {
@@ -769,6 +868,7 @@ var PayrollService = (function () {
       exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
       departmentReview: buildDepartmentReview_(records, employees, inputs),
+      payrollReviewColumns: buildPayrollReviewColumns_(records),
       lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
       finalizeBlockers: buildFinalizeBlockers_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
       payslipStatus: payslipStatus_(records, inputs),

@@ -116,6 +116,10 @@ check('payroll-approval-export', /apiDownloadPayrollApprovalExport/.test(api) &&
   /earn_/.test(read('payroll/PayrollApprovalExportService.gs')));
 check('payroll-department-review', /departmentReview/.test(payroll) && /dept-review/.test(client) &&
   /function trim_\(/.test(payroll));
+check('payroll-review-component-columns', /buildPayrollReviewColumns_/.test(payroll) &&
+  /collectStructureComponentColumns_/.test(payroll) &&
+  /sectionLines_/.test(read('payroll/PayrollApprovalExportService.gs')) &&
+  /payroll-dept-review-table/.test(client) && /resolvePayrollReviewColumns_/.test(client));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
   /enrichExceptionMessage_/.test(payroll));
 check('comp-editor-fallback', /renderCompEditor_/.test(client) && /loadWarning/.test(client));
