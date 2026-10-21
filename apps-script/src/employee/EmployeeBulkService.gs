@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '8';
+  var TEMPLATE_VERSION_ = '9';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -277,6 +277,15 @@ var EmployeeBulkService = (function () {
     return ' Enable Google Drive API: Apps Script editor → Services (+) → Google Drive API → Add (identifier: Drive), then redeploy.';
   }
 
+  function materializeXlsxBlob_(exportedBlob, fileName) {
+    var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    var bytes = exportedBlob.getBytes();
+    if (!bytes || !bytes.length) {
+      throw configurationError_('Excel template export returned an empty file.' + driveApiHint_());
+    }
+    return Utilities.newBlob(bytes, xlsxMime, fileName || 'HRMS_Bulk_Employee_Upload_Template.xlsx');
+  }
+
   function exportSpreadsheetXlsx_(spreadsheetId) {
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     SpreadsheetApp.flush();
@@ -362,15 +371,21 @@ var EmployeeBulkService = (function () {
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    if (sheetHeaders.indexOf('vertical_name') >= 0) {
-      applyVerticalColumnDropdown_(employees, sheetHeaders.length, refs.verticals);
+    try {
+      if (sheetHeaders.indexOf('vertical_name') >= 0) {
+        applyVerticalColumnDropdown_(employees, sheetHeaders.length, refs.verticals);
+      }
+    } catch (dropdownErr) {
+      Logger.log('Bulk flat template vertical dropdown skipped: ' + dropdownErr.message);
     }
     employees.activate();
     var xlsxName = templateFileBase_(variant) + '.xlsx';
     try {
-      return exportSpreadsheetXlsx_(fileId).setName(xlsxName);
+      return materializeXlsxBlob_(exportSpreadsheetXlsx_(fileId), xlsxName);
     } finally {
-      DriveApp.getFileById(fileId).setTrashed(true);
+      try {
+        DriveApp.getFileById(fileId).setTrashed(true);
+      } catch (ignoreTrash) {}
     }
   }
 
@@ -430,14 +445,14 @@ var EmployeeBulkService = (function () {
     }
     employees.activate();
 
-    var blob;
     var xlsxName = templateFileBase_(variant) + '.xlsx';
     try {
-      blob = exportSpreadsheetXlsx_(fileId).setName(xlsxName);
+      return materializeXlsxBlob_(exportSpreadsheetXlsx_(fileId), xlsxName);
     } finally {
-      DriveApp.getFileById(fileId).setTrashed(true);
+      try {
+        DriveApp.getFileById(fileId).setTrashed(true);
+      } catch (ignoreTrash) {}
     }
-    return blob;
   }
 
   function packDownload_(blob, variant, mimeType) {
@@ -456,17 +471,26 @@ var EmployeeBulkService = (function () {
   function downloadCsvTemplate(session, variant) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
-    var refs = listReferenceValues_(session);
-    var blob = buildTemplateFlatXlsx_(refs, variant);
-    return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    try {
+      var refs = listReferenceValues_(session);
+      var blob = buildTemplateFlatXlsx_(refs, variant);
+      return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    } catch (e) {
+      throw configurationError_('Bulk template download failed: ' + (e && e.message ? e.message : String(e)));
+    }
   }
 
   function downloadTemplate(session, variant) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
-    var refs = listReferenceValues_(session);
-    var blob = buildTemplateSpreadsheet_(refs, variant);
-    return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    try {
+      var refs = listReferenceValues_(session);
+      var blob = buildTemplateSpreadsheet_(refs, variant);
+      return packDownload_(blob, variant, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    } catch (e) {
+      if (e && e.hrmsCode) throw e;
+      throw configurationError_('Bulk template download failed: ' + (e && e.message ? e.message : String(e)));
+    }
   }
 
   function parseCsvRows_(text) {
