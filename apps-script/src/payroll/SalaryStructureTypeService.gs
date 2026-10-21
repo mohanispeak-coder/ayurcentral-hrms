@@ -148,6 +148,34 @@ var SalaryStructureTypeService = (function () {
     return (HRMS.VERTICALS || []).slice();
   }
 
+  function isAllVerticals_(vertical) {
+    return trim_(vertical).toUpperCase() === String(HRMS.SALARY_STRUCTURE_ALL_VERTICALS || 'ALL').toUpperCase();
+  }
+
+  function isAllowedStructureVertical_(vertical) {
+    vertical = trim_(vertical).toUpperCase();
+    if (!vertical) return false;
+    if (isAllVerticals_(vertical)) return true;
+    return allowedVerticals_().indexOf(vertical) >= 0;
+  }
+
+  /**
+   * @param {string} structureVertical Value on the template row.
+   * @param {string} wantVertical Employee or filter vertical (optional).
+   * @return {boolean}
+   */
+  function structureAppliesToVertical_(structureVertical, wantVertical) {
+    wantVertical = trim_(wantVertical).toUpperCase();
+    if (!wantVertical) return true;
+    if (isAllVerticals_(structureVertical)) return true;
+    return trim_(structureVertical).toUpperCase() === wantVertical;
+  }
+
+  function formatVerticalLabel_(vertical) {
+    if (isAllVerticals_(vertical)) return 'All verticals';
+    return String(vertical || '');
+  }
+
   function normalizeComponents_(list) {
     if (!list || !list.length) {
       throw validationError_('Add at least one salary component.');
@@ -409,7 +437,7 @@ var SalaryStructureTypeService = (function () {
         if (activeOnly && String(r.status || '').toUpperCase() !== HRMS.STRUCTURE_TYPE_STATUS.ACTIVE) {
           return false;
         }
-        if (wantVertical && String(r.vertical_name || '').toUpperCase() !== wantVertical) return false;
+        if (!structureAppliesToVertical_(r.vertical_name, wantVertical)) return false;
         return true;
       })
       .sort(function (a, b) { return String(a.structure_name).localeCompare(String(b.structure_name)); })
@@ -429,7 +457,7 @@ var SalaryStructureTypeService = (function () {
     if (!name) throw validationError_('Structure name is required.');
     var vertical = trim_(payload.vertical_name).toUpperCase();
     if (!vertical) throw validationError_('Vertical is required.');
-    if (allowedVerticals_().indexOf(vertical) < 0) {
+    if (!isAllowedStructureVertical_(vertical)) {
       throw validationError_('Select a valid vertical.');
     }
     var status = trim_(payload.status).toUpperCase() === HRMS.STRUCTURE_TYPE_STATUS.INACTIVE
@@ -544,6 +572,9 @@ var SalaryStructureTypeService = (function () {
     setStructureTypeStatus: setStructureTypeStatus,
     findTypeById: findTypeById,
     findTypeByName: findTypeByName,
-    isTypeRow: isTypeRow_
+    isTypeRow: isTypeRow_,
+    isAllVerticals: isAllVerticals_,
+    structureAppliesToVertical: structureAppliesToVertical_,
+    formatVerticalLabel: formatVerticalLabel_
   };
 })();

@@ -352,7 +352,7 @@
       return '<tr>' +
         '<td class="mono">' + esc_(s.salary_structure_id) + '</td>' +
         '<td>' + esc_(s.structure_name) + '</td>' +
-        '<td>' + esc_(s.vertical_name) + '</td>' +
+        '<td>' + esc_(formatVerticalLabel_(s.vertical_name)) + '</td>' +
         '<td class="num">' + ((s.components || []).length) + '</td>' +
         '<td>' + statusHtml + '</td>' +
         '<td class="col-actions">' +
@@ -387,6 +387,13 @@
     }).catch(function (err) {
       showToast((err && err.message) || 'Update failed.', 'error');
     });
+  }
+
+  var SST_ALL_VERTICALS_ = 'ALL';
+
+  function formatVerticalLabel_(vertical) {
+    if (String(vertical || '').toUpperCase() === SST_ALL_VERTICALS_) return 'All verticals';
+    return String(vertical || '');
   }
 
   function loadVerticals_() {
@@ -571,9 +578,11 @@
       }));
     }
     var currentVertical = String(existing.vertical_name || '').toUpperCase();
-    var vertOpts = '<option value="">Select vertical</option>' + (verticals || []).map(function (v) {
-      return '<option value="' + esc_(v) + '"' + (currentVertical === String(v).toUpperCase() ? ' selected' : '') + '>' + esc_(v) + '</option>';
-    }).join('');
+    var vertOpts = '<option value="">Select vertical</option>' +
+      '<option value="' + SST_ALL_VERTICALS_ + '"' + (currentVertical === SST_ALL_VERTICALS_ ? ' selected' : '') + '>All verticals</option>' +
+      (verticals || []).map(function (v) {
+        return '<option value="' + esc_(v) + '"' + (currentVertical === String(v).toUpperCase() ? ' selected' : '') + '>' + esc_(v) + '</option>';
+      }).join('');
     var active = String(existing.status || 'ACTIVE').toUpperCase() !== 'INACTIVE';
     var isEdit = !!String(existing.salary_structure_id || '').trim();
     var idField = isEdit

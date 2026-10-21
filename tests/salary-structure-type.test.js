@@ -181,7 +181,26 @@ check('findTypeByName case-insensitive', !!Svc.findTypeByName('sapl executive'))
 check('findTypeById works', !!Svc.findTypeById(created.salary_structure_id));
 var opts = Svc.listStructureTypeOptions({ activeOnly: true });
 check('options include name+vertical', opts.length === 3 && opts[0].structure_name && opts[0].vertical_name);
-check('options filter by vertical', Svc.listStructureTypeOptions({ vertical_name: 'AOPL' }).length === 1);
+
+var allVert = Svc.saveStructureType({
+  salary_structure_id: 'GLOBAL-STD',
+  structure_name: 'Global Standard',
+  vertical_name: 'ALL',
+  components: [
+    { component_code: 'BP', component_name: 'Basic', component_kind: 'EARNING', calc_method: 'PERCENT_OF_CTC', percent: 100 }
+  ]
+});
+check('save all-verticals', allVert.vertical_name === 'ALL');
+check('all vertical in sapl options', Svc.listStructureTypeOptions({ vertical_name: 'SAPL' }).some(function (o) {
+  return o.salary_structure_id === 'GLOBAL-STD';
+}));
+check('all vertical in aopl options', Svc.listStructureTypeOptions({ vertical_name: 'AOPL' }).some(function (o) {
+  return o.salary_structure_id === 'GLOBAL-STD';
+}));
+check('structureAppliesToVertical all', Svc.structureAppliesToVertical('ALL', 'SAPL'));
+check('structureAppliesToVertical specific', !Svc.structureAppliesToVertical('SAPL', 'AOPL'));
+check('listStructureTypes after global', Svc.listStructureTypes(false).length === 4);
+check('options filter by vertical includes global', Svc.listStructureTypeOptions({ vertical_name: 'AOPL' }).length === 2);
 
 // Update existing (edit) keeps single row and replaces components.
 var edited = Svc.saveStructureType({
@@ -195,13 +214,13 @@ var edited = Svc.saveStructureType({
 });
 check('edit keeps same id', edited.salary_structure_id === created.salary_structure_id);
 check('edit replaces components', edited.components.length === 1);
-check('edit did not add a row', Svc.listStructureTypes(false).length === 3);
+check('edit did not add a row', Svc.listStructureTypes(false).length === 4);
 
 // Status toggle + activeOnly filter.
 Svc.setStructureTypeStatus(created.salary_structure_id, 'INACTIVE');
 check('setStatus inactive', Svc.getStructureType(created.salary_structure_id).status === 'INACTIVE');
-check('activeOnly excludes inactive', Svc.listStructureTypes(true).length === 2);
-check('inactive excluded from options', Svc.listStructureTypeOptions({ activeOnly: true }).length === 2);
+check('activeOnly excludes inactive', Svc.listStructureTypes(true).length === 3);
+check('inactive excluded from options', Svc.listStructureTypeOptions({ activeOnly: true }).length === 3);
 
 // Legacy per-employee row must not be treated as a type.
 db.insertRecord('SalaryStructures', { salary_structure_id: 'SS-legacy', employee_id: 'EMP001', status: 'CURRENT', structure_name: '' });

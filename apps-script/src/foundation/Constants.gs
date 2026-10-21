@@ -52,6 +52,9 @@ HRMS.EMPLOYMENT_TYPES = {
 
 HRMS.VERTICALS = ['AOPL', 'SAPL', 'AOMS', 'OTHERS'];
 
+/** Stored on salary structure templates that apply to every vertical. */
+HRMS.SALARY_STRUCTURE_ALL_VERTICALS = 'ALL';
+
 /** Max leave balance shown on attendance register / Form T (per vertical). */
 HRMS.ATTENDANCE_LEAVE_BALANCE_MAX = {
   SAPL: 2,
@@ -323,7 +326,7 @@ HRMS.AUTH_CACHE = {
 };
 
 /** Bump when module HTML/JS changes so browsers reload lazy modules after clasp push. */
-HRMS.CLIENT_ASSETS_VERSION = '2026.10.21.2';
+HRMS.CLIENT_ASSETS_VERSION = '2026.10.21.3';
 
 HRMS.AUTH_LIMITS = {
   OTP_TTL_SEC: 600,

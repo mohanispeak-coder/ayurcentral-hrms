@@ -32,6 +32,7 @@
       picker: null,
       verticals: null,
       salaryStructures: null,
+      salaryStructuresByVertical: null,
       mandatoryMap: null,
       mandatoryBulkList: null
     };
@@ -105,6 +106,7 @@
         empViewCache.picker = null;
         empViewCache.verticals = null;
         empViewCache.salaryStructures = null;
+        empViewCache.salaryStructuresByVertical = null;
         empViewCache.mandatoryMap = null;
         empViewCache.mandatoryBulkList = null;
       });
@@ -655,29 +657,51 @@
       sel.innerHTML = html;
     }
 
+    function structureVerticalLabel_(vertical) {
+      if (String(vertical || '').toUpperCase() === 'ALL') return 'All verticals';
+      return vertical ? String(vertical) : '';
+    }
+
     function fillSalaryStructureSelect_(values, selectedValue) {
       var sel = $('salary_structure_id');
       if (!sel) return;
       var current = selectedValue != null ? String(selectedValue) : sel.value;
       var html = '<option value="">None</option>';
       (values || []).forEach(function (s) {
-        var label = s.salary_structure_id + ' - ' + s.structure_name + (s.vertical_name ? ' (' + s.vertical_name + ')' : '');
+        var vertLabel = structureVerticalLabel_(s.vertical_name);
+        var label = s.salary_structure_id + ' - ' + s.structure_name + (vertLabel ? ' (' + vertLabel + ')' : '');
         html += '<option value="' + escapeHtml(s.salary_structure_id) + '"' +
           (String(s.salary_structure_id) === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
       });
       sel.innerHTML = html;
     }
 
-    function loadSalaryStructureOptions(selectedValue) {
+    function bindSalaryStructureVerticalFilter_() {
+      var vert = $('vertical_name');
+      if (!vert || vert.getAttribute('data-sst-filter-bound')) return;
+      vert.setAttribute('data-sst-filter-bound', '1');
+      vert.addEventListener('change', function () {
+        var structSel = $('salary_structure_id');
+        var keep = structSel ? structSel.value : '';
+        loadSalaryStructureOptions(keep, vert.value);
+      });
+    }
+
+    function loadSalaryStructureOptions(selectedValue, verticalName) {
       var sel = $('salary_structure_id');
       if (!sel) return;
-      if (empViewCache.salaryStructures && !(App.isModuleRefresh && App.isModuleRefresh('employee-create'))) {
-        fillSalaryStructureSelect_(empViewCache.salaryStructures, selectedValue);
+      var filter = { activeOnly: true };
+      if (verticalName) filter.vertical_name = verticalName;
+      var cacheKey = verticalName ? String(verticalName).toUpperCase() : '*';
+      if (empViewCache.salaryStructuresByVertical && empViewCache.salaryStructuresByVertical[cacheKey] &&
+          !(App.isModuleRefresh && App.isModuleRefresh('employee-create'))) {
+        fillSalaryStructureSelect_(empViewCache.salaryStructuresByVertical[cacheKey], selectedValue);
         return;
       }
-      callServer('apiListSalaryStructureTypeOptions', { activeOnly: true }).then(function (list) {
-        empViewCache.salaryStructures = list || [];
-        fillSalaryStructureSelect_(empViewCache.salaryStructures, selectedValue);
+      callServer('apiListSalaryStructureTypeOptions', filter).then(function (list) {
+        empViewCache.salaryStructuresByVertical = empViewCache.salaryStructuresByVertical || {};
+        empViewCache.salaryStructuresByVertical[cacheKey] = list || [];
+        fillSalaryStructureSelect_(list, selectedValue);
       }).catch(function () {
         if (selectedValue) {
           var opt = document.createElement('option');
@@ -750,7 +774,8 @@
         loadManagerOptions('', '');
       }
       loadVerticalOptions('');
-      loadSalaryStructureOptions('');
+      loadSalaryStructureOptions('', '');
+      bindSalaryStructureVerticalFilter_();
       callServer('apiListEmployeeFieldDefs').then(function (defs) {
         appendCustomFieldsToForm_(defs, {});
       }).catch(function () {});
@@ -1104,7 +1129,8 @@
         });
       }
       if ($('btn-save-payroll')) {
-        loadSalaryStructureOptions(emp.salary_structure_id || '');
+        loadSalaryStructureOptions(emp.salary_structure_id || '', emp.vertical_name || '');
+        bindSalaryStructureVerticalFilter_();
         $('btn-save-payroll').addEventListener('click', function () {
           save(this, $('emp-save-payroll-feedback'));
         });

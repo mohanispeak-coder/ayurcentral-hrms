@@ -746,6 +746,9 @@ var EmployeeService = (function () {
         errors.salary_structure_id = 'Select a valid salary structure.';
       } else if (String(structureType.status || '').toUpperCase() !== HRMS.STRUCTURE_TYPE_STATUS.ACTIVE) {
         errors.salary_structure_id = 'Selected salary structure is inactive.';
+      } else if (verticalName && typeof SalaryStructureTypeService.structureAppliesToVertical === 'function' &&
+          !SalaryStructureTypeService.structureAppliesToVertical(structureType.vertical_name, verticalName)) {
+        errors.salary_structure_id = 'This salary structure does not apply to the selected vertical.';
       }
     }
     var ctcMonthly = '';

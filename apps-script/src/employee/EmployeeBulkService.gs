@@ -525,6 +525,12 @@ var EmployeeBulkService = (function () {
           rowErrors.push({ field: 'salary_structure_id', message: 'Salary structure ID (or name) was not found.' });
         } else if (String(structureType.status || '').toUpperCase() !== HRMS.STRUCTURE_TYPE_STATUS.ACTIVE) {
           rowErrors.push({ field: 'salary_structure_id', message: 'Salary structure is inactive.' });
+        } else if (verticalName && typeof SalaryStructureTypeService.structureAppliesToVertical === 'function' &&
+            !SalaryStructureTypeService.structureAppliesToVertical(structureType.vertical_name, verticalName)) {
+          rowErrors.push({
+            field: 'salary_structure_id',
+            message: 'Salary structure does not apply to vertical ' + verticalName + '.'
+          });
         } else {
           resolvedStructureId = structureType.salary_structure_id;
         }
