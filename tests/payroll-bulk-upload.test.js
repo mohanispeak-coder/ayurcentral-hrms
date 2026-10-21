@@ -108,7 +108,8 @@ check('payroll-salary-hold-ui', /js-salary-hold/.test(client) && /apiSetPayrollS
   /setSalaryHold/.test(payroll));
 check('payroll-approval-export', /apiDownloadPayrollApprovalExport/.test(api) &&
   /PayrollApprovalExportService/.test(read('payroll/PayrollApprovalExportService.gs')));
-check('payroll-department-review', /departmentReview/.test(payroll) && /dept-review/.test(client));
+check('payroll-department-review', /departmentReview/.test(payroll) && /dept-review/.test(client) &&
+  /function trim_\(/.test(payroll));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
   /enrichExceptionMessage_/.test(payroll));
 check('comp-editor-fallback', /renderCompEditor_/.test(client) && /loadWarning/.test(client));

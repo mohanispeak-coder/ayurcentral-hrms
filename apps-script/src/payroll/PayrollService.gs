@@ -339,6 +339,10 @@ var PayrollService = (function () {
     return prefix + (max + 1);
   }
 
+  function trim_(v) {
+    return v == null ? '' : String(v).trim();
+  }
+
   function num_(v) {
     var n = Number(v);
     return isFinite(n) ? n : 0;
