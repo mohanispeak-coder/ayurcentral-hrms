@@ -548,7 +548,14 @@
         navigate('payroll', { year: run.period_year, month: run.period_month, runId: run.payroll_run_id });
       });
       document.getElementById('att-goto-formt').addEventListener('click', function () {
-        navigate('attendance-form-t', { year: run.period_year, month: run.period_month, runId: run.payroll_run_id });
+        var vertical = (typeof selectedVertical_ === 'function' ? selectedVertical_() : '') ||
+          bulkState_.vertical || defaultVertical || '';
+        navigate('attendance-form-t', {
+          year: run.period_year,
+          month: run.period_month,
+          runId: run.payroll_run_id,
+          vertical: vertical
+        });
       });
       var gotoHol = document.getElementById('att-goto-holidays');
       if (gotoHol) {
