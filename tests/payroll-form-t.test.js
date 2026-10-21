@@ -37,7 +37,9 @@ check('api-form-t-status', /apiGetFormTStatus/.test(api));
 check('api-form-t-download', /apiDownloadFormT/.test(api));
 check('form-t-client-route', /registerRoute\('attendance-form-t'/.test(formTClient));
 check('form-t-payroll-period-context', /readPayrollPeriodContext/.test(formTClient) &&
-  /resolveRunForFormT_/.test(formTClient) && /findLatestPayrollRun_/.test(formTClient));
+  /resolveRunForFormT_/.test(formTClient) && /formt-apply-period/.test(formTClient) &&
+  /monthSelectHtml_/.test(formTClient));
+check('form-t-prefer-locked-run', /LOCKED/.test(formTSrc) && /locked\.length/.test(formTSrc));
 check('form-t-resolve-run-vertical', /resolveRunIdForVertical_/.test(formTSrc));
 check('form-t-module-ui', /payroll\/FormTClient/.test(apiFoundation));
 check('form-t-template-asset', fs.existsSync(templatePath));

@@ -61,10 +61,13 @@ var FormTService = (function () {
       return Number(r.period_year) === year && Number(r.period_month) === month &&
         runVerticalFromRun_(r) === want;
     });
+    var locked = candidates.filter(function (r) {
+      return String(r.status || '').toUpperCase() === 'LOCKED';
+    });
     var open = candidates.filter(function (r) {
       return String(r.status || '').toUpperCase() !== 'LOCKED';
     });
-    var pick = (open.length ? open[0] : candidates[0]);
+    var pick = locked.length ? locked[0] : (open.length ? open[0] : candidates[0]);
     return pick ? pick.payroll_run_id : runId;
   }
 

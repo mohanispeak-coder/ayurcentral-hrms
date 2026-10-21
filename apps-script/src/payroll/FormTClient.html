@@ -58,9 +58,49 @@
       return '<div class="hrms-loading-block" aria-busy="true"><span class="visually-hidden">Loading</span></div>';
     }
 
+    var MONTH_NAMES_ = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
     function fmtPeriod_(y, m) {
-      var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return (names[m - 1] || m) + ' ' + y;
+      return (MONTH_NAMES_[m - 1] || m) + ' ' + y;
+    }
+
+    function monthSelectHtml_(selectedMonth) {
+      return MONTH_NAMES_.map(function (name, i) {
+        var v = i + 1;
+        return '<option value="' + v + '"' + (Number(selectedMonth) === v ? ' selected' : '') + '>' + name + '</option>';
+      }).join('');
+    }
+
+    function readPeriodFromForm_() {
+      var yEl = document.getElementById('formt-year');
+      var mEl = document.getElementById('formt-month');
+      var y = yEl ? Number(yEl.value) : period_.year;
+      var m = mEl ? Number(mEl.value) : period_.month;
+      if (!y || y < 2000 || y > 2100) return null;
+      if (!m || m < 1 || m > 12) return null;
+      return { year: y, month: m };
+    }
+
+    function applyPeriodFromForm_(clearRunId) {
+      var p = readPeriodFromForm_();
+      if (!p) {
+        showToast('Enter a valid year and month.', 'error');
+        return false;
+      }
+      var changed = p.year !== period_.year || p.month !== period_.month;
+      period_.year = p.year;
+      period_.month = p.month;
+      if (clearRunId || changed) runState_.runId = '';
+      viewCache_ = null;
+      if (App.persistPayrollPeriodContext) {
+        App.persistPayrollPeriodContext({
+          year: period_.year,
+          month: period_.month,
+          vertical: runState_.vertical,
+          runId: ''
+        });
+      }
+      return true;
     }
 
     function verticalFromRun_(run) {
@@ -106,17 +146,22 @@
         return Number(r.period_year) === year && Number(r.period_month) === month;
       });
       var want = vertical ? String(vertical).trim().toUpperCase() : '';
+      function pickBest_(matches) {
+        if (!matches || !matches.length) return null;
+        var locked = matches.filter(function (r) {
+          return String(r.status || '').toUpperCase() === 'LOCKED';
+        });
+        if (locked.length) return locked[0];
+        return matches[0];
+      }
       if (want) {
         if (App.findRunForVerticalMonth) {
           var matched = App.findRunForVerticalMonth(runs, year, month, want);
           if (matched) return matched;
         }
-        var openMatch = list.filter(function (r) {
-          return String(r.status || '').toUpperCase() !== 'LOCKED' && verticalFromRun_(r) === want;
-        });
-        if (openMatch.length) return openMatch[0];
-        var anyMatch = list.filter(function (r) { return verticalFromRun_(r) === want; });
-        if (anyMatch.length) return anyMatch[0];
+        var vertMatches = list.filter(function (r) { return verticalFromRun_(r) === want; });
+        var picked = pickBest_(vertMatches);
+        if (picked) return picked;
       }
       var open = list.filter(function (r) {
         return String(r.status || '').toUpperCase() !== 'LOCKED';
@@ -127,16 +172,20 @@
         if (legacy.length) return legacy[0];
         return open[0];
       }
-      return list[0] || null;
+      return pickBest_(list) || null;
     }
 
     function resolveRunForFormT_(runs) {
       runs = runs || [];
+      var y = Number(period_.year);
+      var m = Number(period_.month);
       if (runState_.runId) {
         var byId = runs.filter(function (r) { return r.payroll_run_id === runState_.runId; })[0];
-        if (byId) return byId;
+        if (byId && Number(byId.period_year) === y && Number(byId.period_month) === m) {
+          return byId;
+        }
       }
-      return findRunForPeriod_(runs, period_.year, period_.month, runState_.vertical);
+      return findRunForPeriod_(runs, y, m, runState_.vertical);
     }
 
     function resolveRunIdForVertical_(vertical, fallbackRun) {
@@ -236,16 +285,6 @@
         reconcilePeriodWithRuns_(runsCache_);
         var run = resolveRunForFormT_(runsCache_);
         if (!run) {
-          var latest = findLatestPayrollRun_(runsCache_);
-          if (latest) {
-            period_.year = Number(latest.period_year);
-            period_.month = Number(latest.period_month);
-            runState_.runId = latest.payroll_run_id;
-            if (verticalFromRun_(latest)) runState_.vertical = verticalFromRun_(latest);
-            run = latest;
-          }
-        }
-        if (!run) {
           paintNoRun_();
           return;
         }
@@ -282,18 +321,16 @@
         '<div class="card"><h2>' + esc_(fmtPeriod_(period_.year, period_.month)) + '</h2>' +
         '<p class="hint">No payroll run for this month. Start payroll for the month you need, or change the period below.</p>' +
         '<div class="form-row">' +
-        '<div class="form-group"><label class="form-label">Year</label><input class="form-input" id="formt-year" type="number" value="' + period_.year + '"></div>' +
-        '<div class="form-group"><label class="form-label">Month</label><input class="form-input" id="formt-month" type="number" min="1" max="12" value="' + period_.month + '"></div>' +
+        '<div class="form-group"><label class="form-label">Year</label><input class="form-input" id="formt-year" type="number" min="2000" max="2100" value="' + period_.year + '"></div>' +
+        '<div class="form-group"><label class="form-label">Month</label><select class="form-select" id="formt-month">' +
+        monthSelectHtml_(period_.month) + '</select></div>' +
         '</div>' +
         '<button type="button" class="btn btn-primary" id="formt-retry-period">Load this month</button> ' +
         '<button type="button" class="btn btn-secondary" id="formt-goto-payroll">Open Payroll</button></div>';
 
-      document.getElementById('formt-year').addEventListener('change', function () { period_.year = Number(this.value); });
-      document.getElementById('formt-month').addEventListener('change', function () { period_.month = Number(this.value); });
       document.getElementById('formt-retry-period').addEventListener('click', function () {
-        runState_.runId = '';
-        viewCache_ = null;
-        loadContext_();
+        if (!applyPeriodFromForm_(true)) return;
+        loadContext_(true);
       });
       document.getElementById('formt-goto-payroll').addEventListener('click', function () {
         navigate('payroll', { year: period_.year, month: period_.month });
@@ -376,19 +413,34 @@
         verticalFromRun_(run) || (catalog_.length ? catalog_[0].vertical_name : '');
       var statusContent = statusHtml || '<span class="hint">Checking status…</span>';
 
+      period_.year = Number(run.period_year);
+      period_.month = Number(run.period_month);
+
       m.innerHTML =
         '<div class="card">' +
-        '<p><strong>' + esc_(fmtPeriod_(run.period_year, run.period_month)) + '</strong> · ' +
-        '<span class="mono" id="formt-run-label">' + esc_(run.payroll_run_id) + '</span></p>' +
-        '<div class="form-row">' +
+        '<p class="page-lede">Choose payroll month and vertical, then download Form T Excel for that period (including finalized months).</p>' +
+        '<div class="form-row formt-period-toolbar" style="align-items:flex-end;margin-bottom:12px">' +
+        '<div class="form-group"><label class="form-label" for="formt-year">Year</label>' +
+        '<input class="form-input" id="formt-year" type="number" min="2000" max="2100" value="' + esc_(period_.year) + '"></div>' +
+        '<div class="form-group"><label class="form-label" for="formt-month">Month</label>' +
+        '<select class="form-select" id="formt-month">' + monthSelectHtml_(period_.month) + '</select></div>' +
         '<div class="form-group"><label class="form-label" for="formt-vertical">Vertical</label>' +
         '<select class="form-select" id="formt-vertical">' + verticalOptionsHtml_(defaultVertical) + '</select></div>' +
+        '<button type="button" class="btn btn-secondary" id="formt-apply-period">Apply</button>' +
         '</div>' +
+        '<p class="hint"><strong>' + esc_(fmtPeriod_(run.period_year, run.period_month)) + '</strong> · ' +
+        '<span class="mono" id="formt-run-label">' + esc_(run.payroll_run_id) + '</span> · ' +
+        esc_(String(run.status || '')) + '</p>' +
         '<div id="formt-status" class="formt-status">' + statusContent + '</div>' +
         '<div class="bulk-action-bar">' +
         '<button type="button" class="btn btn-primary" id="formt-download"' + (canDownload ? '' : ' disabled') + '>Download Form T</button>' +
         '<button type="button" class="btn btn-secondary" id="formt-goto-register">Register</button>' +
         '</div></div>';
+
+      document.getElementById('formt-apply-period').addEventListener('click', function () {
+        if (!applyPeriodFromForm_(true)) return;
+        loadContext_(true);
+      });
 
       document.getElementById('formt-goto-register').addEventListener('click', function () {
         var vertical = document.getElementById('formt-vertical').value;
