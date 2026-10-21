@@ -94,9 +94,9 @@ var csvTpl = Bulk.downloadCsvTemplate({ email: 'hr@test' });
 check('csv template download has payload', csvTpl.base64.length > 10);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 4', /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
+check('bulk template version 5', /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
 check('vertical column dropdown only', /applyVerticalColumnDropdown_/.test(bulkSrc) &&
-  /requireValueInList/.test(bulkSrc) && /requireValueInRange/.test(bulkSrc) &&
+  /findVerticalNameColumn_/.test(bulkSrc) && /requireValueInList/.test(bulkSrc) &&
   /verticalsForTemplate_/.test(bulkSrc));
 check('csv path uses flat xlsx with vertical dropdown', /buildTemplateFlatXlsx_/.test(bulkSrc));
 check('no csv list preamble', !/LIST,verticals/.test(bulkSrc) && !/findCsvHeaderRowIndex_/.test(bulkSrc));

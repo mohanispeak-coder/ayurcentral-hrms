@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '4';
+  var TEMPLATE_VERSION_ = '5';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -78,6 +78,7 @@ var EmployeeBulkService = (function () {
     work_email: 'meena.shah@example.com',
     department: 'Operations',
     designation: 'Senior Executive',
+    vertical_name: 'SAPL',
     location: 'Bangalore',
     employment_type: 'PERMANENT',
     joining_date: '2019-06-01',
@@ -195,20 +196,26 @@ var EmployeeBulkService = (function () {
     return out;
   }
 
-  /** Data validation dropdown on vertical_name only (no other column dropdowns). */
-  function applyVerticalColumnDropdown_(employeesSheet, headers, verticals, listsSheet) {
-    verticals = verticalsForTemplate_(verticals);
-    var vertCol = headers.indexOf('vertical_name') + 1;
-    if (vertCol < 1 || !verticals.length) return;
-    var builder = SpreadsheetApp.newDataValidation().setAllowInvalid(false);
-    if (listsSheet) {
-      var listStartRow = 2;
-      var listEndRow = listStartRow + verticals.length - 1;
-      builder = builder.requireValueInRange(listsSheet.getRange(listStartRow, 6, listEndRow, 6), true);
-    } else {
-      builder = builder.requireValueInList(verticals, true);
+  function findVerticalNameColumn_(sheet, numColumns) {
+    var labels = sheet.getRange(1, 1, 1, numColumns).getValues()[0];
+    for (var i = 0; i < labels.length; i++) {
+      var key = normalizeHeader_(labels[i]).replace(/\*$/, '');
+      if (key === 'vertical_name') return i + 1;
     }
-    employeesSheet.getRange(2, vertCol, MAX_ROWS_ + 1, vertCol).setDataValidation(builder.build());
+    return 0;
+  }
+
+  /** Data validation dropdown on vertical_name column only (header is vertical_name or vertical_name*). */
+  function applyVerticalColumnDropdown_(employeesSheet, numColumns, verticals) {
+    verticals = verticalsForTemplate_(verticals);
+    if (!verticals.length) return;
+    var vertCol = findVerticalNameColumn_(employeesSheet, numColumns);
+    if (vertCol < 1) return;
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(verticals, true)
+      .setAllowInvalid(false)
+      .build();
+    employeesSheet.getRange(2, vertCol, MAX_ROWS_, 1).setDataValidation(rule);
   }
 
   function listSalaryStructureNames_() {
@@ -233,8 +240,18 @@ var EmployeeBulkService = (function () {
       throw configurationError_('Google Drive advanced service is not available.' + driveApiHint_());
     }
     var xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    SpreadsheetApp.flush();
     if (Drive.Files.export) {
       return Drive.Files.export(spreadsheetId, xlsxMime);
+    }
+    var token = ScriptApp.getOAuthToken();
+    var exportUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
+    var response = UrlFetchApp.fetch(exportUrl, {
+      headers: { Authorization: 'Bearer ' + token },
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() === 200) {
+      return response.getBlob().setContentType(xlsxMime);
     }
     throw configurationError_('Drive export is unavailable.' + driveApiHint_());
   }
@@ -297,7 +314,8 @@ var EmployeeBulkService = (function () {
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    applyVerticalColumnDropdown_(employees, sheetHeaders, refs.verticals, null);
+    applyVerticalColumnDropdown_(employees, sheetHeaders.length, refs.verticals);
+    employees.activate();
     var xlsxName = templateFileBase_(variant) + '.xlsx';
     try {
       return exportSpreadsheetXlsx_(fileId).setName(xlsxName);
@@ -316,7 +334,7 @@ var EmployeeBulkService = (function () {
     instructions.getRange(1, 1, 1, 1).setValue('HRMS Bulk Employee Upload - Instructions');
     var instructionLines = instructionLines_(variant);
     instructionLines.push(['Departments / designations / locations on Lists sheet are suggestions for Excel dropdowns.']);
-    instructionLines.push(['vertical_name* has a dropdown on the Employees sheet (SAPL, AOPL, AOMS, …).']);
+    instructionLines.push(['Open the Employees sheet. In the vertical_name column, use the cell dropdown (SAPL, AOPL, AOMS, …).']);
     instructionLines.push(['salary_structure_id (optional) is the structure ID from the Salary structures screen (e.g. SS-001); a structure name is also accepted. See the Lists sheet. ctc_monthly is the monthly CTC amount (number).']);
     instructionLines.push(['']);
     instructionLines.push(['Verticals:']);
@@ -359,7 +377,8 @@ var EmployeeBulkService = (function () {
     var sampleRow = sheetHeaders.map(function (h) { return sample[h] || ''; });
     employees.getRange(2, 1, 1, sheetHeaders.length).setValues([sampleRow]);
     employees.setFrozenRows(1);
-    applyVerticalColumnDropdown_(employees, sheetHeaders, templateVerticals, lists);
+    applyVerticalColumnDropdown_(employees, sheetHeaders.length, templateVerticals);
+    employees.activate();
 
     var blob;
     var xlsxName = templateFileBase_(variant) + '.xlsx';
