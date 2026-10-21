@@ -5,7 +5,7 @@
 var HRMS = HRMS || {};
 
 var EmployeeBulkService = (function () {
-  var TEMPLATE_VERSION_ = '5';
+  var TEMPLATE_VERSION_ = '4';
   var MAX_ROWS_ = 100;
   var STAGE_TTL_SEC_ = 1800;
   var STAGE_PREFIX_ = 'bulk_emp_upload_';
@@ -260,60 +260,21 @@ var EmployeeBulkService = (function () {
     }
   }
 
-  function csvEscape_(v) {
-    v = v == null ? '' : String(v);
-    if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
-      return '"' + v.replace(/"/g, '""') + '"';
-    }
-    return v;
-  }
-
-  function buildTemplateCsv_(variant, refs) {
+  function buildTemplateCsv_(variant) {
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
-    refs = refs || {};
     var sample = sampleRow_(variant);
-    var verticals = verticalsForTemplate_(refs.verticals);
+    var esc = function (v) {
+      v = v == null ? '' : String(v);
+      if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0) {
+        return '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    };
     var headers = bulkHeaders_();
-    var required = requiredHeaders_();
-    var headerLabels = headers.map(function (h) {
-      return (required.indexOf(h) >= 0 ? h + '*' : h);
-    });
-    var lines = [];
-    lines.push('# HRMS bulk employee upload — template version ' + TEMPLATE_VERSION_);
-    lines.push('# vertical_name: use exactly one of — ' + verticals.join(', '));
-    lines.push('#');
-    lines.push('# Allowed verticals (Lists):');
-    verticals.forEach(function (v) {
-      lines.push('LIST,verticals,' + csvEscape_(v));
-    });
-    lines.push('#');
-    lines.push(headerLabels.join(','));
-    lines.push(headers.map(function (h) { return csvEscape_(sample[h] || ''); }).join(','));
+    var lines = [headers.join(',')];
+    lines.push(headers.map(function (h) { return esc(sample[h] || ''); }).join(','));
     var name = templateFileBase_(variant) + '.csv';
     return Utilities.newBlob(lines.join('\n'), 'text/csv', name);
-  }
-
-  function findCsvHeaderRowIndex_(rows) {
-    for (var r = 0; r < rows.length; r++) {
-      var first = normalizeHeader_(rows[r][0] || '').replace(/\*$/, '');
-      if (first === 'employee_id') return r;
-    }
-    return 0;
-  }
-
-  function isCsvMetaRow_(line) {
-    if (!line || !line.length) return true;
-    var c0 = trim_(line[0]);
-    if (!c0) {
-      var allBlank = true;
-      for (var i = 0; i < line.length; i++) {
-        if (trim_(line[i])) allBlank = false;
-      }
-      return allBlank;
-    }
-    if (c0.indexOf('#') === 0) return true;
-    if (normalizeHeader_(c0) === 'list') return true;
-    return false;
   }
 
   function buildTemplateSpreadsheet_(refs, variant) {
@@ -396,8 +357,7 @@ var EmployeeBulkService = (function () {
   function downloadCsvTemplate(session, variant) {
     PermissionService.require(HRMS.ACTIONS.EMPLOYEE_CREATE);
     variant = variant === 'legacy' ? 'legacy' : 'new_hire';
-    var refs = listReferenceValues_(session);
-    var blob = buildTemplateCsv_(variant, refs);
+    var blob = buildTemplateCsv_(variant);
     return packDownload_(blob, variant, 'text/csv');
   }
 
@@ -416,16 +376,19 @@ var EmployeeBulkService = (function () {
   function parseCsvRows_(text) {
     var rows = Utilities.parseCsv(text);
     if (!rows || rows.length < 2) return [];
-    var headerRowIdx = findCsvHeaderRowIndex_(rows);
-    var headers = rows[headerRowIdx].map(normalizeHeader_);
+    var headers = rows[0].map(normalizeHeader_);
     var out = [];
-    for (var r = headerRowIdx + 1; r < rows.length; r++) {
+    for (var r = 1; r < rows.length; r++) {
       var line = rows[r];
-      if (isCsvMetaRow_(line)) continue;
+      if (!line || !line.length) continue;
+      var allBlank = true;
+      for (var c = 0; c < line.length; c++) {
+        if (trim_(line[c])) allBlank = false;
+      }
+      if (allBlank) continue;
       var row = { rowNumber: r + 1 };
       for (var i = 0; i < headers.length; i++) {
-        var key = (headers[i] || '').replace(/\*$/, '');
-        if (!key) continue;
+        var key = headers[i].replace(/\*$/, '');
         row[key] = trim_(line[i]);
       }
       out.push(row);

@@ -98,14 +98,9 @@ check('csv template has father_husband_name column', decodedTpl.indexOf('father_
 check('csv template has uan_no column', decodedTpl.indexOf('uan_no') >= 0);
 
 var bulkSrc = fs.readFileSync(path.join(employeeDir, 'EmployeeBulkService.gs'), 'utf8');
-check('bulk template version 5', /TEMPLATE_VERSION_ = '5'/.test(bulkSrc));
+check('bulk template version 4', /TEMPLATE_VERSION_ = '4'/.test(bulkSrc));
 check('vertical dropdown validation', /applyEmployeeSheetDropdowns_/.test(bulkSrc) &&
   /requireValueInRange/.test(bulkSrc) && /verticalsForTemplate_/.test(bulkSrc));
-check('csv lists verticals', /LIST,verticals/.test(bulkSrc) && /findCsvHeaderRowIndex_/.test(bulkSrc));
-
-var csvWithList = '# comment\nLIST,verticals,SAPL\nLIST,verticals,AOPL\n\n' + csv;
-var rowsWithPreamble = Bulk.parseCsvRows(csvWithList);
-check('csv parse skips list preamble', rowsWithPreamble.length === 1 && rowsWithPreamble[0].vertical_name === 'SAPL');
 
 if (fails) {
   console.error(fails + ' test(s) failed');
