@@ -104,8 +104,11 @@ check('per-employee-payslip', /js-gen-payslip/.test(client) && /apiRegeneratePay
 check('per-employee-payslip-notify', /notifyPayslipsAvailable[\s\S]*\[snapshot\.record\]/.test(payroll) &&
   /Generate & notify/.test(client));
 check('payslip-pdf-export', /htmlToPdfBlob_/.test(payslip) && /baseName \+ '\.pdf'/.test(payslip));
-check('payslip-one-employee-box', /btn-gen-one-payslip/.test(client) && /pr-payslip-one-emp/.test(client) &&
-  /paintPayslipOneEmployeeBox_/.test(client));
+check('payroll-salary-hold-ui', /js-salary-hold/.test(client) && /apiSetPayrollSalaryHold/.test(api) &&
+  /setSalaryHold/.test(payroll));
+check('payroll-approval-export', /apiDownloadPayrollApprovalExport/.test(api) &&
+  /PayrollApprovalExportService/.test(read('payroll/PayrollApprovalExportService.gs')));
+check('payroll-department-review', /departmentReview/.test(payroll) && /dept-review/.test(client));
 check('structure-gap-hint', /explainStructureGap/.test(read('payroll/CompensationService.gs')) &&
   /enrichExceptionMessage_/.test(payroll));
 check('comp-editor-fallback', /renderCompEditor_/.test(client) && /loadWarning/.test(client));

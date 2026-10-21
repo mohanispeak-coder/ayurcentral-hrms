@@ -1506,7 +1506,27 @@
         html += '<div class="alert alert-warning">LOP days differ from approved leave for ' +
           detail.summary.lop_mismatch_count + ' employee(s).</div>';
       }
-      if (detail.departmentTotals && detail.departmentTotals.length) {
+      var deptReview = detail.departmentReview && detail.departmentReview.length
+        ? detail.departmentReview
+        : null;
+      if (deptReview) {
+        html += '<p class="hint">Expand a department (+) to see each employee. Use <strong>Hold salary</strong> in the payroll grid to pause payout for someone this month.</p>';
+        deptReview.forEach(function (dept) {
+          var holdNote = dept.held_count ? (' · ' + dept.held_count + ' on hold') : '';
+          html += '<details class="dept-review" style="margin-top:8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;padding:6px 10px">' +
+            '<summary><strong>' + escapeHtml(dept.department) + '</strong> — ' + dept.count + ' employee(s) · Net ' +
+            fmtMoneyInr(dept.net_pay) + holdNote + '</summary>';
+          html += '<div class="table-wrap" style="margin-top:8px"><table class="data-table"><thead><tr>' +
+            '<th>Employee</th><th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th><th>Payout</th></tr></thead><tbody>';
+          (dept.employees || []).forEach(function (emp) {
+            var hold = String(emp.salary_hold || '').toUpperCase() === 'YES';
+            html += '<tr><td>' + escapeHtml(emp.display_name) + '<div class="hint mono">' + escapeHtml(emp.employee_id) + '</div></td>' +
+              '<td class="num">' + fmtMoneyInr(emp.gross_earnings) + '</td><td class="num">' + fmtMoneyInr(emp.total_deductions) + '</td>' +
+              '<td class="num">' + fmtMoneyInr(emp.net_pay) + '</td><td>' + (hold ? 'On hold' : 'Pay') + '</td></tr>';
+          });
+          html += '</tbody></table></div></details>';
+        });
+      } else if (detail.departmentTotals && detail.departmentTotals.length) {
         html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Department</th><th>Count</th><th class="num">Gross</th><th class="num">Deductions</th><th class="num">Net</th></tr></thead><tbody>';
         detail.departmentTotals.forEach(function (t) {
           html += '<tr><td>' + escapeHtml(t.department) + '</td><td>' + t.count + '</td><td class="num">' + fmtMoneyInr(t.gross_earnings) +
@@ -1515,6 +1535,10 @@
         html += '</tbody></table></div>';
       } else {
         html += '<p class="hint">Department breakdown appears after calculate.</p>';
+      }
+      if (st !== 'DRAFT') {
+        html += '<div class="primary-next" style="margin-top:12px"><button type="button" class="btn btn-secondary" id="btn-download-approval-xlsx">Download approval Excel</button></div>';
+        html += '<p class="hint">Full breakup for management: attendance, components, and hold flags. Re-download after changing hold settings.</p>';
       }
       html += '</div>';
       return html;
@@ -2375,12 +2399,12 @@
         });
       });
 
-      var genOne = $('btn-gen-one-payslip');
-      if (genOne) genOne.addEventListener('click', function () {
-        var sel = $('pr-payslip-one-emp');
-        var employeeId = sel ? sel.value : '';
-        var empName = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : employeeId;
-        runSinglePayslipGenerate_(runId, employeeId, empName, genOne, afterUpdate);
+      var approvalDl = $('btn-download-approval-xlsx');
+      if (approvalDl) approvalDl.addEventListener('click', function () {
+        if (!setButtonLoading(approvalDl, 'Downloading...')) return;
+        rpc('apiDownloadPayrollApprovalExport', [runId], approvalDl, 'Downloading...', $('pr-action-feedback'))
+          .then(function (file) { downloadBlob(file); })
+          .catch(function (err) { showToast(err.message || 'Download failed', 'error'); });
       });
     }
 
@@ -2435,28 +2459,32 @@
       });
     }
 
-    function paintPayslipOneEmployeeBox_(rows, runId) {
-      if (!rows.length) return '';
-      var html = '<div class="card" id="payslip-one-card" style="margin-top:12px;border-color:var(--primary,#2563eb)">' +
-        '<h3>Generate for one employee</h3>' +
-        '<p class="page-lede">Pick an employee to create their payslip and send the email notification to them only.</p>' +
-        '<div class="primary-next" style="flex-wrap:wrap;gap:8px;align-items:flex-end">' +
-        '<label class="form-label" style="margin:0">Employee<br>' +
-        '<select class="form-select" id="pr-payslip-one-emp" style="min-width:260px;margin-top:4px">';
-      rows.forEach(function (row, idx) {
-        var emp = row.employee || {};
-        html += '<option value="' + escapeHtml(emp.employee_id) + '"' + (idx === 0 ? ' selected' : '') + '>' +
-          escapeHtml(emp.display_name || emp.employee_id) + ' (' + escapeHtml(emp.employee_id) + ')</option>';
-      });
-      html += '</select></label>' +
-        '<button type="button" class="btn btn-primary" id="btn-gen-one-payslip">Generate &amp; notify</button>' +
-        '</div></div>';
-      return html;
+    function isRowOnSalaryHold_(row) {
+      var inp = row.input || {};
+      return String(inp.salary_hold || '').toUpperCase() === 'YES';
+    }
+
+    function salaryHoldCellHtml_(row, st) {
+      var empId = row.employee && row.employee.employee_id;
+      var onHold = isRowOnSalaryHold_(row);
+      if (st === 'LOCKED') {
+        return '<td>' + (onHold ? '<span class="phase-chip">On hold</span>' : 'Pay') + '</td>';
+      }
+      if (st === 'DRAFT') {
+        return '<td class="hint">After calculate</td>';
+      }
+      return '<td><select class="form-select js-salary-hold" data-emp="' + escapeHtml(empId) + '" style="max-width:148px" title="Pay = normal payout. Hold = skip payslip until you switch back.">' +
+        '<option value="NO"' + (!onHold ? ' selected' : '') + '>Pay</option>' +
+        '<option value="YES"' + (onHold ? ' selected' : '') + '>Hold salary</option>' +
+        '</select></td>';
     }
 
     function payslipActionHtml_(row, runId) {
       var rec = row.record;
       if (!rec) return '<td>-</td>';
+      if (isRowOnSalaryHold_(row)) {
+        return '<td class="hint">On hold — set Pay in the grid above before generating a payslip.</td>';
+      }
       var ready = !!(rec.payslip_document_id);
       var html = '<td class="payslip-actions">';
       if (ready) {
@@ -2524,7 +2552,7 @@
       html += '<div class="table-wrap"><table class="data-table"><thead><tr>' +
         '<th>Employee</th><th class="num">Basic</th><th class="num">Allowances</th><th class="num">Deductions</th>' +
         '<th class="num">Working</th><th class="num">Paid</th><th class="num">LOP</th><th class="num">Leave LOP</th>' +
-        '<th class="num">Net pay</th><th>Flags</th>' + (isLocked ? '<th>Payslip</th>' : '') + '</tr></thead><tbody>';
+        '<th class="num">Net pay</th><th>Payout</th><th>Flags</th>' + (isLocked ? '<th>Payslip</th>' : '') + '</tr></thead><tbody>';
       pageRows.forEach(function (row) {
         var inp = row.input || {};
         var rec = row.record;
@@ -2550,6 +2578,7 @@
           cell('lop_days', inputValue_(inp, 'lop_days'), '0.5') +
           '<td class="num">' + escapeHtml(inp.lop_from_leave || 0) + '</td>' +
           '<td class="num">' + (rec ? fmtMoney(rec.net_pay) : '-') + '</td>' +
+          salaryHoldCellHtml_(row, st) +
           '<td>' + escapeHtml(exceptionMessagesForRow_(detail, row)) + extrasHint_(inp) + '</td>' +
           (isLocked ? payslipActionHtml_(row, runId) : '') + '</tr>';
       });
@@ -2658,14 +2687,13 @@
           '<p>Finalize payroll first, then generate payslip files for all employees.</p></div></div>';
         return html;
       }
-      html += '<p class="page-lede">Use <strong>Generate for one employee</strong> below to email only that person, or <strong>Generate all payslips</strong> to notify everyone.</p>';
+      html += '<p class="page-lede">Use <strong>Generate all payslips</strong> for everyone who is not on salary hold, or use per-row <strong>Generate &amp; notify</strong> below.</p>';
       var rows = payslipRows_(detail);
       var runId = detail.run.payroll_run_id;
       if (!rows.length) {
         html += '<div class="empty-state"><h2>No calculated employees</h2></div></div>';
         return html;
       }
-      html += paintPayslipOneEmployeeBox_(rows, runId);
       html += '<div class="primary-next" style="margin-top:12px"><button type="button" class="btn btn-secondary" id="btn-regen-payslips">Generate all payslips</button></div>';
       if (ps.complete) {
         html += '<div class="alert alert-success" style="margin-top:12px">Payslips generated for ' + ps.generated + ' of ' + ps.expected + ' employees.</div>';
@@ -2676,11 +2704,12 @@
       html += '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Employee</th><th>Net pay</th><th>Status</th><th>Payslip</th></tr></thead><tbody>';
       rows.forEach(function (row) {
         var rec = row.record;
+        var onHold = isRowOnSalaryHold_(row);
         var ready = !!(rec && rec.payslip_document_id);
         html += '<tr><td>' + escapeHtml(row.employee.display_name) +
           '<div class="hint">' + escapeHtml(row.employee.employee_id) + '</div></td>' +
           '<td class="num">' + fmtMoney(rec.net_pay) + '</td>' +
-          '<td>' + (ready ? 'Ready to download' : 'Not generated yet') + '</td>' +
+          '<td>' + (onHold ? 'Salary on hold' : (ready ? 'Ready to download' : 'Not generated yet')) + '</td>' +
           payslipActionHtml_(row, runId) + '</tr>';
       });
       html += '</tbody></table></div></div>';
@@ -2782,7 +2811,26 @@
           payrollState.tableFilter = ev.target.value;
           payrollState.tablePage = 1;
           repaintPayrollTable_(page);
+          return;
         }
+        var holdSel = ev.target && ev.target.classList && ev.target.classList.contains('js-salary-hold') ? ev.target : null;
+        if (!holdSel) return;
+        var d = payrollState.detail;
+        if (!d || !d.run) return;
+        var empId = holdSel.getAttribute('data-emp');
+        var holdVal = holdSel.value;
+        holdSel.disabled = true;
+        rpc('apiSetPayrollSalaryHold', [d.run.payroll_run_id, empId, holdVal], null, 'Updating…', $('pr-action-feedback'))
+          .then(function (next) {
+            payrollState.detail = next;
+            invalidatePayrollRunPeers_(d.run.payroll_run_id);
+            repaintCurrentPayrollView_(page, App.getState().navSeq, next);
+            showToast(holdVal === 'YES' ? 'Salary on hold for this month.' : 'Salary hold released — employee will be paid.', 'success');
+          })
+          .catch(function (err) {
+            holdSel.disabled = false;
+            showToast(err.message || 'Could not update salary hold', 'error');
+          });
       });
       card.addEventListener('click', function (ev) {
         var btn = ev.target && ev.target.closest ? ev.target.closest('#pr-page-prev, #pr-page-next') : null;

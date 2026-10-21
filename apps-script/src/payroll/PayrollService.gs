@@ -45,7 +45,159 @@ var PayrollService = (function () {
     if (typeof SchemaService !== 'undefined' && SchemaService.ensureSheetHeaders) {
       try {
         SchemaService.ensureSheetHeaders(HRMS.SHEETS.PAYROLL_RUNS);
+        SchemaService.ensureSheetHeaders(HRMS.SHEETS.PAYROLL_INPUTS);
       } catch (ignore) {}
+    }
+  }
+
+  function isSalaryHold_(inputRow) {
+    return String(inputRow && inputRow.salary_hold || '').toUpperCase() === 'YES';
+  }
+
+  function normalizeSalaryHoldValue_(value) {
+    return String(value || '').toUpperCase() === 'YES' ? 'YES' : 'NO';
+  }
+
+  function heldEmployeeIdMap_(runId) {
+    var map = {};
+    DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId }).forEach(function (inp) {
+      if (!isSalaryHold_(inp)) return;
+      var key = String(inp.employee_id || '');
+      map[key] = true;
+      var norm = normalizeEmployeeId_(key);
+      if (norm) map[norm] = true;
+    });
+    return map;
+  }
+
+  function assertSalaryHoldMutable_(run) {
+    var st = String(run.status).toUpperCase();
+    if (st === HRMS.PAYROLL_STATUS.LOCKED) {
+      throw conflictError_('Payroll is finalized. Salary hold cannot be changed on a locked run.');
+    }
+  }
+
+  function departmentForRecord_(record, employees) {
+    var dept = 'Unknown';
+    try {
+      var bd = JSON.parse(record.component_breakdown || '{}');
+      dept = (bd.meta && bd.meta.department) || '';
+    } catch (ignore) {}
+    if (!dept && employees) {
+      var emp = employees[record.employee_id] || employees[normalizeEmployeeId_(record.employee_id)];
+      dept = emp && emp.department ? emp.department : '';
+    }
+    return trim_(dept) || 'Unknown';
+  }
+
+  function buildDepartmentReview_(records, employees, inputs) {
+    var holdByEmp = {};
+    (inputs || []).forEach(function (inp) {
+      holdByEmp[String(inp.employee_id)] = isSalaryHold_(inp);
+      var norm = normalizeEmployeeId_(inp.employee_id);
+      if (norm) holdByEmp[norm] = isSalaryHold_(inp);
+    });
+    var groups = {};
+    (records || []).forEach(function (r) {
+      var dept = departmentForRecord_(r, employees);
+      if (!groups[dept]) {
+        groups[dept] = {
+          department: dept,
+          count: 0,
+          gross_earnings: 0,
+          total_deductions: 0,
+          net_pay: 0,
+          held_count: 0,
+          employees: []
+        };
+      }
+      var g = groups[dept];
+      g.count++;
+      g.gross_earnings = PayrollEngine.round2(g.gross_earnings + num_(r.gross_earnings));
+      g.total_deductions = PayrollEngine.round2(g.total_deductions + num_(r.total_deductions));
+      g.net_pay = PayrollEngine.round2(g.net_pay + num_(r.net_pay));
+      var emp = employees[r.employee_id] || employees[normalizeEmployeeId_(r.employee_id)] || {};
+      var held = !!holdByEmp[String(r.employee_id)] || !!holdByEmp[normalizeEmployeeId_(r.employee_id)];
+      if (held) g.held_count++;
+      g.employees.push({
+        employee_id: r.employee_id,
+        display_name: employeeDisplayName_(emp) || r.employee_id,
+        gross_earnings: num_(r.gross_earnings),
+        total_deductions: num_(r.total_deductions),
+        net_pay: num_(r.net_pay),
+        salary_hold: held ? 'YES' : 'NO'
+      });
+    });
+    return Object.keys(groups).sort().map(function (k) {
+      var g = groups[k];
+      g.employees.sort(function (a, b) {
+        return String(a.display_name).localeCompare(String(b.display_name));
+      });
+      return g;
+    });
+  }
+
+  function resolveSalaryStructureType_(structureRef) {
+    structureRef = trim_(structureRef);
+    if (!structureRef || typeof SalaryStructureTypeService === 'undefined') return null;
+    var type = SalaryStructureTypeService.findTypeById(structureRef) ||
+      SalaryStructureTypeService.findTypeByName(structureRef);
+    if (type) return type;
+    var idPart = structureRef.split(/\s+-\s+/)[0];
+    idPart = trim_(idPart);
+    if (idPart) return SalaryStructureTypeService.findTypeById(idPart);
+    return null;
+  }
+
+  function setSalaryHold(runId, employeeId, hold) {
+    var session = requireHr_();
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) throw validationError_('employee_id is required.');
+    return withScriptLock_(function () {
+      var run = getRun_(runId);
+      assertSalaryHoldMutable_(run);
+      var inputs = DbService.findRecords(HRMS.SHEETS.PAYROLL_INPUTS, { payroll_run_id: runId });
+      var target = null;
+      var norm = normalizeEmployeeId_(employeeId);
+      inputs.forEach(function (inp) {
+        if (String(inp.employee_id) === employeeId || normalizeEmployeeId_(inp.employee_id) === norm) {
+          target = inp;
+        }
+      });
+      if (!target) throw notFoundError_('Employee not found in this payroll run.');
+      DbService.updateRecord(HRMS.SHEETS.PAYROLL_INPUTS, 'payroll_input_id', target.payroll_input_id, {
+        salary_hold: normalizeSalaryHoldValue_(hold)
+      });
+      AuditService.log(
+        normalizeSalaryHoldValue_(hold) === 'YES' ? 'PAYROLL_SALARY_HOLD' : 'PAYROLL_SALARY_UNHOLD',
+        'PayrollInputs',
+        target.payroll_input_id,
+        normalizeSalaryHoldValue_(hold) === 'YES' ? ('Hold salary ' + employeeId) : ('Release salary hold ' + employeeId),
+        session.employee_id
+      );
+      return getRunDetail(runId, DETAIL_AFTER_MUTATION_);
+    });
+  }
+
+  function downloadApprovalExport(runId) {
+    requireHr_();
+    ensurePayrollRunSchema_();
+    return PayrollApprovalExportService.downloadApprovalPack(runId);
+  }
+
+  function filterRecordsForPayslip_(runId, records) {
+    var held = heldEmployeeIdMap_(runId);
+    return (records || []).filter(function (r) {
+      var key = String(r.employee_id || '');
+      return !held[key] && !held[normalizeEmployeeId_(key)];
+    });
+  }
+
+  function assertEmployeeNotOnSalaryHold_(runId, employeeId) {
+    var held = heldEmployeeIdMap_(runId);
+    var key = String(employeeId || '');
+    if (held[key] || held[normalizeEmployeeId_(key)]) {
+      throw conflictError_('Salary is on hold for this employee. Set Pay in the payroll grid before generating a payslip.');
     }
   }
 
@@ -608,9 +760,10 @@ var PayrollService = (function () {
       exceptions: collectExceptionsHuman_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
       exceptionSummary: buildExceptionSummary_(records, employees),
       departmentTotals: departmentTotals_(records, employees),
+      departmentReview: buildDepartmentReview_(records, employees, inputs),
       lockBlocks: evaluateLockBlocks_(run, records, true).map(humanizeLockBlock_),
       finalizeBlockers: buildFinalizeBlockers_(records, employees, periodEnd_(run.period_year, run.period_month), inputs),
-      payslipStatus: payslipStatus_(records),
+      payslipStatus: payslipStatus_(records, inputs),
       uiPhase: uiPhase,
       uiPhaseLabel: uiPhaseLabel_(uiPhase),
       syncMeta: syncMeta,
@@ -1044,7 +1197,7 @@ var PayrollService = (function () {
 
     try {
       if (generatePayslips) {
-        PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session, {
+        PayslipService.generateForRun(snapshot.run, filterRecordsForPayslip_(runId, snapshot.records), snapshot.employees, session, {
           replaceExisting: false
         });
       }
@@ -1115,7 +1268,7 @@ var PayrollService = (function () {
       };
     });
     try {
-      PayslipService.generateForRun(snapshot.run, snapshot.records, snapshot.employees, session, {
+      PayslipService.generateForRun(snapshot.run, filterRecordsForPayslip_(runId, snapshot.records), snapshot.employees, session, {
         replaceExisting: false
       });
     } catch (e) {
@@ -1156,6 +1309,7 @@ var PayrollService = (function () {
         }
       }
       if (!rec) throw notFoundError_('No payroll record for ' + employeeId + ' in this run.');
+      assertEmployeeNotOnSalaryHold_(runId, rec.employee_id);
       return {
         run: run,
         record: rec,
@@ -1405,7 +1559,8 @@ var PayrollService = (function () {
       arrears_amount: 0,
       daily_attendance_json: '',
       lop_from_leave: lopFromMap_(lopMap, emp.employee_id),
-      remarks: ''
+      remarks: '',
+      salary_hold: 'NO'
     };
   }
 
@@ -1585,7 +1740,8 @@ var PayrollService = (function () {
           last_name: emp.last_name || '',
           work_email: emp.work_email || '',
           department: emp.department || '',
-          designation: emp.designation || ''
+          designation: emp.designation || '',
+          vertical_name: emp.vertical_name || ''
         }
       };
     });
@@ -1728,17 +1884,40 @@ var PayrollService = (function () {
     };
   }
 
-  function payslipStatus_(records) {
-    var expected = (records || []).length;
+  function payslipStatus_(records, inputs) {
+    var held = {};
+    (inputs || []).forEach(function (inp) {
+      if (!isSalaryHold_(inp)) return;
+      var key = String(inp.employee_id || '');
+      held[key] = true;
+      var norm = normalizeEmployeeId_(key);
+      if (norm) held[norm] = true;
+    });
+    var payable = (records || []).filter(function (r) {
+      var key = String(r.employee_id || '');
+      return !held[key] && !held[normalizeEmployeeId_(key)];
+    });
+    var expected = payable.length;
     var generated = 0;
-    (records || []).forEach(function (r) {
+    payable.forEach(function (r) {
       if (String(r.payslip_document_id || '').trim()) generated++;
     });
     return {
       expected: expected,
       generated: generated,
-      complete: expected > 0 && generated === expected
+      complete: expected > 0 && generated === expected,
+      held_count: (records || []).length - expected
     };
+  }
+
+  function exportSpreadsheetXlsxForTemplate_(spreadsheetId) {
+    if (typeof AttendanceBulkService !== 'undefined' && AttendanceBulkService.exportSpreadsheetXlsx_) {
+      return AttendanceBulkService.exportSpreadsheetXlsx_(spreadsheetId);
+    }
+    if (typeof PayrollBulkService !== 'undefined') {
+      throw configurationError_('Excel export helper is not exposed from PayrollBulkService.');
+    }
+    throw configurationError_('Excel export is not available in this deployment.');
   }
 
   return {
@@ -1770,6 +1949,9 @@ var PayrollService = (function () {
     regeneratePayslips: regeneratePayslips,
     regeneratePayslipForEmployee: regeneratePayslipForEmployee,
     evaluateLockBlocks: evaluateLockBlocks_,
-    humanizeExceptionFlag: humanizeExceptionFlag_
+    humanizeExceptionFlag: humanizeExceptionFlag_,
+    setSalaryHold: setSalaryHold,
+    downloadApprovalExport: downloadApprovalExport,
+    exportSpreadsheetXlsxForTemplate_: exportSpreadsheetXlsxForTemplate_
   };
 })();

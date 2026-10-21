@@ -125,6 +125,18 @@ function apiDownloadPayrollTemplate(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiSetPayrollSalaryHold(runId, employeeId, hold, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.setSalaryHold(runId, employeeId, hold);
+  }, sessionToken);
+}
+
+function apiDownloadPayrollApprovalExport(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.downloadApprovalExport(runId);
+  }, sessionToken);
+}
+
 function apiDownloadAttendanceRegisterTemplate(runId, verticalName, sessionToken) {
   return hrmsRun_(function () {
     return AttendanceBulkService.downloadTemplate(runId, verticalName);
