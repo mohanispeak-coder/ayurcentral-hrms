@@ -91,10 +91,14 @@ var AttendanceRegisterService = (function () {
     return halfDayCount_(counts) * 0.5;
   }
 
+  /**
+   * Calendar days with a code in the register (each 1/2P cell counts as 1 day, not 0.5).
+   */
   function computeDaysTotal_(counts) {
     counts = counts || {};
     return (Number(counts.P) || 0) + (Number(counts['W/H']) || 0) + (Number(counts.L) || 0) +
-      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0) + halfDayPresent_(counts);
+      (Number(counts.WO) || 0) + (Number(counts.ML) || 0) + (Number(counts.H) || 0) +
+      (Number(counts.A) || 0) + halfDayCount_(counts);
   }
 
   function leaveBalanceMaxForVertical_(verticalCode) {
@@ -338,7 +342,8 @@ var AttendanceRegisterService = (function () {
     var range = start + ':' + end;
     var poolCell = colToLetter_(TEMPLATE_POOL_COL_) + sheetRow;
     var poolLeave = poolAwareLeaveExprs_(range, poolCell);
-    var halfDayPart = halfDayCountExpr_(range, true);
+    var halfDayWeighted = halfDayCountExpr_(range, true);
+    var halfDayCells = halfDayCountExpr_(range, false);
     var dayParts = [];
     ['P', 'W/H', 'L', 'WO', 'ML', 'H'].forEach(function (code) {
       if (code === 'W/H') {
@@ -359,7 +364,7 @@ var AttendanceRegisterService = (function () {
       H: '=COUNTIF(' + range + ',"H")',
       'Leave Balance': leaveBalanceFormula_(range, poolCell),
       'Leave Balan': leaveBalanceFormula_(range, poolCell),
-      DAYS: '=' + dayParts.join('+') + '+' + halfDayPart
+      DAYS: '=' + dayParts.join('+') + '+' + halfDayCells + '+COUNTIF(' + range + ',"A")'
     };
     return formulas;
   }

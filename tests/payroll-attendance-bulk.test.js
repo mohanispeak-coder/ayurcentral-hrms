@@ -49,7 +49,7 @@ check('permission-attendance-access', /requireAttendanceAccess/.test(permSrc) &&
   /isModuleEnabledForRole\(session\.role, 'attendance'\)/.test(permSrc));
 check('register-uses-central-attendance-access', /PermissionService\.requireAttendanceAccess/.test(regSrc));
 check('register-service', /AttendanceRegisterService/.test(regSrc));
-check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '11'/.test(bulkSrc));
+check('bulk-service', /AttendanceBulkService/.test(bulkSrc) && /TEMPLATE_VERSION_ = '12'/.test(bulkSrc));
 check('attendance-payroll-extra-columns', /TDS, Advance, LCD, LWF/.test(bulkSrc) &&
   /AttendancePayrollExtras/.test(regSrc));
 check('template-header-styles', /applyAttendanceHeaderStyles_/.test(bulkSrc) && /setBackground/.test(bulkSrc));
@@ -139,6 +139,16 @@ var poolFullSum = Reg.summarize_(poolFullReg, 2026, 9, 'SAPL',
   { employee_id: 'SAPL-1', vertical_name: 'SAPL', joining_date: '2020-01-01' });
 check('half-over-pool-goes-to-a', poolFullSum.leave_days_l_column === 2 && poolFullSum.absent_a_column === 1.5,
   'L=' + poolFullSum.leave_days_l_column + ' A=' + poolFullSum.absent_a_column);
+
+var arvindReg = {
+  '01': 'P', '02': 'H', '03': 'P', '04': 'W/H', '05': 'P', '06': 'P', '07': 'P', '08': 'P', '09': 'P', '10': 'P',
+  '11': 'W/H', '12': 'P', '13': 'P', '14': 'P', '15': 'P', '16': 'P', '17': 'P', '18': 'W/H', '19': 'H', '20': 'H',
+  '21': 'H', '22': 'P', '23': 'L', '24': 'P', '25': 'W/H', '26': 'P', '27': '1/2P', '28': 'P', '29': 'P', '30': '1/2P', '31': 'P'
+};
+var arvindSum = Reg.summarize_(arvindReg, 2026, 9, 'SAPL',
+  { employee_id: 'SAPL-0315', vertical_name: 'SAPL', joining_date: '2020-01-01' });
+check('days-total-counts-half-days-as-full-cells', arvindSum.days_total === 31 && arvindSum.days_in_month === 31,
+  'days_total=' + arvindSum.days_total);
 
 if (failures.length) {
   console.log('\n' + failures.length + ' failed:');
