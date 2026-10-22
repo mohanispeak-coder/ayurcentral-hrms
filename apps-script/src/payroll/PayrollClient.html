@@ -165,26 +165,6 @@
     var bulkState = { preview: null, selectedFile: null };
     var compBulkState = { preview: null, selectedFile: null };
 
-    /** Navigation read (skip sync, no row payload). Pass { full: true } after mutations or explicit refresh. */
-    function fetchPayrollRunDetail_(runId, opts) {
-      opts = opts || {};
-      var args = [runId, opts.full ? { full: true } : { light: true }];
-      if (opts.background) args.push({ background: true });
-      return callServer.apply(null, ['apiGetPayrollRun'].concat(args));
-    }
-
-    function queueFullPayrollRunDetail_(runId, page, seq, routeGuard) {
-      if (!runId) return;
-      fetchPayrollRunDetail_(runId, { full: true, background: true }).then(function (full) {
-        if (!routeGuard()) return;
-        var current = payrollState.detail && payrollState.detail.run;
-        if (!current || String(current.payroll_run_id) !== String(runId)) return;
-        payrollState.detail = full;
-        homeState.overview = full;
-        paintUnifiedPayroll_(page, seq, full);
-      }).catch(function () {});
-    }
-
     function shellInv_(keys) {
       if (App.invalidateModuleViewCache) App.invalidateModuleViewCache(keys);
     }
@@ -304,14 +284,10 @@
             vertical: homeState.vertical
           });
         }
-        return fetchPayrollRunDetail_(targetRun.payroll_run_id, { light: true }).then(function (detail) {
+        return callServer('apiGetPayrollRun', targetRun.payroll_run_id).then(function (detail) {
           if (!routeGuard()) return;
           payrollState.detail = detail;
           homeState.overview = detail;
-          var page = pageEl();
-          if (detail && detail.light && page) {
-            queueFullPayrollRunDetail_(targetRun.payroll_run_id, page, seq, routeGuard);
-          }
           callback(detail, targetRun);
         });
       });
@@ -1003,7 +979,7 @@
           var created = (res && res.created) || [];
           if (created.length && created[0].payroll_run_id) {
             homeState.vertical = String(created[0].vertical_name || homeState.vertical || '').toUpperCase();
-            return fetchPayrollRunDetail_(created[0].payroll_run_id, { full: true }).then(function (detail) {
+            return callServer('apiGetPayrollRun', created[0].payroll_run_id).then(function (detail) {
               payrollState.detail = detail;
               if (typeof onDone === 'function') onDone(detail, p, homeState.vertical);
             });
@@ -2291,7 +2267,7 @@
           .then(function () {
             bulkState.preview = null;
             invalidatePayrollRunPeers_(runId);
-            return fetchPayrollRunDetail_(runId, { full: true });
+            return callServer('apiGetPayrollRun', runId);
           })
           .then(function (nextDetail) {
             payrollState.detail = nextDetail;
@@ -2358,7 +2334,7 @@
       if (!runId) return;
       if (btn && !setButtonLoading(btn, 'Refreshing…')) return;
       if (App.invalidateModuleViewCachePrefix) App.invalidateModuleViewCachePrefix('payroll');
-      rpc('apiGetPayrollRun', [runId, { full: true }], btn, 'Refreshing…', $('pr-action-feedback'))
+      rpc('apiGetPayrollRun', [runId], btn, 'Refreshing…', $('pr-action-feedback'))
         .then(function (next) {
           payrollState.detail = next;
           homeState.overview = next;

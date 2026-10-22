@@ -1905,25 +1905,6 @@
           var seq = state.navSeq;
           var tNav = Date.now();
           var viewKey = moduleViewKey(route, params);
-          if (moduleLoaded_[moduleId] && moduleRoutesRegistered_(moduleId, route) &&
-              shouldRestoreModuleView(viewKey)) {
-            logClientPerf_({ kind: 'nav-fast-restore', route: route, moduleId: moduleId, shellMs: 0 });
-            if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
-            return;
-          }
-          if (moduleLoaded_[moduleId] && moduleRoutesRegistered_(moduleId, route)) {
-            paintPendingModuleShell(route);
-            logClientPerf_({ kind: 'nav-shell', route: route, moduleId: moduleId, shellMs: Date.now() - tNav });
-            if (!invokeRegisteredRouteRender_(route, params)) renderPlaceholder();
-            logClientPerf_({
-              kind: 'nav-module-ready',
-              route: route,
-              moduleId: moduleId,
-              untilModuleReadyMs: Date.now() - tNav,
-              cached: true
-            });
-            return;
-          }
           if (moduleLoaded_[moduleId] && shouldRestoreModuleView(viewKey)) {
             ensureModule(moduleId, { userInitiated: true, forRoute: route })
               .then(function () {
@@ -2029,8 +2010,6 @@
     if (!state.session || !state.session.authorized) return;
     options = options || {};
     params = params || {};
-    var navT0 = Date.now();
-    logClientPerf_({ kind: 'nav-start', route: route, navSeq: (state.navSeq || 0) + 1, t: navT0 });
     if (route === 'payroll' || route === 'attendance-bulk-upload' || route === 'attendance-form-t' ||
         route === 'salary-structure' || route === 'salary-statement' || route === 'compensation' ||
         route === 'payroll-employee-salary') {
