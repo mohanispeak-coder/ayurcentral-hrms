@@ -956,7 +956,7 @@ var NotificationEngine = (function () {
       message: 'Your payslip for ' + period + ' is available in My Payslips.',
       email_subject: subject,
       email_body: 'Hello ' + vars.display_name + ',\n\nYour payslip for ' + period +
-        ' is attached to this email as a PDF. You can also open My Payslips in HRMS Application to download it again.\n\nEmployee ID: ' +
+        ' is attached to this email as a PDF. \n\nYou can also open My Payslips in HRMS Application to download it again.\n\nEmployee ID: ' +
         vars.employee_id,
       payslip_document_id: record && record.payslip_document_id ? String(record.payslip_document_id) : '',
       dedupe_bucket: String(record && record.payslip_document_id || record && record.payroll_record_id || run.payroll_run_id)
