@@ -2,11 +2,17 @@
  * Authenticated ATS APIs. AuthZ is re-checked in AtsService / AtsPermissionService.
  */
 
-function apiAtsGetBootstrap(sessionToken) {
+function apiAtsGetBootstrap(optionsOrToken, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return AtsService.getBootstrap(session);
-  }, sessionToken);
+    var options = {};
+    if (optionsOrToken && typeof optionsOrToken === 'object' && !Array.isArray(optionsOrToken)) {
+      options = optionsOrToken;
+    }
+    return AtsService.getBootstrap(session, options);
+  }, typeof optionsOrToken === 'string' || optionsOrToken === undefined || optionsOrToken === null
+    ? optionsOrToken
+    : sessionToken);
 }
 
 function apiAtsEnsureSchema(sessionToken) {
@@ -127,6 +133,47 @@ function apiAtsDownloadResume(candidateId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return AtsService.downloadResume(session, candidateId);
+  }, sessionToken);
+}
+
+function apiAtsListHireSalaryStructures(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.listHireSalaryStructures(session);
+  }, sessionToken);
+}
+
+function apiAtsSaveHireCompensation(applicationId, payload, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.saveHireCompensation(session, applicationId, payload || {});
+  }, sessionToken);
+}
+
+function apiAtsSendHireOfferLetter(applicationId, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.sendHireOfferLetter(session, applicationId);
+  }, sessionToken);
+}
+
+function apiAtsSendHireAppointmentLetter(applicationId, joiningDate, sessionToken) {
+  // Back-compat: older web clients called (applicationId, sessionToken) before joining date param existed.
+  var jd = joiningDate == null ? '' : String(joiningDate).trim();
+  if (jd && !/^\d{4}-\d{2}-\d{2}$/.test(jd) && jd.length > 24) {
+    sessionToken = joiningDate;
+    joiningDate = '';
+  }
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.sendHireAppointmentLetter(session, applicationId, joiningDate);
+  }, sessionToken);
+}
+
+function apiAtsCreateEmployeeFromHire(applicationId, employeeId, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AtsService.createEmployeeFromHire(session, applicationId, employeeId);
   }, sessionToken);
 }
 

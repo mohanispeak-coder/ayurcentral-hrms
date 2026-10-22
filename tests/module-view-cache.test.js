@@ -44,6 +44,10 @@ check('consume-restore-api', /function consumeModuleViewRestore/.test(scripts));
 check('mark-loaded-api', /function markModuleViewLoaded/.test(scripts));
 check('refresh-api', /function refreshCurrentModuleView/.test(scripts));
 check('refresh-never-stuck', /finishModuleRefresh/.test(scripts) && /armRefreshWatchdog_/.test(scripts));
+check('refresh-clears-global-busy', /endingRefresh/.test(scripts) && /clearOrphanGlobalBusy_/.test(scripts));
+check('bulk-required-ui-helper', /function bulkRequiredColumnsHtml/.test(scripts));
+check('auth-enter-submit', /onEnterSubmit\(\$\('auth-email'\)/.test(scripts));
+check('ats-list-finally', /\.finally\(function \(\)/.test(ats) && /apiAtsListCandidates/.test(ats));
 check('dashboard-restore', /consumeModuleViewRestore\(dashKey\)/.test(scripts) && /dashViewCache_/.test(scripts));
 check('dashboard-two-stage-kept', /apiGetHomeDashboardMore/.test(scripts) && /secondaryPending/.test(scripts));
 check('refresh-button', /js-module-refresh/.test(scripts) && /Refreshing…/.test(scripts));
@@ -54,9 +58,11 @@ check('no-post-login-herd', !/setTimeout\(preloadModulesFromNav,\s*0\)/.test(scr
 check('emp-restore-list', /consumeModuleViewRestore\(key\)/.test(emp) && /apiGetEmployeeDirectory/.test(emp));
 check('emp-restore-profile', /consumeModuleViewRestore\(key\)/.test(emp) && /apiGetEmployee/.test(emp));
 check('leave-restore', /tryRestoreLeave_/.test(leaveUi) && /apiLeaveGetMyLeave/.test(leaveUi));
+check('leave-admin-bundle', /apiLeaveGetAdminBundle/.test(leaveUi) && /apiLeaveGetAdminBundle/.test(apiLeave));
+check('vertical-catalog-cache', /fetchVerticalCatalog_/.test(scripts) && /fetchVerticalCatalog:/.test(scripts));
 check('leave-approve-still-rpc', /apiLeaveApprove/.test(leaveUi));
 check('payroll-restore-home', /consumeModuleViewRestore\('payroll'\)/.test(payroll));
-check('payroll-lock-still-rpc', /apiLockPayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));
+check('payroll-finalize-still-rpc', /apiFinalizePayroll/.test(payroll) && /apiCalculatePayroll/.test(payroll));
 check('ats-restore-home', /consumeModuleViewRestore\('ats'\)/.test(ats));
 check('ntf-restore-inbox', /consumeModuleViewRestore\(ntfKey\)/.test(ntf) && /apiGetNotifications/.test(ntf));
 check('ntf-optimistic-mark', /markLocal\(/.test(ntf) && /apiMarkNotificationRead/.test(ntf));
@@ -191,9 +197,7 @@ function loadShell() {
     'auth-send-btn', 'auth-step-code', 'auth-email-display', 'auth-code', 'auth-code-error',
     'auth-verify-btn', 'auth-resend-btn', 'auth-change-email-btn', 'setup-state',
     'btn-run-setup', 'setup-result', 'page-content', 'main-content', 'module-ui-root',
-    'toast-container', 'ask-hr-fab', 'ask-hr-panel', 'ask-hr-clear', 'ask-hr-close',
-    'ask-hr-messages', 'ask-hr-intro', 'ask-hr-thread', 'ask-hr-form', 'ask-hr-input',
-    'ask-hr-send', 'ask-hr-compose-error'
+    'toast-container'
   ].forEach(function (id) { fakeEl('div', id); });
 
   var document = {

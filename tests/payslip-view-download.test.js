@@ -1,0 +1,57 @@
+/**
+ * Payslip view vs download contracts.
+ * Run: node tests/payslip-view-download.test.js
+ */
+const fs = require('fs');
+const path = require('path');
+
+const src = path.join(__dirname, '..', 'apps-script', 'src');
+const failures = [];
+
+function read(rel) {
+  return fs.readFileSync(path.join(src, rel), 'utf8');
+}
+
+function check(name, cond) {
+  if (cond) console.log('PASS ' + name);
+  else {
+    failures.push(name);
+    console.log('FAIL ' + name);
+  }
+}
+
+const payslip = read('payroll/PayslipService.gs');
+const apiPay = read('payroll/ApiPayroll.gs');
+const apiEmp = read('employee/ApiEmployee.gs');
+const payrollClient = read('payroll/PayrollClient.html');
+const empClient = read('employee/EmployeeClient.html');
+
+check('store-html-payslip', /Utilities\.newBlob\(html, 'text\/html/.test(payslip));
+check('package-intent-view', /intent === 'view'/.test(payslip) && /payslipIntent_/.test(payslip));
+check('api-payslip-intent', /apiGetPayslipDownload\(documentId, intent/.test(apiPay));
+check('api-employee-doc-intent', /apiDownloadEmployeeDocument\(documentId, intent/.test(apiEmp));
+check('client-view-arg', /apiGetPayslipDownload', \[btn\.getAttribute\('data-id'\), 'view'\]/.test(payrollClient));
+check('client-download-arg', /apiGetPayslipDownload', \[btn\.getAttribute\('data-id'\), 'download'\]/.test(payrollClient));
+check('profile-view-arg', /apiDownloadEmployeeDocument', id, 'view'/.test(empClient));
+check('sapl-pay-slip-title', /PAY SLIP/.test(payslip) && /pay-slip-badge/.test(payslip));
+check('sapl-earnings-amount-column', /AMOUNT \(Rs\.\)/.test(payslip) && /TOTAL EARNINGS \(A\)/.test(payslip));
+check('sapl-earnings-from-earned-section', /payslipEarningLines_/.test(payslip) && !/RATE \(Rs\.\)/.test(payslip));
+check('sapl-deductions-total-b', /TOTAL DEDUCTIONS \(B\)/.test(payslip));
+check('sapl-logo-fallback-setting', /payslip_logo_url/.test(payslip));
+check('sapl-vertical-employer', /resolveEmployerBlock_/.test(payslip) && /listVerticalCatalog/.test(payslip));
+const logoSvc = read('payroll/PayslipLogoService.gs');
+const logoData = read('payroll/PayslipLogos.gs');
+check('payslip-logo-service-verticals', /SAPL/.test(logoSvc) && /AYURVEDAONE/.test(logoSvc) && /resolveVertical_/.test(logoSvc));
+check('payslip-logo-embedded', /HRMS_PAYSLIP_LOGO_B64_/.test(logoData) && /dataUriForEmployee_/.test(logoSvc));
+check('payslip-logo-by-employee-id', /PayslipLogoService\.dataUriForEmployee/.test(payslip) && /split\('-'\)/.test(payslip));
+check('payslip-template-table-layout', /info-table/.test(payslip) && /class="split"/.test(payslip) && /coins-icon/.test(payslip));
+check('payslip-deduction-lines-helper', /payslipDeductionLines_/.test(payslip));
+check('payslip-effective-days-paid-plus-lop', /paidDays \+ lopDays/.test(payslip));
+check('payslip-htmlservice-pdf', /HtmlService\.createHtmlOutput/.test(payslip));
+check('payslip-address-by-vertical', /PAYSLIP_ADDRESS_BY_VERTICAL/.test(read('foundation/Constants.gs')));
+
+if (failures.length) {
+  console.error('\n' + failures.length + ' failed');
+  process.exit(1);
+}
+console.log('\nAll payslip view/download checks passed');

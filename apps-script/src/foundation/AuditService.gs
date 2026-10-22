@@ -1,5 +1,5 @@
 /**
- * Lightweight audit logging — no sensitive payloads.
+ * Lightweight audit logging - no sensitive payloads.
  */
 var HRMS = HRMS || {};
 

@@ -1,5 +1,5 @@
 /**
- * Employee module tests — run `testEmployee_All` from the Apps Script editor.
+ * Employee module tests - run `testEmployee_All` from the Apps Script editor.
  * Covers 11_TEST_PLAN.md EMP P0 cases (and EMP-03 P1 search helper).
  */
 
@@ -20,6 +20,7 @@ function testEmployee_All() {
       manager_employee_id: 'EMP002',
       department: 'Sales',
       designation: 'AE',
+      vertical_name: 'SAPL',
       location: 'HQ',
       employment_type: 'PERMANENT',
       status: 'ACTIVE',
@@ -33,7 +34,8 @@ function testEmployee_All() {
     var view = EmployeeService.sanitizeForViewer(row, session);
     return view.pan === undefined && view.bank_account_number === undefined &&
       view.bank_ifsc === undefined && view.notes === undefined &&
-      view.can_view_payroll_ids === false && view.view_mode === 'TEAM_WORK';
+      view.can_view_payroll_ids === false && view.view_mode === 'TEAM_WORK' &&
+      view.vertical_name === 'SAPL';
   })(), 'EMP-08');
 
   record('sanitizeEmployeeOtherDenied', (function () {
@@ -69,7 +71,7 @@ function testEmployee_All() {
 
   var isHr = PermissionService.isHrOrAdmin(session);
   if (!isHr) {
-    record('EMP-01 create', true, 'Skipped — current user is not HR/ADMIN (' + session.role + ')', true);
+    record('EMP-01 create', true, 'Skipped - current user is not HR/ADMIN (' + session.role + ')', true);
     try {
       EmployeeService.listDirectory(session, { q: 'zzz-no-match' });
       record('EMPLOYEE_directoryDenied', session.role !== 'EMPLOYEE', 'directory allowed for ' + session.role);
@@ -87,9 +89,11 @@ function testEmployee_All() {
       first_name: 'Test',
       last_name: 'Employee',
       display_name: 'Test Employee ' + stamp,
+      employee_id: 'SAPL-' + stamp.slice(-4),
       work_email: email1,
       department: 'QA',
       designation: 'Tester',
+      vertical_name: 'SAPL',
       joining_date: '2026-01-15',
       employment_type: 'PERMANENT',
       location: 'Head Office',
@@ -117,9 +121,11 @@ function testEmployee_All() {
     EmployeeService.createEmployee(session, {
       first_name: 'Dup',
       last_name: 'Mail',
+      employee_id: 'SAPL-' + String(Number(stamp.slice(-4)) + 1).slice(-4).replace(/^(\d)$/, '00$1'),
       work_email: email1,
       department: 'QA',
       designation: 'Tester',
+      vertical_name: 'SAPL',
       joining_date: '2026-01-15',
       employment_type: 'CONTRACT',
       location: 'Head Office',
@@ -133,8 +139,9 @@ function testEmployee_All() {
   try {
     var updated = EmployeeService.updateEmployee(session, newId, { department: 'Operations' });
     record('EMP-02 edit department',
-      updated.employee.department === 'Operations' && updated.employee.employee_id === newId,
-      updated.employee.department + ' / ' + updated.employee.employee_id);
+      updated.employee.department === 'Operations' && updated.employee.employee_id === newId &&
+      updated.employee.vertical_name === 'SAPL',
+      updated.employee.department + ' / ' + updated.employee.employee_id + ' / ' + updated.employee.vertical_name);
   } catch (e) {
     record('EMP-02 edit department', false, e.message);
   }

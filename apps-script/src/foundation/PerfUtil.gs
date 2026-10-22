@@ -172,7 +172,7 @@ var HrmsPerf = (function () {
     return current_;
   }
 
-  /** Test helper — forget the cached flag so the next enabled() re-reads properties. */
+  /** Test helper - forget the cached flag so the next enabled() re-reads properties. */
   function resetEnabledCacheForTests() {
     enabledCached_ = null;
   }

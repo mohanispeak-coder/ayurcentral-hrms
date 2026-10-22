@@ -1,0 +1,560 @@
+<script>
+(function () {
+  'use strict';
+
+  function whenAppReady(fn) {
+    function run() {
+      var App = window.HrmsApp;
+      if (!App || !App.registerRoute || !App.callServer) return false;
+      fn(App);
+      return true;
+    }
+    if (run()) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      if (run() || ++tries > 200) clearInterval(timer);
+    }, 25);
+  }
+
+  whenAppReady(function (App) {
+    if (window.__hrmsHolidayCalInit_) return;
+    window.__hrmsHolidayCalInit_ = true;
+
+    var $ = App.$;
+    var escapeHtml = App.escapeHtml;
+    var callServer = App.callServer;
+    var showToast = App.showToast;
+    var setActionFeedback = App.setActionFeedback;
+    var pageHeaderHtml = App.pageHeaderHtml;
+
+    var state = { year: new Date().getFullYear(), scope: 'ALL', preview: null };
+    var listLoadGen_ = 0;
+    var MODULE_KEY_ = 'holiday-calendar';
+
+    function holBannerEl_() {
+      return $('hol-status-banner');
+    }
+
+    function holNotify_(message, type, alsoToast) {
+      var el = holBannerEl_();
+      if (!el) {
+        if (alsoToast && message && showToast) {
+          showToast(message, type === 'error' ? 'error' : (type === 'busy' ? '' : 'success'));
+        }
+        return;
+      }
+      if (!message) {
+        el.textContent = '';
+        el.className = 'hol-status-banner hol-status-banner--hidden';
+        el.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      var cls = 'hol-status-banner';
+      if (type === 'error') cls += ' is-error';
+      else if (type === 'busy' || type === 'info') cls += type === 'busy' ? ' is-busy' : ' is-info';
+      else cls += ' is-success';
+      el.className = cls;
+      el.textContent = message;
+      el.removeAttribute('aria-hidden');
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (ignoreScroll) {}
+      if (alsoToast && showToast) {
+        showToast(message, type === 'error' ? 'error' : (type === 'busy' ? '' : 'success'));
+      }
+    }
+
+    function holFeedback_(el, message, type, alsoBanner) {
+      if (setActionFeedback && el) setActionFeedback(el, message, type);
+      if (alsoBanner) holNotify_(message, type, false);
+    }
+
+    App.registerRoute('holiday-calendar', {
+      title: 'Holiday calendar',
+      render: function () { renderPage(); }
+    });
+
+    function onHolidayRoute_() {
+      var s = App.getState();
+      return s && s.currentRoute === MODULE_KEY_;
+    }
+
+    function stillOn(seq, loadGen) {
+      if (!onHolidayRoute_()) return false;
+      if (loadGen != null && loadGen !== listLoadGen_) return false;
+      if (App.routeStill) return App.routeStill(seq, MODULE_KEY_);
+      var s = App.getState();
+      return seq === s.navSeq;
+    }
+
+    function renderPage() {
+      var page = $('page-content');
+      if (!page) return;
+      page.classList.remove('hidden');
+      var seq = App.getState().navSeq;
+      page.innerHTML = '<div class="holiday-cal-page">' +
+        pageHeaderHtml('Holiday calendar', 'Configure public holidays. Attendance register downloads pre-fill H on matching dates (ALL + vertical-specific).') +
+        '<div id="hol-status-banner" class="hol-status-banner hol-status-banner--hidden" role="status" aria-live="polite" aria-hidden="true"></div>' +
+        '<div id="holiday-cal-body">' +
+        (App.sectionSkeleton ? App.sectionSkeleton({ label: 'Loading holidays' }) : '<p>Loading…</p>') +
+        '</div></div>';
+      holNotify_('Loading holiday calendar…', 'busy', false);
+      loadAndPaint(seq, { quietSuccess: true });
+    }
+
+    function loadAndPaint(seq, opts) {
+      opts = opts || {};
+      var loadGen = ++listLoadGen_;
+      if (!opts.quietSuccess) holNotify_('Refreshing holiday list…', 'busy', false);
+      var refreshBtn = $('hol-refresh');
+      var query = { calendar_year: state.year, scope: state.scope };
+      var p = refreshBtn
+        ? callServer('apiHolidayList', query, { button: refreshBtn, loadingText: 'Refreshing…' })
+        : callServer('apiHolidayList', query);
+      var slowTimer = setTimeout(function () {
+        if (loadGen !== listLoadGen_ || !onHolidayRoute_()) return;
+        holNotify_('Still loading holidays… large calendars can take up to a minute.', 'busy', false);
+      }, 20000);
+      p.then(function (data) {
+        if (!stillOn(seq, loadGen)) return;
+        try {
+          paint(data || {});
+        } catch (paintErr) {
+          holNotify_(paintErr.message || 'Failed to display holidays', 'error', true);
+          if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+          return;
+        }
+        if (App.markModuleViewLoaded) App.markModuleViewLoaded(MODULE_KEY_);
+        var n = (data && data.holidays ? data.holidays : []).length;
+        if (opts.successMessage) {
+          holNotify_(opts.successMessage, 'success', true);
+        } else if (!opts.quietSuccess) {
+          holNotify_('List updated: ' + n + ' holiday(s) for ' + state.year + '.', 'success', true);
+        } else {
+          holNotify_('Showing ' + n + ' holiday(s) for calendar year ' + state.year + '. Actions below update this list.', 'info', false);
+        }
+      }).catch(function (err) {
+        if (!stillOn(seq, loadGen)) return;
+        var msg = err.message || 'Failed to load holidays';
+        holNotify_(msg, 'error', true);
+        if (App.finishModuleRefresh) App.finishModuleRefresh(true);
+        var body = $('holiday-cal-body');
+        if (body) {
+          body.innerHTML = '<div class="alert alert-danger">' + escapeHtml(msg) + '</div>' +
+            '<p class="hint">Use the header <strong>Refresh</strong> button to try again. HR and Admin roles can manage this page once the session is valid.</p>';
+        }
+      }).finally(function () {
+        clearTimeout(slowTimer);
+      });
+      return p;
+    }
+
+    function paint(data) {
+      var body = $('holiday-cal-body');
+      if (!body) return;
+      var verticals = data.verticals || [];
+      var holidays = data.holidays || [];
+      var presets = data.presets || [];
+      var yearOpts = '';
+      var y = new Date().getFullYear();
+      for (var i = y - 1; i <= y + 2; i++) {
+        yearOpts += '<option value="' + i + '"' + (state.year === i ? ' selected' : '') + '>' + i + '</option>';
+      }
+      var vertOpts = '<option value="ALL"' + (state.scope === 'ALL' ? ' selected' : '') + '>All scopes</option>';
+      verticals.forEach(function (v) {
+        vertOpts += '<option value="' + escapeHtml(v) + '"' + (state.scope === v ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+      });
+      var rows = holidays.map(function (h) {
+        var scopeVal = h.scope === 'ALL' ? 'ALL' : (h.scope_value || h.scope);
+        return '<tr><td>' + escapeHtml(h.holiday_date) + '</td><td>' + escapeHtml(h.name) + '</td>' +
+          '<td>' + escapeHtml(h.scope === 'ALL' ? 'ALL' : (h.scope + (h.scope_value ? ' / ' + h.scope_value : ''))) + '</td>' +
+          '<td>' + (h.optional ? 'Yes' : 'No') + '</td>' +
+          '<td class="col-actions">' +
+          '<button type="button" class="btn btn-secondary btn-sm" data-edit-hol="' + escapeHtml(h.holiday_id) +
+          '" data-hol-date="' + escapeHtml(h.holiday_date) + '" data-hol-name="' + escapeHtml(h.name) +
+          '" data-hol-scope="' + escapeHtml(scopeVal) + '" data-hol-opt="' + (h.optional ? '1' : '0') + '">Edit</button> ' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-del-hol="' +
+          escapeHtml(h.holiday_id) + '">Delete</button></td></tr>';
+      }).join('');
+
+      var presetOpts = presets.map(function (p) {
+        return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.label) + '</option>';
+      }).join('');
+
+      body.innerHTML =
+        '<div class="card"><h2>Year Excel template</h2>' +
+        '<p class="hint">Download one workbook for the whole year. The <strong>Holidays</strong> sheet has <strong>one example row</strong> only - replace it and add your dates, then upload below. ' +
+        'The same holidays appear on the leave calendar, attendance register (H pre-fill), and this list.</p>' +
+        '<button type="button" class="btn btn-primary" id="hol-dl-year-template">Download Excel template for ' + escapeHtml(String(state.year)) + '</button>' +
+        '<div id="hol-dl-feedback" class="action-feedback hidden" role="status" style="margin-top:12px"></div></div>' +
+
+        '<div class="card" style="margin-top:16px"><div class="page-toolbar filters">' +
+        '<div class="form-group"><label class="form-label">Calendar year</label><select class="form-select" id="hol-year">' + yearOpts + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Filter</label><select class="form-select" id="hol-scope">' + vertOpts + '</select></div>' +
+        '<button type="button" class="btn btn-secondary" id="hol-refresh">Refresh list</button></div></div>' +
+
+        '<div class="card" style="margin-top:16px"><h2>Holidays (' + holidays.length + ')</h2>' +
+        '<p class="hint">Imported or preset rows can be changed anytime: use <strong>Edit</strong>, or delete and add again. Changes apply to new attendance downloads and the leave calendar (not past locked payroll).</p>' +
+        '<div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Name</th><th>Scope</th><th>Optional</th><th></th></tr></thead>' +
+        '<tbody>' + (rows || '<tr><td colspan="5">No holidays for this year.</td></tr>') + '</tbody></table></div></div>' +
+
+        '<div class="card" style="margin-top:16px"><h2 id="hol-form-title">Add holiday</h2>' +
+        '<form id="hol-add-form" class="form-grid">' +
+        '<input type="hidden" name="holiday_id" id="hol-edit-id" value="">' +
+        '<div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" name="holiday_date" id="hol-edit-date" required></div>' +
+        '<div class="form-group"><label class="form-label">Name</label><input class="form-input" name="name" id="hol-edit-name" required></div>' +
+        '<div class="form-group"><label class="form-label">Scope</label><select class="form-select" name="scope" id="hol-add-scope">' +
+        '<option value="ALL">ALL (company)</option>' + verticals.map(function (v) {
+          return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + ' only</option>';
+        }).join('') + '</select></div>' +
+        '<div class="form-group"><label class="form-check"><input type="checkbox" name="optional" id="hol-edit-optional"> Optional holiday</label></div>' +
+        '<div class="form-actions"><button type="submit" class="btn btn-primary" id="hol-save-btn">Save holiday</button>' +
+        '<button type="button" class="btn btn-ghost hidden" id="hol-cancel-edit">Cancel edit</button></div>' +
+        '<div id="hol-form-feedback" class="action-feedback hidden" role="status" style="margin-top:12px"></div></form></div>' +
+
+        '<div class="card" style="margin-top:16px"><h2>Import from Excel or CSV</h2>' +
+        '<p class="hint">Use the year template (.xlsx) or CSV with columns: calendar_year, holiday_date, name, scope, scope_value, optional. ' +
+        'Dates: <strong>YYYY-MM-DD</strong> or <strong>DD-MM-YYYY</strong>; Excel date cells are accepted. Empty template rows are ignored.</p>' +
+        '<input type="file" id="hol-csv-file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">' +
+        '<p id="hol-file-label" class="hint" style="margin-top:8px">No file selected.</p>' +
+        '<label class="form-check"><input type="checkbox" id="hol-replace"> Replace existing holidays for this year (ALL scope only)</label>' +
+        '<div class="form-actions"><button type="button" class="btn btn-secondary" id="hol-validate">Validate</button>' +
+        '<button type="button" class="btn btn-primary" id="hol-commit" disabled>Import valid rows</button></div>' +
+        '<div id="hol-import-feedback" class="action-feedback hidden" role="status" style="margin-top:12px"></div>' +
+        '<div id="hol-import-preview" class="card" style="margin-top:12px;padding:12px;display:none"></div></div>' +
+
+        '<div class="card" style="margin-top:16px"><h2>Preset</h2>' +
+        '<p class="hint">One-click add common fixed-date holidays for the selected calendar year (no upload). ' +
+        'Use <strong>India - fixed national holidays</strong> for Republic Day, Independence Day, Gandhi Jayanti, and Christmas. ' +
+        'Add regional days (e.g. Ayudha Pooja) via the template or manual Add holiday.</p>' +
+        '<div class="form-row"><select class="form-select" id="hol-preset">' + presetOpts + '</select>' +
+        '<select class="form-select" id="hol-preset-scope"><option value="ALL">ALL</option>' +
+        verticals.map(function (v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('') +
+        '</select><button type="button" class="btn btn-secondary" id="hol-apply-preset">Add preset for year</button></div>' +
+        '<div id="hol-preset-feedback" class="action-feedback hidden" role="status" style="margin-top:12px"></div></div>';
+
+      $('hol-year').addEventListener('change', function () {
+        state.year = Number(this.value);
+        holNotify_('Loading ' + state.year + '…', 'busy', false);
+        loadAndPaint(App.getState().navSeq);
+      });
+      $('hol-scope').addEventListener('change', function () {
+        state.scope = this.value;
+        holNotify_('Applying filter…', 'busy', false);
+        loadAndPaint(App.getState().navSeq);
+      });
+      $('hol-refresh').addEventListener('click', function () {
+        holNotify_('Refreshing holiday list…', 'busy', false);
+        loadAndPaint(App.getState().navSeq, { quietSuccess: false });
+      });
+
+      var fileInput = $('hol-csv-file');
+      if (fileInput) {
+        fileInput.addEventListener('change', function () {
+          var label = $('hol-file-label');
+          var f = fileInput.files && fileInput.files[0];
+          if (label) label.textContent = f ? ('Selected: ' + f.name) : 'No file selected.';
+          state.preview = null;
+          if ($('hol-commit')) $('hol-commit').disabled = true;
+        });
+      }
+
+      function resetHolidayForm_() {
+        var form = $('hol-add-form');
+        if (form) form.reset();
+        if ($('hol-edit-id')) $('hol-edit-id').value = '';
+        if ($('hol-form-title')) $('hol-form-title').textContent = 'Add holiday';
+        if ($('hol-save-btn')) $('hol-save-btn').textContent = 'Save holiday';
+        if ($('hol-cancel-edit')) $('hol-cancel-edit').classList.add('hidden');
+        holFeedback_($('hol-form-feedback'), '', 'info');
+      }
+
+      function startEditHoliday_(btn) {
+        var scopeVal = btn.getAttribute('data-hol-scope') || 'ALL';
+        $('hol-edit-id').value = btn.getAttribute('data-edit-hol') || btn.getAttribute('data-del-hol') || '';
+        $('hol-edit-date').value = btn.getAttribute('data-hol-date') || '';
+        $('hol-edit-name').value = btn.getAttribute('data-hol-name') || '';
+        $('hol-edit-optional').checked = btn.getAttribute('data-hol-opt') === '1';
+        var sel = $('hol-add-scope');
+        if (sel) sel.value = scopeVal === 'ALL' ? 'ALL' : scopeVal;
+        $('hol-form-title').textContent = 'Edit holiday';
+        $('hol-save-btn').textContent = 'Update holiday';
+        $('hol-cancel-edit').classList.remove('hidden');
+        holNotify_('Editing holiday - change fields below and click Update holiday.', 'info', false);
+        $('hol-add-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      body.querySelectorAll('[data-edit-hol]').forEach(function (btn) {
+        btn.addEventListener('click', function () { startEditHoliday_(btn); });
+      });
+
+      body.querySelectorAll('[data-del-hol]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-del-hol');
+          if (!confirm('Delete this holiday?')) return;
+          holNotify_('Deleting holiday…', 'busy', false);
+          callServer('apiHolidayDelete', id, { button: btn, loadingText: 'Deleting…' }).then(function () {
+            holNotify_('Holiday deleted.', 'success', true);
+            resetHolidayForm_();
+            loadAndPaint(App.getState().navSeq, { quietSuccess: true });
+          }).catch(function (e) {
+            holNotify_(e.message || 'Delete failed', 'error', true);
+          });
+        });
+      });
+
+      if ($('hol-cancel-edit')) {
+        $('hol-cancel-edit').addEventListener('click', function () {
+          resetHolidayForm_();
+          holNotify_('Edit cancelled.', 'info', false);
+        });
+      }
+
+      $('hol-add-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var saveBtn = $('hol-save-btn');
+        var formFb = $('hol-form-feedback');
+        var fd = new FormData(ev.target);
+        var scopeVal = String(fd.get('scope') || 'ALL');
+        var payload = {
+          holiday_id: fd.get('holiday_id') || '',
+          calendar_year: state.year,
+          holiday_date: fd.get('holiday_date'),
+          name: fd.get('name'),
+          scope: scopeVal === 'ALL' ? 'ALL' : scopeVal,
+          scope_value: scopeVal === 'ALL' ? '' : scopeVal,
+          optional: fd.get('optional') === 'on'
+        };
+        var isEdit = !!payload.holiday_id;
+        holNotify_((isEdit ? 'Updating' : 'Saving') + ' holiday…', 'busy', false);
+        holFeedback_(formFb, (isEdit ? 'Updating' : 'Saving') + '…', 'info', false);
+        callServer('apiHolidaySave', payload, {
+          button: saveBtn,
+          loadingText: isEdit ? 'Updating…' : 'Saving…',
+          feedback: formFb
+        }).then(function () {
+          var msg = isEdit ? 'Holiday updated successfully.' : 'Holiday saved successfully.';
+          holNotify_(msg, 'success', true);
+          holFeedback_(formFb, msg, 'success', false);
+          resetHolidayForm_();
+          loadAndPaint(App.getState().navSeq, { successMessage: msg });
+        }).catch(function (e) {
+          var errMsg = e.message || 'Save failed';
+          holNotify_(errMsg, 'error', true);
+          holFeedback_(formFb, errMsg, 'error', false);
+        });
+      });
+
+      function downloadHolidayFile_(file) {
+        if (!file || !file.base64) {
+          holNotify_('Download failed: empty file from server. Redeploy after clasp push.', 'error', true);
+          return;
+        }
+        try {
+          var binary = atob(file.base64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          var blob = new Blob([bytes], { type: file.mimeType || 'application/octet-stream' });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          var fileName = file.fileName || ('HRMS_Holiday_Calendar_' + state.year + '.xlsx');
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          var dlMsg = 'Download started: ' + fileName;
+          holNotify_(dlMsg, 'success', true);
+          holFeedback_($('hol-dl-feedback'), dlMsg, 'success', false);
+          if (file.format === 'csv') {
+            showToast('Excel export unavailable - CSV template downloaded instead.', 'warning');
+          }
+        } catch (dlErr) {
+          holNotify_(dlErr.message || 'Could not save file in browser', 'error', true);
+        }
+      }
+
+      $('hol-dl-year-template').addEventListener('click', function () {
+        var btn = this;
+        var dlFb = $('hol-dl-feedback');
+        holNotify_('Preparing Excel template…', 'busy', false);
+        holFeedback_(dlFb, 'Preparing download…', 'info', false);
+        callServer('apiHolidayDownloadYearTemplate', state.year, { button: btn, loadingText: 'Preparing…' })
+          .then(function (file) { downloadHolidayFile_(file); })
+          .catch(function (e) {
+            var msg = e.message || 'Download failed';
+            holNotify_(msg, 'error', true);
+            holFeedback_(dlFb, msg, 'error', false);
+          });
+      });
+
+      function readFileAsImport_(file, cb) {
+        var name = (file.name || '').toLowerCase();
+        if (name.indexOf('.xlsx') >= 0 || name.indexOf('.xls') >= 0) {
+          var reader = new FileReader();
+          reader.onload = function () {
+            var bytes = new Uint8Array(reader.result);
+            var binary = '';
+            for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            cb({ base64: btoa(binary), fileName: file.name, mimeType: file.type });
+          };
+          reader.onerror = function () {
+            holNotify_('Could not read the Excel file in your browser.', 'error', true);
+          };
+          reader.readAsArrayBuffer(file);
+        } else {
+          var reader = new FileReader();
+          reader.onload = function () { cb({ csv_text: reader.result }); };
+          reader.onerror = function () {
+            holNotify_('Could not read the CSV file.', 'error', true);
+          };
+          reader.readAsText(file);
+        }
+      }
+
+      function paintImportPreview_(res) {
+        var el = $('hol-import-preview');
+        if (!el) return;
+        var valid = res.valid || [];
+        var errors = res.errors || [];
+        if (!valid.length && !errors.length) {
+          el.style.display = 'none';
+          el.innerHTML = '';
+          return;
+        }
+        el.style.display = 'block';
+        var html = '<p class="section-title" style="margin-top:0">Validation result</p>' +
+          '<p><strong>' + valid.length + '</strong> row(s) ready to import' +
+          (errors.length ? ' · <span class="text-danger">' + errors.length + ' issue(s)</span>' : '') + '</p>';
+        if (valid.length) {
+          html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Name</th><th>Scope</th></tr></thead><tbody>';
+          valid.slice(0, 25).forEach(function (row) {
+            html += '<tr><td>' + escapeHtml(row.holiday_date) + '</td><td>' + escapeHtml(row.name) + '</td><td>' +
+              escapeHtml(row.scope === 'ALL' ? 'ALL' : (row.scope_value || row.scope)) + '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+          if (valid.length > 25) {
+            html += '<p class="hint">Showing first 25 of ' + valid.length + ' valid rows.</p>';
+          }
+        }
+        if (errors.length) {
+          html += '<ul class="text-danger" style="margin:8px 0 0;padding-left:1.2rem">';
+          errors.forEach(function (e) {
+            html += '<li>Line ' + escapeHtml(String(e.line)) + ': ' + escapeHtml(e.message) + '</li>';
+          });
+          html += '</ul>';
+        }
+        el.innerHTML = html;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      $('hol-validate').addEventListener('click', function () {
+        var btn = this;
+        var feedback = $('hol-import-feedback');
+        var input = $('hol-csv-file');
+        if (!input.files || !input.files[0]) {
+          var pickMsg = 'Choose an Excel or CSV file first.';
+          holNotify_(pickMsg, 'error', true);
+          holFeedback_(feedback, pickMsg, 'error', false);
+          return;
+        }
+        holNotify_('Reading file…', 'busy', false);
+        holFeedback_(feedback, 'Reading file…', 'info', false);
+        $('hol-commit').disabled = true;
+        state.preview = null;
+        readFileAsImport_(input.files[0], function (meta) {
+          meta.calendar_year = state.year;
+          holNotify_('Validating on server…', 'busy', false);
+          holFeedback_(feedback, 'Validating on server…', 'info', false);
+          callServer('apiHolidayValidateImport', meta, {
+            button: btn,
+            loadingText: 'Validating…'
+          })
+            .then(function (res) {
+              state.preview = res;
+              var validN = (res.valid || []).length;
+              var errN = (res.errors || []).length;
+              $('hol-commit').disabled = !validN;
+              paintImportPreview_(res);
+              if (validN) {
+                var okMsg = 'Validation OK: ' + validN + ' row(s) ready. Click Import valid rows.';
+                holNotify_(okMsg, 'success', true);
+                holFeedback_(feedback, okMsg, 'success', false);
+              } else {
+                var badMsg = 'No valid rows. Fix ' + errN + ' issue(s) below and validate again.';
+                holNotify_(badMsg, 'error', true);
+                holFeedback_(feedback, badMsg, 'error', false);
+              }
+            })
+            .catch(function (e) {
+              var msg = e.message || 'Validation failed';
+              holNotify_(msg, 'error', true);
+              holFeedback_(feedback, msg, 'error', false);
+            });
+        });
+      });
+
+      $('hol-commit').addEventListener('click', function () {
+        if (!state.preview || !state.preview.valid || !state.preview.valid.length) {
+          var needMsg = 'Validate a file first.';
+          holNotify_(needMsg, 'error', true);
+          holFeedback_($('hol-import-feedback'), needMsg, 'error', false);
+          return;
+        }
+        var btn = this;
+        var feedback = $('hol-import-feedback');
+        var count = state.preview.valid.length;
+        holNotify_('Importing ' + count + ' holiday(s)…', 'busy', false);
+        callServer('apiHolidayCommitImport', {
+          rows: state.preview.valid,
+          calendar_year: state.year,
+          replace_scope_year: $('hol-replace').checked,
+          scope: 'ALL'
+        }, {
+          button: btn,
+          loadingText: 'Importing…',
+          feedback: feedback
+        }).then(function (res) {
+          var msg = 'Import complete: ' + res.inserted + ' added, ' + res.skipped + ' skipped (duplicates).';
+          holNotify_(msg, 'success', true);
+          holFeedback_(feedback, msg, 'success', false);
+          state.preview = null;
+          $('hol-commit').disabled = true;
+          var prev = $('hol-import-preview');
+          if (prev) { prev.style.display = 'none'; prev.innerHTML = ''; }
+          loadAndPaint(App.getState().navSeq, { successMessage: msg });
+        }).catch(function (e) {
+          var msg = e.message || 'Import failed';
+          holNotify_(msg, 'error', true);
+          holFeedback_(feedback, msg, 'error', false);
+        });
+      });
+
+      $('hol-apply-preset').addEventListener('click', function () {
+        var btn = this;
+        var presetFb = $('hol-preset-feedback');
+        holNotify_('Adding preset holidays…', 'busy', false);
+        holFeedback_(presetFb, 'Adding preset…', 'info', false);
+        var preset = $('hol-preset').value;
+        var sc = $('hol-preset-scope').value;
+        callServer('apiHolidayApplyPreset', {
+          preset_id: preset,
+          calendar_year: state.year,
+          scope: sc === 'ALL' ? 'ALL' : sc,
+          scope_value: sc === 'ALL' ? '' : sc
+        }, { button: btn, loadingText: 'Adding…', feedback: presetFb }).then(function (res) {
+          var msg = 'Preset added: ' + res.inserted + ' new holiday(s), ' + res.skipped + ' skipped.';
+          holNotify_(msg, 'success', true);
+          holFeedback_(presetFb, msg, 'success', false);
+          loadAndPaint(App.getState().navSeq, { successMessage: msg });
+        }).catch(function (e) {
+          var msg = e.message || 'Preset failed';
+          holNotify_(msg, 'error', true);
+          holFeedback_(presetFb, msg, 'error', false);
+        });
+      });
+    }
+  });
+})();
+</script>

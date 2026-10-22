@@ -1,12 +1,12 @@
 /**
- * Configuration — PropertiesService + Settings sheet.
+ * Configuration - PropertiesService + Settings sheet.
  */
 var HRMS = HRMS || {};
 
 var ConfigService = (function () {
   var scriptProps_ = PropertiesService.getScriptProperties();
 
-  /** Request-scoped spreadsheet handle — cleared when ID changes. */
+  /** Request-scoped spreadsheet handle - cleared when ID changes. */
   var spreadsheetCache_ = null;
   var spreadsheetCacheId_ = '';
   var openByIdCount_ = 0;
@@ -155,6 +155,18 @@ var ConfigService = (function () {
     return getSetting('company_name', 'AyurCentral HRMS');
   }
 
+  function getHrmsWebAppUrl() {
+    var configured = String(getSetting('hrms_webapp_url', '') || '').trim();
+    if (configured) return configured;
+    try {
+      if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
+        var deployed = ScriptApp.getService().getUrl();
+        if (deployed) return String(deployed).trim();
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
   function getTimezone() {
     return getSetting('timezone', 'Asia/Kolkata');
   }
@@ -200,14 +212,15 @@ var ConfigService = (function () {
   }
 
   function isValidRole_(role) {
-    return role === HRMS.ROLES.ADMIN ||
+    return role === HRMS.ROLES.OWNER ||
+      role === HRMS.ROLES.ADMIN ||
       role === HRMS.ROLES.HR ||
       role === HRMS.ROLES.MANAGER ||
       role === HRMS.ROLES.EMPLOYEE;
   }
 
   /**
-   * Application mode — defaults to PRODUCTION when unset or unreadable.
+   * Application mode - defaults to PRODUCTION when unset or unreadable.
    * @return {string} HRMS.APP_MODE value
    */
   function getAppMode() {
@@ -256,6 +269,74 @@ var ConfigService = (function () {
     }
   }
 
+  function parseBoolSetting_(value, defaultValue) {
+    if (value === null || value === undefined || value === '') return defaultValue;
+    var s = String(value).trim().toUpperCase();
+    if (s === 'TRUE' || s === 'YES' || s === 'Y' || s === '1') return true;
+    if (s === 'FALSE' || s === 'NO' || s === 'N' || s === '0') return false;
+    return defaultValue;
+  }
+
+  function isTempDemoLoginEnabled() {
+    try {
+      return parseBoolSetting_(getSetting(HRMS.SETTINGS_KEYS.TEMP_DEMO_LOGIN_ENABLED, 'false'), false);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function getTempDemoUserId() {
+    return String(getSetting(HRMS.SETTINGS_KEYS.TEMP_DEMO_USER_ID, '') || '').trim();
+  }
+
+  function getTempDemoPasswordSalt() {
+    return String(getSetting(HRMS.SETTINGS_KEYS.TEMP_DEMO_PASSWORD_SALT, '') || '').trim();
+  }
+
+  function getTempDemoPasswordHash() {
+    return String(getSetting(HRMS.SETTINGS_KEYS.TEMP_DEMO_PASSWORD_HASH, '') || '').trim();
+  }
+
+  function getTempDemoSessionEmail() {
+    return (HRMS.TEMP_DEMO && HRMS.TEMP_DEMO.SESSION_EMAIL) || '__hrms_temp_demo__@login.local';
+  }
+
+  function getTempDemoRole() {
+    try {
+      var role = String(getSetting(HRMS.SETTINGS_KEYS.TEMP_DEMO_ROLE, HRMS.ROLES.ADMIN))
+        .trim()
+        .toUpperCase();
+      return isValidRole_(role) ? role : HRMS.ROLES.ADMIN;
+    } catch (e) {
+      return HRMS.ROLES.ADMIN;
+    }
+  }
+
+  /**
+   * Script-editor helper (e.g. devSetTempDemoCredentials).
+   * @param {string} key
+   * @param {string} value
+   * @param {string=} actorEmail
+   */
+  function upsertSettingValue(key, value, actorEmail) {
+    clearSettingsCache_();
+    var row = DbService.findOne(HRMS.SHEETS.SETTINGS, { setting_key: key });
+    if (!row && typeof SchemaService !== 'undefined' && SchemaService.seedMissingDefaultSettings) {
+      SchemaService.seedMissingDefaultSettings();
+      row = DbService.findOne(HRMS.SHEETS.SETTINGS, { setting_key: key });
+    }
+    if (!row) {
+      throw configurationError_('Unknown setting key: ' + key);
+    }
+    var actor = String(actorEmail || 'script-editor').trim().toLowerCase() || 'script-editor';
+    DbService.updateRecord(HRMS.SHEETS.SETTINGS, 'setting_key', key, {
+      setting_value: String(value),
+      updated_at: new Date(),
+      updated_by_email: actor
+    });
+    clearSettingsCache_();
+  }
+
   return {
     getScriptProperty: getScriptProperty,
     setScriptProperty: setScriptProperty,
@@ -268,6 +349,7 @@ var ConfigService = (function () {
     clearSettingsCache: clearSettingsCache_,
     getSetting: getSetting,
     getCompanyName: getCompanyName,
+    getHrmsWebAppUrl: getHrmsWebAppUrl,
     getTimezone: getTimezone,
     getCurrency: getCurrency,
     loadSettingsMap: loadSettingsMap_,
@@ -277,7 +359,14 @@ var ConfigService = (function () {
     getDemoRoleForEmail: getDemoRoleForEmail,
     parseDemoEmailList: parseDemoEmailList_,
     parseDemoRoleMap: parseDemoRoleMap_,
-    /** Test helper — openById calls this execution. */
+    isTempDemoLoginEnabled: isTempDemoLoginEnabled,
+    getTempDemoUserId: getTempDemoUserId,
+    getTempDemoPasswordSalt: getTempDemoPasswordSalt,
+    getTempDemoPasswordHash: getTempDemoPasswordHash,
+    getTempDemoSessionEmail: getTempDemoSessionEmail,
+    getTempDemoRole: getTempDemoRole,
+    upsertSettingValue: upsertSettingValue,
+    /** Test helper - openById calls this execution. */
     getOpenByIdCountForTests: function () { return openByIdCount_; },
     resetOpenByIdCountForTests: function () { openByIdCount_ = 0; }
   };

@@ -16,10 +16,31 @@ function apiGetMyTeam(query, sessionToken) {
   }, sessionToken);
 }
 
+function apiGetLeaveBalancesDirectory(query, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listLeaveBalancesDirectory(session, query || {});
+  }, sessionToken);
+}
+
 function apiGetEmployeePicker(sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return EmployeeService.listPicker(session);
+  }, sessionToken);
+}
+
+function apiGetEmployeeVerticals(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listVerticals(session);
+  }, sessionToken);
+}
+
+function apiGetVerticalCatalog(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return EmployeeService.listVerticalCatalog(session);
   }, sessionToken);
 }
 
@@ -79,10 +100,19 @@ function apiUploadEmployeeDocument(employeeId, meta, sessionToken) {
   }, sessionToken);
 }
 
-function apiDownloadEmployeeDocument(documentId, sessionToken) {
+function apiUploadEmployeeDocuments(employeeId, files, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
-    return EmployeeService.downloadDocument(session, documentId);
+    return EmployeeService.uploadDocuments(session, employeeId, files || []);
+  }, sessionToken);
+}
+
+function apiDownloadEmployeeDocument(documentId, intent, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    var mode = 'download';
+    if (intent === 'view' || intent === 'download') mode = intent;
+    return EmployeeService.downloadDocument(session, documentId, mode);
   }, sessionToken);
 }
 
@@ -90,5 +120,33 @@ function apiGetEmployeeLeaveSummary(employeeId, sessionToken) {
   return hrmsRun_(function () {
     var session = AuthService.requireAuth();
     return EmployeeService.getLeaveSummary(session, employeeId);
+  }, sessionToken);
+}
+
+function apiListEmployeeFieldDefs(includeInactive, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeFieldDefService.listFieldDefs(!includeInactive);
+  }, sessionToken);
+}
+
+function apiSaveEmployeeFieldDefs(payload, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeFieldDefService.saveFieldDefs(payload || {});
+  }, sessionToken);
+}
+
+function apiGetEmployeeMandatoryFields(sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeMandatoryFieldService.listConfig();
+  }, sessionToken);
+}
+
+function apiSaveEmployeeMandatoryFields(payload, sessionToken) {
+  return hrmsRun_(function () {
+    AuthService.requireAuth();
+    return EmployeeMandatoryFieldService.saveConfig(payload || {});
   }, sessionToken);
 }

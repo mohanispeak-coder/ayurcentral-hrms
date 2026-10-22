@@ -54,6 +54,46 @@ var LeaveLopService = (function () {
     return Math.round(total * 100) / 100;
   }
 
+  /**
+   * One LeaveRequests read → employee_id → LOP days for a calendar month.
+   * Same rules as computeLopFromLeave. Request-scoped only (no CacheService).
+   * @param {number|string} periodYear
+   * @param {number|string} periodMonth
+   * @return {Object.<string, number>}
+   */
+  function computeLopMapForPeriod(periodYear, periodMonth) {
+    var types = loadTypeMap_();
+    var method = getCountMethod_();
+    var requests;
+    try {
+      requests = DbService.getAllRecords(HRMS.SHEETS.LEAVE_REQUESTS);
+    } catch (e) {
+      return {};
+    }
+    var totals = {};
+    (requests || []).forEach(function (req) {
+      if (String(req.status).toUpperCase() !== HRMS.LEAVE_STATUS.APPROVED) return;
+      var type = types[String(req.leave_type_id)];
+      if (!type || !LeaveEngine.isTruthy(type.counts_as_lop)) return;
+      var eid = String(req.employee_id || '');
+      if (!eid) return;
+      var days = LeaveEngine.lopDaysInMonth(
+        req.start_date,
+        req.end_date,
+        req.is_half_day,
+        method,
+        periodYear,
+        periodMonth
+      );
+      if (!days) return;
+      totals[eid] = (totals[eid] || 0) + days;
+    });
+    Object.keys(totals).forEach(function (eid) {
+      totals[eid] = Math.round(totals[eid] * 100) / 100;
+    });
+    return totals;
+  }
+
   function isLockedRun_(run) {
     return String(run.status || '').toUpperCase() === 'LOCKED';
   }
@@ -116,6 +156,7 @@ var LeaveLopService = (function () {
 
   return {
     computeLopFromLeave: computeLopFromLeave,
+    computeLopMapForPeriod: computeLopMapForPeriod,
     refreshOpenPayrollLop: refreshOpenPayrollLop,
     getApprovedLopForPayroll: computeLopFromLeave
   };

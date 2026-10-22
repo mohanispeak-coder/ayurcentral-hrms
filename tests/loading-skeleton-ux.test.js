@@ -51,7 +51,7 @@ check('refresh-aria-busy', /pageBusy\.setAttribute\('aria-busy'/.test(scripts) &
 
 check('ats-jobs-initial-skeleton', /skRows\(7,\s*7\)/.test(ats) && /ats-job-body/.test(ats));
 check('ats-jobs-keep-refresh', /keepRefresh[\s\S]*paintJobRows\(atsView\.jobs\)/.test(ats));
-check('ats-cands-initial-skeleton', /ats-cand-body[\s\S]*skRows\(7,\s*7\)/.test(ats));
+check('ats-cands-initial-skeleton', /ats-cand-body[\s\S]*skRows\(8,\s*8\)/.test(ats));
 check('ats-cands-keep-refresh', /keepRefresh[\s\S]*paintCandRows\(atsView\.candidates\)/.test(ats));
 check('ats-detail-skeleton', /function detailSkeleton/.test(ats) && /detailSkeleton\(\)/.test(ats));
 check('ats-no-plain-loading-p', !/<p>Loading…<\/p>/.test(ats));
@@ -60,10 +60,7 @@ check('ntf-skeleton-initial', /sectionSkeleton[\s\S]*Loading notifications|varia
 check('ntf-keep-refresh', /keepRefresh[\s\S]*paintInbox/.test(ntf));
 check('bell-loading-skeleton', /ntf-skel/.test(bell) && !/ntf-empty">Loading…/.test(bell));
 
-check('ask-hr-uses-skeleton-status',
-  /ask-hr-skel-stack/.test(scripts) && /function startAskHrStatus/.test(scripts));
-check('ask-hr-no-plain-loading-text-as-primary',
-  !/ask-hr-status[\s\S]{0,200}textContent = ['"]Loading…['"]/.test(scripts));
+check('ask-hr-removed-from-client', !/initAskHr/.test(scripts) && !/apiAskHr/.test(scripts));
 
 check('emp-refresh-refills-selects', /isModuleRefresh[\s\S]*fillSelectOptions\('emp-filter-dept'/.test(emp));
 check('leave-spinner-uses-skeleton', /sectionSkeleton/.test(leave) || /hrms-loading-block/.test(leave));

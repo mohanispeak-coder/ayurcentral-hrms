@@ -1,5 +1,5 @@
 /**
- * Ask HR orchestration — session, RBAC, rate limit, Hub client, audit.
+ * Ask HR orchestration - session, RBAC, rate limit, Hub client, audit.
  * Does not expose Hub URL, HMAC secret, spreadsheet ID, Drive IDs, email, or employee_id to Hub.
  * Knowledge path only: question → HMAC → Ayurveda-AI Drive/Gemini. No live HRMS DATA/HYBRID.
  */
@@ -52,7 +52,7 @@ var AskHrService = (function () {
 
   /**
    * 10 questions / 15 minutes / employee (or DEMO session identity).
-   * No script lock — must not wrap the Hub call.
+   * No script lock - must not wrap the Hub call.
    * @param {string} identity
    * @param {number} nowMs
    * @param {Object} store
@@ -189,7 +189,7 @@ var AskHrService = (function () {
         };
       }
 
-      // Knowledge only — question-only HMAC submit (no mode/context, no live HRMS data).
+      // Knowledge only - question-only HMAC submit (no mode/context, no live HRMS data).
       var result = KnowledgeHubClient.submit(
         {
           url: config.url,

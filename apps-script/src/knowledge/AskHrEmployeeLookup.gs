@@ -75,7 +75,7 @@ var AskHrEmployeeLookup = (function () {
       var mgrName = nameMap[self.manager_employee_id] || self.manager_employee_id;
       return successAnswer_('Your reporting manager is **' + mgrName + '**.');
     }
-    return successAnswer_('You belong to the **' + (self.department || '—') + '** department.');
+    return successAnswer_('You belong to the **' + (self.department || '-') + '** department.');
   }
 
   /**

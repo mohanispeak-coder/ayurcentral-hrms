@@ -1,0 +1,15 @@
+{
+  "name": "ayurcentral-hrms-apps-script",
+  "private": true,
+  "scripts": {
+    "login": "clasp login",
+    "login:remote": "clasp login --no-localhost",
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "open": "clasp open",
+    "deploy": "clasp push && echo 'Code pushed. Now redeploy the web app in script.google.com → Deploy → Manage deployments → New version.'"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.4.1"
+  }
+}

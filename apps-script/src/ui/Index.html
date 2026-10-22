@@ -4,7 +4,7 @@
   <?!= include('ui/Styles'); ?>
   <base target="_top">
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>AyurCentral HRMS</title>
 </head>
 <body>
@@ -82,6 +82,22 @@
               <button type="button" class="btn btn-ghost btn-sm" id="auth-change-email-btn">Change email</button>
             </div>
           </div>
+          <div class="card auth-card hidden" id="auth-step-demo">
+            <h2>Demo sign-in</h2>
+            <p>Sign in with the demo user ID and password (no verification code).</p>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-demo-user-id">User ID</label>
+              <input class="form-input" type="text" id="auth-demo-user-id" autocomplete="username" placeholder="Demo user ID" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label is-required" for="auth-demo-password">Password</label>
+              <input class="form-input" type="password" id="auth-demo-password" autocomplete="current-password" placeholder="Password" required>
+            </div>
+            <p id="auth-demo-error" class="alert alert-danger hidden" role="alert"></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="auth-demo-btn">Sign in</button>
+            </div>
+          </div>
         </div>
         <div id="setup-state" class="card auth-card hidden">
           <h2>System setup required</h2>
@@ -100,46 +116,8 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
   <div id="module-ui-root" class="hidden" aria-hidden="true"></div>
 
-  <button type="button" id="ask-hr-fab" class="ask-hr-fab hidden" aria-label="Ask HR" aria-expanded="false" aria-controls="ask-hr-panel">
-    <svg class="ask-hr-fab-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path fill="currentColor" d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-6.5L7 21v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
-    </svg>
-    <span class="ask-hr-fab-label">Ask HR</span>
-  </button>
-
-  <div id="ask-hr-panel" class="ask-hr-panel hidden" role="dialog" aria-labelledby="ask-hr-title" aria-modal="true">
-    <div class="ask-hr-header">
-      <div class="ask-hr-header-text">
-        <h2 id="ask-hr-title">Ask HR</h2>
-        <p class="ask-hr-header-desc">Policies, procedures, and live HRMS answers you are authorized to see.</p>
-      </div>
-      <div class="ask-hr-header-actions">
-        <button type="button" class="btn btn-secondary btn-sm" id="ask-hr-expand" aria-pressed="false" title="Expand">Expand</button>
-        <button type="button" class="btn btn-secondary btn-sm" id="ask-hr-clear">Clear</button>
-        <button type="button" class="btn-icon ask-hr-close" id="ask-hr-close" aria-label="Close Ask HR">×</button>
-      </div>
-    </div>
-    <div id="ask-hr-messages" class="ask-hr-messages" role="log" aria-live="polite" aria-relevant="additions">
-      <div id="ask-hr-intro" class="ask-hr-intro">
-        <p>Ask about company policies, SOPs, HR procedures, leave rules, benefits and other employee information.</p>
-        <p class="ask-hr-suggest-label">Try asking</p>
-        <div class="ask-hr-suggests">
-          <button type="button" class="ask-hr-suggest" data-ask-hr-q="What is the leave notice period?">What is the leave notice period?</button>
-          <button type="button" class="ask-hr-suggest" data-ask-hr-q="Where can I find the HR policy?">Where can I find the HR policy?</button>
-          <button type="button" class="ask-hr-suggest" data-ask-hr-q="How do I apply for leave?">How do I apply for leave?</button>
-        </div>
-      </div>
-      <div id="ask-hr-thread" class="ask-hr-thread"></div>
-    </div>
-    <form id="ask-hr-form" class="ask-hr-composer">
-      <label class="visually-hidden" for="ask-hr-input">Your question</label>
-      <textarea class="form-input ask-hr-input" id="ask-hr-input" rows="2" maxlength="1000" placeholder="Ask a question…" autocomplete="off"></textarea>
-      <button type="submit" class="btn btn-primary" id="ask-hr-send">Send</button>
-      <p id="ask-hr-compose-error" class="ask-hr-compose-error hidden" role="alert"></p>
-    </form>
-  </div>
-
   <?!= include('notifications/NotificationBell'); ?>
+  <?!= include('ui/LeaveViewShared'); ?>
   <?!= include('ui/Scripts'); ?>
 </body>
 </html>

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AyurCentral HRMS - Technical Guide (Admin)</title>
+<style>
+@page { margin: 18mm 14mm; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11pt; line-height: 1.45; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 12px; }
+h1 { font-size: 22pt; border-bottom: 2px solid #0f766e; padding-bottom: 8px; color: #0f766e; }
+h2 { font-size: 14pt; margin-top: 1.4em; color: #134e4a; page-break-after: avoid; }
+h3 { font-size: 12pt; margin-top: 1em; page-break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 9.5pt; page-break-inside: avoid; }
+th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f1f5f9; font-weight: 600; }
+tr:nth-child(even) td { background: #f8fafc; }
+code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
+ul, ol { margin: 0.4em 0; }
+p { margin: 0.5em 0; }
+li { margin: 0.2em 0; }
+</style>
+</head>
+<body>
+<h1>AyurCentral HRMS - Technical Guide (for system owner / developer)</h1>
+<p><strong>Audience:</strong> System owners and technical administrators. Complements the HR-facing manual.<br />
+<strong>Pair with:</strong> <code>docs/AYURCENTRAL_HR_USER_MANUAL.md</code> (share only that one with HR).</p>
+<hr />
+<h2>1. What the product is</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UI</td>
+<td>Single-page web app (HTML/JS) served by <strong>Google Apps Script</strong> web app (<code>doGet</code> → <code>Index.html</code> + lazy-loaded module HTML).</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Apps Script server functions (<code>api*</code> entry points) called via <code>google.script.run</code> wrapper in <code>Scripts.html</code>.</td>
+</tr>
+<tr>
+<td>Data</td>
+<td>Google <strong>Spreadsheet</strong> tabs (Employees, PayrollRuns, PayrollInputs, etc.) via <code>DbService</code>.</td>
+</tr>
+<tr>
+<td>Files</td>
+<td>Google <strong>Drive</strong> (documents, payslip HTML, bulk upload staging).</td>
+</tr>
+<tr>
+<td>Email</td>
+<td><code>MailApp</code> + <code>Notifications</code> sheet log.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Security model:</strong> UI hides routes by role, but <strong>every API call re-checks</strong> <code>PermissionService</code> / session. Spreadsheet editor access is <strong>not</strong> the app security boundary.</p>
+<hr />
+<h2>2. Repository layout (high level)</h2>
+<pre><code>apps-script/src/
+  foundation/     Auth, Db, Schema, Permissions, Constants, ApiFoundation
+  ui/             Shell, Scripts.html, Styles, SettingsClient
+  employee/       Directory, profiles, mandatory fields
+  leave/          Types, balances, apply, approve
+  payroll/        PayrollService, Compensation, Attendance bulk, Form T, Salary statement
+  ats/            Jobs, candidates, hire letters, create employee from hire
+  notifications/  Bell, inbox, email log
+tests/            Node-based string/regression tests (not full E2E)
+docs/             Integration notes + user manuals
+</code></pre>
+<p>Deploy: <code>apps-script/SETUP.md</code> - <code>clasp push</code>, <code>clasp deploy</code>, set web app URL.</p>
+<p><strong>Client cache bust:</strong> <code>HRMS.CLIENT_ASSETS_VERSION</code> in <code>Constants.gs</code>; bootstrap returns <code>clientAssetsVersion</code> to the browser.</p>
+<hr />
+<h2>3. Authentication and users</h2>
+<ul>
+<li>Sign-in: Google account → <code>AuthService</code> resolves session (<code>Users</code> sheet: <code>google_email</code>, <code>employee_id</code>, <code>role</code>, status).</li>
+<li>Roles: <code>OWNER</code>, <code>ADMIN</code>, <code>HR</code>, <code>MANAGER</code>, <code>EMPLOYEE</code> (see <code>03_USER_ROLES_PERMISSIONS.md</code>).</li>
+<li>OTP / session token stored client-side (<code>hrms_session_token</code>); expired session returns authorization errors on API calls.</li>
+<li><strong>OWNER</strong> bypasses some module-matrix restrictions; treat as super-admin.</li>
+</ul>
+<p>Navigation items: <code>PermissionService.NAV_ITEMS_</code> filtered by role; optional <strong>Settings → HRMS module access by role</strong> matrix persists overrides.</p>
+<hr />
+<h2>4. Routing and modules</h2>
+<p><code>Scripts.html</code> maps <strong>route → module id</strong> for lazy load (<code>apiLoadModuleUi</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Module</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>payroll</code>, <code>payroll-run</code>, <code>salary-structure</code>, <code>compensation</code>, <code>attendance-bulk-upload</code>, <code>attendance-form-t</code></td>
+<td>payroll / payroll-attendance</td>
+<td>Monthly payroll path</td>
+</tr>
+<tr>
+<td><code>salary-statement</code></td>
+<td>payroll-statement</td>
+<td>CTC statement export</td>
+</tr>
+<tr>
+<td><code>employees</code>, <code>employee-profile</code>, <code>employee-mandatory-fields</code>, …</td>
+<td>employee</td>
+<td>HR master data</td>
+</tr>
+<tr>
+<td><code>leave-*</code></td>
+<td>leave</td>
+<td>Leave lifecycle</td>
+</tr>
+<tr>
+<td><code>ats-*</code></td>
+<td>ats</td>
+<td>Recruitment</td>
+</tr>
+<tr>
+<td><code>notifications</code></td>
+<td>notifications</td>
+<td>Inbox + email log</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td>settings</td>
+<td>Admin configuration</td>
+</tr>
+</tbody>
+</table>
+<p>The sidebar groups <strong>Attendance</strong> and <strong>Payroll</strong> as separate collapsible sections for HR users.</p>
+<hr />
+<h2>5. Payroll - backend design (what HR screens depend on)</h2>
+<h3>5.1 Data flow</h3>
+<pre><code>SalaryStructures (+ components)     ← Compensation / salary-structure UI
+        ↓
+PayrollRuns (header: year, month, vertical_name, status)
+PayrollInputs (per employee: days, daily_attendance_json, bonus, TDS, …)
+        ↓
+PayrollService.calculate() → PayrollEngine
+        ↓
+PayrollRecords (snapshot + component_breakdown JSON)
+        ↓
+LOCK → PayslipService → Drive + Documents
+</code></pre>
+<h3>5.2 Run IDs and verticals</h3>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Example</th>
+<th><code>vertical_name</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Legacy combined</td>
+<td><code>PR-2026-09</code></td>
+<td>empty</td>
+</tr>
+<tr>
+<td>Per vertical</td>
+<td><code>PR-2026-09-SAPL</code></td>
+<td><code>SAPL</code></td>
+</tr>
+<tr>
+<td>Correction</td>
+<td><code>PR-2026-09-SAPL-C1</code></td>
+<td>same as source</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>findOpenRun_(year, month, vertical)</code> - only one open draft per vertical per month.</li>
+<li><code>eligibleEmployees_</code> filters by employee <code>vertical_name</code> (or ID prefix) when run has a vertical.</li>
+<li><code>AttendanceBulkService.assertRunVerticalMatches_</code> blocks uploading SAPL register into AOPL run.</li>
+</ul>
+<h3>5.3 Legacy import</h3>
+<ul>
+<li><code>importInputsFromLegacyRun</code> / <code>apiPayrollImportLegacyInputs</code> - copies inputs (including <code>daily_attendance_json</code>) from combined run to vertical run for matching employees.</li>
+<li><code>tryAutoImportFromLegacy_</code> on <code>createRunInsideLock_</code> after <code>seedInputs_</code>.</li>
+<li>Client: <code>legacyImportHint</code>, <code>attendance_input_count</code> on run list, banners, <code>resolveTargetRunForPeriod_</code> fallback to legacy when vertical draft has zero attendance.</li>
+</ul>
+<h3>5.4 Workflow states</h3>
+<p><code>DRAFT → CALCULATED → UNDER_REVIEW → APPROVED → LOCKED</code><br />
+No unlock in Phase 1 - <code>createCorrectionRun</code> from LOCKED source seeds inputs from source (including <code>daily_attendance_json</code> on corrections).</p>
+<h3>5.5 Key APIs (Payroll)</h3>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th>Service method</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiListPayrollRuns</code></td>
+<td><code>listRuns</code></td>
+</tr>
+<tr>
+<td><code>apiGetPayrollRun</code></td>
+<td><code>getRunDetail</code> (+ sync eligible employees)</td>
+</tr>
+<tr>
+<td><code>apiCreatePayrollRun</code></td>
+<td><code>createRun(year, month, vertical, notes)</code></td>
+</tr>
+<tr>
+<td><code>apiCreatePayrollRunsAllVerticals</code></td>
+<td><code>createRunsForAllVerticals</code></td>
+</tr>
+<tr>
+<td><code>apiPayrollImportLegacyInputs</code></td>
+<td><code>importInputsFromLegacyRun</code></td>
+</tr>
+<tr>
+<td><code>apiSavePayrollInputs</code></td>
+<td><code>saveInputs</code></td>
+</tr>
+<tr>
+<td><code>apiCalculatePayroll</code></td>
+<td><code>calculate</code></td>
+</tr>
+<tr>
+<td><code>apiLockPayroll</code> / <code>apiFinalizePayroll</code></td>
+<td>lock / finalize</td>
+</tr>
+<tr>
+<td><code>apiCreatePayrollCorrection</code></td>
+<td><code>createCorrectionRun</code></td>
+</tr>
+<tr>
+<td>Attendance bulk</td>
+<td><code>AttendanceBulkService.validateUpload</code> / <code>commitUpload</code></td>
+</tr>
+</tbody>
+</table>
+<p>Full list: <code>ApiPayroll.gs</code>.</p>
+<hr />
+<h2>6. Leave ↔ payroll bridge</h2>
+<ul>
+<li><code>PayrollLeaveBridge.getApprovedLopMapForPayroll</code> → <code>lop_from_leave</code> on inputs.</li>
+<li><code>refreshLopFromLeave</code> / <code>applyLeaveLopToDays</code> - HR opt-in to copy into <code>lop_days</code> and recompute <code>paid_days</code>.</li>
+<li>Approved leave changes do <strong>not</strong> alter LOCKED runs.</li>
+</ul>
+<hr />
+<h2>7. Employee module (backend hooks)</h2>
+<ul>
+<li>Create: allocate <code>employee_id</code>, seed <code>LeaveBalances</code>, optional Drive folder, audit log.</li>
+<li><code>PayrollService.syncOpenPayrollRunsForEmployee</code> adds new active employees to open draft runs.</li>
+<li>Mandatory fields: configurable required columns for create/bulk (employee-mandatory-fields route).</li>
+</ul>
+<hr />
+<h2>8. ATS → HRMS hire path</h2>
+<ul>
+<li>Stages in <code>AtsConstants</code> / <code>AtsEngine</code>; terminal hire stage <code>HIRED</code>.</li>
+<li>Letters: PDF generation + email (templates in Settings + code-managed HTML layouts).</li>
+<li><code>CompensationService</code> + <code>PayrollEngine</code> for offer salary breakup on PDF.</li>
+<li>Create employee from hire: RPC creates <code>Employees</code> row with new ID; links application to employee.</li>
+</ul>
+<p>See <code>docs/ATS_INTEGRATION_NOTES.md</code>.</p>
+<hr />
+<h2>9. Notifications</h2>
+<ul>
+<li>Event types: leave submitted/approved/rejected, payroll review, payslip available, etc.</li>
+<li>Rows in <code>Notifications</code> sheet; HR views delivery log in app.</li>
+<li>Toggles in Settings → email section.</li>
+</ul>
+<p>See <code>docs/NOTIFICATIONS_INTEGRATION_NOTES.md</code>.</p>
+<hr />
+<h2>10. Settings and schema maintenance</h2>
+<ul>
+<li><strong>Settings</strong> sheet: booleans, role module matrix, content templates, company emails.</li>
+<li><strong>Database setup:</strong> HRMS menu in spreadsheet or <code>SchemaService.ensureSheetHeaders</code> - adds columns such as <code>PayrollRuns.vertical_name</code>, template rows.</li>
+<li>If Settings templates missing, UI shows warning to run database setup.</li>
+</ul>
+<hr />
+<h2>11. Deploy and verify</h2>
+<pre><code class="language-bash">cd apps-script
+clasp push
+clasp deploy   # or update existing deployment
+</code></pre>
+<p>Pull the latest application source from your repository before deploying, if your team uses version control.</p>
+<p><strong>Verify in browser:</strong></p>
+<ol>
+<li>Footer on payroll pages shows <code>clientAssetsVersion</code> (version string updates when IT deploys a new build).</li>
+<li>Sidebar shows Attendance + Payroll sections for HR roles.</li>
+<li>Combined legacy + import banner on vertical runs when older combined data exists.</li>
+</ol>
+<p><strong>Tests (local):</strong></p>
+<pre><code class="language-bash">node tests/payroll-vertical-runs.test.js
+</code></pre>
+<hr />
+<h2>12. Operational troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HR sees old UI</td>
+<td>Deployment not updated or cached</td>
+<td>New deployment + hard refresh; check <code>CLIENT_ASSETS_VERSION</code>.</td>
+</tr>
+<tr>
+<td>Empty vertical payroll</td>
+<td>Data on <code>PR-YYYY-MM</code></td>
+<td>Import legacy or open combined run.</td>
+</tr>
+<tr>
+<td>Calculate skips employees</td>
+<td><code>MISSING_STRUCTURE</code> / zero working days</td>
+<td>Fix structure or attendance.</td>
+</tr>
+<tr>
+<td>Cannot finalize</td>
+<td>Still DRAFT or exception flags</td>
+<td>Calculate; resolve Payroll check blockers.</td>
+</tr>
+<tr>
+<td>403 on API</td>
+<td>Role or module matrix</td>
+<td>Users sheet role; Settings module access.</td>
+</tr>
+<tr>
+<td>Ask HR errors</td>
+<td>Feature flag / API key</td>
+<td>Settings + <code>AskHr</code> service config.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>13. Spec documents (source of truth)</h2>
+<table>
+<thead>
+<tr>
+<th>Doc</th>
+<th>Topic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>00_MASTER_SPEC.md</code></td>
+<td>Product scope</td>
+</tr>
+<tr>
+<td><code>03_USER_ROLES_PERMISSIONS.md</code></td>
+<td>Roles matrix</td>
+</tr>
+<tr>
+<td><code>04_EMPLOYEE_MODULE.md</code></td>
+<td>Employee master</td>
+</tr>
+<tr>
+<td><code>05_LEAVE_MODULE.md</code></td>
+<td>Leave workflow</td>
+</tr>
+<tr>
+<td><code>06_PAYROLL_COMPENSATION_MODULE.md</code></td>
+<td>Payroll math and states</td>
+</tr>
+<tr>
+<td><code>07_DASHBOARD_NOTIFICATIONS.md</code></td>
+<td>Dashboard + mail events</td>
+</tr>
+<tr>
+<td><code>09_APPS_SCRIPT_ARCHITECTURE.md</code></td>
+<td>Code structure</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>14. Regenerating the PDF manuals</h2>
+<p>From the <code>docs</code> folder:</p>
+<pre><code class="language-bash">python3 build-ayurcentral-manuals-pdf.py
+</code></pre>
+<p>This writes <code>AYURCENTRAL_HR_USER_MANUAL.pdf</code> and <code>AYURCENTRAL_TECHNICAL_GUIDE_FOR_ADMIN.pdf</code> next to the markdown sources.</p>
+<hr />
+<p><em>Internal technical guide - not for distribution to end-user HR staff.</em></p>
+</body>
+</html>

@@ -1,7 +1,7 @@
 /**
  * Leave → Payroll LOP integration point.
  *
- * Preferred contract (Leave module — `12_BUILD_PLAN.md`):
+ * Preferred contract (Leave module - `12_BUILD_PLAN.md`):
  *   LeaveLopService.computeLopFromLeave(employeeId, periodYear, periodMonth)
  * Also accepts LeaveService.getApprovedLopForPayroll if that alias exists.
  *
@@ -22,6 +22,17 @@ var PayrollLeaveBridge = (function () {
       return isFinite(fromLeave) && fromLeave > 0 ? fromLeave : 0;
     }
     return readLopFromSchema_(employeeId, periodYear, periodMonth);
+  }
+
+  /**
+   * Employee id → approved LOP days for one calendar month. One LeaveRequests read.
+   */
+  function getApprovedLopMapForPayroll(periodYear, periodMonth) {
+    if (typeof LeaveLopService !== 'undefined' && LeaveLopService &&
+        typeof LeaveLopService.computeLopMapForPeriod === 'function') {
+      return LeaveLopService.computeLopMapForPeriod(periodYear, periodMonth) || {};
+    }
+    return {};
   }
 
   function readLopFromSchema_(employeeId, periodYear, periodMonth) {
@@ -98,6 +109,7 @@ var PayrollLeaveBridge = (function () {
   }
 
   return {
-    getApprovedLopForPayroll: getApprovedLopForPayroll
+    getApprovedLopForPayroll: getApprovedLopForPayroll,
+    getApprovedLopMapForPayroll: getApprovedLopMapForPayroll
   };
 })();

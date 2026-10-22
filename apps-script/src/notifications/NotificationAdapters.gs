@@ -1,5 +1,5 @@
 /**
- * Module adapters — existing Leave/Payroll (and ATS) call these
+ * Module adapters - existing Leave/Payroll (and ATS) call these
  * AFTER business commits succeed. Do not call from inside LockService.
  * Leave/Payroll files are not modified in this stream; wire later using
  * docs/NOTIFICATIONS_INTEGRATION_NOTES.md.
@@ -9,16 +9,24 @@ var HRMS = HRMS || {};
 var NotificationLeaveAdapter = (function () {
   function employeeHint_(emp) {
     emp = emp || {};
+    var dn = String(emp.display_name || '').trim();
+    if (!dn) dn = String((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
     return {
       employee_id: emp.employee_id,
       email: emp.work_email || emp.email,
-      display_name: emp.display_name
+      display_name: dn || emp.employee_id
     };
   }
 
-  function notifySubmitted(leaveRequest, employee, manager) {
+  function notifySubmitted(leaveRequest, employee, recipient, options) {
     try {
-      var payload = NotificationEngine.payloads.leaveSubmitted(leaveRequest, employeeHint_(employee), employeeHint_(manager));
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveSubmitted(
+        leaveRequest,
+        employeeHint_(employee),
+        employeeHint_(recipient),
+        options
+      );
       payload.force_email = false;
       payload.force_in_app = true;
       return NotificationService.createNotification(payload);
@@ -28,9 +36,31 @@ var NotificationLeaveAdapter = (function () {
     }
   }
 
-  function notifyApproved(leaveRequest, employee) {
+  function notifyHrReviewRequired(leaveRequest, employee, hrRecipient) {
+    return notifySubmitted(leaveRequest, employee, hrRecipient, { audience: 'hr' });
+  }
+
+  function notifyManagerApprovalRequired(leaveRequest, employee, manager, options) {
+    options = options || {};
+    var name = (employee && (employee.display_name || employee.employee_id)) || 'An employee';
+    if (!options.title) {
+      options.title = 'Leave awaiting your approval';
+    }
+    if (!options.message) {
+      options.message = 'Leave request from ' + name + ' is awaiting your approval.';
+    }
+    options.audience = 'manager';
+    return notifySubmitted(leaveRequest, employee, manager, options);
+  }
+
+  function notifyApproved(leaveRequest, employee, options) {
     try {
-      var payload = NotificationEngine.payloads.leaveApproved(leaveRequest, employeeHint_(employee));
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveApproved(
+        leaveRequest,
+        employeeHint_(employee),
+        options
+      );
       payload.force_email = false;
       payload.force_in_app = true;
       return NotificationService.createNotification(payload);
@@ -40,14 +70,63 @@ var NotificationLeaveAdapter = (function () {
     }
   }
 
-  function notifyRejected(leaveRequest, employee) {
+  function notifyRejected(leaveRequest, employee, options) {
     try {
-      var payload = NotificationEngine.payloads.leaveRejected(leaveRequest, employeeHint_(employee));
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveRejected(
+        leaveRequest,
+        employeeHint_(employee),
+        options
+      );
       payload.force_email = false;
       payload.force_in_app = true;
       return NotificationService.createNotification(payload);
     } catch (e) {
       Logger.log('NotificationLeaveAdapter.notifyRejected: ' + (e.message || e));
+      return { ok: false, error: String(e.message || e) };
+    }
+  }
+
+  function notifyLeaveDecisionToManager(leaveRequest, employee, manager, decision, options) {
+    if (!manager || !manager.employee_id) return { ok: true, skipped: true };
+    try {
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveDecisionNotice(
+        leaveRequest,
+        employeeHint_(employee),
+        employeeHint_(manager),
+        decision,
+        { audience: 'manager', email_body: options.email_body, comment: options.comment }
+      );
+      payload.force_email = false;
+      payload.force_in_app = true;
+      return NotificationService.createNotification(payload);
+    } catch (e) {
+      Logger.log('NotificationLeaveAdapter.notifyLeaveDecisionToManager: ' + (e.message || e));
+      return { ok: false, error: String(e.message || e) };
+    }
+  }
+
+  function notifyLeaveDecisionToAdditional(leaveRequest, employee, decision, options) {
+    try {
+      var enabled = LeaveEngine.isTruthy(ConfigService.getSetting('leave_decision_notify_additional_enabled', false));
+      var extraEmail = String(ConfigService.getSetting('leave_decision_notify_additional_email', '') || '').trim().toLowerCase();
+      if (!enabled || !extraEmail) return { ok: true, skipped: true };
+      var resolved = NotificationService.resolveRecipient({ email: extraEmail });
+      if (!resolved || !resolved.employee_id) return { ok: true, skipped: true, reason: 'external_email' };
+      options = options || {};
+      var payload = NotificationEngine.payloads.leaveDecisionNotice(
+        leaveRequest,
+        employeeHint_(employee),
+        resolved,
+        decision,
+        { audience: 'hr', email_body: options.email_body, comment: options.comment }
+      );
+      payload.force_email = false;
+      payload.force_in_app = true;
+      return NotificationService.createNotification(payload);
+    } catch (e) {
+      Logger.log('NotificationLeaveAdapter.notifyLeaveDecisionToAdditional: ' + (e.message || e));
       return { ok: false, error: String(e.message || e) };
     }
   }
@@ -66,7 +145,7 @@ var NotificationLeaveAdapter = (function () {
         end_date: leaveRequest.end_date
       };
       results.push(NotificationService.createNotification(
-        NotificationEngine.payloads.leaveCancelled(empReq, employeeHint_(employee), actorName)
+        NotificationEngine.payloads.leaveCancelled(empReq, employeeHint_(employee), actorName, { audience: 'employee' })
       ));
     } catch (e) {
       Logger.log('NotificationLeaveAdapter.notifyCancelled employee: ' + (e.message || e));
@@ -81,7 +160,7 @@ var NotificationLeaveAdapter = (function () {
           display_name: employee && employee.display_name,
           start_date: leaveRequest.start_date,
           end_date: leaveRequest.end_date
-        }, employeeHint_(manager), actorName);
+        }, employeeHint_(manager), actorName, { audience: 'manager' });
         results.push(NotificationService.createNotification(mgrPayload));
       } catch (e2) {
         Logger.log('NotificationLeaveAdapter.notifyCancelled manager: ' + (e2.message || e2));
@@ -92,13 +171,28 @@ var NotificationLeaveAdapter = (function () {
 
   return {
     notifySubmitted: notifySubmitted,
+    notifyHrReviewRequired: notifyHrReviewRequired,
+    notifyManagerApprovalRequired: notifyManagerApprovalRequired,
     notifyApproved: notifyApproved,
     notifyRejected: notifyRejected,
+    notifyLeaveDecisionToManager: notifyLeaveDecisionToManager,
+    notifyLeaveDecisionToAdditional: notifyLeaveDecisionToAdditional,
     notifyCancelled: notifyCancelled
   };
 })();
 
 var NotificationPayrollAdapter = (function () {
+  function employeeHint_(emp) {
+    emp = emp || {};
+    var dn = String(emp.display_name || '').trim();
+    if (!dn) dn = String((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+    return {
+      employee_id: emp.employee_id,
+      email: emp.work_email || emp.email,
+      display_name: dn || emp.employee_id
+    };
+  }
+
   function hrRecipients_() {
     return NotificationService.listHrAdminRecipients();
   }
@@ -151,16 +245,43 @@ var NotificationPayrollAdapter = (function () {
       employeeMap = employeeMap || {};
       var inputs = [];
       (records || []).forEach(function (row) {
-        var emp = employeeMap[row.employee_id] || NotificationService.resolveRecipient({ employee_id: row.employee_id });
-        if (!emp) return;
-        var payload = NotificationEngine.payloads.payslipAvailable(row, emp, run);
-        if (NotificationEngine.payslipContainsNet(payload.title) ||
-            NotificationEngine.payslipContainsNet(payload.email_subject)) {
-          Logger.log('Skipped payslip notification — subject contained net pay');
+        var docId = String(row.payslip_document_id || '').trim();
+        if (!docId && row.employee_id && run && run.payroll_run_id) {
+          var fresh = DbService.findOne(HRMS.SHEETS.PAYROLL_RECORDS, {
+            payroll_run_id: run.payroll_run_id,
+            employee_id: row.employee_id
+          });
+          docId = fresh && fresh.payslip_document_id ? String(fresh.payslip_document_id).trim() : '';
+        }
+        if (!docId) return;
+        var rowForPayload = Object.assign({}, row, { payslip_document_id: docId });
+        var rawEmp = employeeMap[row.employee_id] ||
+          employeeMap[String(row.employee_id || '').trim().toUpperCase()] ||
+          NotificationService.resolveRecipient({ employee_id: row.employee_id });
+        if (!rawEmp) return;
+        var emp = employeeHint_(rawEmp);
+        if (!String(emp.email || '').trim()) {
+          Logger.log('Skipped payslip email for ' + row.employee_id + ' — no work_email on employee record.');
           return;
         }
+        var payload = NotificationEngine.payloads.payslipAvailable(rowForPayload, emp, run);
+        if (NotificationEngine.payslipContainsNet(payload.title) ||
+            NotificationEngine.payslipContainsNet(payload.email_subject)) {
+          Logger.log('Skipped payslip notification - subject contained net pay');
+          return;
+        }
+        var docRow = DbService.findOne(HRMS.SHEETS.DOCUMENTS, { document_id: docId });
+        var uploadedKey = docRow && docRow.uploaded_at
+          ? String(docRow.uploaded_at instanceof Date ? docRow.uploaded_at.toISOString() : docRow.uploaded_at)
+          : '0';
+        payload.dedupe_bucket = docId + '|' + uploadedKey;
+        payload.force_email = true;
         inputs.push(payload);
       });
+      if (!inputs.length) {
+        Logger.log('notifyPayslipsAvailable: no payslip emails queued (missing docs or work_email).');
+        return { ok: true, created: 0, emailed: 0, skipped: true };
+      }
       return NotificationService.createNotifications(inputs);
     } catch (e) {
       Logger.log('NotificationPayrollAdapter.notifyPayslipsAvailable: ' + (e.message || e));

@@ -1,5 +1,5 @@
 /**
- * Ask HR / Knowledge Hub client tests — no live Gemini, no Hub deploy required.
+ * Ask HR / Knowledge Hub client tests - no live Gemini, no Hub deploy required.
  * Run testAskHr_All from the Apps Script editor.
  */
 

@@ -1,0 +1,305 @@
+<script>
+(function () {
+  'use strict';
+
+  function ready(fn) {
+    if (window.HrmsApp) fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  ready(function initSettingsUi() {
+    var App = window.HrmsApp;
+    if (!App) return;
+    var $ = App.$;
+    var escapeHtml = App.escapeHtml;
+    var callServer = App.callServer;
+    var showToast = App.showToast;
+    var pageHeaderHtml = App.pageHeaderHtml;
+
+    var settingsState = { data: null };
+
+    App.registerRoute('settings', {
+      title: 'Settings',
+      render: function () { renderSettings(); }
+    });
+
+    function stillOn(seq) {
+      if (App.routeStill) return App.routeStill(seq, 'settings');
+      var s = App.getState();
+      return seq === s.navSeq && s.currentRoute === 'settings';
+    }
+
+    function renderSettings() {
+      var page = $('page-content');
+      if (!page) return;
+      page.classList.remove('hidden');
+      var seq = App.getState().navSeq;
+      page.innerHTML = '<div class="settings-page">' +
+        pageHeaderHtml('Settings', 'Organisation email toggles and default self-service access by role. Changes are stored in the Settings sheet.') +
+        '<div id="settings-body">' +
+        (App.sectionSkeleton ? App.sectionSkeleton({ label: 'Loading settings' }) : '<p>Loading…</p>') +
+        '</div></div>';
+      Promise.all([
+        callServer('apiGetAdminSettings'),
+        callServer('apiLeaveGetPolicySettings').catch(function () { return null; })
+      ])
+        .then(function (parts) {
+          if (!stillOn(seq)) return;
+          settingsState.data = parts[0];
+          settingsState.leavePolicy = parts[1];
+          paintSettings(parts[0], parts[1]);
+        })
+        .catch(function (err) {
+          if (!stillOn(seq)) return;
+          $('settings-body').innerHTML = '<div class="alert alert-danger">' + escapeHtml(err.message || 'Could not load settings') + '</div>';
+        });
+    }
+
+    function paintSettings(data, leavePolicy) {
+      var body = $('settings-body');
+      if (!body || !data) return;
+      leavePolicy = leavePolicy || settingsState.leavePolicy || null;
+      var email = data.email || [];
+      var rm = data.role_modules || {};
+      var modFeatures = rm.modules || [];
+      var modMatrix = rm.matrix || [];
+      var ra = data.role_access || {};
+      var features = ra.features || [];
+      var matrix = ra.matrix || [];
+
+      var welcome = data.welcome || {};
+      var lp = leavePolicy || {};
+      var lg = lp.global || {};
+      var verts = lp.verticals || [];
+      var leavePolicyHtml = '<div class="card"><h2>Leave policy</h2>' +
+        '<p class="hint">Monthly values are <strong>entitlement per eligible month</strong> (vertical-specific). ' +
+        'In the <strong>join month</strong>: days 1–9 full grant; days 10–20 half grant (none if monthly entitlement is only 1); ' +
+        'after the cut-off day no grant. Later months always use the full monthly value.</p>' +
+        '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label" for="lp-year-mode">Leave year</label>' +
+        '<select class="form-select" id="lp-year-mode"><option value="CALENDAR"' +
+        (String(lg.leave_year_mode || 'CALENDAR') === 'CALENDAR' ? ' selected' : '') + '>Calendar (Jan–Dec)</option>' +
+        '<option value="FINANCIAL"' + (String(lg.leave_year_mode) === 'FINANCIAL' ? ' selected' : '') + '>Financial (Apr–Mar)</option></select></div>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-half-from">Half grant from day</label>' +
+        '<input class="form-input" type="number" min="1" max="28" id="lp-join-half-from" value="' +
+        escapeHtml(String(lg.leave_join_half_from_day != null ? lg.leave_join_half_from_day : 10)) + '"></div>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-half-to">Half grant through day</label>' +
+        '<input class="form-input" type="number" min="1" max="28" id="lp-join-half-to" value="' +
+        escapeHtml(String(lg.leave_join_half_to_day != null ? lg.leave_join_half_to_day : 20)) + '"></div>' +
+        '<div class="form-group"><label class="form-label" for="lp-join-cut">No grant after day</label>' +
+        '<input class="form-input" type="number" min="1" max="28" id="lp-join-cut" value="' +
+        escapeHtml(String(lg.leave_join_grant_after_day != null ? lg.leave_join_grant_after_day : 20)) + '"></div></div>' +
+        '<div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th>Vertical</th><th class="num">Monthly entitlement</th>' +
+        '<th>Carry-forward</th><th>Frequency</th><th class="num">CF max</th></tr></thead><tbody>';
+      verts.forEach(function (v) {
+        leavePolicyHtml += '<tr data-vert-row="' + escapeHtml(v.vertical_name) + '"><td><strong>' + escapeHtml(v.vertical_name) + '</strong></td>' +
+          '<td class="num"><input class="form-input" type="number" min="0" step="0.5" data-vert-monthly style="max-width:80px" value="' +
+          escapeHtml(v.monthly_leave_days != null && v.monthly_leave_days !== '' ? v.monthly_leave_days : '') + '"></td>' +
+          '<td><label class="form-check"><input type="checkbox" data-vert-cf-enabled' + (v.carry_forward_enabled ? ' checked' : '') + '></label></td>' +
+          '<td><select class="form-select" data-vert-cf-freq style="max-width:120px">' +
+          '<option value="MONTHLY"' + (v.carry_forward_frequency === 'MONTHLY' ? ' selected' : '') + '>Monthly</option>' +
+          '<option value="YEARLY"' + (v.carry_forward_frequency !== 'MONTHLY' ? ' selected' : '') + '>Yearly</option></select></td>' +
+          '<td class="num"><input class="form-input" type="number" min="0" step="0.5" data-vert-cf-max style="max-width:80px" value="' +
+          escapeHtml(String(v.carry_forward_max_days != null ? v.carry_forward_max_days : 0)) + '"></td></tr>';
+      });
+      leavePolicyHtml += '</tbody></table></div>' +
+        '<p class="hint">Carry-forward applies only when the checkbox is on <strong>and</strong> CF max is set. ' +
+        'Monthly CF flows through attendance; yearly CF applies at leave-year balance grant (Settings only - not leave-type admin).</p>' +
+        '<p class="hint">Changing policy does not rewrite historical leave requests or past balance rows; current-year entitlement syncs upward when policy increases.</p>' +
+        '<button type="button" class="btn btn-secondary" id="btn-save-leave-policy" style="margin-top:12px">Save leave policy</button></div>';
+
+      var welcomeHtml = '<div class="card"><h2>Welcome messaging</h2>' +
+        '<p class="hint">Welcome email copy is edited under <strong>Content templates</strong> below. ' +
+        'Toggle automatic send on login creation in the email toggles section.</p>' +
+        '<p class="hint">Welcome email on create: ' + (welcome.email_welcome_enabled ? 'enabled' : 'disabled') + '</p></div>';
+
+      var emailHtml = '<div class="card" style="margin-top:16px"><h2>Email &amp; welcome toggles</h2>' +
+        '<p class="hint">When disabled, emails are skipped but rows still appear in Notifications → Email log as SKIPPED where applicable.</p>';
+      email.forEach(function (row) {
+        if (row.type === 'boolean') {
+          emailHtml += '<label class="form-check" style="display:block;margin:8px 0">' +
+            '<input type="checkbox" data-email-key="' + escapeHtml(row.key) + '"' + (row.value ? ' checked' : '') + '> ' +
+            escapeHtml(row.label) + '</label>';
+        } else {
+          var inputType = row.type === 'string' ? 'text' : 'email';
+          emailHtml += '<div class="form-group"><label class="form-label" for="set-' + escapeHtml(row.key) + '">' +
+            escapeHtml(row.label) + '</label>' +
+            '<input class="form-input" id="set-' + escapeHtml(row.key) + '" data-email-key="' + escapeHtml(row.key) + '" type="' + inputType + '" value="' +
+            escapeHtml(row.value || '') + '"></div>';
+        }
+      });
+      emailHtml += '</div>';
+
+      var modHtml = '<div class="card" style="margin-top:16px"><h2>HRMS module access by role</h2>' +
+        '<p class="hint">Control which sidebar areas each role can see and use (Employee, Manager, HR, Admin). ' +
+        'OWNER always has full access. Users should refresh after you save. This cannot grant modules outside a role’s built-in scope.</p>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
+      modFeatures.forEach(function (f) {
+        modHtml += '<th title="' + escapeHtml(f.id) + '">' + escapeHtml(f.label) + '</th>';
+      });
+      modHtml += '</tr></thead><tbody>';
+      modMatrix.forEach(function (row) {
+        modHtml += '<tr><td><strong>' + escapeHtml(row.role) + '</strong></td>';
+        modFeatures.forEach(function (f) {
+          var on = row.modules && row.modules[f.id];
+          modHtml += '<td><label class="form-check"><input type="checkbox" data-mod-role="' + escapeHtml(row.role) +
+            '" data-mod-id="' + escapeHtml(f.id) + '"' + (on ? ' checked' : '') + '></label></td>';
+        });
+        modHtml += '</tr>';
+      });
+      modHtml += '</tbody></table></div></div>';
+
+      var roleHtml = '<div class="card" style="margin-top:16px"><h2>New login defaults (self-service)</h2>' +
+        '<p class="hint">Default download / upload / payslip / leave flags for each role when a user login is created. ' +
+        'Per-employee overrides remain on the employee profile (Login &amp; role tab). Upload applies to the employee&apos;s own profile only.</p>' +
+        '<div class="table-wrap table-wrap--contain table-wrap--scroll-hint settings-matrix-wrap">' +
+        '<table class="data-table settings-matrix-table"><thead><tr><th>Role</th>';
+      features.forEach(function (f) {
+        roleHtml += '<th>' + escapeHtml(f.label) + '</th>';
+      });
+      roleHtml += '</tr></thead><tbody>';
+      matrix.forEach(function (row) {
+        roleHtml += '<tr><td><strong>' + escapeHtml(row.role) + '</strong></td>';
+        features.forEach(function (f) {
+          var on = row.flags && row.flags[f.id];
+          roleHtml += '<td><label class="form-check"><input type="checkbox" data-role="' + escapeHtml(row.role) +
+            '" data-feat="' + escapeHtml(f.id) + '"' + (on ? ' checked' : '') + '></label></td>';
+        });
+        roleHtml += '</tr>';
+      });
+      roleHtml += '</tbody></table></div></div>';
+
+      var templates = data.content_templates || [];
+      var tplHtml = '<div class="card" style="margin-top:16px"><h2>Content &amp; document templates</h2>' +
+        '<p class="hint">Edit email bodies and instruction text below. PDF layouts used across HRMS are listed for reference; ' +
+        'they are generated from HTML in code (not uploaded PDF files). Email wording applies when letters are sent; ' +
+        're-send a letter after changing ATS email templates.</p>';
+      if (!templates.length) {
+        tplHtml += '<p class="alert alert-warning">Template rows are missing from the Settings sheet. ' +
+          'Open the spreadsheet → run <strong>HRMS → Database setup</strong> (or run <span class="mono">runDatabaseSetupFromEditor</span> in Apps Script), then refresh this page.</p>';
+      }
+      templates.forEach(function (tpl) {
+        var isPdf = tpl.kind === 'pdf_layout';
+        tplHtml += '<div class="template-block" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border,#e2e8f0)">' +
+          '<h3 style="margin:0 0 6px;font-size:1rem">' + escapeHtml(tpl.label) +
+          (isPdf ? ' <span class="badge badge-applied">PDF layout</span>' : '') + '</h3>' +
+          '<p class="hint" style="margin:0 0 8px">' + escapeHtml(tpl.description || '') + '</p>';
+        if (isPdf && tpl.managedIn) {
+          tplHtml += '<p class="hint" style="margin:0 0 8px">Maintained in: <span class="mono">' +
+            escapeHtml(tpl.managedIn) + '</span>. Layout changes require a developer deploy; logos follow payroll vertical rules.</p>';
+        }
+        if (tpl.placeholders && tpl.placeholders.length) {
+          tplHtml += '<p class="hint" style="margin:0 0 8px">' + (isPdf ? 'Includes: ' : 'Placeholders: ') +
+            escapeHtml(tpl.placeholders.join(', ')) + '</p>';
+        }
+        if (!isPdf) {
+          var fields = tpl.fields || {};
+          if (fields.subject !== undefined) {
+            tplHtml += '<div class="form-group"><label class="form-label">Subject</label>' +
+              '<input class="form-input" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="subject" type="text" value="' +
+              escapeHtml(fields.subject || '') + '"></div>';
+          }
+          if (fields.body !== undefined) {
+            tplHtml += '<div class="form-group"><label class="form-label">Body</label>' +
+              '<textarea class="form-input" rows="8" data-tpl-id="' + escapeHtml(tpl.id) + '" data-tpl-part="body">' +
+              escapeHtml(fields.body || '') + '</textarea></div>';
+          }
+        }
+        tplHtml += '</div>';
+      });
+      tplHtml += '</div>';
+
+      body.innerHTML = leavePolicyHtml + welcomeHtml + emailHtml + tplHtml + modHtml + roleHtml +
+        '<div class="form-actions" style="margin-top:16px">' +
+        '<button type="button" class="btn btn-primary" id="btn-save-settings">Save settings</button>' +
+        '<span class="hint" id="settings-save-hint"></span></div>';
+
+      var btnLp = $('btn-save-leave-policy');
+      if (btnLp) {
+        btnLp.addEventListener('click', function () {
+          var verticals = [];
+          try {
+          Array.prototype.forEach.call(body.querySelectorAll('[data-vert-row]'), function (tr) {
+            var name = tr.getAttribute('data-vert-row');
+            var cfOn = tr.querySelector('[data-vert-cf-enabled]').checked;
+            var cfMax = tr.querySelector('[data-vert-cf-max]').value;
+            if (cfOn && (!cfMax || Number(cfMax) <= 0)) {
+              throw new Error('Set CF max (days) for ' + name + ' when carry-forward is enabled.');
+            }
+            verticals.push({
+              vertical_name: name,
+              monthly_leave_days: tr.querySelector('[data-vert-monthly]').value,
+              carry_forward_enabled: cfOn,
+              carry_forward_frequency: tr.querySelector('[data-vert-cf-freq]').value,
+              carry_forward_max_days: cfOn ? cfMax : 0
+            });
+          });
+          } catch (valErr) {
+            showToast(valErr.message || 'Invalid carry-forward settings', 'error');
+            return;
+          }
+          callServer('apiLeaveSavePolicySettings', {
+            global: {
+              leave_year_mode: $('lp-year-mode').value,
+              leave_join_half_from_day: $('lp-join-half-from').value,
+              leave_join_half_to_day: $('lp-join-half-to').value,
+              leave_join_grant_after_day: $('lp-join-cut').value
+            },
+            verticals: verticals
+          }, { button: btnLp, loadingText: 'Saving…' }).then(function (next) {
+            settingsState.leavePolicy = next;
+            showToast('Leave policy saved', 'success');
+          }).catch(function (err) {
+            showToast(err.message || 'Save failed', 'error');
+          });
+        });
+      }
+
+      $('btn-save-settings').addEventListener('click', function () {
+        var btn = $('btn-save-settings');
+        var emailPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-email-key]'), function (el) {
+          var key = el.getAttribute('data-email-key');
+          if (el.type === 'checkbox') emailPatch[key] = el.checked;
+          else emailPatch[key] = el.value;
+        });
+        var rolePatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-role][data-feat]'), function (el) {
+          var role = el.getAttribute('data-role');
+          var feat = el.getAttribute('data-feat');
+          if (!rolePatch[role]) rolePatch[role] = {};
+          rolePatch[role][feat] = el.checked;
+        });
+        var modPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-mod-role][data-mod-id]'), function (el) {
+          var role = el.getAttribute('data-mod-role');
+          var mid = el.getAttribute('data-mod-id');
+          if (!modPatch[role]) modPatch[role] = {};
+          modPatch[role][mid] = el.checked;
+        });
+        var tplPatch = {};
+        Array.prototype.forEach.call(body.querySelectorAll('[data-tpl-id][data-tpl-part]'), function (el) {
+          var id = el.getAttribute('data-tpl-id');
+          var part = el.getAttribute('data-tpl-part');
+          if (!tplPatch[id]) tplPatch[id] = {};
+          tplPatch[id][part] = el.value;
+        });
+        callServer('apiSaveAdminSettings', {
+          email: emailPatch,
+          role_modules: modPatch,
+          role_access: rolePatch,
+          content_templates: tplPatch
+        }, {
+          button: btn, loadingText: 'Saving…'
+        }).then(function (next) {
+          settingsState.data = next;
+          showToast('Settings saved', 'success');
+        }).catch(function (err) {
+          showToast(err.message || 'Save failed', 'error');
+        });
+      });
+    }
+  });
+})();
+</script>

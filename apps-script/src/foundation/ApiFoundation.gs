@@ -1,15 +1,67 @@
 /**
- * Client-callable API — foundation endpoints only.
+ * Client-callable API - foundation endpoints only.
  */
 
 /** Allowlisted module UI partials for lazy load (shell stays lean). */
 var HRMS_MODULE_UI_FILES_ = {
-  employee: ['employee/EmployeePages', 'employee/EmployeeClient'],
+  employee: ['employee/EmployeePages', 'employee/EmployeeClient', 'employee/EmployeeFieldDefsClient', 'employee/EmployeeMandatoryFieldsClient'],
   leave: ['leave/LeaveUi', 'leave/LeaveClient'],
   payroll: ['payroll/PayrollClient'],
+  'payroll-attendance': ['payroll/AttendanceClient', 'payroll/FormTClient', 'payroll/HolidayCalendarClient'],
+  'payroll-structure': ['payroll/SalaryStructureClient'],
+  'payroll-statement': ['payroll/SalaryStatementClient'],
   ats: ['ats/AtsClient'],
-  notifications: ['notifications/NotificationClient']
+  notifications: ['notifications/NotificationClient'],
+  admin: ['ui/SettingsClient']
 };
+
+var MODULE_UI_CACHE_TTL_SEC_ = 21600;
+var MODULE_UI_CACHE_MAX_CHARS_ = 95000;
+
+function moduleUiCacheKey_(moduleId) {
+  var ver = (typeof HRMS !== 'undefined' && HRMS.CLIENT_ASSETS_VERSION)
+    ? String(HRMS.CLIENT_ASSETS_VERSION)
+    : '1';
+  return 'hrms_mod_ui_' + ver + '_' + String(moduleId || '').toLowerCase();
+}
+
+function readModuleUiFromFiles_(files) {
+  var parts = [];
+  var missing = [];
+  for (var i = 0; i < files.length; i++) {
+    try {
+      parts.push(HtmlService.createHtmlOutputFromFile(files[i]).getContent());
+    } catch (fileErr) {
+      missing.push(files[i]);
+      Logger.log('readModuleUiFromFiles_: skipped ' + files[i] + ': ' +
+        (fileErr && fileErr.message ? fileErr.message : fileErr));
+    }
+  }
+  return { html: parts.join('\n'), missingFiles: missing };
+}
+
+function loadModuleUiPayload_(moduleId, files) {
+  var cacheKey = moduleUiCacheKey_(moduleId);
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get(cacheKey);
+    if (cached) {
+      return { html: cached, missingFiles: [], cacheHit: true };
+    }
+  } catch (cacheReadErr) {
+    Logger.log('loadModuleUiPayload_ cache read: ' + (cacheReadErr.message || cacheReadErr));
+  }
+  var built = readModuleUiFromFiles_(files);
+  if (built.html && built.html.length <= MODULE_UI_CACHE_MAX_CHARS_) {
+    try {
+      CacheService.getScriptCache().put(cacheKey, built.html, MODULE_UI_CACHE_TTL_SEC_);
+    } catch (cachePutErr) {
+      Logger.log('loadModuleUiPayload_ cache put: ' + (cachePutErr.message || cachePutErr));
+    }
+  }
+  built.cacheHit = false;
+  return built;
+}
 
 /** @return {Object} */
 function apiGetAppBootstrap(sessionToken) {
@@ -32,9 +84,9 @@ function apiGetAppBootstrap(sessionToken) {
 
     var nav = [];
     if (session.authorized) {
-      // Reuse resolved session — do not call requireAuth()/resolveSession again.
+      // Reuse resolved session - do not call requireAuth()/resolveSession again.
       PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
-      nav = PermissionService.getNavForRole(session.role);
+      nav = PermissionService.getNavForSession(session);
     }
 
     // Active Google identity only (skip effective-user diagnostics on hot path).
@@ -65,7 +117,10 @@ function apiGetAppBootstrap(sessionToken) {
         reason: session.reason,
         message: session.message,
         demo: !!session.demo,
-        authRequired: !!session.authRequired
+        authRequired: !!session.authRequired,
+        access: session.access || (typeof UserAccessService !== 'undefined'
+          ? UserAccessService.getFlagsForSession(session)
+          : null)
       },
       auth: {
         path: activeEmail ? 'GOOGLE' : (session.authorized && session.email ? 'OTP' : 'NONE'),
@@ -77,7 +132,11 @@ function apiGetAppBootstrap(sessionToken) {
         timezone: timezone,
         configured: configured,
         configError: configError,
-        mode: mode
+        mode: mode,
+        clientAssetsVersion: (typeof HRMS !== 'undefined' && HRMS.CLIENT_ASSETS_VERSION)
+          ? HRMS.CLIENT_ASSETS_VERSION
+          : '1',
+        tempDemoLoginEnabled: configured && ConfigService.isTempDemoLoginEnabled()
       },
       navigation: nav,
       phase: 'foundation'
@@ -99,19 +158,23 @@ function apiGetAppBootstrap(sessionToken) {
  */
 function apiGetModuleUi(moduleId, sessionToken) {
   return hrmsRun_(function () {
-    PermissionService.require(HRMS.ACTIONS.ACCESS_APP);
+    var session = AuthService.requireAuth();
+    PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
     var id = String(moduleId || '').trim().toLowerCase();
+    if (id === 'ats') {
+      PermissionService.require(HRMS.ACTIONS.ATS_ACCESS, {}, session);
+    }
     var files = HRMS_MODULE_UI_FILES_[id];
     if (!files) {
       throw validationError_('Unknown module UI: ' + id);
     }
     var t0 = Date.now();
-    var parts = [];
-    for (var i = 0; i < files.length; i++) {
-      parts.push(HtmlService.createHtmlOutputFromFile(files[i]).getContent());
-    }
+    var payload = loadModuleUiPayload_(id, files);
     HrmsPerf.log('apiGetModuleUi:' + id, Date.now() - t0);
-    return { moduleId: id, html: parts.join('\n') };
+    if (HrmsPerf.enabled() && HrmsPerf.mark) {
+      HrmsPerf.mark(payload.cacheHit ? 'moduleUiCacheHit' : 'moduleUiCacheMiss');
+    }
+    return { moduleId: id, html: payload.html, missingFiles: payload.missingFiles || [] };
   }, sessionToken);
 }
 
@@ -149,9 +212,52 @@ function apiVerifyAuthOtp(email, code, sessionToken) {
         employee_id: session.employee_id,
         role: session.role,
         displayName: session.displayName,
-        demo: !!session.demo
+        demo: !!session.demo,
+        access: session.access || (typeof UserAccessService !== 'undefined'
+          ? UserAccessService.getFlagsForSession(session)
+          : null)
       },
-      navigation: PermissionService.getNavForRole(session.role)
+      navigation: PermissionService.getNavForSession(session)
+    };
+  }, sessionToken);
+}
+
+/** TEMP: User ID + password login (no OTP). @return {Object} */
+function apiVerifyTempDemoLogin(userId, password, sessionToken) {
+  return hrmsRun_(function () {
+    try {
+      ConfigService.getSpreadsheetId();
+    } catch (e) {
+      throw configurationError_('HRMS database is not configured.');
+    }
+    if (!ConfigService.isTempDemoLoginEnabled()) {
+      throw validationError_('Demo login is not available.', { reason: 'DISABLED' });
+    }
+    var result = TempDemoAuthService.verifyLogin(userId, password);
+    if (!result.ok) {
+      throw validationError_(result.message, { reason: result.reason });
+    }
+    HRMS_REQUEST_SESSION_TOKEN_ = result.sessionToken || '';
+    var session = AuthService.resolveSession({ email: result.email, sessionToken: result.sessionToken });
+    if (!session.authorized) {
+      throw authorizationError_(session.message || 'Access denied.');
+    }
+    PermissionService.require(HRMS.ACTIONS.ACCESS_APP, {}, session);
+    return {
+      sessionToken: result.sessionToken,
+      expiresInSeconds: result.expiresInSeconds,
+      session: {
+        authorized: session.authorized,
+        email: session.email,
+        employee_id: session.employee_id,
+        role: session.role,
+        displayName: session.displayName,
+        demo: !!session.demo,
+        access: session.access || (typeof UserAccessService !== 'undefined'
+          ? UserAccessService.getFlagsForSession(session)
+          : null)
+      },
+      navigation: PermissionService.getNavForSession(session)
     };
   }, sessionToken);
 }
@@ -199,7 +305,7 @@ function apiRunDatabaseSetup(spreadsheetId, sessionToken) {
   }, sessionToken);
 }
 
-/** Role-scoped home dashboard — immediate cards only (unread + leave). */
+/** Role-scoped home dashboard - immediate cards only (unread + leave). */
 function apiGetHomeDashboard(sessionToken) {
   return hrmsRun_(function () {
     var session = PermissionService.require(HRMS.ACTIONS.ACCESS_APP);
@@ -283,7 +389,23 @@ function apiGetSchemaInfo(sessionToken) {
   }, sessionToken);
 }
 
-/** Foundation self-test — run from Apps Script editor. */
+/** @return {Object} */
+function apiGetAdminSettings(sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AdminSettingsService.getSettings(session);
+  }, sessionToken);
+}
+
+/** @return {Object} */
+function apiSaveAdminSettings(payload, sessionToken) {
+  return hrmsRun_(function () {
+    var session = AuthService.requireAuth();
+    return AdminSettingsService.saveSettings(session, payload || {});
+  }, sessionToken);
+}
+
+/** Foundation self-test - run from Apps Script editor. */
 function runFoundationSelfTest() {
   var results = [];
   function check(name, fn) {

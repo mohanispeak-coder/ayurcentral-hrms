@@ -1,0 +1,17 @@
+{
+  "name": "AyurCentral HRMS",
+  "install": "bash scripts/cloud-agent-install.sh",
+  "ports": [
+    {
+      "name": "HRMS shell smoke",
+      "port": 8765
+    }
+  ],
+  "terminals": [
+    {
+      "name": "HRMS smoke UI",
+      "command": "python3 -m http.server 8765 --directory tests/fixtures --bind 0.0.0.0",
+      "description": "Serves tests/fixtures/hrms-shell-smoke.html for local shell UI checks without Google Apps Script."
+    }
+  ]
+}

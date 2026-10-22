@@ -107,6 +107,12 @@ function loadApp(controller) {
     setItem: function (k, v) { store[k] = String(v); },
     removeItem: function (k) { delete store[k]; }
   };
+  var localStore = {};
+  var localStorage = {
+    getItem: function (k) { return localStore.hasOwnProperty(k) ? localStore[k] : null; },
+    setItem: function (k, v) { localStore[k] = String(v); },
+    removeItem: function (k) { delete localStore[k]; }
+  };
 
   controller.calls = [];
   controller.success = null;
@@ -147,6 +153,7 @@ function loadApp(controller) {
     document: document,
     google: { script: { run: runObj } },
     sessionStorage: sessionStorage,
+    localStorage: localStorage,
     Promise: Promise,
     Date: Date,
     Array: Array,
@@ -328,6 +335,88 @@ function runAsync() {
     return App.callServer('apiFoo', { button: 'not-a-dom-node', loadingText: 'x' }).then(function () {
       var last = ctrl.calls[0] && ctrl.calls[0].args && ctrl.calls[0].args[0];
       check('plain object with string button is payload', last && last.button === 'not-a-dom-node');
+    });
+  }).then(function () {
+    ctrl.mode = 'success';
+    ctrl.result = { ok: true, data: 'x' };
+    ctrl.calls = [];
+    App.setSessionToken('otp_session_token_demo');
+    return App.callServer('apiAtsGetDashboard', { loadingText: 'Working…' }).then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('loadingText-only opts are not server args', args && args.length === 1 && args[0] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.mode = 'success';
+    ctrl.result = { ok: true, data: [] };
+    ctrl.calls = [];
+    App.setSessionToken('otp_session_token_demo');
+    return App.callServer('apiAtsListJobs', { q: 'test' }, { loadingText: 'Working…' }).then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('list jobs keeps query and OTP token', args && args.length === 2 && args[0].q === 'test' && args[1] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.mode = 'success';
+    ctrl.result = { ok: true, data: { html: '' } };
+    ctrl.calls = [];
+    App.setSessionToken('otp_session_token_demo');
+    var modules = ['employee', 'leave', 'payroll', 'ats', 'notifications', 'admin'];
+    var chain = Promise.resolve();
+    modules.forEach(function (mid) {
+      chain = chain.then(function () {
+        ctrl.calls = [];
+        return App.callServer('apiGetModuleUi', mid).then(function () {
+          var args = ctrl.calls[0] && ctrl.calls[0].args;
+          check('module UI ' + mid + ' keeps id + OTP token',
+            args && args.length === 2 && args[0] === mid && args[1] === 'otp_session_token_demo');
+        });
+      });
+    });
+    return chain;
+  }).then(function () {
+    ctrl.mode = 'success';
+    ctrl.result = { ok: true, data: { employee_id: 'EMP001' } };
+    ctrl.calls = [];
+    App.setSessionToken('otp_session_token_demo');
+    return App.callServer('apiGetEmployee', 'EMP001').then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('employee id is not stolen as session token',
+        args && args[0] === 'EMP001' && args[1] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.calls = [];
+    return App.callServer('apiGetPayrollRun', 'PRUN1').then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('payroll run id is not stolen as session token',
+        args && args[0] === 'PRUN1' && args[1] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.calls = [];
+    return App.callServer('apiAtsGetJob', 'JOB1').then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('job id is not stolen as session token',
+        args && args[0] === 'JOB1' && args[1] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.calls = [];
+    return App.callServer('apiLeaveGetCalendar', 2026, 9, '').then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('empty string business arg preserved before OTP token',
+        args && args.length === 4 && args[0] === 2026 && args[1] === 9 && args[2] === '' && args[3] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.calls = [];
+    return App.callServer('apiLeaveApprove', 'LR1', 'ok').then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('two string args keep OTP token last',
+        args && args.length === 3 && args[0] === 'LR1' && args[1] === 'ok' && args[2] === 'otp_session_token_demo');
+    });
+  }).then(function () {
+    ctrl.calls = [];
+    var holQuery = { calendar_year: 2026, scope: 'ALL' };
+    return App.callServer('apiHolidayList', holQuery, null).then(function () {
+      var args = ctrl.calls[0] && ctrl.calls[0].args;
+      check('null action opts are not sent as sessionToken',
+        args && args.length === 2 && args[0] === holQuery && args[1] === 'otp_session_token_demo');
     });
   }).then(function () {
     ctrl.mode = 'throw';

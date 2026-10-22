@@ -150,17 +150,35 @@ const managerRec = { employee_id: 'EMP002', display_name: 'Mo Manager', email: '
 {
   const cancelledEmp = E.payloads.leaveCancelled(Object.assign({ display_name: 'Ada Employee' }, leaveReq), employeeRec, 'HR');
   check('NTF-leave-cancel-emp', cancelledEmp.type === 'LEAVE_CANCELLED' && cancelledEmp.recipient_employee_id === 'EMP003');
+  check('NTF-leave-cancel-emp-route', cancelledEmp.action_route === 'my-leave');
   const cancelledMgr = E.payloads.leaveCancelled(Object.assign({ display_name: 'Ada Employee' }, leaveReq), managerRec, 'HR');
   check('NTF-leave-cancel-mgr', cancelledMgr.recipient_employee_id === 'EMP002');
-  check('NTF-leave-submit-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, managerRec).action_route === 'leave-approvals');
+  check('NTF-leave-cancel-mgr-route', cancelledMgr.action_route === 'leave-approvals');
+  check('NTF-leave-submit-mgr-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, managerRec).action_route === 'leave-approvals');
+  check('NTF-leave-submit-hr-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, hr, { audience: 'hr' }).action_route === 'leave-admin');
+  check('NTF-leave-submit-emp-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, employeeRec).action_route === 'my-leave');
+  check('NTF-leave-approved-route', E.payloads.leaveApproved(leaveReq, employeeRec).action_route === 'my-leave');
+  check('NTF-leave-rejected-route', E.payloads.leaveRejected(leaveReq, employeeRec).action_route === 'my-leave');
+  check('NTF-leave-approved-interim-route', E.payloads.leaveApproved(leaveReq, employeeRec, {
+    title: 'Pending manager approval',
+    message: 'Your leave has been approved by HR and is awaiting Reporting Manager approval.'
+  }).action_route === 'my-leave');
+  check('NTF-leave-manager-pending-route', E.payloads.leaveSubmitted(leaveReq, employeeRec, managerRec, {
+    audience: 'manager',
+    title: 'Leave awaiting your approval',
+    message: 'Leave request from Ada Employee is awaiting your approval.'
+  }).action_route === 'leave-approvals');
+  check('NTF-leave-my-leave-params', E.payloads.leaveApproved(leaveReq, employeeRec).action_params.leaveRequestId === 'LR-100');
 }
 
 // --- payroll / payslip no net ---
 {
   const run = { payroll_run_id: 'PR-1', period_year: 2026, period_month: 8 };
-  const rec = { payroll_record_id: 'PREC-1', employee_id: 'EMP003', net_pay: 99999 };
+  const rec = { payroll_record_id: 'PREC-1', employee_id: 'EMP003', net_pay: 99999, payslip_document_id: 'DOC-PS-1' };
   const slip = E.payloads.payslipAvailable(rec, employeeRec, run);
-  check('NTF-payslip-subject', slip.email_subject === 'Payslip available — August 2026');
+  check('NTF-payslip-subject', slip.email_subject === 'Payslip available - August 2026');
+  check('NTF-payslip-doc-id', slip.payslip_document_id === 'DOC-PS-1');
+  check('NTF-payslip-email-pdf-copy', String(slip.email_body).indexOf('attached to this email as a PDF') >= 0);
   check('NTF-payslip-no-net-title', !E.payslipContainsNet(slip.title) && slip.title.indexOf('99999') < 0);
   check('NTF-payslip-no-net-body', !E.payslipContainsNet(slip.email_body) && String(slip.email_body).indexOf('99999') < 0);
   check('NTF-payslip-route', slip.action_route === 'my-payslips');

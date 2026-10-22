@@ -1,5 +1,5 @@
 /**
- * Pure ATS rules — job lifecycle, pipeline, RBAC helpers, public sanitization.
+ * Pure ATS rules - job lifecycle, pipeline, RBAC helpers, public sanitization.
  * No SpreadsheetApp / AuthService calls. Safe for Node unit tests.
  */
 var ATS = ATS || {};
@@ -219,19 +219,71 @@ var AtsEngine = (function () {
   }
 
   function roleOf(session) {
-    return upper_(session && session.role);
+    var role = session && session.role;
+    if (typeof PermissionService !== 'undefined' && PermissionService.normalizeUserRole) {
+      return PermissionService.normalizeUserRole(role);
+    }
+    return upper_(role);
+  }
+
+  function pad2_(n) {
+    n = String(Number(n) || 0);
+    return n.length < 2 ? '0' + n : n;
+  }
+
+  /**
+   * Accept DD/MM/YYYY (preferred in bulk templates), ISO YYYY-MM-DD, or Date values.
+   * @return {{ ok: boolean, iso: string, error: string }}
+   */
+  function parseClosingDate(value) {
+    if (value === null || value === undefined || value === '') {
+      return { ok: true, iso: '', error: '' };
+    }
+    if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+      return {
+        ok: true,
+        iso: value.getFullYear() + '-' + pad2_(value.getMonth() + 1) + '-' + pad2_(value.getDate()),
+        error: ''
+      };
+    }
+    var s = trim_(value);
+    var dmyHyphen = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dmyHyphen) {
+      s = dmyHyphen[1] + '/' + dmyHyphen[2] + '/' + dmyHyphen[3];
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      return { ok: true, iso: s.substring(0, 10), error: '' };
+    }
+    var dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+    if (dmy) {
+      return {
+        ok: true,
+        iso: dmy[3] + '-' + pad2_(dmy[2]) + '-' + pad2_(dmy[1]),
+        error: ''
+      };
+    }
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return {
+        ok: true,
+        iso: d.getFullYear() + '-' + pad2_(d.getMonth() + 1) + '-' + pad2_(d.getDate()),
+        error: ''
+      };
+    }
+    return { ok: false, iso: '', error: 'Closing date must be DD/MM/YYYY (e.g. 31/12/2026 or 31-12-2026).' };
   }
 
   function canAccessAts(session) {
     if (!session || !session.authorized) return false;
     var role = roleOf(session);
-    return role === 'ADMIN' || role === 'HR' || role === 'MANAGER';
+    // Keep in sync with PermissionService NAV / ACTIONS for Recruitment.
+    return role === 'OWNER' || role === 'ADMIN' || role === 'HR' || role === 'MANAGER';
   }
 
   function canManageAts(session) {
     if (!canAccessAts(session)) return false;
     var role = roleOf(session);
-    return role === 'ADMIN' || role === 'HR';
+    return role === 'OWNER' || role === 'ADMIN' || role === 'HR';
   }
 
   function isManager(session) {
@@ -309,9 +361,12 @@ var AtsEngine = (function () {
       errors.employment_type = 'Choose a valid employment type.';
     }
 
-    var close = trim_(payload.closing_date);
-    if (close && !/^\d{4}-\d{2}-\d{2}$/.test(close.substring(0, 10))) {
-      errors.closing_date = 'Closing date must be YYYY-MM-DD.';
+    var closeRaw = trim_(payload.closing_date);
+    var closingDateIso = '';
+    if (closeRaw) {
+      var closeParsed = parseClosingDate(closeRaw);
+      if (!closeParsed.ok) errors.closing_date = closeParsed.error || 'Closing date must be DD/MM/YYYY.';
+      else closingDateIso = closeParsed.iso;
     }
 
     ['description', 'responsibilities', 'requirements'].forEach(function (key) {
@@ -327,7 +382,12 @@ var AtsEngine = (function () {
       errors.employee_id = 'Jobs must not set employee_id.';
     }
 
-    return { ok: Object.keys(errors).length === 0, errors: errors, openings: isFinite(openings) && openings >= 1 ? Math.floor(openings) : 1 };
+    return {
+      ok: Object.keys(errors).length === 0,
+      errors: errors,
+      openings: isFinite(openings) && openings >= 1 ? Math.floor(openings) : 1,
+      closingDateIso: closingDateIso
+    };
   }
 
   function validatePublicApplyPayload(payload) {
@@ -365,6 +425,29 @@ var AtsEngine = (function () {
       email: email,
       phone: trim_(payload.phone)
     };
+  }
+
+  function validateInterviewSchedulePayload(payload) {
+    payload = payload || {};
+    var errors = {};
+    if (trim_(payload.notes).length > ATS.LIMITS.TEXT_MAX) {
+      errors.notes = 'Notes are too long.';
+    }
+    return { ok: Object.keys(errors).length === 0, errors: errors };
+  }
+
+  function forwardStageTargets(fromStage, pipeline) {
+    var from = upper_(fromStage);
+    var path = happyPath(pipeline);
+    var fromIdx = path.indexOf(from);
+    var out = [];
+    if (fromIdx >= 0) {
+      for (var i = fromIdx + 1; i < path.length; i++) out.push(path[i]);
+    }
+    ATS.TERMINAL_EXTRA.forEach(function (t) {
+      if (t !== from && out.indexOf(t) < 0) out.push(t);
+    });
+    return out;
   }
 
   function validateInterviewPayload(payload) {
@@ -507,6 +590,7 @@ var AtsEngine = (function () {
     assertPublicJobSafe: assertPublicJobSafe,
     findDuplicateApplication: findDuplicateApplication,
     canMoveStage: canMoveStage,
+    forwardStageTargets: forwardStageTargets,
     canAccessAts: canAccessAts,
     canManageAts: canManageAts,
     isManager: isManager,
@@ -516,9 +600,11 @@ var AtsEngine = (function () {
     canAccessCandidate: canAccessCandidate,
     canDownloadResume: canDownloadResume,
     canWriteInterview: canWriteInterview,
+    parseClosingDate: parseClosingDate,
     validateJobPayload: validateJobPayload,
     validatePublicApplyPayload: validatePublicApplyPayload,
     validateInterviewPayload: validateInterviewPayload,
+    validateInterviewSchedulePayload: validateInterviewSchedulePayload,
     allowedResumeMime: allowedResumeMime,
     computeKpis: computeKpis,
     sharePack: sharePack,
