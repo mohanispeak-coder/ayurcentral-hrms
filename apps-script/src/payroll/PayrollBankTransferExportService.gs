@@ -177,7 +177,7 @@ var PayrollBankTransferExportService = (function () {
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8eef3');
     sheet.setFrozenRows(1);
     var netCol = 5;
-    data.push(['TOTAL', '', '', '', netTotal, '', '']);
+    data.push(['TOTAL', '', '', '', netTotal, '', '', '']);
     sheet.getRange(2, 1, data.length, headers.length).setValues(data);
     sheet.getRange(data.length + 1, netCol).setNumberFormat('#,##0.00');
     sheet.getRange(2, netCol, data.length, 1).setNumberFormat('#,##0.00');
