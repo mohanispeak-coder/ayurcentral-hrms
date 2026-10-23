@@ -119,7 +119,8 @@ check('payroll-bank-transfer-export', /apiDownloadPayrollBankTransfer/.test(api)
   /PayrollBankTransferExportService/.test(read('payroll/PayrollBankTransferExportService.gs')) &&
   /btn-download-bank-transfer-xlsx/.test(client) &&
   /uniquePaymentId_/.test(read('payroll/PayrollBankTransferExportService.gs')) &&
-  /'Net pay'/.test(read('payroll/PayrollBankTransferExportService.gs')));
+  /'Net pay'/.test(read('payroll/PayrollBankTransferExportService.gs')) &&
+  /payrollCalculateDateParts_/.test(read('payroll/PayrollBankTransferExportService.gs')));
 check('salary-statement-total-row', /'TOTAL'/.test(read('payroll/SalaryStatementService.gs')) &&
   /sumNet/.test(read('payroll/SalaryStatementService.gs')));
 check('payroll-department-review', /departmentReview/.test(payroll) && /dept-review/.test(client) &&

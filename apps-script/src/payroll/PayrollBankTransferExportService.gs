@@ -26,20 +26,46 @@ var PayrollBankTransferExportService = (function () {
     return String(inputRow && inputRow.salary_hold || '').trim().toUpperCase() === 'YES';
   }
 
-  function daysInMonth_(year, month) {
-    return new Date(Number(year), Number(month), 0).getDate();
+  function toDate_(v) {
+    if (!v && v !== 0) return null;
+    if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) return v;
+    var s = String(v).trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
   }
 
-  /** Last calendar day of payroll month (used in unique payment reference). */
-  function payrollCreditDateParts_(run) {
-    var y = Number(run.period_year);
-    var m = Number(run.period_month);
-    var day = daysInMonth_(y, m);
-    return { day: day, month: m, year: y };
+  /** Calendar parts in org timezone from payroll calculate timestamp. */
+  function datePartsFromCalculatedAt_(value) {
+    var d = toDate_(value);
+    if (!d) return null;
+    var tz = ConfigService.getTimezone();
+    return {
+      day: Number(Utilities.formatDate(d, tz, 'd')),
+      month: Number(Utilities.formatDate(d, tz, 'M')),
+      year: Number(Utilities.formatDate(d, tz, 'yyyy'))
+    };
+  }
+
+  /** Date when this run was last calculated (run row, else latest record calculated_at). */
+  function payrollCalculateDateParts_(run, records) {
+    var parts = datePartsFromCalculatedAt_(run && run.calculated_at);
+    if (parts) return parts;
+    var latest = null;
+    (records || []).forEach(function (rec) {
+      var d = toDate_(rec.calculated_at);
+      if (!d) return;
+      if (!latest || d.getTime() > latest.getTime()) latest = d;
+    });
+    if (latest) return datePartsFromCalculatedAt_(latest);
+    throw validationError_(
+      'Payroll calculated date is missing. Run Calculate payroll again, then download the bank transfer file.'
+    );
   }
 
   /**
-   * First 3 letters of employee name (A–Z only) + DDMMYYYY, e.g. Rajesh + 28-Sep-2026 → RAJ28092026.
+   * First 3 letters of employee name (A–Z only) + DDMMYYYY from calculate date, e.g. RAJ28092026.
    */
   function uniquePaymentId_(displayName, dateParts) {
     var letters = String(displayName || '').replace(/[^a-zA-Z]/g, '').toUpperCase();
@@ -105,7 +131,7 @@ var PayrollBankTransferExportService = (function () {
       return String(a.employee_id).localeCompare(String(b.employee_id));
     });
 
-    var dateParts = payrollCreditDateParts_(run);
+    var dateParts = payrollCalculateDateParts_(run, records);
     var empCache = {};
     var headers = [
       'Emp Id',
