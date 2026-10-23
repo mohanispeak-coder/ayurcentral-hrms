@@ -10,6 +10,18 @@ var PayrollBankTransferExportService = (function () {
     return String(employeeId || '').trim().toUpperCase();
   }
 
+  function num_(v) {
+    var n = Number(v);
+    return isFinite(n) ? n : 0;
+  }
+
+  function round2_(n) {
+    if (typeof PayrollEngine !== 'undefined' && PayrollEngine.round2) {
+      return PayrollEngine.round2(n);
+    }
+    return Math.round(num_(n) * 100) / 100;
+  }
+
   function isSalaryHold_(inputRow) {
     return String(inputRow && inputRow.salary_hold || '').trim().toUpperCase() === 'YES';
   }
@@ -100,21 +112,26 @@ var PayrollBankTransferExportService = (function () {
       'Name',
       'Emp account number',
       'IFSC code',
+      'Net pay',
       'Company account number',
       'unique ID'
     ];
     var data = [];
+    var netTotal = 0;
 
     records.forEach(function (rec) {
       var empId = String(rec.employee_id || '');
       var inp = inputsByEmp[empId] || inputsByEmp[normEmpId_(empId)] || {};
       if (isSalaryHold_(inp)) return;
       var emp = loadEmployeeBank_(empId, empCache);
+      var netPay = round2_(rec.net_pay);
+      netTotal = round2_(netTotal + netPay);
       data.push([
         emp.employee_id,
         emp.display_name,
         emp.bank_account_number,
         emp.bank_ifsc,
+        netPay,
         '',
         uniquePaymentId_(emp.display_name, dateParts)
       ]);
@@ -131,7 +148,12 @@ var PayrollBankTransferExportService = (function () {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8eef3');
     sheet.setFrozenRows(1);
+    var netCol = 5;
+    data.push(['TOTAL', '', '', '', netTotal, '', '']);
     sheet.getRange(2, 1, data.length, headers.length).setValues(data);
+    sheet.getRange(data.length + 1, netCol).setNumberFormat('#,##0.00');
+    sheet.getRange(2, netCol, data.length, 1).setNumberFormat('#,##0.00');
+    sheet.getRange(data.length + 1, 1, 1, headers.length).setFontWeight('bold').setBackground('#f1f5f9');
     SpreadsheetApp.flush();
 
     var name = 'HRMS_Bank_Transfer_' + (run.payroll_run_id || 'run') + '.xlsx';
