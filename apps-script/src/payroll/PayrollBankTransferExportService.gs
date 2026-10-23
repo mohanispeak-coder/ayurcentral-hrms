@@ -139,6 +139,7 @@ var PayrollBankTransferExportService = (function () {
       'Emp account number',
       'IFSC code',
       'Net pay',
+      'Salary hold',
       'Company account number',
       'unique ID'
     ];
@@ -148,23 +149,24 @@ var PayrollBankTransferExportService = (function () {
     records.forEach(function (rec) {
       var empId = String(rec.employee_id || '');
       var inp = inputsByEmp[empId] || inputsByEmp[normEmpId_(empId)] || {};
-      if (isSalaryHold_(inp)) return;
+      var onHold = isSalaryHold_(inp);
       var emp = loadEmployeeBank_(empId, empCache);
       var netPay = round2_(rec.net_pay);
-      netTotal = round2_(netTotal + netPay);
+      if (!onHold) netTotal = round2_(netTotal + netPay);
       data.push([
         emp.employee_id,
         emp.display_name,
         emp.bank_account_number,
         emp.bank_ifsc,
         netPay,
+        onHold ? 'Hold' : 'Unhold',
         '',
         uniquePaymentId_(emp.display_name, dateParts)
       ]);
     });
 
     if (!data.length) {
-      throw validationError_('No employees available for bank transfer export (check salary holds and calculated rows).');
+      throw validationError_('No calculated payroll rows for bank transfer export. Run Calculate payroll first.');
     }
 
     var ss = SpreadsheetApp.create('HRMS Bank Transfer');
