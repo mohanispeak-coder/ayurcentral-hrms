@@ -156,6 +156,12 @@ function apiDownloadPayrollApprovalExport(runId, sessionToken) {
   }, sessionToken);
 }
 
+function apiDownloadPayrollBankTransfer(runId, sessionToken) {
+  return hrmsRun_(function () {
+    return PayrollService.downloadBankTransferExport(runId);
+  }, sessionToken);
+}
+
 function apiDownloadAttendanceRegisterTemplate(runId, verticalName, sessionToken) {
   return hrmsRun_(function () {
     return AttendanceBulkService.downloadTemplate(runId, verticalName);

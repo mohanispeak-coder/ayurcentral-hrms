@@ -718,6 +718,51 @@ var SalaryStatementService = (function () {
       body.push(padRowWidth_(line, ncol));
     });
 
+    if (rows.length) {
+      var sumRate = {};
+      var sumEarned = {};
+      var sumDed = {};
+      RATE_EARN_KEYS_.forEach(function (c) { sumRate[c.label] = 0; sumEarned[c.label] = 0; });
+      DED_KEYS_.forEach(function (c) { sumDed[c.label] = 0; });
+      var sumRateGross = 0;
+      var sumEarnedGross = 0;
+      var sumTotalDed = 0;
+      var sumNet = 0;
+      rows.forEach(function (r) {
+        var rate = r.rate || {};
+        var earned = r.earned || {};
+        var deductions = r.deductions || {};
+        RATE_EARN_KEYS_.forEach(function (c) {
+          sumRate[c.label] = round2_(sumRate[c.label] + Number(rate[c.label] || 0));
+          sumEarned[c.label] = round2_(sumEarned[c.label] + Number(earned[c.label] || 0));
+        });
+        DED_KEYS_.forEach(function (c) {
+          sumDed[c.label] = round2_(sumDed[c.label] + Number(deductions[c.label] || 0));
+        });
+        sumRateGross = round2_(sumRateGross + Number(r.rate_gross || 0));
+        sumEarnedGross = round2_(sumEarnedGross + Number(r.earned_gross || 0));
+        sumTotalDed = round2_(sumTotalDed + Number(r.total_deductions || 0));
+        sumNet = round2_(sumNet + Number(r.net_pay || 0));
+      });
+      var totalLine = ['', 'TOTAL', '', '', '', '', '', ''];
+      RATE_EARN_KEYS_.forEach(function (c) {
+        totalLine.push(dash_(sumRate[c.label]));
+      });
+      totalLine.push(dash_(sumRateGross));
+      totalLine.push('');
+      RATE_EARN_KEYS_.forEach(function (c) {
+        totalLine.push(dash_(sumEarned[c.label]));
+      });
+      totalLine.push(dash_(sumEarnedGross));
+      DED_KEYS_.forEach(function (c) {
+        totalLine.push(dash_(sumDed[c.label]));
+      });
+      totalLine.push(dash_(sumTotalDed));
+      totalLine.push(dash_(sumNet));
+      totalLine.push('');
+      body.push(padRowWidth_(totalLine, ncol));
+    }
+
     var all = [row1, row2, padRowWidth_(row3, ncol)].concat(body);
     var ss = SpreadsheetApp.create('Salary Statement');
     var fileId = ss.getId();

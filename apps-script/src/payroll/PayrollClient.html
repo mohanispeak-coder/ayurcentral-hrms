@@ -1735,8 +1735,10 @@
         html += '<p class="hint">Department breakdown appears after calculate.</p>';
       }
       if (st !== 'DRAFT') {
-        html += '<div class="primary-next" style="margin-top:12px"><button type="button" class="btn btn-secondary" id="btn-download-approval-xlsx">Download calculated payroll</button></div>';
-        html += '<p class="hint">Excel includes employee details, days, earnings (Basic, HRA, etc.), deductions (PF, ESIC, PT, etc.), and totals. Hold/release uses the buttons above.</p>';
+        html += '<div class="primary-next" style="margin-top:12px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-secondary" id="btn-download-approval-xlsx">Download calculated payroll</button> ' +
+          '<button type="button" class="btn btn-secondary" id="btn-download-bank-transfer-xlsx">Download bank transfer file</button></div>';
+        html += '<p class="hint">Calculated payroll Excel includes component breakup and a <strong>TOTAL</strong> row. Bank transfer file has account/IFSC and a unique ID (first 3 letters of name + payroll month end date DDMMYYYY). Company account column is left blank. Hold/release uses the buttons above.</p>';
       }
       html += '</div>';
       return html;
@@ -2638,6 +2640,20 @@
       if (approvalDl) approvalDl.addEventListener('click', function () {
         if (!setButtonLoading(approvalDl, 'Downloading...')) return;
         rpc('apiDownloadPayrollApprovalExport', [runId], approvalDl, 'Downloading...', $('pr-action-feedback'))
+          .then(function (file) {
+            if (!file || !file.base64) {
+              showToast('Download returned an empty file. Try Refresh, then download again.', 'error');
+              return;
+            }
+            downloadBlob(file);
+          })
+          .catch(function (err) { showToast((err && err.message) || 'Download failed', 'error'); });
+      });
+
+      var bankDl = $('btn-download-bank-transfer-xlsx');
+      if (bankDl) bankDl.addEventListener('click', function () {
+        if (!setButtonLoading(bankDl, 'Downloading...')) return;
+        rpc('apiDownloadPayrollBankTransfer', [runId], bankDl, 'Downloading...', $('pr-action-feedback'))
           .then(function (file) {
             if (!file || !file.base64) {
               showToast('Download returned an empty file. Try Refresh, then download again.', 'error');

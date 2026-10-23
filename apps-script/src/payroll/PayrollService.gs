@@ -288,6 +288,12 @@ var PayrollService = (function () {
     return PayrollApprovalExportService.downloadApprovalPack(runId);
   }
 
+  function downloadBankTransferExport(runId) {
+    requireHr_();
+    ensurePayrollRunSchema_();
+    return PayrollBankTransferExportService.downloadBankTransferPack(runId);
+  }
+
   function filterRecordsForPayslip_(runId, records) {
     var held = heldEmployeeIdMap_(runId);
     return (records || []).filter(function (r) {
@@ -2142,6 +2148,7 @@ var PayrollService = (function () {
     humanizeExceptionFlag: humanizeExceptionFlag_,
     setSalaryHold: setSalaryHold,
     downloadApprovalExport: downloadApprovalExport,
+    downloadBankTransferExport: downloadBankTransferExport,
     exportSpreadsheetXlsxForTemplate_: exportSpreadsheetXlsxForTemplate_
   };
 })();

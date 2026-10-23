@@ -288,7 +288,28 @@ var PayrollApprovalExportService = (function () {
         data.push(line);
       });
 
+      if (data.length) {
+        var totals = [];
+        for (var col = 0; col < headers.length; col++) totals[col] = 0;
+        totals[0] = 'TOTAL';
+        totals[1] = '';
+        totals[2] = '';
+        totals[3] = '';
+        totals[4] = '';
+        var sumFromCol = fixedHeaders.length;
+        for (var r = 0; r < data.length; r++) {
+          for (var c = sumFromCol; c < headers.length; c++) {
+            totals[c] = num_(totals[c]) + num_(data[r][c]);
+          }
+        }
+        data.push(totals);
+      }
+
       setSheetValues_(sheet, 2, 1, data);
+      if (data.length > 1) {
+        var totalRow = data.length + 1;
+        sheet.getRange(totalRow, 1, 1, headers.length).setFontWeight('bold').setBackground('#f1f5f9');
+      }
       sheet.getRange(1, 1).setNote(
         'Run: ' + (run.payroll_run_id || '') +
         ' · earn_* = earnings (Basic, HRA, etc.), ded_* = deductions (PF, ESIC, PT, etc.).'
