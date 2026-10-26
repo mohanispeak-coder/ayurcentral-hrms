@@ -1,26 +1,613 @@
-<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/><title>AyurCentral HRMS User Manual</title><style>
-@page { size: A4; margin: 16mm 14mm 18mm 14mm; }
-body { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 11pt; line-height: 1.55; color: #1a1a1a; }
-h1 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 18pt; color: #0d47a1; margin: 0 0 10px; page-break-after: avoid; }
-h2 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 14pt; color: #1565c0; margin: 22px 0 10px; border-bottom: 1px solid #b0c4de; padding-bottom: 4px; page-break-after: avoid; }
-h3 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 12pt; color: #222; margin: 16px 0 8px; page-break-after: avoid; }
-h4 { font-family: Cambria, "Times New Roman", Georgia, serif; font-size: 11pt; font-weight: bold; color: #333; margin: 12px 0 6px; page-break-after: avoid; }
-p { margin: 0 0 8px; }
-ul, ol { margin: 0 0 10px; padding-left: 20px; }
-li { margin-bottom: 4px; }
-.cover { text-align: center; padding: 36px 16px 44px; page-break-after: always; }
-.cover .brand { font-size: 26pt; font-weight: 700; color: #0d47a1; }
-.cover .sub { font-size: 13pt; color: #555; margin-top: 6px; }
-.toc { page-break-after: always; }
-.toc ol { line-height: 1.65; }
-table.data { width: 100%; border-collapse: collapse; font-size: 11pt; margin: 8px 0 14px; }
-table.data th, table.data td { border: 1px solid #bbb; padding: 5px 7px; vertical-align: top; }
-table.data th { background: #e3f2fd; font-weight: 600; }
-.tip { background: #f5f9ff; border-left: 4px solid #1976d2; padding: 8px 10px; margin: 10px 0; font-size: 10pt; }
-.warn { background: #fff8e6; border-left: 4px solid #f9a825; padding: 8px 10px; margin: 10px 0; font-size: 10pt; }
-.page-break { page-break-before: always; }
-.steps { counter-reset: step; list-style: none; padding-left: 0; }
-.steps li { counter-increment: step; margin-bottom: 8px; padding-left: 28px; position: relative; }
-.steps li::before { content: counter(step); position: absolute; left: 0; font-weight: 700; color: #1565c0; }
-footer { margin-top: 24px; font-size: 8.5pt; color: #777; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
-</style></head><body><div class='cover'><div class='brand'>AyurCentral HRMS</div><div class='sub'>Detailed User Manual</div><p style='margin-top:28px;font-size:15pt;font-weight:600'>For Admin, HR, Manager, and Employee</p></div><div class='toc'><h2>Table of contents</h2><ol><li>1. Introduction</li><li>2. Sign in and daily use</li><li>3. Roles and access</li><li>4. Menu and screens</li><li>5. Admin: Settings and system</li><li>6. HR: Employee records</li><li>6.1 Add one employee</li><li>6.2 Employee profile</li><li>6.3 Bulk upload</li><li>6.4 Mandatory fields</li><li>6.5 Custom fields</li><li>7. HR: Leave</li><li>8. HR: Attendance (Register and Form T)</li><li>9. HR: Payroll and salary</li><li>10. HR: Recruitment (ATS)</li><li>11. Manager tasks</li><li>12. Employee self-service</li><li>13. Notifications</li><li>14. Troubleshooting</li><li>Appendix A: Bulk upload columns</li><li>Appendix B: Mandatory field catalog</li><li>Appendix C: Attendance day codes</li><li>Appendix D: Full route list</li></ol></div><h2>1. Introduction</h2><h3>Dashboard (Main → Dashboard)</h3><p>The dashboard is the home page after sign-in. It shows counts and shortcuts based on your role (for example leave approvals for managers, payroll status for HR, your employee ID for staff). Use the sidebar to go to detailed screens.</p><p>AyurCentral HRMS is a browser-based Human Resource Management System. Your company uses it to keep employee records, process leave, record attendance, run payroll, and manage hiring.</p><p>This manual is written in simple English. It matches the screens and labels in your AyurCentral HRMS app.</p><h3>What you need</h3><ul><li>A computer or phone with a modern browser (Chrome recommended).</li><li>Your company Google account (work email).</li><li>The HRMS web app URL from IT or HR (usually ends with <code>/exec</code>).</li></ul><h2>2. Sign in and daily use</h2><h3>2.1 First visit</h3><ol class='steps'><li>Open the HRMS link in your browser.</li><li>Choose your Google work account when Google asks you to sign in.</li><li>Wait for the dashboard to load. The left side shows the menu.</li><li>If you see an error about access, your login is not set up yet. Contact Admin or HR.</li></ol><h3>2.2 Parts of the screen</h3><ul><li><strong>Sidebar (left):</strong> Sections such as Main, My Work, People, Time Off, Attendance, Payroll, Recruitment, System. Click a section name to expand or collapse it.</li><li><strong>Top bar:</strong> Page title, notification bell, your name and role, Sign out.</li><li><strong>Main page:</strong> Forms, tables, and buttons for the task you selected.</li><li><strong>Refresh:</strong> Many pages have a refresh control to reload data from the server.</li><li><strong>Ask HR:</strong> Floating help button to ask HR questions (when enabled).</li></ul><h3>2.3 Sign out</h3><p>Always click <strong>Sign out</strong> when you finish on a shared computer.</p><h3>2.4 After an app update</h3><p>Press <strong>Ctrl+Shift+R</strong> (Windows) or <strong>Cmd+Shift+R</strong> (Mac) once to hard refresh if menus or buttons look old.</p><div class='page-break'></div><h2>3. Roles and access</h2><p>Each user has a <strong>role</strong>. The role controls which menu items appear.</p><table class='data'><tr><th>Role</th><th>Typical access</th></tr><tr><td><strong>EMPLOYEE</strong></td><td>Dashboard; My Work (profile, leave, payslips if enabled). Cannot open company employee list or payroll admin.</td></tr><tr><td><strong>MANAGER</strong></td><td>Everything Employee has, plus My Team and Leave Approvals. May see Recruitment if Admin allows.</td></tr><tr><td><strong>HR</strong></td><td>People, leave admin, attendance, payroll, recruitment, notifications, settings (no full owner powers).</td></tr><tr><td><strong>ADMIN</strong></td><td>Same as HR plus full settings; Users screen may show &#x27;coming soon&#x27; in this build.</td></tr><tr><td><strong>OWNER</strong></td><td>Full access to all modules. Module checkboxes in Settings do not limit OWNER.</td></tr></table><div class='tip'>Admin can change which modules each role sees under <strong>System → Settings → HRMS module access by role</strong>. If a menu is missing, ask Admin before reporting a bug.</div><h2>4. Menu and screens</h2><p>The left menu is split into sections. Open a section to see pages inside it. The table below lists each page, who normally uses it, and what it is for.</p><h3>Main</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Dashboard</td><td>Owner, Admin, HR team, Managers, All staff</td><td>Use this page for dashboard tasks.</td></tr></table><h3>My Work</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>My Profile</td><td>Owner, Admin, HR team, Managers, All staff</td><td>Your employee record and the details you are allowed to see.</td></tr><tr><td>My Leave</td><td>Owner, Admin, HR team, Managers, All staff</td><td>Balances for the current leave year and your requests.</td></tr><tr><td>My Payslips</td><td>Owner, Admin, HR team, Managers, All staff</td><td>Your locked payslips. Amounts come from the payroll snapshot.</td></tr></table><h3>People</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Employees</td><td>Owner, Admin, HR team</td><td>Use this page for employees tasks.</td></tr><tr><td>Mandatory fields</td><td>Owner, Admin, HR team</td><td>Choose which employee fields are required on create and bulk upload.</td></tr><tr><td>My Team</td><td>Managers</td><td>Direct reports. Open a row to view work details.</td></tr></table><h3>Time Off</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Leave</td><td>Owner, Admin, HR team</td><td>Company leave requests and configurable leave types.</td></tr><tr><td>Leave Approvals</td><td>Owner, Admin, HR team, Managers</td><td>Submitted requests waiting for a decision.</td></tr></table><h3>Attendance</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Register</td><td>Owner, Admin, HR team</td><td>Monthly attendance register (Form XVII style): daily codes, summaries, and payroll day counts.</td></tr><tr><td>Form T</td><td>Owner, Admin, HR team</td><td>Statutory Form T Excel export per vertical for the selected payroll month.</td></tr></table><h3>Payroll</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Salary structure</td><td>Owner, Admin, HR team</td><td>Create reusable salary structure templates (vertical + component percentages) and assign them to employees.</td></tr><tr><td>Salary Statement</td><td>Owner, Admin, HR team</td><td>Monthly cost-to-company breakdown by employee from structure templates and CTC.</td></tr><tr><td>Payroll</td><td>Owner, Admin, HR team</td><td>Use this page for payroll tasks.</td></tr></table><h3>Recruitment</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Recruitment</td><td>Owner, Admin, HR team, Managers</td><td>Use this page for recruitment tasks.</td></tr><tr><td>Jobs</td><td>Owner, Admin, HR team, Managers</td><td>Create, publish, and share requisitions.</td></tr><tr><td>Candidates</td><td>Owner, Admin, HR team, Managers</td><td>Applicants for jobs you can access.</td></tr></table><h3>System</h3><table class='data'><tr><th>Screen</th><th>Who can open it</th><th>What you do here</th></tr><tr><td>Notifications</td><td>Owner, Admin, HR team</td><td>Use this page for notifications tasks.</td></tr><tr><td>Settings</td><td>Owner, Admin, HR team</td><td>Use this page for settings tasks.</td></tr><tr><td>Users (coming soon)</td><td>Owner, Admin</td><td>Use this page for users tasks.</td></tr></table><div class='page-break'></div><h2>5. Admin: Settings and system</h2><p>Go to <strong>System → Settings</strong>. Only HR and Admin roles see this in your export.</p><h3>Welcome messaging</h3><p>Turn email notifications on or off (leave, payroll, welcome mail, etc.). When off, the system may still log the event under Notifications as SKIPPED.</p><h3>Email &amp; welcome toggles</h3><p>Turn email notifications on or off (leave, payroll, welcome mail, etc.). When off, the system may still log the event under Notifications as SKIPPED.</p><h3>HRMS module access by role</h3><p>This table lists modules (Dashboard, Employees, Payroll, Attendance, etc.) against roles Employee, Manager, HR, Admin. Check a box to allow that role to see and use the module in the sidebar.</p><ol class='steps'><li>Change checkboxes as needed.</li><li>Scroll down and click <strong>Save settings</strong>.</li><li>Tell affected users to refresh the browser.</li></ol><h3>New login defaults (self-service)</h3><p>Sets default self-service rights when a new login is created: download documents, upload documents, payslips, leave. You can still change per employee later.</p><h3>Content templates</h3><p>Edit wording for welcome emails, bulk upload help text, and ATS offer letters. Use placeholders shown on the settings page.</p><h3>Notifications (System → Notifications)</h3><p>HR and Admin can read in-app notifications and review email log entries. Use this to confirm whether emails were sent or skipped.</p><div class='warn'><strong>Users</strong> menu is marked coming soon in your export. User roles are managed through your existing user setup (spreadsheet / admin process).</div><div class='page-break'></div><h2>6. HR: Employee records</h2><p>Open <strong>People → Employees</strong>. You can search by employee ID or name and filter by status, department, location, and vertical.</p><h3>Buttons on the Employees page</h3><ul><li><strong>Mandatory fields</strong> - open the checklist of required fields (if present in your build).</li><li><strong>Custom fields</strong> - define extra columns for profiles and bulk upload.</li><li><strong>Bulk upload</strong> - import many employees from Excel or CSV.</li><li><strong>Add employee</strong> - create one employee.</li><li><strong>Refresh</strong> - reload the directory list.</li></ul><h3>6.1 Add one employee</h3><ol class='steps'><li>Click <strong>Add employee</strong>.</li><li>Fill every field that has a red star (*). Stars follow your Mandatory fields settings.</li><li>Employee code must match your format (for example SAPL-0001, AOPL-0001, AOMS-0001).</li><li>Employment type is usually one of: PERMANENT, CONTRACT, INTERN, CONSULTANT.</li><li>Choose the correct <strong>vertical</strong> for the employee.</li><li>Bank: if you enter account number, IFSC is usually required (unless Mandatory fields say otherwise).</li><li>Click save. Fix any red error messages and try again.</li></ol><h3>6.2 Employee profile</h3><p>Click a row in the directory to open the profile. Your build includes these areas:</p><ul><li><strong>Personal</strong> - edit or view details in this section (HR permissions apply).</li><li><strong>Employment</strong> - edit or view details in this section (HR permissions apply).</li><li><strong>Payroll</strong> - edit or view details in this section (HR permissions apply).</li><li><strong>Documents</strong> - edit or view details in this section (HR permissions apply).</li><li><strong>Payslips</strong> - edit or view details in this section (HR permissions apply).</li><li><strong>Access</strong> - edit or view details in this section (HR permissions apply).</li></ul><p>HR can upload documents, change status (active/inactive), send welcome email, and manage app login access from the profile where those buttons appear.</p><h4>Fields on the employee form (your build)</h4><table class='data'><tr><th>Field</th><th>Label on screen</th></tr><tr><td><code>employee_id</code></td><td>Employee code</td></tr><tr><td><code>first_name</code></td><td>First name</td></tr><tr><td><code>last_name</code></td><td>Last name</td></tr><tr><td><code>display_name</code></td><td>Display name</td></tr><tr><td><code>father_husband_name</code></td><td>Father / husband name</td></tr><tr><td><code>date_of_birth</code></td><td>Date of birth</td></tr><tr><td><code>gender</code></td><td>Gender</td></tr><tr><td><code>phone</code></td><td>Phone</td></tr><tr><td><code>address</code></td><td>Address</td></tr><tr><td><code>work_email</code></td><td>Work email</td></tr><tr><td><code>department</code></td><td>Department</td></tr><tr><td><code>designation</code></td><td>Designation</td></tr><tr><td><code>vertical_name</code></td><td>Vertical</td></tr><tr><td><code>manager_employee_id</code></td><td>Manager</td></tr><tr><td><code>joining_date</code></td><td>Joining date</td></tr><tr><td><code>employment_type</code></td><td>Employment type</td></tr><tr><td><code>location</code></td><td>Location</td></tr><tr><td><code>salary_structure_id</code></td><td>Salary structure</td></tr><tr><td><code>ctc_monthly</code></td><td>Monthly CTC</td></tr><tr><td><code>uan_no</code></td><td>UAN no.</td></tr><tr><td><code>esi_no</code></td><td>ESI no.</td></tr><tr><td><code>pf_no</code></td><td>PF no.</td></tr><tr><td><code>pan</code></td><td>PAN</td></tr><tr><td><code>bank_account_name</code></td><td>Bank account name</td></tr><tr><td><code>bank_account_number</code></td><td>Bank account number</td></tr><tr><td><code>bank_ifsc</code></td><td>IFSC</td></tr><tr><td><code>bank_name</code></td><td>Bank name</td></tr><tr><td><code>notes</code></td><td>Notes (HR only)</td></tr><tr><td><code>google_login_email</code></td><td>Google login email</td></tr><tr><td><code>acc-role</code></td><td>HRMS role</td></tr></table><p>Payroll fields include UAN, ESI, PF, PAN, bank details, salary structure, and monthly CTC. Statutory numbers may be optional unless Mandatory fields require them.</p><h3>6.3 Bulk upload</h3><ol class='steps'><li>From Employees, open <strong>Bulk upload</strong>.</li><li>Download the template (new hire or legacy/existing employee variant).</li><li>Fill one row per employee. Do not rename header columns.</li><li>Upload the file. Wait for validation.</li><li>Review errors per row. Fix the file and re-upload if needed.</li><li>Confirm import only when all rows you need are valid.</li></ol><h4>Rules printed in your template</h4><ul><li>After upload, review validation results before confirming import.</li><li>Legacy / existing employees - set create_login to NO unless issuing portal access now.</li><li>New hires - use create_login YES when creating Google sign-in.</li><li>Required columns are marked with * in the Employees sheet header row.</li><li>Employee code format: SAPL-0001, AOPL-0001, AOMS-0001 (provided by HR, not auto-generated).</li><li>Dates must be YYYY-MM-DD.</li><li>create_login: YES or NO. If YES, google_login_email is required.</li><li>System role is always EMPLOYEE on create. Admin assigns HR/Manager/Admin separately.</li><li>manager_employee_id must already exist in HRMS (e.g. SAPL-0005).</li><li>Do not change header names on the Employees sheet.</li></ul><div class='warn'>Maximum rows per upload is limited in software (commonly 100). Split large files if needed.</div><h3>6.4 Mandatory fields</h3><p>Path: <strong>People → Mandatory fields</strong> or the button on Employees.</p><ol class='steps'><li>Review fields grouped by Identity, Contact, Work, Payroll, Bank, etc.</li><li>Tick <strong>Mandatory</strong> for fields that must be filled on create and bulk upload.</li><li>Employee code cannot be turned off.</li><li>Click <strong>Save</strong>. The page reloads so forms and templates match.</li></ol><p>After save, single employee forms show red stars on required fields. Bulk templates mark required columns with * in the header row.</p><h3>6.5 Custom fields</h3><ol class='steps'><li>Open <strong>Custom fields</strong> from Employees.</li><li>Enter field key (lowercase, underscores, e.g. blood_group) and label.</li><li>Mark Active if the field should appear on forms and bulk template.</li><li>Save. New columns appear on bulk upload after save.</li></ol><div class='page-break'></div><h2>7. HR: Leave</h2><h3>7.1 Leave administration (Time Off → Leave)</h3><p>Company leave requests and configurable leave types.</p><p>HR uses this area to:</p><ul><li>Configure leave types (annual, sick, etc. as your company set up).</li><li>View and manage employee leave requests and balances.</li><li>Support corrections according to company policy.</li></ul><h3>7.2 Leave approvals (Time Off → Leave Approvals)</h3><p>Submitted requests waiting for a decision.</p><ol class='steps'><li>Open Leave Approvals.</li><li>Select a pending request.</li><li>Approve or reject. Add a comment if your process requires it.</li><li>Employee and manager may receive email if toggles are on in Settings.</li></ol><h3>7.3 Employee leave apply (for reference)</h3><p>Employees use <strong>My Leave → Apply</strong>. Dates are counted on the server. Half-day is 0.5 when the type allows it.</p><h2>8. HR: Attendance</h2><h3>8.1 Register (Attendance → Register)</h3><p>Monthly attendance register (Form XVII style): daily codes, summaries, and payroll day counts.</p><ol class='steps'><li>Select payroll month and vertical if the screen asks.</li><li>Download the attendance template.</li><li>Enter one attendance code per day for each employee.</li><li>Upload the file and review validation messages.</li><li>Confirm when data is correct.</li></ol><h3>8.2 Form T (Attendance → Form T)</h3><p>Statutory Form T Excel export per vertical for the selected payroll month.</p><p>Choose payroll period and vertical, then generate or download the Form T Excel export as per your statutory process.</p><div class='page-break'></div><h2>9. HR: Payroll and salary</h2><h3>9.1 Salary structure</h3><p>Create reusable salary structure templates (vertical + component percentages) and assign them to employees.</p><p>Create templates with earning/deduction components. Assign a structure and monthly CTC on the employee profile for payroll to work.</p><h3>9.2 Salary Statement</h3><p>Monthly cost-to-company breakdown by employee from structure templates and CTC.</p><h3>9.3 Payroll run (Payroll → Payroll)</h3><p>One primary next step. Locked amounts never change.</p><p>Typical monthly flow:</p><ol class='steps'><li>Open the payroll month you need.</li><li>Sync or load employees for that run.</li><li>Enter or import attendance / LOP adjustments if your process uses them.</li><li>Save inputs.</li><li>Calculate payroll and review amounts.</li><li>Fix errors (missing bank, structure, etc.) before finalize.</li><li>Finalize or lock the run when numbers are approved.</li><li>Generate payslips. Employees see them under My Payslips when enabled.</li></ol><div class='tip'>Locked payroll amounts do not change. Use correction run features in the app if your build includes them.</div><h2>10. HR: Recruitment (ATS)</h2><p>Menus: <strong>Recruitment</strong>, <strong>Jobs</strong>, <strong>Candidates</strong>.</p><ul><li><strong>Jobs</strong> - Create, publish, and share requisitions.</li><li><strong>Candidates</strong> - Applicants for jobs you can access.</li><li>Job detail pages support pipeline stages, interviews, and public apply links.</li><li>Hired candidates are not automatic employees; create them in Employees when they join.</li></ul><div class='page-break'></div><h2>11. Manager tasks</h2><ul><li><strong>My Team</strong> - Direct reports. Open a row to view work details.</li><li><strong>Leave Approvals</strong> - act on team leave requests promptly.</li><li><strong>My Leave / My Profile / My Payslips</strong> - same as any employee.</li><li>Recruitment screens if Admin enabled Manager access.</li></ul><h2>12. Employee self-service</h2><h3>12.1 My Profile</h3><p>Your employee record and the details you are allowed to see.</p><h3>12.2 My Leave</h3><p>Balances for the current leave year and your requests.</p><ol class='steps'><li>Check balance for the leave year shown.</li><li>Click apply, pick dates and leave type.</li><li>Submit and wait for approval.</li><li>Track status under your request list.</li></ol><h3>12.3 My Payslips</h3><p>Your locked payslips. Amounts come from the payroll snapshot.</p><h2>13. Notifications</h2><p>Use the bell icon for unread items. HR/Admin can open the Notifications page for full history and email log.</p><h2>14. Troubleshooting</h2><table class='data'><tr><th>Problem</th><th>What to do</th></tr><tr><td>Cannot sign in</td><td>Confirm Google account; ask Admin to add user with correct role.</td></tr><tr><td>Menu item missing</td><td>Admin: check Settings → module access for your role.</td></tr><tr><td>Save does not update screen</td><td>Hard refresh (Ctrl+Shift+R). Wait for save spinner to finish.</td></tr><tr><td>Bulk upload errors</td><td>Check employee code format, duplicate emails, required * columns, date format YYYY-MM-DD.</td></tr><tr><td>Payroll will not finalize</td><td>Complete bank details, salary structure, CTC; read error message on screen.</td></tr><tr><td>No payslip</td><td>Payroll must be finalized; Admin must allow payslips for your role in Settings.</td></tr></table><div class='page-break'></div><h2>Appendix A: Bulk upload columns</h2><p>Columns in the employee bulk template in your export:</p><table class='data'><tr><th>#</th><th>Column name</th><th>Notes</th></tr><tr><td>1</td><td><code>employee_id</code></td><td>Required. Company format e.g. SAPL-0001.</td></tr><tr><td>2</td><td><code>first_name</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>3</td><td><code>last_name</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>4</td><td><code>display_name</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>5</td><td><code>father_husband_name</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>6</td><td><code>uan_no</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>7</td><td><code>esi_no</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>8</td><td><code>pf_no</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>9</td><td><code>work_email</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>10</td><td><code>department</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>11</td><td><code>designation</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>12</td><td><code>vertical_name</code></td><td>Must match company vertical list.</td></tr><tr><td>13</td><td><code>location</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>14</td><td><code>employment_type</code></td><td>PERMANENT, CONTRACT, INTERN, CONSULTANT</td></tr><tr><td>15</td><td><code>joining_date</code></td><td>YYYY-MM-DD.</td></tr><tr><td>16</td><td><code>salary_structure_id</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>17</td><td><code>ctc_monthly</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>18</td><td><code>manager_employee_id</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>19</td><td><code>phone</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>20</td><td><code>address</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>21</td><td><code>date_of_birth</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>22</td><td><code>gender</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>23</td><td><code>pan</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>24</td><td><code>bank_account_name</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>25</td><td><code>bank_account_number</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>26</td><td><code>bank_ifsc</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>27</td><td><code>bank_name</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>28</td><td><code>notes</code></td><td>See mandatory fields; may be optional.</td></tr><tr><td>29</td><td><code>create_login</code></td><td>YES or NO for Google login on import.</td></tr><tr><td>30</td><td><code>google_login_email</code></td><td>Required when create_login is YES.</td></tr></table><h2>Appendix B: Mandatory field catalog</h2><h3>Identity</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>Employee code</td><td><code>employee_id</code></td><td>Yes</td></tr><tr><td>First name</td><td><code>first_name</code></td><td>Yes</td></tr><tr><td>Last name</td><td><code>last_name</code></td><td>Yes</td></tr><tr><td>Display name</td><td><code>display_name</code></td><td>No</td></tr><tr><td>Father / husband name</td><td><code>father_husband_name</code></td><td>No</td></tr><tr><td>Date of birth</td><td><code>date_of_birth</code></td><td>No</td></tr><tr><td>Gender</td><td><code>gender</code></td><td>No</td></tr></table><h3>Contact</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>Phone</td><td><code>phone</code></td><td>No</td></tr><tr><td>Address</td><td><code>address</code></td><td>No</td></tr></table><h3>Work</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>Work email</td><td><code>work_email</code></td><td>Yes</td></tr><tr><td>Department</td><td><code>department</code></td><td>Yes</td></tr><tr><td>Designation</td><td><code>designation</code></td><td>Yes</td></tr><tr><td>Vertical</td><td><code>vertical_name</code></td><td>Yes</td></tr><tr><td>Manager employee ID</td><td><code>manager_employee_id</code></td><td>No</td></tr><tr><td>Joining date</td><td><code>joining_date</code></td><td>Yes</td></tr><tr><td>Employment type</td><td><code>employment_type</code></td><td>Yes</td></tr><tr><td>Location</td><td><code>location</code></td><td>Yes</td></tr></table><h3>Payroll</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>Salary structure</td><td><code>salary_structure_id</code></td><td>No</td></tr><tr><td>Monthly CTC</td><td><code>ctc_monthly</code></td><td>No</td></tr><tr><td>UAN no.</td><td><code>uan_no</code></td><td>No</td></tr><tr><td>ESI no.</td><td><code>esi_no</code></td><td>No</td></tr><tr><td>PF no.</td><td><code>pf_no</code></td><td>No</td></tr><tr><td>PAN</td><td><code>pan</code></td><td>No</td></tr></table><h3>Bank</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>Bank account name</td><td><code>bank_account_name</code></td><td>No</td></tr><tr><td>Bank account number</td><td><code>bank_account_number</code></td><td>No</td></tr><tr><td>IFSC</td><td><code>bank_ifsc</code></td><td>No</td></tr><tr><td>Bank name</td><td><code>bank_name</code></td><td>No</td></tr></table><h3>Other</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>Notes (HR)</td><td><code>notes</code></td><td>No</td></tr></table><h3>Bulk login</h3><table class='data'><tr><th>Label</th><th>Field id</th><th>Default mandatory</th></tr><tr><td>create_login (bulk)</td><td><code>create_login</code></td><td>Yes</td></tr><tr><td>Google login email</td><td><code>google_login_email</code></td><td>No</td></tr></table><h2>Appendix C: Attendance day codes</h2><p>Use one code per day in the Register upload:</p><table class='data'><tr><th>Code</th><th>Meaning</th></tr><tr><td><strong>P</strong></td><td>Present</td></tr><tr><td><strong>W/H or WH</strong></td><td>Work from home</td></tr><tr><td><strong>A</strong></td><td>Absent</td></tr><tr><td><strong>L</strong></td><td>Leave</td></tr><tr><td><strong>WO</strong></td><td>Weekly off</td></tr><tr><td><strong>ML</strong></td><td>Maternity leave (legacy import may use S)</td></tr><tr><td><strong>H</strong></td><td>Holiday</td></tr></table><h2>Appendix D: Full route list</h2><table class='data'><tr><th>Route id</th><th>Title</th><th>Description</th></tr><tr><td><code>ats-candidate</code></td><td>Candidate</td><td>Profile, applications, interviews, and notes.</td></tr><tr><td><code>ats-candidates</code></td><td>Candidates</td><td>Applicants for jobs you can access.</td></tr><tr><td><code>ats-job</code></td><td>Job</td><td>Applications, pipeline, and the public apply link.</td></tr><tr><td><code>ats-job-edit</code></td><td>Edit job</td><td>Update the requisition. Candidates are not employees.</td></tr><tr><td><code>ats-job-new</code></td><td>New job</td><td>Describe the role. Publishing creates the careers link.</td></tr><tr><td><code>ats-jobs</code></td><td>Jobs</td><td>Create, publish, and share requisitions.</td></tr><tr><td><code>attendance-bulk-upload</code></td><td>Register</td><td>Monthly attendance register (Form XVII style): daily codes, summaries, and payroll day counts.</td></tr><tr><td><code>attendance-form-t</code></td><td>Form T</td><td>Statutory Form T Excel export per vertical for the selected payroll month.</td></tr><tr><td><code>employee-bulk-upload</code></td><td>Bulk upload</td><td>Import many employees from Excel or CSV.</td></tr><tr><td><code>employee-create</code></td><td>Add employee</td><td>Employee ID is assigned on save. Payroll identifiers are optional.</td></tr><tr><td><code>employee-field-defs</code></td><td>Employee custom fields</td><td>Define optional extra columns for profiles and bulk upload.</td></tr><tr><td><code>employee-mandatory-fields</code></td><td>Mandatory fields</td><td>Choose which employee fields are required on create and bulk upload.</td></tr><tr><td><code>employee-profile</code></td><td>Employee</td><td>Employee master record.</td></tr><tr><td><code>leave-admin</code></td><td>Leave</td><td>Company leave requests and configurable leave types.</td></tr><tr><td><code>leave-apply</code></td><td>Apply Leave</td><td>Dates are counted on the server. Half-day is 0.5 when the type allows it.</td></tr><tr><td><code>leave-approvals</code></td><td>Leave Approvals</td><td>Submitted requests waiting for a decision.</td></tr><tr><td><code>leave-calendar</code></td><td>Leave Calendar</td><td>Approved leave for the month, scoped to your role.</td></tr><tr><td><code>my-leave</code></td><td>My Leave</td><td>Balances for the current leave year and your requests.</td></tr><tr><td><code>my-payslips</code></td><td>My Payslips</td><td>Your locked payslips. Amounts come from the payroll snapshot.</td></tr><tr><td><code>my-profile</code></td><td>My Profile</td><td>Your employee record and the details you are allowed to see.</td></tr><tr><td><code>my-team</code></td><td>My Team</td><td>Direct reports. Open a row to view work details.</td></tr><tr><td><code>payroll-run</code></td><td>Payroll run</td><td>One primary next step. Locked amounts never change.</td></tr><tr><td><code>salary-statement</code></td><td>Salary Statement</td><td>Monthly cost-to-company breakdown by employee from structure templates and CTC.</td></tr><tr><td><code>salary-structure</code></td><td>Salary structures</td><td>Create reusable salary structure templates (vertical + component percentages) and assign them to employees.</td></tr></table><footer>AyurCentral HRMS - internal use.</footer></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AyurCentral HRMS - HR User Manual</title>
+<style>
+@page { margin: 18mm 14mm; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11pt; line-height: 1.45; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 12px; }
+h1 { font-size: 22pt; border-bottom: 2px solid #0f766e; padding-bottom: 8px; color: #0f766e; }
+h2 { font-size: 14pt; margin-top: 1.4em; color: #134e4a; page-break-after: avoid; }
+h3 { font-size: 12pt; margin-top: 1em; page-break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 9.5pt; page-break-inside: avoid; }
+th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f1f5f9; font-weight: 600; }
+tr:nth-child(even) td { background: #f8fafc; }
+code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
+ul, ol { margin: 0.4em 0; }
+p { margin: 0.5em 0; }
+li { margin: 0.2em 0; }
+</style>
+</head>
+<body>
+<h1>AyurCentral Enterprise HRMS - HR User Manual</h1>
+<p><strong>Who this is for:</strong> HR and Admin staff who use the web app every day.<br />
+<strong>What this covers:</strong> Screens, buttons, and step-by-step tasks only (no technical setup).<br />
+<strong>Last updated:</strong> October 2026.</p>
+<hr />
+<h2>1. Getting started</h2>
+<h3>1.1 Opening the app</h3>
+<ol>
+<li>Open the <strong>AyurCentral HRMS</strong> link your IT team shared (it runs in the browser, usually via Google).</li>
+<li>Sign in with your <strong>company Google account</strong> (the same email that was added as an HR/Admin user).</li>
+<li>If you see “not authorized,” your email is not linked to an active user record - contact your system owner.</li>
+</ol>
+<h3>1.2 Layout you will see every day</h3>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Left sidebar</strong></td>
+<td>Main menu. Sections can be expanded or collapsed.</td>
+</tr>
+<tr>
+<td><strong>Top bar</strong></td>
+<td>Page title, <strong>notifications</strong> (bell), your name and role, <strong>Sign out</strong>.</td>
+</tr>
+<tr>
+<td><strong>Main page</strong></td>
+<td>Forms, tables, and action buttons for the task you chose.</td>
+</tr>
+<tr>
+<td><strong>Ask HR</strong> (chat bubble, bottom right)</td>
+<td>Quick help about using HRMS (not a substitute for payroll decisions).</td>
+</tr>
+</tbody>
+</table>
+<p>After you sign in, use a <strong>hard refresh</strong> (Ctrl+Shift+R or Cmd+Shift+R) if the screen looks old or buttons are missing.</p>
+<h3>1.3 Roles (what HR usually needs to know)</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ADMIN / OWNER</strong></td>
+<td>Everything HR can do, plus <strong>Settings</strong>, user access, and sensitive configuration.</td>
+</tr>
+<tr>
+<td><strong>HR</strong></td>
+<td>Employees, leave, attendance, payroll, recruitment, notifications.</td>
+</tr>
+<tr>
+<td><strong>MANAGER</strong></td>
+<td>Team list, leave approvals - <strong>no payroll or salary screens</strong>.</td>
+</tr>
+<tr>
+<td><strong>EMPLOYEE</strong></td>
+<td>Own profile, own leave, own payslips only.</td>
+</tr>
+</tbody>
+</table>
+<p>The menu only shows items your role is allowed to see. If something is missing, an Admin can adjust <strong>Settings → HRMS module access by role</strong> (then you refresh the page).</p>
+<hr />
+<h2>2. Dashboard</h2>
+<p><strong>Menu:</strong> Main → <strong>Dashboard</strong></p>
+<p>The dashboard answers: <em>“What needs attention today?”</em></p>
+<p>For HR/Admin you will typically see:</p>
+<ul>
+<li>Count of <strong>active employees</strong></li>
+<li>Who is <strong>on leave today</strong></li>
+<li><strong>Pending leave</strong> waiting for approval</li>
+<li><strong>Payroll status</strong> for the current month (if a run exists)</li>
+<li><strong>Alerts</strong> (for example missing bank details, missing salary structure, failed emails)</li>
+<li><strong>Recent activity</strong> (audit-style list of important actions)</li>
+</ul>
+<p><strong>Quick actions</strong> (when shown): jump to leave approvals, payroll, add employee, or apply leave - depending on your role.</p>
+<hr />
+<h2>3. My Work (your own record)</h2>
+<p>These items appear for most users; HR uses them for their own employment data too.</p>
+<h3>3.1 My Profile</h3>
+<p>View and update <strong>your</strong> contact details where the app allows self-edit (phone, address). Payroll identifiers and employment fields are usually HR-only on other people’s profiles.</p>
+<h3>3.2 My Leave</h3>
+<ul>
+<li>See <strong>leave balances</strong> for the current leave year.</li>
+<li>See your <strong>requests</strong> (draft, submitted, approved, rejected).</li>
+<li>Use <strong>Apply leave</strong> (or the link from here) to submit a new request.</li>
+</ul>
+<h3>3.3 My Payslips</h3>
+<ul>
+<li>Lists <strong>all locked (finalized)</strong> payslips for <strong>you only</strong>, one row per month (newest first).</li>
+<li><strong>View</strong> or <strong>Download PDF</strong> for any month that has been finalized — there is no separate month picker; pick the row you need.</li>
+<li>Amounts come from the <strong>payroll snapshot</strong> for that month, not live salary structure.</li>
+<li>If empty, payroll for your employee ID may not be finalized yet.</li>
+</ul>
+<hr />
+<h2>4. People</h2>
+<h3>4.1 Employees (directory)</h3>
+<p><strong>Menu:</strong> People → <strong>Employees</strong></p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Find someone</strong></td>
+<td>Use search and filters; click a row to open the profile.</td>
+</tr>
+<tr>
+<td><strong>Add employee</strong></td>
+<td><strong>Add employee</strong> → fill required fields → <strong>Save</strong>. Employee ID is assigned automatically on save.</td>
+</tr>
+<tr>
+<td><strong>View / edit profile</strong></td>
+<td>Open the employee → use tabs (Personal, Employment, Payroll IDs, Leave, Documents, etc.).</td>
+</tr>
+<tr>
+<td><strong>Deactivate</strong></td>
+<td>On profile → change status to inactive when someone leaves. They will not appear on new payroll drafts; old locked payroll is unchanged.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tip:</strong> Before monthly payroll, make sure each active employee has <strong>salary structure</strong>, <strong>bank details</strong>, and <strong>PAN</strong> where your process requires them. The payroll screen will flag missing items.</p>
+<h3>4.2 Mandatory fields</h3>
+<p><strong>Menu:</strong> People → <strong>Mandatory fields</strong></p>
+<ul>
+<li>Choose which fields are <strong>required</strong> when creating employees or using bulk upload.</li>
+<li>Save after changes.</li>
+<li>Use this to match your company’s onboarding checklist.</li>
+</ul>
+<h3>4.3 My Team (managers only)</h3>
+<p>Managers see <strong>direct reports</strong> only - no salary. HR uses <strong>Employees</strong> for the full directory.</p>
+<hr />
+<h2>5. Time off (leave)</h2>
+<h3>5.1 Leave (company view) - HR</h3>
+<p><strong>Menu:</strong> Time Off → <strong>Leave</strong></p>
+<ul>
+<li>See <strong>all employees’</strong> leave requests (by status).</li>
+<li><strong>Configure leave types</strong> and policies your company uses (names and rules are set here, not hard-coded).</li>
+<li>HR can act on behalf of employees when your process allows (actions are logged).</li>
+</ul>
+<h3>5.2 Leave approvals</h3>
+<p><strong>Menu:</strong> Time Off → <strong>Leave Approvals</strong></p>
+<ul>
+<li>Lists requests in <strong>Submitted</strong> state.</li>
+<li>Open a request → <strong>Approve</strong> or <strong>Reject</strong> (with reason if needed).</li>
+<li>Managers see <strong>team only</strong>; HR/Admin can see broader queues.</li>
+</ul>
+<h3>5.3 How leave connects to payroll (what HR should do)</h3>
+<ul>
+<li>Approved leave may suggest <strong>LOP (loss of pay)</strong> on open payroll months.</li>
+<li>On payroll screens you can <strong>refresh leave LOP</strong> or <strong>apply leave LOP to days</strong> (see Payroll section).</li>
+<li><strong>Locked</strong> payroll months are never changed by new leave - use a <strong>correction run</strong> if needed.</li>
+</ul>
+<h3>5.4 Leave calendar</h3>
+<p>Shows approved leave in a calendar view (scope depends on role).</p>
+<hr />
+<h2>6. Attendance</h2>
+<p>Attendance in HRMS means <strong>working days, paid days, and LOP</strong> for payroll - not a biometric device link.</p>
+<h3>6.1 Register (attendance upload)</h3>
+<p><strong>Menu:</strong> Attendance → <strong>Register</strong></p>
+<p>This is <strong>step 2</strong> of the monthly payroll path (see section 7).</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pick month</strong></td>
+<td>Use the <strong>period</strong> card (year, month, <strong>vertical</strong>).</td>
+</tr>
+<tr>
+<td><strong>Start payroll for the month</strong></td>
+<td>If no run exists: <strong>Start selected vertical</strong> or <strong>Start all verticals</strong>.</td>
+</tr>
+<tr>
+<td><strong>Upload register</strong></td>
+<td>Download the <strong>attendance template</strong> for the run → fill in Excel/CSV → <strong>Validate</strong> → <strong>Confirm import</strong>.</td>
+</tr>
+<tr>
+<td><strong>Edit one employee</strong></td>
+<td>Use the table on the same page to enter or fix working days, paid days, LOP.</td>
+</tr>
+<tr>
+<td><strong>Save</strong></td>
+<td><strong>Save days &amp; extras</strong> before leaving the page if you edited manually.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Vertical:</strong> Choose <strong>SAPL</strong>, <strong>AOPL</strong>, <strong>AOMS</strong>, or <strong>Combined (legacy payroll)</strong>.<br />
+- <strong>Combined (legacy)</strong> = older single payroll run for the whole company (<code>PR-YYYY-MM</code>).<br />
+- <strong>Per vertical</strong> = separate run per company vertical (<code>PR-YYYY-MM-SAPL</code>, etc.).</p>
+<p>If attendance was entered on an <strong>older combined</strong> run but you opened an empty <strong>vertical</strong> run, use the yellow banner: <strong>Import from combined payroll</strong> or <strong>Open combined payroll</strong>.</p>
+<h3>6.2 Form T</h3>
+<p><strong>Menu:</strong> Attendance → <strong>Form T</strong></p>
+<p>Statutory <strong>Form T</strong> Excel for a chosen <strong>payroll month</strong> and <strong>vertical</strong> (including <strong>past finalized months</strong>, not only the current month).</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Set <strong>Year</strong> and <strong>Month</strong>, then click <strong>Apply</strong>.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Choose <strong>Vertical</strong> (SAPL, AOPL, AOMS, etc.).</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Wait for the green “ready” message (attendance must be complete for that vertical/month).</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Click <strong>Download Form T</strong>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tips</strong></p>
+<ul>
+<li>If the wrong month opens, change Year/Month and <strong>Apply</strong> again, then hard refresh if the screen still looks old.</li>
+<li>From <strong>Register</strong>, the <strong>Form T</strong> shortcut keeps the same vertical and period when possible.</li>
+<li>Form T needs a <strong>payroll run</strong> for that month; start payroll or open an existing run from <strong>Payroll → All payroll runs</strong> if the month is missing.</li>
+</ul>
+<h3>6.3 Holiday calendar (if enabled)</h3>
+<p><strong>Menu:</strong> Attendance → <strong>Holiday calendar</strong></p>
+<ul>
+<li>Download/upload yearly holiday templates for attendance and payroll (scope depends on your settings).</li>
+</ul>
+<hr />
+<h2>7. Payroll (monthly salary run)</h2>
+<p>Payroll is a <strong>three-step path</strong> shown at the top of salary-related pages:</p>
+<ol>
+<li><strong>Salary structure</strong> - employee packages (CTC / components).  </li>
+<li><strong>Attendance</strong> - working days and LOP for the month.  </li>
+<li><strong>Payroll</strong> - calculate net pay, review, finalize, payslips.</li>
+</ol>
+<p>Use the <strong>pipeline buttons</strong> (1 → 2 → 3) to move between steps without losing the selected month.</p>
+<h3>7.1 Salary structure</h3>
+<p><strong>Menu:</strong> Payroll → <strong>Salary structure</strong></p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Bulk update</strong></td>
+<td>Use <strong>bulk upload</strong> (Excel/CSV template) for many employees.</td>
+</tr>
+<tr>
+<td><strong>One employee</strong></td>
+<td>Search employee → open editor → enter components → <strong>Save</strong>.</td>
+</tr>
+<tr>
+<td><strong>Revision</strong></td>
+<td>When salary changes, create a <strong>revision</strong> (history is kept; old amounts are not overwritten).</td>
+</tr>
+</tbody>
+</table>
+<p>Employees must have a <strong>current</strong> structure effective for the payroll month before calculate will succeed.</p>
+<h3>7.2 Salary Statement</h3>
+<p><strong>Menu:</strong> Payroll → <strong>Salary Statement</strong></p>
+<ul>
+<li>Monthly <strong>rate of pay, earned pay, deductions, and net</strong> grid from salary structures (and payroll run data when present) — for HR review, <strong>not</strong> the same as the employee payslip PDF.</li>
+<li>Choose <strong>year</strong>, <strong>month</strong>, and <strong>vertical</strong>, then load the statement.</li>
+<li><strong>Download Excel:</strong> the file includes a <strong>TOTAL</strong> row at the bottom that sums numeric salary columns (gross, deductions, net pay, etc.).</li>
+</ul>
+<h3>7.3 Payroll - main run screen</h3>
+<p><strong>Menu:</strong> Payroll → <strong>Payroll</strong></p>
+<h4>A. Choose period and run</h4>
+<ol>
+<li>Set <strong>year</strong> and <strong>month</strong>.</li>
+<li>Set <strong>vertical</strong>:
+   - <strong>Combined (legacy payroll)</strong> - use for months that were always run as one company-wide payroll.
+   - <strong>SAPL / AOPL / AOMS</strong> - use when you run payroll separately per vertical.</li>
+<li>If several runs exist for the same month, use <strong>Runs this month</strong> dropdown or <strong>All payroll runs</strong> at the bottom → <strong>Open</strong> the correct run ID.</li>
+</ol>
+<p><strong>Run status labels you will see:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning for HR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Draft</strong></td>
+<td>You can edit attendance inputs; not finalized.</td>
+</tr>
+<tr>
+<td><strong>Calculated</strong></td>
+<td>Net pay computed; you can recalculate if inputs change.</td>
+</tr>
+<tr>
+<td><strong>In review / Approved</strong></td>
+<td>Optional review steps if your process uses them.</td>
+</tr>
+<tr>
+<td><strong>Locked / Finalized</strong></td>
+<td>Month is closed; payslips generated; use <strong>correction run</strong> to fix.</td>
+</tr>
+</tbody>
+</table>
+<h4>B. KPI row</h4>
+<p>Shows employee count, gross, deductions, net (after calculate), and LOP summary.</p>
+<h4>C. Step 2 - Calculate payroll</h4>
+<ol>
+<li>Fix any <strong>attendance incomplete</strong> warning (all employees need valid working/paid/LOP days).</li>
+<li>Click <strong>Calculate payroll</strong> (or <strong>Recalculate</strong>).</li>
+<li>Review the employee table: amounts, warnings, exceptions.</li>
+<li>Use <strong>↻ Refresh</strong> in the header if you changed attendance or holds on another tab and need the latest totals.</li>
+</ol>
+<p><strong>Important:</strong> You cannot <strong>Finalize</strong> while status is still <strong>Draft</strong> and calculate has not been run. Use <strong>↑ Go to Calculate payroll</strong> from the finalize section if you are at the bottom of the page.</p>
+<h4>C2. Review summary (after calculate)</h4>
+<p>Below the main table, open <strong>Review summary</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What you see</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Department rows</strong></td>
+<td>Click <strong>+</strong> on a department to expand every employee in that department.</td>
+</tr>
+<tr>
+<td><strong>Component columns</strong></td>
+<td><strong>Scroll horizontally</strong> to see full breakup (Basic, HRA, SA, PF, ESIC, PT, bonus, TDS, gross, net, etc.) — same logic as calculated payroll.</td>
+</tr>
+<tr>
+<td><strong>Payout column</strong></td>
+<td><strong>Hold salary</strong> / <strong>Release hold</strong> buttons per employee (not controlled from Excel).</td>
+</tr>
+<tr>
+<td><strong>On hold</strong></td>
+<td>Employees on hold are skipped for payslip generation until released. After <strong>Finalize</strong>, use <strong>Release hold</strong> on the <strong>Payslips</strong> row for that employee, then generate the payslip.</td>
+</tr>
+</tbody>
+</table>
+<h4>C3. Excel downloads (Review summary)</h4>
+<p>Available after calculate (not in Draft):</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Download calculated payroll</strong></td>
+<td>Full component columns (<code>earn_*</code>, <code>ded_*</code>), days, gross, deductions, net, employer lines where applicable. Last row is <strong>TOTAL</strong> (sums numeric columns).</td>
+</tr>
+<tr>
+<td><strong>Download bank transfer file</strong></td>
+<td>Bank payment sheet for the <strong>same payroll run</strong>: Emp Id, Name, account number, IFSC, <strong>Net pay</strong>, <strong>Salary hold</strong> (<code>Hold</code> / <code>Unhold</code>), blank <strong>Company account number</strong> (fill in Excel if needed), <strong>unique ID</strong> (first 3 letters of name + <strong>date payroll was calculated</strong>, format <code>DDMMYYYY</code>, e.g. <code>RAJ28092026</code>). <strong>TOTAL</strong> net pay includes <strong>Unhold</strong> rows only.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> Re-run <strong>Calculate payroll</strong> after changing attendance or holds so exports and unique IDs match the latest calculation date.</p>
+<h4>D. Payroll check (exceptions)</h4>
+<p>The app lists employees who need attention, for example:</p>
+<ul>
+<li>Missing salary structure  </li>
+<li>Missing bank or PAN  </li>
+<li>Working days zero  </li>
+<li>Negative net pay  </li>
+</ul>
+<p>Use <strong>Fix</strong> links to jump to salary structure or employee profile where offered.</p>
+<h4>E. Review and approve (if shown)</h4>
+<p>Follow on-screen steps if your organization uses formal review before lock.</p>
+<h4>F. Finalize payroll</h4>
+<ul>
+<li>When checks pass and status is past draft, click <strong>Finalize payroll</strong> and confirm in the dialog.</li>
+<li>Finalizing <strong>locks</strong> amounts for that run (they cannot be casually edited).</li>
+<li>You <strong>cannot add new salary holds</strong> after finalize; you <strong>can</strong> <strong>Release hold</strong> on employees who were already on hold.</li>
+</ul>
+<h4>G. Payslips</h4>
+<p>After finalize:</p>
+<ul>
+<li>Payslip PDFs are generated per employee (except those on <strong>salary hold</strong>).</li>
+<li><strong>Generate &amp; notify</strong> can email payslips (with PDF attachment when configured).</li>
+<li>Use regenerate options in <strong>More actions</strong> if a payslip failed.</li>
+<li>Employees see their own copies under <strong>My Payslips</strong> (all finalized months).</li>
+</ul>
+<h4>H. Correction run (after lock)</h4>
+<p>If a <strong>locked</strong> month was wrong:</p>
+<ol>
+<li>Open that locked run.  </li>
+<li><strong>More actions</strong> → <strong>Create correction run</strong>.  </li>
+<li>A new <strong>draft</strong> opens for the <strong>same month and vertical</strong>; original locked run stays as history.  </li>
+<li>Repeat attendance → calculate → finalize on the correction run.</li>
+</ol>
+<h4>I. More actions (advanced)</h4>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Import attendance from combined payroll</strong></td>
+<td>Vertical run is empty but old combined run has days.</td>
+</tr>
+<tr>
+<td><strong>Refresh leave LOP</strong></td>
+<td>Pull latest approved leave LOP suggestions.</td>
+</tr>
+<tr>
+<td><strong>Apply leave LOP to days</strong></td>
+<td>Copy leave LOP into LOP days and recompute paid days (then recalculate).</td>
+</tr>
+<tr>
+<td><strong>Return to draft</strong></td>
+<td>Undo review state so you can edit inputs (rules depend on status).</td>
+</tr>
+<tr>
+<td><strong>Create correction run</strong></td>
+<td>Only from a <strong>locked</strong> run.</td>
+</tr>
+</tbody>
+</table>
+<h4>J. All payroll runs</h4>
+<p>At the bottom, expand <strong>All payroll runs</strong> to open <strong>any</strong> month/run (including the current month). The row marked <strong>Current</strong> is the run you are viewing.</p>
+<hr />
+<h2>8. Recruitment (ATS)</h2>
+<p><strong>Menu:</strong> Recruitment → <strong>Recruitment</strong> / <strong>Jobs</strong> / <strong>Candidates</strong></p>
+<h3>8.1 Jobs</h3>
+<ul>
+<li>Create a job → <strong>Publish</strong> when ready (creates the public careers link).</li>
+<li>Edit title, description, location, etc. on <strong>Edit job</strong>.</li>
+</ul>
+<h3>8.2 Candidates and pipeline</h3>
+<ul>
+<li>Candidates apply via the public link or are added manually.</li>
+<li>Move stages: Applied → Screening → … → Offer → <strong>Hired</strong>.</li>
+</ul>
+<h3>8.3 When a candidate is Hired</h3>
+<p>On the hired application you will typically:</p>
+<ol>
+<li>Enter <strong>compensation</strong> (salary breakup for letters).  </li>
+<li>Set <strong>joining date</strong> (needed for appointment letter).  </li>
+<li><strong>Send offer letter</strong> (email with PDF).  </li>
+<li><strong>Send appointment letter</strong> (after joining date is set).  </li>
+<li><strong>Create employee</strong> - opens a form with a <strong>new employee ID</strong>; completes onboarding into the employee directory.</li>
+</ol>
+<p>Do steps in the order your HR policy requires; the screen hints remind you about joining date before appointment letter.</p>
+<hr />
+<h2>9. Notifications</h2>
+<p><strong>Menu:</strong> System → <strong>Notifications</strong></p>
+<ul>
+<li><strong>Inbox</strong> - messages and links to related screens.  </li>
+<li><strong>Email log</strong> (HR) - whether system emails were sent, failed, or skipped.  </li>
+<li><strong>Preferences</strong> - where available, control how you receive alerts.</li>
+</ul>
+<hr />
+<h2>10. Settings (Admin / Owner)</h2>
+<p><strong>Menu:</strong> System → <strong>Settings</strong></p>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Welcome messaging</strong></td>
+<td>How welcome emails behave.</td>
+</tr>
+<tr>
+<td><strong>Email &amp; welcome toggles</strong></td>
+<td>Turn categories of system email on or off.</td>
+</tr>
+<tr>
+<td><strong>Content &amp; document templates</strong></td>
+<td>Edit email subject/body text for letters and notifications. PDF layouts are listed for reference; layout changes need IT.</td>
+</tr>
+<tr>
+<td><strong>HRMS module access by role</strong></td>
+<td>Which sidebar modules each role sees.</td>
+</tr>
+<tr>
+<td><strong>New login defaults</strong></td>
+<td>Default self-service flags when a login is created.</td>
+</tr>
+</tbody>
+</table>
+<p>Click <strong>Save settings</strong> after changes. Users should <strong>refresh</strong> the browser to see menu changes.</p>
+<p><strong>Users</strong> (Admin): role assignment screen - may show “coming soon” depending on deployment; user mapping is often done in the master spreadsheet by IT.</p>
+<hr />
+<h2>11. Monthly payroll checklist (recommended)</h2>
+<p>Use this every month:</p>
+<ol>
+<li>[ ] New joiners: employee record + salary structure + bank/PAN.  </li>
+<li>[ ] Leavers: mark <strong>inactive</strong> (after last working day process).  </li>
+<li>[ ] Leave: clear pending approvals that affect the month.  </li>
+<li>[ ] <strong>Salary structure</strong> - revisions effective for this month are in place.  </li>
+<li>[ ] <strong>Attendance / Register</strong> - upload or enter days for the correct <strong>vertical</strong> (or combined legacy).  </li>
+<li>[ ] <strong>Payroll</strong> - <strong>Calculate</strong> → review <strong>department breakup</strong> → set <strong>holds</strong> if needed → <strong>Finalize</strong>.  </li>
+<li>[ ] <strong>Payslips</strong> - confirm generated; <strong>release hold</strong> and generate for anyone held; spot-check PDFs.  </li>
+<li>[ ] <strong>Exports</strong> - <strong>Calculated payroll</strong> Excel, <strong>bank transfer</strong> file, <strong>Salary Statement</strong>, <strong>Form T</strong> as your compliance calendar needs.  </li>
+<li>[ ] <strong>Bank file</strong> - fill <strong>Company account number</strong> in Excel if your bank needs it; pay only <strong>Unhold</strong> rows (check TOTAL).</li>
+</ol>
+<hr />
+<h2>12. Common problems (quick fixes)</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>What to try</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Finalize button disabled</td>
+<td>Scroll up → <strong>Calculate payroll</strong> first; fix attendance incomplete banner.</td>
+</tr>
+<tr>
+<td>No employees on payroll</td>
+<td>Wrong run or vertical - open <strong>Combined (legacy)</strong> or <strong>Import from combined payroll</strong>.</td>
+</tr>
+<tr>
+<td>“Attendance incomplete”</td>
+<td>Every row needs working days &gt; 0 and valid paid/LOP; finish register upload.</td>
+</tr>
+<tr>
+<td>Missing structure / bank on check list</td>
+<td>Open employee → salary structure or payroll tab.</td>
+</tr>
+<tr>
+<td>Old month was wrong after finalize</td>
+<td><strong>Create correction run</strong> from locked run (do not edit locked month).</td>
+</tr>
+<tr>
+<td>Menu item missing</td>
+<td>Admin: <strong>Settings → module access</strong>; then hard refresh.</td>
+</tr>
+<tr>
+<td>Screen looks outdated</td>
+<td>Hard refresh; confirm IT deployed latest web app version (check footer build / client version).</td>
+</tr>
+<tr>
+<td>Form T stuck on current month</td>
+<td>Set Year/Month → <strong>Apply</strong>; hard refresh; confirm latest deployment.</td>
+</tr>
+<tr>
+<td>Review shows only gross/net</td>
+<td>Hard refresh; expand department; scroll right for component columns.</td>
+</tr>
+<tr>
+<td>Bank unique ID wrong date</td>
+<td><strong>Recalculate</strong> payroll, then download bank file again (ID uses <strong>calculate</strong> date).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>13. Getting help</h2>
+<ul>
+<li><strong>Ask HR</strong> chat: usage questions inside the app.  </li>
+<li><strong>IT / system owner:</strong> login issues, deployment, spreadsheet access, new users.  </li>
+<li><strong>Accounts:</strong> statutory interpretation, TDS amounts, PF/ESI policy - amounts you enter must match your company’s rules.</li>
+</ul>
+<hr />
+<p><em>AyurCentral Enterprise HRMS - HR User Manual. For internal training and operations.</em></p>
+</body>
+</html>

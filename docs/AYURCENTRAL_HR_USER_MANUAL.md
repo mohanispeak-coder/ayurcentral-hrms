@@ -2,7 +2,7 @@
 
 **Who this is for:** HR and Admin staff who use the web app every day.  
 **What this covers:** Screens, buttons, and step-by-step tasks only (no technical setup).  
-**Last updated:** September 2026.
+**Last updated:** October 2026.
 
 ---
 
@@ -73,8 +73,9 @@ View and update **your** contact details where the app allows self-edit (phone, 
 
 ### 3.3 My Payslips
 
-- Lists **locked** payslips for **you only**.
-- **Download** or view after payroll has been finalized for that month.
+- Lists **all locked (finalized)** payslips for **you only**, one row per month (newest first).
+- **View** or **Download PDF** for any month that has been finalized — there is no separate month picker; pick the row you need.
+- Amounts come from the **payroll snapshot** for that month, not live salary structure.
 - If empty, payroll for your employee ID may not be finalized yet.
 
 ---
@@ -166,8 +167,26 @@ If attendance was entered on an **older combined** run but you opened an empty *
 
 **Menu:** Attendance → **Form T**
 
-- Statutory **Form T** Excel export for a chosen **payroll month** and **vertical**.
-- Use after attendance/payroll data exists for that period.
+Statutory **Form T** Excel for a chosen **payroll month** and **vertical** (including **past finalized months**, not only the current month).
+
+| Step | What to do |
+| --- | --- |
+| 1 | Set **Year** and **Month**, then click **Apply**. |
+| 2 | Choose **Vertical** (SAPL, AOPL, AOMS, etc.). |
+| 3 | Wait for the green “ready” message (attendance must be complete for that vertical/month). |
+| 4 | Click **Download Form T**. |
+
+**Tips**
+
+- If the wrong month opens, change Year/Month and **Apply** again, then hard refresh if the screen still looks old.
+- From **Register**, the **Form T** shortcut keeps the same vertical and period when possible.
+- Form T needs a **payroll run** for that month; start payroll or open an existing run from **Payroll → All payroll runs** if the month is missing.
+
+### 6.3 Holiday calendar (if enabled)
+
+**Menu:** Attendance → **Holiday calendar**
+
+- Download/upload yearly holiday templates for attendance and payroll (scope depends on your settings).
 
 ---
 
@@ -197,8 +216,9 @@ Employees must have a **current** structure effective for the payroll month befo
 
 **Menu:** Payroll → **Salary Statement**
 
-- Monthly **cost-to-company / salary breakdown** report from structures (for HR review, not the same as payslip PDF).
-- Filter by period and export/download as provided on screen.
+- Monthly **rate of pay, earned pay, deductions, and net** grid from salary structures (and payroll run data when present) — for HR review, **not** the same as the employee payslip PDF.
+- Choose **year**, **month**, and **vertical**, then load the statement.
+- **Download Excel:** the file includes a **TOTAL** row at the bottom that sums numeric salary columns (gross, deductions, net pay, etc.).
 
 ### 7.3 Payroll - main run screen
 
@@ -230,8 +250,31 @@ Shows employee count, gross, deductions, net (after calculate), and LOP summary.
 1. Fix any **attendance incomplete** warning (all employees need valid working/paid/LOP days).
 2. Click **Calculate payroll** (or **Recalculate**).
 3. Review the employee table: amounts, warnings, exceptions.
+4. Use **↻ Refresh** in the header if you changed attendance or holds on another tab and need the latest totals.
 
 **Important:** You cannot **Finalize** while status is still **Draft** and calculate has not been run. Use **↑ Go to Calculate payroll** from the finalize section if you are at the bottom of the page.
+
+#### C2. Review summary (after calculate)
+
+Below the main table, open **Review summary**:
+
+| Area | What you see |
+| --- | --- |
+| **Department rows** | Click **+** on a department to expand every employee in that department. |
+| **Component columns** | **Scroll horizontally** to see full breakup (Basic, HRA, SA, PF, ESIC, PT, bonus, TDS, gross, net, etc.) — same logic as calculated payroll. |
+| **Payout column** | **Hold salary** / **Release hold** buttons per employee (not controlled from Excel). |
+| **On hold** | Employees on hold are skipped for payslip generation until released. After **Finalize**, use **Release hold** on the **Payslips** row for that employee, then generate the payslip. |
+
+#### C3. Excel downloads (Review summary)
+
+Available after calculate (not in Draft):
+
+| Button | Contents |
+| --- | --- |
+| **Download calculated payroll** | Full component columns (`earn_*`, `ded_*`), days, gross, deductions, net, employer lines where applicable. Last row is **TOTAL** (sums numeric columns). |
+| **Download bank transfer file** | Bank payment sheet for the **same payroll run**: Emp Id, Name, account number, IFSC, **Net pay**, **Salary hold** (`Hold` / `Unhold`), blank **Company account number** (fill in Excel if needed), **unique ID** (first 3 letters of name + **date payroll was calculated**, format `DDMMYYYY`, e.g. `RAJ28092026`). **TOTAL** net pay includes **Unhold** rows only. |
+
+**Note:** Re-run **Calculate payroll** after changing attendance or holds so exports and unique IDs match the latest calculation date.
 
 #### D. Payroll check (exceptions)
 
@@ -250,16 +293,18 @@ Follow on-screen steps if your organization uses formal review before lock.
 
 #### F. Finalize payroll
 
-- When checks pass and status is past draft, click **Finalize payroll**.
+- When checks pass and status is past draft, click **Finalize payroll** and confirm in the dialog.
 - Finalizing **locks** amounts for that run (they cannot be casually edited).
+- You **cannot add new salary holds** after finalize; you **can** **Release hold** on employees who were already on hold.
 
 #### G. Payslips
 
 After finalize:
 
-- Payslip files are generated per employee with a record.
+- Payslip PDFs are generated per employee (except those on **salary hold**).
+- **Generate & notify** can email payslips (with PDF attachment when configured).
 - Use regenerate options in **More actions** if a payslip failed.
-- Employees see their own copies under **My Payslips**.
+- Employees see their own copies under **My Payslips** (all finalized months).
 
 #### H. Correction run (after lock)
 
@@ -351,9 +396,10 @@ Use this every month:
 3. [ ] Leave: clear pending approvals that affect the month.  
 4. [ ] **Salary structure** - revisions effective for this month are in place.  
 5. [ ] **Attendance / Register** - upload or enter days for the correct **vertical** (or combined legacy).  
-6. [ ] **Payroll** - **Calculate** → fix exceptions → **Finalize**.  
-7. [ ] **Payslips** - confirm generated; spot-check a few employees.  
-8. [ ] **Salary Statement** / **Form T** - export if your compliance calendar needs them.
+6. [ ] **Payroll** - **Calculate** → review **department breakup** → set **holds** if needed → **Finalize**.  
+7. [ ] **Payslips** - confirm generated; **release hold** and generate for anyone held; spot-check PDFs.  
+8. [ ] **Exports** - **Calculated payroll** Excel, **bank transfer** file, **Salary Statement**, **Form T** as your compliance calendar needs.  
+9. [ ] **Bank file** - fill **Company account number** in Excel if your bank needs it; pay only **Unhold** rows (check TOTAL).
 
 ---
 
@@ -367,7 +413,10 @@ Use this every month:
 | Missing structure / bank on check list | Open employee → salary structure or payroll tab. |
 | Old month was wrong after finalize | **Create correction run** from locked run (do not edit locked month). |
 | Menu item missing | Admin: **Settings → module access**; then hard refresh. |
-| Screen looks outdated | Hard refresh; confirm IT deployed latest web app version. |
+| Screen looks outdated | Hard refresh; confirm IT deployed latest web app version (check footer build / client version). |
+| Form T stuck on current month | Set Year/Month → **Apply**; hard refresh; confirm latest deployment. |
+| Review shows only gross/net | Hard refresh; expand department; scroll right for component columns. |
+| Bank unique ID wrong date | **Recalculate** payroll, then download bank file again (ID uses **calculate** date). |
 
 ---
 

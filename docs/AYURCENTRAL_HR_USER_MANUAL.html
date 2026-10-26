@@ -24,7 +24,7 @@ li { margin: 0.2em 0; }
 <h1>AyurCentral Enterprise HRMS - HR User Manual</h1>
 <p><strong>Who this is for:</strong> HR and Admin staff who use the web app every day.<br />
 <strong>What this covers:</strong> Screens, buttons, and step-by-step tasks only (no technical setup).<br />
-<strong>Last updated:</strong> September 2026.</p>
+<strong>Last updated:</strong> October 2026.</p>
 <hr />
 <h2>1. Getting started</h2>
 <h3>1.1 Opening the app</h3>
@@ -116,8 +116,9 @@ li { margin: 0.2em 0; }
 </ul>
 <h3>3.3 My Payslips</h3>
 <ul>
-<li>Lists <strong>locked</strong> payslips for <strong>you only</strong>.</li>
-<li><strong>Download</strong> or view after payroll has been finalized for that month.</li>
+<li>Lists <strong>all locked (finalized)</strong> payslips for <strong>you only</strong>, one row per month (newest first).</li>
+<li><strong>View</strong> or <strong>Download PDF</strong> for any month that has been finalized — there is no separate month picker; pick the row you need.</li>
+<li>Amounts come from the <strong>payroll snapshot</strong> for that month, not live salary structure.</li>
 <li>If empty, payroll for your employee ID may not be finalized yet.</li>
 </ul>
 <hr />
@@ -226,9 +227,43 @@ li { margin: 0.2em 0; }
 <p>If attendance was entered on an <strong>older combined</strong> run but you opened an empty <strong>vertical</strong> run, use the yellow banner: <strong>Import from combined payroll</strong> or <strong>Open combined payroll</strong>.</p>
 <h3>6.2 Form T</h3>
 <p><strong>Menu:</strong> Attendance → <strong>Form T</strong></p>
+<p>Statutory <strong>Form T</strong> Excel for a chosen <strong>payroll month</strong> and <strong>vertical</strong> (including <strong>past finalized months</strong>, not only the current month).</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Set <strong>Year</strong> and <strong>Month</strong>, then click <strong>Apply</strong>.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Choose <strong>Vertical</strong> (SAPL, AOPL, AOMS, etc.).</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Wait for the green “ready” message (attendance must be complete for that vertical/month).</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Click <strong>Download Form T</strong>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tips</strong></p>
 <ul>
-<li>Statutory <strong>Form T</strong> Excel export for a chosen <strong>payroll month</strong> and <strong>vertical</strong>.</li>
-<li>Use after attendance/payroll data exists for that period.</li>
+<li>If the wrong month opens, change Year/Month and <strong>Apply</strong> again, then hard refresh if the screen still looks old.</li>
+<li>From <strong>Register</strong>, the <strong>Form T</strong> shortcut keeps the same vertical and period when possible.</li>
+<li>Form T needs a <strong>payroll run</strong> for that month; start payroll or open an existing run from <strong>Payroll → All payroll runs</strong> if the month is missing.</li>
+</ul>
+<h3>6.3 Holiday calendar (if enabled)</h3>
+<p><strong>Menu:</strong> Attendance → <strong>Holiday calendar</strong></p>
+<ul>
+<li>Download/upload yearly holiday templates for attendance and payroll (scope depends on your settings).</li>
 </ul>
 <hr />
 <h2>7. Payroll (monthly salary run)</h2>
@@ -267,8 +302,9 @@ li { margin: 0.2em 0; }
 <h3>7.2 Salary Statement</h3>
 <p><strong>Menu:</strong> Payroll → <strong>Salary Statement</strong></p>
 <ul>
-<li>Monthly <strong>cost-to-company / salary breakdown</strong> report from structures (for HR review, not the same as payslip PDF).</li>
-<li>Filter by period and export/download as provided on screen.</li>
+<li>Monthly <strong>rate of pay, earned pay, deductions, and net</strong> grid from salary structures (and payroll run data when present) — for HR review, <strong>not</strong> the same as the employee payslip PDF.</li>
+<li>Choose <strong>year</strong>, <strong>month</strong>, and <strong>vertical</strong>, then load the statement.</li>
+<li><strong>Download Excel:</strong> the file includes a <strong>TOTAL</strong> row at the bottom that sums numeric salary columns (gross, deductions, net pay, etc.).</li>
 </ul>
 <h3>7.3 Payroll - main run screen</h3>
 <p><strong>Menu:</strong> Payroll → <strong>Payroll</strong></p>
@@ -314,8 +350,58 @@ li { margin: 0.2em 0; }
 <li>Fix any <strong>attendance incomplete</strong> warning (all employees need valid working/paid/LOP days).</li>
 <li>Click <strong>Calculate payroll</strong> (or <strong>Recalculate</strong>).</li>
 <li>Review the employee table: amounts, warnings, exceptions.</li>
+<li>Use <strong>↻ Refresh</strong> in the header if you changed attendance or holds on another tab and need the latest totals.</li>
 </ol>
 <p><strong>Important:</strong> You cannot <strong>Finalize</strong> while status is still <strong>Draft</strong> and calculate has not been run. Use <strong>↑ Go to Calculate payroll</strong> from the finalize section if you are at the bottom of the page.</p>
+<h4>C2. Review summary (after calculate)</h4>
+<p>Below the main table, open <strong>Review summary</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What you see</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Department rows</strong></td>
+<td>Click <strong>+</strong> on a department to expand every employee in that department.</td>
+</tr>
+<tr>
+<td><strong>Component columns</strong></td>
+<td><strong>Scroll horizontally</strong> to see full breakup (Basic, HRA, SA, PF, ESIC, PT, bonus, TDS, gross, net, etc.) — same logic as calculated payroll.</td>
+</tr>
+<tr>
+<td><strong>Payout column</strong></td>
+<td><strong>Hold salary</strong> / <strong>Release hold</strong> buttons per employee (not controlled from Excel).</td>
+</tr>
+<tr>
+<td><strong>On hold</strong></td>
+<td>Employees on hold are skipped for payslip generation until released. After <strong>Finalize</strong>, use <strong>Release hold</strong> on the <strong>Payslips</strong> row for that employee, then generate the payslip.</td>
+</tr>
+</tbody>
+</table>
+<h4>C3. Excel downloads (Review summary)</h4>
+<p>Available after calculate (not in Draft):</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Download calculated payroll</strong></td>
+<td>Full component columns (<code>earn_*</code>, <code>ded_*</code>), days, gross, deductions, net, employer lines where applicable. Last row is <strong>TOTAL</strong> (sums numeric columns).</td>
+</tr>
+<tr>
+<td><strong>Download bank transfer file</strong></td>
+<td>Bank payment sheet for the <strong>same payroll run</strong>: Emp Id, Name, account number, IFSC, <strong>Net pay</strong>, <strong>Salary hold</strong> (<code>Hold</code> / <code>Unhold</code>), blank <strong>Company account number</strong> (fill in Excel if needed), <strong>unique ID</strong> (first 3 letters of name + <strong>date payroll was calculated</strong>, format <code>DDMMYYYY</code>, e.g. <code>RAJ28092026</code>). <strong>TOTAL</strong> net pay includes <strong>Unhold</strong> rows only.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> Re-run <strong>Calculate payroll</strong> after changing attendance or holds so exports and unique IDs match the latest calculation date.</p>
 <h4>D. Payroll check (exceptions)</h4>
 <p>The app lists employees who need attention, for example:</p>
 <ul>
@@ -329,15 +415,17 @@ li { margin: 0.2em 0; }
 <p>Follow on-screen steps if your organization uses formal review before lock.</p>
 <h4>F. Finalize payroll</h4>
 <ul>
-<li>When checks pass and status is past draft, click <strong>Finalize payroll</strong>.</li>
+<li>When checks pass and status is past draft, click <strong>Finalize payroll</strong> and confirm in the dialog.</li>
 <li>Finalizing <strong>locks</strong> amounts for that run (they cannot be casually edited).</li>
+<li>You <strong>cannot add new salary holds</strong> after finalize; you <strong>can</strong> <strong>Release hold</strong> on employees who were already on hold.</li>
 </ul>
 <h4>G. Payslips</h4>
 <p>After finalize:</p>
 <ul>
-<li>Payslip files are generated per employee with a record.</li>
+<li>Payslip PDFs are generated per employee (except those on <strong>salary hold</strong>).</li>
+<li><strong>Generate &amp; notify</strong> can email payslips (with PDF attachment when configured).</li>
 <li>Use regenerate options in <strong>More actions</strong> if a payslip failed.</li>
-<li>Employees see their own copies under <strong>My Payslips</strong>.</li>
+<li>Employees see their own copies under <strong>My Payslips</strong> (all finalized months).</li>
 </ul>
 <h4>H. Correction run (after lock)</h4>
 <p>If a <strong>locked</strong> month was wrong:</p>
@@ -455,9 +543,10 @@ li { margin: 0.2em 0; }
 <li>[ ] Leave: clear pending approvals that affect the month.  </li>
 <li>[ ] <strong>Salary structure</strong> - revisions effective for this month are in place.  </li>
 <li>[ ] <strong>Attendance / Register</strong> - upload or enter days for the correct <strong>vertical</strong> (or combined legacy).  </li>
-<li>[ ] <strong>Payroll</strong> - <strong>Calculate</strong> → fix exceptions → <strong>Finalize</strong>.  </li>
-<li>[ ] <strong>Payslips</strong> - confirm generated; spot-check a few employees.  </li>
-<li>[ ] <strong>Salary Statement</strong> / <strong>Form T</strong> - export if your compliance calendar needs them.</li>
+<li>[ ] <strong>Payroll</strong> - <strong>Calculate</strong> → review <strong>department breakup</strong> → set <strong>holds</strong> if needed → <strong>Finalize</strong>.  </li>
+<li>[ ] <strong>Payslips</strong> - confirm generated; <strong>release hold</strong> and generate for anyone held; spot-check PDFs.  </li>
+<li>[ ] <strong>Exports</strong> - <strong>Calculated payroll</strong> Excel, <strong>bank transfer</strong> file, <strong>Salary Statement</strong>, <strong>Form T</strong> as your compliance calendar needs.  </li>
+<li>[ ] <strong>Bank file</strong> - fill <strong>Company account number</strong> in Excel if your bank needs it; pay only <strong>Unhold</strong> rows (check TOTAL).</li>
 </ol>
 <hr />
 <h2>12. Common problems (quick fixes)</h2>
@@ -495,7 +584,19 @@ li { margin: 0.2em 0; }
 </tr>
 <tr>
 <td>Screen looks outdated</td>
-<td>Hard refresh; confirm IT deployed latest web app version.</td>
+<td>Hard refresh; confirm IT deployed latest web app version (check footer build / client version).</td>
+</tr>
+<tr>
+<td>Form T stuck on current month</td>
+<td>Set Year/Month → <strong>Apply</strong>; hard refresh; confirm latest deployment.</td>
+</tr>
+<tr>
+<td>Review shows only gross/net</td>
+<td>Hard refresh; expand department; scroll right for component columns.</td>
+</tr>
+<tr>
+<td>Bank unique ID wrong date</td>
+<td><strong>Recalculate</strong> payroll, then download bank file again (ID uses <strong>calculate</strong> date).</td>
 </tr>
 </tbody>
 </table>
